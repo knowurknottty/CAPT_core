@@ -44,6 +44,17 @@ extension points — they are NOT in v0.1 and have no code behind them yet.
 - [x] Doctor/verify extensions + boundary audit.
 - [x] 348 tests passing; verify_runtime 5/5 sections.
 
+## v0.4.1 (this release) — DONE
+
+- [x] Anti-Token-Extraction component (optional, independently degradable).
+- [x] Local child-process stdio only; cache mode off; sensitive-input refusal.
+- [x] Pinned upstream repo + commit recorded in component manifest.
+- [x] Legacy cache purge on bootstrap/upgrade.
+- [x] Hermes MCP template (stdio, no creds, isolation metadata).
+- [x] Capability registry + installer + doctor + verify_runtime + docs updated.
+- [x] 9 required integration tests; all 17 v0.4 release gates remain green.
+- [x] Plugin tool `capt_anti_token_extraction_status` (47 total).
+
 ## v1.0 (candidates)
 
 - [ ] Multi-agent federation via CTP correlation ids.

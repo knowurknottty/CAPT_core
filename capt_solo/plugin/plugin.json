@@ -1,7 +1,7 @@
 {
   "name": "capt-solo",
-  "version": "0.4.0",
-  "description": "Local-first cognitive runtime for Hermes (memory, CTP transactions, KHSB bus, adaptive lifecycle, sessions, procedures, prospective memory, retrieval feedback).",
+  "version": "0.4.1",
+  "description": "Local-first cognitive runtime for Hermes (memory, CTP transactions, KHSB bus, adaptive lifecycle, sessions, procedures, prospective memory, retrieval feedback, proof-governed skill runtime, optional anti-token-extraction component).",
   "entry": "capt_solo.plugin",
   "tools": [
     "capt_store_memory",
@@ -49,7 +49,8 @@
     "capt_validate_bubble",
     "capt_install_bubble",
     "capt_export_bubble",
-    "capt_inspect_proof"
+    "capt_inspect_proof",
+    "capt_anti_token_extraction_status"
   ],
   "tools_module": "capt_solo.plugin",
   "tools_factory": "get_plugin",

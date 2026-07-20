@@ -745,6 +745,15 @@ class CaptSoloPlugin:
         finally:
             eng.close()
 
+    def capt_anti_token_extraction_status(self) -> Dict[str, Any]:
+        """Report anti-token-extraction component status (optional capability)."""
+        try:
+            from capt_solo.components import AntiTokenExtractionComponent
+            comp = AntiTokenExtractionComponent()
+            return {"ok": True, **comp.status()}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
 
 # Tool registry — Hermes discovers tools from this mapping.
 TOOLS = {
@@ -797,6 +806,7 @@ TOOLS = {
     "capt_install_bubble": CaptSoloPlugin.capt_install_bubble,
     "capt_export_bubble": CaptSoloPlugin.capt_export_bubble,
     "capt_inspect_proof": CaptSoloPlugin.capt_inspect_proof,
+    "capt_anti_token_extraction_status": CaptSoloPlugin.capt_anti_token_extraction_status,
 }
 
 

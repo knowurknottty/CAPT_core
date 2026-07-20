@@ -42,6 +42,21 @@ print("[OK] Runtime initialized at $INSTALL_PREFIX (memory.db + ctp journal pres
 print("[OK] Health:", health()["status"])
 PY
 
+# 2b. Bootstrap optional components (idempotent; purges legacy caches).
+python3 - <<'PY'
+import sys
+sys.path.insert(0, "$CAPT_SOLO_SRC")
+try:
+    from capt_solo.components import bootstrap_anti_token_extraction, purge_legacy_cache
+    purged = purge_legacy_cache()
+    res = bootstrap_anti_token_extraction()
+    if purged:
+        print(f"[OK] Legacy anti-token-extraction cache purged: {purged}")
+    print(f"[OK] Anti-token-extraction component bootstrapped (idempotent={res.get('idempotent')})")
+except Exception as e:
+    print(f"[WARN] Anti-token-extraction bootstrap skipped: {e}")
+PY
+
 # 3. Install plugin
 if [ -d "$HERMES_CONFIG_DIR" ]; then
   mkdir -p "$PLUGIN_TARGET"

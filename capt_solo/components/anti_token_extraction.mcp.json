@@ -1,0 +1,33 @@
+{
+  "component": "anti-token-extraction",
+  "description": "Optional, independently degradable anti-token-extraction capability. Runs as a local child process over stdio. Cache mode off, sensitive-input refusal on, no credentials in arguments.",
+  "transport": "local-child-process-stdio",
+  "mcp_server": {
+    "command": "python3",
+    "args": [
+      "<capt-solo>/capt_solo/components/_ate_stdio_server.py",
+      "--cache-mode", "off",
+      "--refusal", "on"
+    ],
+    "env": {},
+    "credentials_in_args": false,
+    "cache_mode": "off",
+    "sensitive_input_refusal": true
+  },
+  "pinned_upstream": {
+    "repo": "https://github.com/knowurknottty/anti-token-extraction",
+    "commit": "b68adac7311b2315d992592b479e6761aa9dc856"
+  },
+  "isolation": {
+    "embeds_into_memory": false,
+    "embeds_into_ctp": false,
+    "embeds_into_khsb": false,
+    "degradation_scope": "anti-token-extraction-only"
+  },
+  "safety_constraints": [
+    "cache_mode must be 'off'",
+    "sensitive_input_refusal must be true",
+    "no credentials passed in MCP arguments",
+    "failure degrades only the anti-token-extraction capability"
+  ]
+}

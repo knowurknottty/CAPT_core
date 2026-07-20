@@ -42,6 +42,12 @@ from capt_solo.foundry.columns import (
     decode_list, decode_dict, decode_list_safe, decode_dict_safe,
     ColumnDecodeError,
 )
+from capt_solo.components import (
+    AntiTokenExtractionComponent, ATEManifest, ComponentUnavailable,
+    UnsafeConfiguration, COMPONENT_ID, UPSTREAM_REPO, PINNED_COMMIT,
+    load_manifest, save_manifest, purge_legacy_cache,
+    bootstrap_anti_token_extraction,
+)
 
 __all__ = [
     "ProofEngine", "ProofRequirement", "Evidence", "ProofAggregate", "sha256_of",
@@ -60,4 +66,8 @@ __all__ = [
     "Governance", "GovernanceReceipt",
     "decode_list", "decode_dict", "decode_list_safe", "decode_dict_safe",
     "ColumnDecodeError",
+    "AntiTokenExtractionComponent", "ATEManifest", "ComponentUnavailable",
+    "UnsafeConfiguration", "COMPONENT_ID", "UPSTREAM_REPO", "PINNED_COMMIT",
+    "load_manifest", "save_manifest", "purge_legacy_cache",
+    "bootstrap_anti_token_extraction",
 ]

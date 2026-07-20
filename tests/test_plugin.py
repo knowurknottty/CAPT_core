@@ -31,7 +31,7 @@ def test_tool_names_stable():
         "capt_record_retrieval_feedback", "capt_get_restart_context",
     }
     assert expected.issubset(set(tool_names()))
-    assert len(TOOLS) == 46
+    assert len(TOOLS) == 47
 
 
 def test_capt_store_memory(plugin):
