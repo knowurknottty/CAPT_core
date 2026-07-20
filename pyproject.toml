@@ -23,7 +23,9 @@ Homepage = "https://github.com/knowurknottty/CAPT_core"
 capt-solo = "capt_solo.plugin:get_plugin"
 
 [tool.setuptools.packages.find]
+where = ["."]
 include = ["capt_solo*"]
+namespaces = true
 
 [tool.setuptools.package-data]
 "capt_solo.components" = ["*.json"]
