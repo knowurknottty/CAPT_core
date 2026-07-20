@@ -17,6 +17,8 @@ jobs:
         python-version: ["3.10", "3.12"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
@@ -58,6 +60,18 @@ jobs:
         run: bash doctor.sh
       - name: Build distribution
         run: python -m build
+      - name: Installed wheel import smoke test
+        run: |
+          python -m pip install --force-reinstall dist/*.whl
+          python - <<'PY'
+          import importlib.metadata as md
+          import capt_solo
+          import capt_solo.components
+          from capt_solo.components import AntiTokenExtractionComponent
+          print("capt_solo import: PASS")
+          print("components import: PASS")
+          print("distribution:", md.version("capt-solo"))
+          PY
       - name: Audit shipped Python dependency closure
         run: |
           python -m pip freeze --exclude-editable > /tmp/runtime-requirements.txt
