@@ -1,22 +1,20 @@
 {
   "component": "anti-token-extraction",
-  "description": "Optional, independently degradable anti-token-extraction capability. Runs as a local child process over stdio. Cache mode off, sensitive-input refusal on, no credentials in arguments.",
-  "transport": "local-child-process-stdio",
+  "description": "Optional stateless tool-output compression via the pinned upstream FastMCP server.",
+  "transport": "stdio",
   "mcp_server": {
     "command": "python3",
-    "args": [
-      "<capt-solo>/capt_solo/components/_ate_stdio_server.py",
-      "--cache-mode", "off",
-      "--refusal", "on"
-    ],
+    "args": ["-m", "anti_token_extraction.server"],
     "env": {},
     "credentials_in_args": false,
     "cache_mode": "off",
-    "sensitive_input_refusal": true
+    "sensitive_input_policy": "refuse",
+    "network_enabled": false
   },
   "pinned_upstream": {
     "repo": "https://github.com/knowurknottty/anti-token-extraction",
-    "commit": "b68adac7311b2315d992592b479e6761aa9dc856"
+    "commit": "b68adac7311b2315d992592b479e6761aa9dc856",
+    "version": "0.2.0"
   },
   "isolation": {
     "embeds_into_memory": false,
@@ -25,9 +23,10 @@
     "degradation_scope": "anti-token-extraction-only"
   },
   "safety_constraints": [
-    "cache_mode must be 'off'",
-    "sensitive_input_refusal must be true",
-    "no credentials passed in MCP arguments",
+    "persistent payload caching is unsupported",
+    "historical payload retrieval is unsupported",
+    "sensitive-looking input is refused",
+    "no credentials are passed in MCP arguments",
     "failure degrades only the anti-token-extraction capability"
   ]
 }
