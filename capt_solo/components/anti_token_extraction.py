@@ -1,49 +1,43 @@
-"""CAPT Solo v0.4.1 — Anti-Token-Extraction component.
+"""CAPT Solo v0.4.1 Anti-Token-Extraction integration.
 
-Optional, independently degradable capability. Runs as a LOCAL child process
-over stdio (JSON-RPC 2.0). No network, no embedding into CAPT memory/CTP/KHSB.
-Cache mode is OFF. Sensitive-input refusal is ON. No credentials are ever
-passed in MCP arguments.
-
-The upstream source is pinned by repository + commit in the component manifest.
-A minimal, vendored stdio server (`_ate_stdio_server.py`) provides the local
-runtime so the capability works offline; `verify_pinned_commit()` confirms the
-installed commit matches the pinned upstream commit.
-
-Failure of this component degrades ONLY the anti-token-extraction capability
-(never memory, CTP, KHSB, governance, ClaimGuard, plugin loading, or core).
+The component is optional and independently degradable. It launches a local
+stdio adapter which imports the pinned upstream package. No payload persistence,
+network transport, historical retrieval, or credential-bearing arguments are
+permitted.
 """
 
 from __future__ import annotations
 
+import importlib.metadata
 import json
 import os
-import re
+import selectors
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from capt_solo.core.config import home_dir
 
-# Pinned upstream — recorded in the manifest; never fetched at runtime.
 UPSTREAM_REPO = "https://github.com/knowurknottty/anti-token-extraction"
 PINNED_COMMIT = "b68adac7311b2315d992592b479e6761aa9dc856"
-
+PINNED_VERSION = "0.2.0"
 COMPONENT_ID = "anti-token-extraction"
+MAX_REQUEST_BYTES = 1_048_576
 LEGACY_CACHE_NAMES = ("ate_cache", ".ate_cache", "anti_token_cache", "token_extract_cache")
 
 
 class ComponentUnavailable(Exception):
-    """Raised when the anti-token-extraction child process cannot serve."""
+    """The optional component cannot safely serve the request."""
 
 
 class UnsafeConfiguration(Exception):
-    """Raised when the component manifest violates a hard safety constraint."""
+    """A hard component safety constraint was violated."""
 
 
 @dataclass
@@ -51,19 +45,22 @@ class ATEManifest:
     component: str = COMPONENT_ID
     upstream_repo: str = UPSTREAM_REPO
     pinned_commit: str = PINNED_COMMIT
+    pinned_version: str = PINNED_VERSION
     cache_mode: str = "off"
     sensitive_input_refusal: bool = True
     transport: str = "local-child-process-stdio"
     no_credentials_in_args: bool = True
     installed_commit: Optional[str] = None
+    installed_version: Optional[str] = None
     bootstrapped_at: float = 0.0
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "ATEManifest":
-        return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
+    def from_dict(cls, value: Dict[str, Any]) -> "ATEManifest":
+        fields = cls.__dataclass_fields__
+        return cls(**{key: item for key, item in value.items() if key in fields})
 
 
 def component_dir() -> Path:
@@ -71,31 +68,10 @@ def component_dir() -> Path:
 
 
 def manifest_path() -> Path:
-    # Allow tests / isolated runs to redirect the manifest elsewhere.
     override = os.environ.get("CAPT_ATE_MANIFEST_PATH")
     if override:
         return Path(override)
-    return component_dir() / "manifest.json"
-
-
-# Sensitive-input refusal targets CREDENTIAL ASSIGNMENTS (something being
-# submitted as a secret to process/store), NOT bare tokens that are themselves
-# extraction targets (e.g. AKIA…, ghp_…). Those are what the component finds.
-_SECRET_ASSIGNMENT_PATTERNS = [
-    re.compile(r"(?i)-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----"),
-    re.compile(r"(?i)bearer\s+[A-Za-z0-9._\-]{20,}"),
-    re.compile(r"(?i)(api[_-]?key|apikey|secret[_-]?key)\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{16,}"),
-    re.compile(r"(?i)(password|passwd|pwd)\s*[:=]\s*['\"]?[^\\s'\"]{6,}"),
-    re.compile(r"(?i)(session|auth|access)[_\-]?token\s*[:=]\s*['\"]?[A-Za-z0-9._\-]{20,}"),
-    re.compile(r"(?i)recovery[_-]?code\s*[:=]\s*['\"]?[A-Za-z0-9]{8,}"),
-    re.compile(r"(?i)(seed\s*phrase|mnemonic|recovery\s*phrase)\b"),
-    re.compile(r"(?i)(?:^|\n)\s*(?:export\s+)?[A-Z][A-Z0-9_]{2,}\s*=\s*['\"]?[A-Za-z0-9/+_\-]{20,}['\"]?\s*(?:\n|$)"),
-]
-
-
-def is_sensitive_input(text: str) -> bool:
-    """True if the input carries a credential assignment (refuse, don't extract)."""
-    return any(p.search(text) for p in _SECRET_ASSIGNMENT_PATTERNS)
+    return home_dir() / "components" / COMPONENT_ID / "manifest.json"
 
 
 def stdio_server_path() -> Path:
@@ -104,247 +80,286 @@ def stdio_server_path() -> Path:
 
 def legacy_cache_dirs() -> List[Path]:
     root = home_dir()
-    return [root / n for n in LEGACY_CACHE_NAMES]
+    paths = [root / name for name in LEGACY_CACHE_NAMES]
+    paths.append(Path.home() / ".cache" / "anti-token-extraction")
+    return paths
 
 
-def _validate_manifest(m: ATEManifest) -> None:
-    if m.cache_mode != "off":
-        raise UnsafeConfiguration(
-            f"cache_mode must be 'off' for anti-token-extraction (got '{m.cache_mode}')")
-    if not m.sensitive_input_refusal:
-        raise UnsafeConfiguration(
-            "sensitive_input_refusal must be True for anti-token-extraction")
-    if not m.no_credentials_in_args:
-        raise UnsafeConfiguration(
-            "no_credentials_in_args must be True for anti-token-extraction")
+def _validate_manifest(manifest: ATEManifest) -> None:
+    if manifest.cache_mode != "off":
+        raise UnsafeConfiguration("cache_mode must be 'off'")
+    if not manifest.sensitive_input_refusal:
+        raise UnsafeConfiguration("sensitive_input_refusal must be enabled")
+    if not manifest.no_credentials_in_args:
+        raise UnsafeConfiguration("credentials in process arguments are forbidden")
+    if manifest.transport != "local-child-process-stdio":
+        raise UnsafeConfiguration("only local child-process stdio is supported")
+    if manifest.pinned_commit != PINNED_COMMIT or manifest.pinned_version != PINNED_VERSION:
+        raise UnsafeConfiguration("component pin does not match the release policy")
 
 
 def load_manifest() -> Optional[ATEManifest]:
-    p = manifest_path()
-    if not p.exists():
+    path = manifest_path()
+    if not path.is_file() or path.is_symlink():
         return None
     try:
-        return ATEManifest.from_dict(json.loads(p.read_text()))
-    except Exception:
+        return ATEManifest.from_dict(json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, ValueError, TypeError):
         return None
 
 
-def save_manifest(m: ATEManifest) -> None:
-    _validate_manifest(m)
-    manifest_path().write_text(json.dumps(m.to_dict(), indent=2))
+def save_manifest(manifest: ATEManifest) -> None:
+    _validate_manifest(manifest)
+    path = manifest_path()
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if path.is_symlink():
+        raise UnsafeConfiguration("manifest path must not be a symlink")
+    payload = json.dumps(manifest.to_dict(), indent=2, sort_keys=True) + "\n"
+    fd, tmp_name = tempfile.mkstemp(prefix=".manifest-", dir=str(path.parent), text=True)
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_name, path)
+        if os.name == "posix":
+            os.chmod(path, 0o600)
+    finally:
+        try:
+            os.unlink(tmp_name)
+        except FileNotFoundError:
+            pass
 
 
 def purge_legacy_cache() -> List[str]:
-    """Remove any legacy anti-token-extraction cache directories.
-
-    Returns the list of paths that were removed. Idempotent: safe to call
-    when no legacy cache exists.
-    """
     removed: List[str] = []
-    for d in legacy_cache_dirs():
-        if d.exists() and d.is_dir():
-            shutil.rmtree(d)
-            removed.append(str(d))
+    for path in legacy_cache_dirs():
+        if path.is_symlink():
+            continue
+        if path.is_dir():
+            shutil.rmtree(path)
+            removed.append(str(path))
+        elif path.is_file():
+            path.unlink()
+            removed.append(str(path))
     return removed
 
 
-def _spawn_server(timeout: float = 5.0) -> subprocess.Popen:
-    """Spawn the bundled stdio server as a local child process."""
+def installed_provenance() -> Dict[str, Optional[str]]:
+    try:
+        dist = importlib.metadata.distribution("anti-token-extraction")
+    except importlib.metadata.PackageNotFoundError:
+        return {"version": None, "commit": None, "url": None}
+    commit = None
+    url = None
+    try:
+        raw = dist.read_text("direct_url.json")
+        if raw:
+            direct = json.loads(raw)
+            url = direct.get("url")
+            commit = (direct.get("vcs_info") or {}).get("commit_id")
+    except (OSError, ValueError, TypeError):
+        pass
+    return {"version": dist.version, "commit": commit, "url": url}
+
+
+def _provenance_matches(provenance: Dict[str, Optional[str]]) -> bool:
+    return provenance.get("version") == PINNED_VERSION and provenance.get("commit") == PINNED_COMMIT
+
+
+def _spawn_server() -> subprocess.Popen[str]:
     server = stdio_server_path()
-    if not server.exists():
-        raise ComponentUnavailable(f"stdio server not found: {server}")
-    # No credentials are passed as arguments — only the safety-constrained flags.
+    if not server.is_file() or server.is_symlink():
+        raise ComponentUnavailable("component stdio adapter is unavailable")
     proc = subprocess.Popen(
-        [sys.executable, str(server), "--cache-mode", "off", "--refusal", "on"],
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        text=True, bufsize=1)
-    assert proc.stdin is not None and proc.stdout is not None, \
-        "stdio pipes must be open for the child process"
+        [sys.executable, "-I", str(server), "--cache-mode", "off", "--refusal", "on"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+        close_fds=True,
+    )
+    if proc.stdin is None or proc.stdout is None:
+        proc.kill()
+        raise ComponentUnavailable("stdio pipes were not created")
     return proc
 
 
-def _jsonrpc(proc: subprocess.Popen, method: str, params: Any,
-             req_id: str = None, timeout: float = 5.0) -> Dict[str, Any]:
-    if req_id is None:
-        req_id = uuid.uuid4().hex
-    msg = json.dumps({"jsonrpc": "2.0", "id": req_id, "method": method,
-                      "params": params or {}})
+def _jsonrpc(
+    proc: subprocess.Popen[str], method: str, params: Dict[str, Any], timeout: float = 5.0
+) -> Dict[str, Any]:
+    if proc.stdin is None or proc.stdout is None:
+        raise ComponentUnavailable("stdio channel unavailable")
+    message = json.dumps(
+        {"jsonrpc": "2.0", "id": uuid.uuid4().hex, "method": method, "params": params},
+        separators=(",", ":"),
+    )
+    if len(message.encode("utf-8")) > MAX_REQUEST_BYTES + 4096:
+        raise UnsafeConfiguration("request exceeds 1 MiB limit")
     try:
-        proc.stdin.write(msg + "\n")
+        proc.stdin.write(message + "\n")
         proc.stdin.flush()
+        selector = selectors.DefaultSelector()
+        selector.register(proc.stdout, selectors.EVENT_READ)
+        if not selector.select(timeout):
+            raise ComponentUnavailable("stdio response timed out")
         line = proc.stdout.readline()
         if not line:
-            raise ComponentUnavailable("stdio server closed connection")
-        resp = json.loads(line)
-        if "error" in resp:
-            raise ComponentUnavailable(f"server error: {resp['error']}")
-        return resp.get("result", {})
-    except (json.JSONDecodeError, BrokenPipeError, ValueError) as e:
-        raise ComponentUnavailable(f"stdio communication failed: {e}")
+            raise ComponentUnavailable("stdio server closed the channel")
+        response = json.loads(line)
+    except (BrokenPipeError, OSError, ValueError) as exc:
+        raise ComponentUnavailable(f"stdio communication failed: {exc}") from exc
+    finally:
+        try:
+            selector.close()
+        except UnboundLocalError:
+            pass
+    if response.get("error"):
+        message = str(response["error"].get("message", "component error"))
+        if "sensitive" in message.lower():
+            raise UnsafeConfiguration("sensitive input refused by upstream policy")
+        raise ComponentUnavailable(message)
+    result = response.get("result", {})
+    if not isinstance(result, dict):
+        raise ComponentUnavailable("invalid component response")
+    return result
+
+
+def _stop(proc: Optional[subprocess.Popen[str]]) -> None:
+    if proc is None:
+        return
+    try:
+        proc.terminate()
+        proc.wait(timeout=2)
+    except Exception:
+        proc.kill()
+        proc.wait(timeout=2)
 
 
 class AntiTokenExtractionComponent:
-    """Manages the optional anti-token-extraction capability.
-
-    All methods are safe to call when the component is absent: they report
-    status rather than raising, except ``extract()`` which raises
-    ``ComponentUnavailable`` so the caller can degrade ONLY this capability.
-    """
-
     def __init__(self, manifest: Optional[ATEManifest] = None) -> None:
         self.manifest = manifest or load_manifest() or ATEManifest()
 
-    # ----- discovery / status ------------------------------------------
     def discover(self) -> Dict[str, Any]:
-        """Report component presence and pin match without spawning."""
-        server_present = stdio_server_path().exists()
-        manifest_present = manifest_path().exists()
-        pinned_ok = (self.manifest.installed_commit == self.manifest.pinned_commit)
-        if not server_present:
+        provenance = installed_provenance()
+        manifest = load_manifest()
+        safe_config = True
+        try:
+            _validate_manifest(self.manifest)
+        except UnsafeConfiguration:
+            safe_config = False
+        installed = provenance.get("version") is not None
+        pinned = _provenance_matches(provenance)
+        if not installed:
             state = "absent"
-        elif not manifest_present and self.manifest.installed_commit is None:
-            # bundled server exists but nothing has been bootstrapped
-            state = "absent"
-        elif not manifest_present or not pinned_ok:
+        elif not pinned or manifest is None or not safe_config:
             state = "present-mismatch"
         else:
             state = "present-ok"
         return {
             "component": COMPONENT_ID,
             "state": state,
-            "server_present": server_present,
-            "manifest_present": manifest_present,
-            "pinned_commit": self.manifest.pinned_commit,
-            "installed_commit": self.manifest.installed_commit,
-            "pinned_match": pinned_ok,
+            "server_present": stdio_server_path().is_file(),
+            "manifest_present": manifest is not None,
+            "pinned_commit": PINNED_COMMIT,
+            "installed_commit": provenance.get("commit"),
+            "installed_version": provenance.get("version"),
+            "pinned_match": pinned,
             "cache_mode": self.manifest.cache_mode,
             "sensitive_input_refusal": self.manifest.sensitive_input_refusal,
         }
 
     def verify_pinned_commit(self) -> bool:
-        """True iff the installed commit matches the pinned upstream commit."""
-        return (self.manifest.installed_commit == self.manifest.pinned_commit
-                and self.manifest.installed_commit is not None)
+        return _provenance_matches(installed_provenance())
 
-    # ----- lifecycle ----------------------------------------------------
     def bootstrap(self, force: bool = False) -> Dict[str, Any]:
-        """Idempotent bootstrap: purge legacy cache, pin installed commit.
-
-        Calling twice with no change is a no-op (idempotent). Only writes the
-        manifest when state actually changes or ``force`` is set.
-        """
-        prior = load_manifest()
-        already_ok = (prior is not None
-                      and prior.installed_commit == self.manifest.pinned_commit
-                      and stdio_server_path().exists())
+        _validate_manifest(self.manifest)
+        provenance = installed_provenance()
         removed = purge_legacy_cache()
+        if not _provenance_matches(provenance):
+            return {
+                "bootstrapped": False,
+                "idempotent": False,
+                "healthy": False,
+                "reason": "pinned upstream package is not installed",
+                "legacy_cache_purged": removed,
+                "installed_commit": provenance.get("commit"),
+            }
+        prior = load_manifest()
+        already_ok = prior is not None and prior.installed_commit == PINNED_COMMIT
         if already_ok and not force and not removed:
-            return {"bootstrapped": False, "idempotent": True,
-                    "legacy_cache_purged": removed,
-                    "installed_commit": self.manifest.installed_commit}
-        self.manifest.installed_commit = self.manifest.pinned_commit
+            return {
+                "bootstrapped": False,
+                "idempotent": True,
+                "healthy": True,
+                "legacy_cache_purged": [],
+                "installed_commit": PINNED_COMMIT,
+            }
+        self.manifest.installed_commit = PINNED_COMMIT
+        self.manifest.installed_version = PINNED_VERSION
         self.manifest.bootstrapped_at = time.time()
         save_manifest(self.manifest)
-        return {"bootstrapped": True, "idempotent": False,
-                "legacy_cache_purged": removed,
-                "installed_commit": self.manifest.installed_commit}
+        return {
+            "bootstrapped": True,
+            "idempotent": False,
+            "healthy": True,
+            "legacy_cache_purged": removed,
+            "installed_commit": PINNED_COMMIT,
+        }
 
-    # ----- health -------------------------------------------------------
     def health_check(self) -> Dict[str, Any]:
-        """Spawn the child process and confirm it answers a health ping."""
-        disc = self.discover()
-        if disc["state"] == "absent":
-            return {"healthy": False, "reason": "component absent",
-                    "state": disc["state"]}
-        if disc["state"] == "present-mismatch":
-            return {"healthy": False, "reason": "commit/version mismatch",
-                    "state": disc["state"],
-                    "installed": disc["installed_commit"],
-                    "pinned": disc["pinned_commit"]}
+        discovery = self.discover()
+        if discovery["state"] != "present-ok":
+            return {"healthy": False, "state": discovery["state"], "reason": "package or pin unavailable"}
         proc = None
         try:
             proc = _spawn_server()
-            _jsonrpc(proc, "initialize", {"capabilities": {}})
-            res = _jsonrpc(proc, "health", {})
-            healthy = bool(res.get("ok", False))
-            return {"healthy": healthy, "reason": res.get("detail", ""),
-                    "state": disc["state"]}
-        except ComponentUnavailable as e:
-            return {"healthy": False, "reason": str(e), "state": disc["state"]}
+            _jsonrpc(proc, "initialize", {})
+            result = _jsonrpc(proc, "health", {})
+            return {"healthy": bool(result.get("ok")), "state": discovery["state"], "reason": result.get("detail", "")}
+        except (ComponentUnavailable, UnsafeConfiguration) as exc:
+            return {"healthy": False, "state": discovery["state"], "reason": str(exc)}
         finally:
-            if proc is not None:
-                try:
-                    proc.terminate()
-                    proc.wait(timeout=2)
-                except Exception:
-                    proc.kill()
+            _stop(proc)
 
     def status(self) -> Dict[str, Any]:
-        disc = self.discover()
+        discovery = self.discover()
         health = self.health_check()
-        return {**disc, "healthy": health["healthy"],
-                "health_reason": health.get("reason", ""),
-                "pinned_verified": self.verify_pinned_commit()}
+        return {**discovery, "healthy": health["healthy"], "health_reason": health.get("reason", ""), "pinned_verified": self.verify_pinned_commit()}
 
-    # ----- extraction ---------------------------------------------------
-    def extract(self, text: str, schema: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Extract tokens from ``text`` via the local child process.
-
-        Refuses sensitive input (credential assignments) before spawning.
-        Raises ``ComponentUnavailable`` on any failure so the caller can
-        degrade ONLY this capability.
-        """
-        if is_sensitive_input(text):
-            raise UnsafeConfiguration(
-                "sensitive input refused: credential assignment detected")
-        # Safety constraint: cache must be off and refusal on, regardless of
-        # bootstrap state. An unsafe manifest must never be served.
-        if self.manifest.cache_mode != "off":
-            raise UnsafeConfiguration(
-                f"unsafe cache_mode '{self.manifest.cache_mode}' (must be 'off')")
-        if not self.manifest.sensitive_input_refusal:
-            raise UnsafeConfiguration(
-                "sensitive_input_refusal must be True")
-        disc = self.discover()
-        if disc["state"] != "present-ok":
-            raise ComponentUnavailable(
-                f"anti-token-extraction not available (state={disc['state']})")
+    def compress(self, text: str, filter_name: str = "auto") -> Dict[str, Any]:
+        if len(text.encode("utf-8")) > MAX_REQUEST_BYTES:
+            raise UnsafeConfiguration("input exceeds 1 MiB limit")
+        _validate_manifest(self.manifest)
+        if self.discover()["state"] != "present-ok":
+            raise ComponentUnavailable("pinned anti-token-extraction runtime is unavailable")
         proc = None
         try:
             proc = _spawn_server()
-            _jsonrpc(proc, "initialize", {"capabilities": {}})
-            res = _jsonrpc(proc, "extract", {"text": text, "schema": schema or {}})
-            return {"ok": True, "tokens": res.get("tokens", []),
-                    "component": COMPONENT_ID}
-        except ComponentUnavailable:
-            raise
+            _jsonrpc(proc, "initialize", {})
+            result = _jsonrpc(proc, "compress", {"text": text, "filter_name": filter_name})
+            return {"ok": True, "component": COMPONENT_ID, **result}
         finally:
-            if proc is not None:
-                try:
-                    proc.terminate()
-                    proc.wait(timeout=2)
-                except Exception:
-                    proc.kill()
+            _stop(proc)
+
+    def extract(self, text: str, schema: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Backward-compatible alias. This compresses tool output; it never extracts credentials."""
+        return self.compress(text, filter_name="auto")
 
 
 def bootstrap_anti_token_extraction(force: bool = False) -> Dict[str, Any]:
-    """Convenience: construct the component and run an idempotent bootstrap."""
-    comp = AntiTokenExtractionComponent()
-    return comp.bootstrap(force=force)
+    return AntiTokenExtractionComponent().bootstrap(force=force)
 
 
 def register_capability(reg) -> None:
-    """Register the anti-token-extraction capability as optional + degradable.
-
-    The capability starts in 'candidate' (not verified) and is independently
-    degradable: a failure degrades ONLY this capability, never the rest of CAPT.
-    """
     reg.register(
         COMPONENT_ID,
-        description="Optional anti-token-extraction via local child-process stdio.",
-        provider="capt-solo/components",
+        description="Optional stateless tool-output compression over local stdio.",
+        provider="anti-token-extraction",
         required_environment="local-child-process",
-        dependencies=["capt_solo.components._ate_stdio_server"],
+        dependencies=["anti-token-extraction==0.2.0"],
         supported_versions=["0.4.1"],
         lifecycle="candidate",
         creation_metadata={
