@@ -4,15 +4,18 @@
 
 ### Added
 - **Anti-Token-Extraction component** (`capt_solo/components/`): optional,
-  independently degradable capability running as a local child process over
-  stdio (JSON-RPC 2.0). Cache mode off, sensitive-input refusal on, no
-  credentials in MCP arguments.
+  independently degradable capability invoking the REAL upstream
+  `anti_token_extraction` package as a local child process over stdio
+  (FastMCP). Cache mode off, sensitive-input refusal on, no credentials in
+  MCP arguments.
 - **Pinned upstream manifest**: `UPSTREAM_REPO` + `PINNED_COMMIT`
   (https://github.com/knowurknottty/anti-token-extraction @ b68adac…) recorded
-  in `ATEManifest`; `verify_pinned_commit()` confirms install matches.
-- **Bundled offline stdio server** (`_ate_stdio_server.py`) mirroring the
-  pinned upstream contract; replace with the pinned upstream build for prod.
-- **Legacy cache purge** on bootstrap/upgrade (`purge_legacy_cache()`).
+  in `ATEManifest`; provenance verified via `direct_url.json`
+  (`verify_pinned_commit()` confirms install matches exact commit + repo + vcs).
+- **Legacy cache purge** on bootstrap/upgrade (`purge_legacy_cache()` delegates
+  to the upstream `anti-token-extraction security purge-legacy-cache`, removing
+  `~/.cache/anti-token-extraction/csc2.json`; symlink-safe, quarantines on
+  failure).
 - **Hermes MCP template** (`anti_token_extraction.mcp.json`): stdio, cache off,
   refusal on, no creds, isolation metadata.
 - **Capability registration**: `register_capability(reg)` registers
@@ -20,10 +23,14 @@
 - **Plugin tool**: `capt_anti_token_extraction_status` (47 tools total).
 - **doctor.sh**: `v04.anti_token_extraction` check (pass healthy+pinned; warn
   absent/degraded — never blocks core).
-- **verify_runtime.py**: 8 `component.ate_*` checks (warn-only).
-- **Tests**: `tests/test_v04_anti_token_extraction.py` (9 scenarios: absent,
-  healthy, wrong commit/version, MCP startup failure, unsafe cache, secret
-  schema rejection, scoped degradation, bootstrap idempotency, legacy-cache purge).
+- **verify_runtime.py**: `component.ate_*` checks (warn-only).
+- **Tests**: `tests/test_v04_anti_token_extraction.py` (27 tests: no-shim,
+  no-credential-extraction-regex, safe compress shape, sensitive refusal,
+  MCP template no-secret-params, cache off, no historical retrieval, stdio
+  transport, provenance exact/wrong-commit/wrong-repo/missing/malformed/absent,
+  scoped degradation, core systems unaffected, no payload state, no input in
+  errors, oversized rejection, timeout kill, legacy-cache purge, manifest
+  security, bootstrap idempotency, real end-to-end compression).
 - **Docs**: `docs/ANTI_TOKEN_EXTRACTION.md`.
 
 ### Changed

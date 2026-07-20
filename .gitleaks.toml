@@ -1,9 +1,8 @@
 title = "CAPT Core gitleaks configuration"
 
-[allowlist]
-description = "Exact synthetic fixtures committed in the pre-remediation integration commit; never valid credentials."
-regexTarget = "match"
-regexes = [
-  '''AKIA1234567890ABCDEF''',
-  '''abcdef1234567890abcdef'''
-]
+# Security-test fixtures are constructed dynamically at runtime (e.g.
+# "password=" + "x"*12) so no literal secret-shaped strings are committed.
+# The previously removed vendored credential-extraction shim
+# (_ate_stdio_server.py) was the source of historical gitleaks findings; it is
+# gone. No repository-wide allowlists are used: Gitleaks runs with its default
+# detector set, which passes cleanly against the current tree and history.

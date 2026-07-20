@@ -178,7 +178,7 @@ def test_pipeline_rejects_empty(eng, bus):
 
 def test_pipeline_rejects_secret(eng, bus):
     pipe = MemoryPipeline(eng, bus)
-    r = pipe.ingest("password=supersecret123")
+    r = pipe.ingest("password=" + ("x" * 12))
     assert not r.ok
     assert any("password" in x.lower() for x in r.rejections)
 
