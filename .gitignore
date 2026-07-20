@@ -1,0 +1,48 @@
+# CAPT Solo — gitignore
+# Exclude runtime state, generated artifacts, caches, and secrets.
+
+# Runtime data (local-only, never committed)
+data/
+backups/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# CTP journals
+ctp/
+journal.log
+state.json
+
+# Python caches
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Temp / verification scratch
+capt-verify-*/
+hermes-verify-*
+/tmp/
+*.json.tmp
+
+# Editor / OS
+.DS_Store
+*.swp
+.idea/
+
+# Secrets / credentials (never commit)
+*.env
+.env.*
+secrets.json
+credentials.*
+*.pem
+*.key
+
+# Build / dist
+build/
+dist/
+*.egg-info/
