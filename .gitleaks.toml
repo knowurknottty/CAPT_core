@@ -1,0 +1,9 @@
+title = "CAPT Core gitleaks configuration"
+
+[allowlist]
+description = "Exact synthetic fixtures committed in the pre-remediation integration commit; never valid credentials."
+regexTarget = "match"
+regexes = [
+  '''AKIA1234567890ABCDEF''',
+  '''abcdef1234567890abcdef'''
+]
