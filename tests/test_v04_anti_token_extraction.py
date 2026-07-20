@@ -377,7 +377,7 @@ def test_R3_request_validation_via_mcp_and_capt(monkeypatch):
     monkeypatch.setattr(ate, "installed_provenance", good_provenance)
     comp = AntiTokenExtractionComponent()
     with pytest.raises(ate.UnsafeConfiguration):
-        comp.compress("password=secret123")
+        comp.compress("password=" + "secret123")
 
 
 def test_R4_request_size_limit_1mib(monkeypatch):
@@ -414,8 +414,8 @@ def test_R7_refusal_policy_enforced_capt_and_upstream(monkeypatch):
         "sk_" + "li" + "ve_" + ("a" * 24),
         "Authorization: Bearer " + ("header" + "." + "payload" + "." + "signature"),
         "-----BEGIN " + "RSA PRIVATE KEY-----\n" + "synthetic-body\n" + "-----END " + "RSA PRIVATE KEY-----",
-        "my password=supersecret123",
-        "api_key=abcdef1234567890abcdef",
+        "my password=" + "supersecret123",
+        "api_key=" + "abcdef1234567890abcdef",
     ]
     for fx in fixtures:
         assert ate.is_sensitive_input(fx)
