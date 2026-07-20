@@ -1,0 +1,32 @@
+{
+  "component": "anti-token-extraction",
+  "description": "Optional stateless tool-output compression via the pinned upstream FastMCP server.",
+  "transport": "stdio",
+  "mcp_server": {
+    "command": "python3",
+    "args": ["-m", "anti_token_extraction.server"],
+    "env": {},
+    "credentials_in_args": false,
+    "cache_mode": "off",
+    "sensitive_input_policy": "refuse",
+    "network_enabled": false
+  },
+  "pinned_upstream": {
+    "repo": "https://github.com/knowurknottty/anti-token-extraction",
+    "commit": "b68adac7311b2315d992592b479e6761aa9dc856",
+    "version": "0.2.0"
+  },
+  "isolation": {
+    "embeds_into_memory": false,
+    "embeds_into_ctp": false,
+    "embeds_into_khsb": false,
+    "degradation_scope": "anti-token-extraction-only"
+  },
+  "safety_constraints": [
+    "persistent payload caching is unsupported",
+    "historical payload retrieval is unsupported",
+    "sensitive-looking input is refused",
+    "no credentials are passed in MCP arguments",
+    "failure degrades only the anti-token-extraction capability"
+  ]
+}

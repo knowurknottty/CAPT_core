@@ -1,5 +1,41 @@
 # CAPT Solo — Changelog
 
+## v0.4.1 (2026-07-20) — Anti-Token-Extraction Component Integration
+
+### Added
+- **Anti-Token-Extraction component** (`capt_solo/components/`): optional,
+  independently degradable capability running as a local child process over
+  stdio (JSON-RPC 2.0). Cache mode off, sensitive-input refusal on, no
+  credentials in MCP arguments.
+- **Pinned upstream manifest**: `UPSTREAM_REPO` + `PINNED_COMMIT`
+  (https://github.com/knowurknottty/anti-token-extraction @ b68adac…) recorded
+  in `ATEManifest`; `verify_pinned_commit()` confirms install matches.
+- **Bundled offline stdio server** (`_ate_stdio_server.py`) mirroring the
+  pinned upstream contract; replace with the pinned upstream build for prod.
+- **Legacy cache purge** on bootstrap/upgrade (`purge_legacy_cache()`).
+- **Hermes MCP template** (`anti_token_extraction.mcp.json`): stdio, cache off,
+  refusal on, no creds, isolation metadata.
+- **Capability registration**: `register_capability(reg)` registers
+  `anti-token-extraction` as `candidate`, `optional`, `independently_degradable`.
+- **Plugin tool**: `capt_anti_token_extraction_status` (47 tools total).
+- **doctor.sh**: `v04.anti_token_extraction` check (pass healthy+pinned; warn
+  absent/degraded — never blocks core).
+- **verify_runtime.py**: 8 `component.ate_*` checks (warn-only).
+- **Tests**: `tests/test_v04_anti_token_extraction.py` (9 scenarios: absent,
+  healthy, wrong commit/version, MCP startup failure, unsafe cache, secret
+  schema rejection, scoped degradation, bootstrap idempotency, legacy-cache purge).
+- **Docs**: `docs/ANTI_TOKEN_EXTRACTION.md`.
+
+### Changed
+- `plugin.json` version 0.4.0 → 0.4.1; tool count 46 → 47.
+- `install.sh`: bootstraps the component (idempotent) and purges legacy caches.
+- `doctor.sh`: version label v0.4.1; plugin tool count 47.
+
+### Safety
+- Failure of this component degrades ONLY the anti-token-extraction capability
+  (scoped `affected_scope`). Memory, CTP, KHSB, governance, ClaimGuard, plugin
+  loading, and core runtime remain operational.
+
 ## v0.4.0 (2026-07-19) — Proof-Governed Cognitive Operating System
 
 ### Added

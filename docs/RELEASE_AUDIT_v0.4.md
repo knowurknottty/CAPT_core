@@ -113,6 +113,21 @@ SCENARIO RESULT: ALL PASS
 - Broken downgrade paths: `degrade`/`revoke`/`deprecate` explicit, recorded,
   reversible via `mark_proven`/`govern_approve` re-run where applicable.
 
+## v0.4.1 Addendum — Anti-Token-Extraction Integration (integration branch)
+
+The v0.4.0 tag is immutable and unchanged. Integration work for v0.4.1 proceeds
+on branch `integration/anti-token-extraction-v0.2` and adds an **optional,
+independently degradable** component without altering any v0.4.0 behavior:
+
+- New `capt_solo/components/` package (isolated; no embedding into memory/CTP/KHSB).
+- Local child-process stdio only; cache off; sensitive-input refusal; no creds in args.
+- Pinned upstream `https://github.com/knowurknottty/anti-token-extraction@b68adac…`.
+- Failure degrades ONLY `anti-token-extraction` (scoped `affected_scope`); all
+  other subsystems remain operational.
+- 9 required integration tests; `verify_runtime.py` + `doctor.sh` extended
+  (warn-only for the optional component, so core verification is never blocked).
+- All 17 v0.4 release gates remain GREEN after integration.
+
 ## Conclusion
 
 All 17 release gates PASS. CAPT Solo v0.4 is internally consistent, proof-governed,

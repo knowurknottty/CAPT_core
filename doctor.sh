@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CAPT Solo v0.4 — doctor
+# CAPT Solo v0.4.1 — doctor
 # Diagnoses the local environment and reports what is and isn't available.
 # Emits STRUCTURED checks: check_id | status | severity | summary | evidence | remediation | duration_ms
 # Status: pass | warn | fail | skip
@@ -9,7 +9,7 @@ CAPT_SOLO_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_PREFIX="${CAPT_SOLO_HOME:-$HOME/.capt-solo}"
 HERMES_CONFIG_DIR="${HERMES_CONFIG_DIR:-$HOME/.hermes}"
 
-echo "== CAPT Solo v0.4 doctor =="
+echo "== CAPT Solo v0.4.1 doctor =="
 
 emit() { # check_id status severity summary evidence remediation
   local cid="$1" st="$2" sev="$3" sum="$4" ev="$5" rem="$6"
@@ -94,13 +94,33 @@ else
   emit "v04.cli_available" "fail" "medium" "CLI not runnable" "cli error" "check capt_cli.py"
 fi
 
-if PYTHONPATH="$CAPT_SOLO_SRC" python3 -c "import json,sys; d=json.load(open('$HERMES_CONFIG_DIR/plugins/capt-solo/plugin.json')); sys.exit(0 if len(d.get('tools',[]))==46 else 1)" 2>/dev/null; then
-  emit "v04.plugin_tools" "pass" "high" "Plugin tool count is 46" "46 tools" "n/a"
+if PYTHONPATH="$CAPT_SOLO_SRC" python3 -c "import json,sys; d=json.load(open('$HERMES_CONFIG_DIR/plugins/capt-solo/plugin.json')); sys.exit(0 if len(d.get('tools',[]))==47 else 1)" 2>/dev/null; then
+  emit "v04.plugin_tools" "pass" "high" "Plugin tool count is 47" "47 tools" "n/a"
 elif [ -f "$CAPT_SOLO_SRC/capt_solo/plugin/plugin.json" ]; then
   CNT=$(python3 -c "import json; print(len(json.load(open('$CAPT_SOLO_SRC/capt_solo/plugin/plugin.json')).get('tools',[])))")
   emit "v04.plugin_tools" "warn" "medium" "Plugin tools counted from source (not installed)" "source tools=$CNT" "run install.sh to deploy plugin"
 else
-  emit "v04.plugin_tools" "fail" "high" "Plugin tool count != 46" "no plugin.json" "add v0.4 tools"
+  emit "v04.plugin_tools" "fail" "high" "Plugin tool count != 47" "no plugin.json" "add v0.4.1 tools"
+fi
+
+# --- anti-token-extraction component (optional, independently degradable) ---
+if PYTHONPATH="$CAPT_SOLO_SRC" CAPT_SOLO_HOME="$(mktemp -d)" python3 -c '
+from capt_solo.components import AntiTokenExtractionComponent
+import sys
+st = AntiTokenExtractionComponent().status()
+healthy = st.get("healthy")
+pinned = st.get("pinned_verified")
+if st.get("state") == "absent":
+    print("ABSENT"); sys.exit(0)   # optional: absence is not a failure
+if healthy and pinned:
+    print("OK"); sys.exit(0)
+print("DEGRADED"); sys.exit(2)
+' 2>/dev/null; then
+  emit "v04.anti_token_extraction" "pass" "high" "Anti-token-extraction component healthy + pinned" "status ok" "n/a"
+elif [ $? -eq 0 ]; then
+  emit "v04.anti_token_extraction" "warn" "low" "Anti-token-extraction component absent (optional)" "state=absent" "bootstrap to enable; absence does not block CAPT"
+else
+  emit "v04.anti_token_extraction" "warn" "medium" "Anti-token-extraction degraded (scoped)" "health/pin mismatch" "degrade only this capability; CAPT core unaffected"
 fi
 
 if PYTHONPATH="$CAPT_SOLO_SRC" CAPT_SOLO_HOME="$(mktemp -d)" python3 "$CAPT_SOLO_SRC/verify_runtime.py" >/dev/null 2>&1; then

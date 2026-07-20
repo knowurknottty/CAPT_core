@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "capt-solo"
-version = "0.1.0"
+version = "0.4.1"
 description = "Local-first cognitive runtime for individual developers, integrating with Hermes."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -17,11 +17,17 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/inversion-labs/capt-solo"
+Homepage = "https://github.com/knowurknottty/CAPT_core"
 
-[options]
-packages = ["capt_solo", "capt_solo.core", "capt_solo.memory", "capt_solo.ctp", "capt_solo.khsb", "capt_solo.plugin"]
-python_requires = ">=3.8"
-
-[options.entry_points.hermes_plugins]
+[project.entry-points.hermes_plugins]
 capt-solo = "capt_solo.plugin:get_plugin"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["capt_solo*"]
+namespaces = true
+
+[tool.setuptools.package-data]
+"capt_solo.components" = ["*.json"]
+"capt_solo.plugin" = ["*.json"]
+"capt_solo.skills" = ["**/*.md"]

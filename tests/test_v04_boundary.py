@@ -63,7 +63,7 @@ def test_plugin_tool_count_is_46():
     pj = SRC / "plugin" / "plugin.json"
     data = json.loads(pj.read_text())
     tools = data.get("tools", [])
-    assert len(tools) == 46, f"expected 46 tools, got {len(tools)}"
+    assert len(tools) == 47, f"expected 47 tools, got {len(tools)}"
 
 
 def test_cli_uses_domain_methods_not_sql():

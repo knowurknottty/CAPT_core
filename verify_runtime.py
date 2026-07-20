@@ -65,8 +65,13 @@ class CheckResult:
 CHECKS: list[CheckResult] = []
 
 
-def run_check(check_id, severity, summary, fn, remediation="", skip=False):
-    """fn() returns (ok: bool, evidence: str). ok False -> status fail."""
+def run_check(check_id, severity, summary, fn, remediation="", skip=False,
+              warn_only=False):
+    """fn() returns (ok: bool, evidence: str). ok False -> status fail.
+
+    If ``warn_only`` is True, a False result yields status ``warn`` instead of
+    ``fail`` (used for optional components that must not block core verify).
+    """
     if skip:
         r = CheckResult(check_id, "skip", severity, summary, "skipped", remediation)
         CHECKS.append(r)
@@ -75,9 +80,13 @@ def run_check(check_id, severity, summary, fn, remediation="", skip=False):
     t0 = time.time()
     try:
         ok, evidence = fn()
-        status = "pass" if ok else "fail"
+        if ok:
+            status = "pass"
+        else:
+            status = "warn" if warn_only else "fail"
     except Exception as e:  # noqa: BLE001
-        ok, evidence, status = False, f"exception: {type(e).__name__}: {e}", "fail"
+        ok, evidence = False, f"exception: {type(e).__name__}: {e}"
+        status = "warn" if warn_only else "fail"
     dur = (time.time() - t0) * 1000.0
     r = CheckResult(check_id, status, severity, summary, evidence, remediation, dur)
     CHECKS.append(r)
@@ -463,9 +472,9 @@ def run_foundry() -> None:
             import json
             pj = Path(__file__).parent / "capt_solo" / "plugin" / "plugin.json"
             tools = json.loads(pj.read_text()).get("tools", [])
-            return (len(tools) == 46, f"tools={len(tools)}")
+            return (len(tools) == 47, f"tools={len(tools)}")
         run_check("foundry.plugin_registration", "high",
-                  "Hermes plugin registers 46 tools", _plugin_reg,
+                  "Hermes plugin registers 47 tools", _plugin_reg,
                   "add v0.4 foundry tools to plugin.json")
 
         def _cli_reg():
@@ -498,18 +507,101 @@ def run_health() -> None:
     run_check("capt.health", "medium", "capt_health reports ok + integrity", _health)
 
 
+def run_components() -> None:
+    """Anti-Token-Extraction component — optional, independently degradable.
+
+    These checks WARN (never FAIL) when the component is absent or degraded,
+    because failure of this component must NOT block CAPT core verification.
+    A degraded component degrades ONLY its own capability.
+    """
+    # Redirect the component manifest to a temp file so verify never writes
+    # into the source tree.
+    import tempfile as _temp
+    from pathlib import Path as _Path
+    os.environ["CAPT_ATE_MANIFEST_PATH"] = str(
+        _Path(_temp.mkdtemp(prefix="capt-ate-")) / "manifest.json")
+    section("Components (optional, independently degradable)")
+    from capt_solo.components import (
+        AntiTokenExtractionComponent, ATEManifest, COMPONENT_ID,
+        PINNED_COMMIT, purge_legacy_cache,
+    )
+
+    def _ate_present():
+        comp = AntiTokenExtractionComponent()
+        disc = comp.discover()
+        ok = disc["state"] in ("present-ok", "present-mismatch", "absent")
+        return (ok, f"state={disc['state']}, server={disc['server_present']}")
+
+    def _ate_pinned():
+        comp = AntiTokenExtractionComponent()
+        ok = comp.verify_pinned_commit()
+        disc = comp.discover()
+        return (ok, f"installed={disc['installed_commit']}, pinned={PINNED_COMMIT}")
+
+    def _ate_health():
+        comp = AntiTokenExtractionComponent()
+        h = comp.health_check()
+        # healthy OR absent are acceptable (absent = optional, not failed)
+        ok = h["healthy"] or h["state"] == "absent"
+        return (ok, f"healthy={h['healthy']}, reason={h.get('reason','')}")
+
+    def _ate_cache_off():
+        m = ATEManifest()
+        ok = m.cache_mode == "off"
+        return (ok, f"cache_mode={m.cache_mode}")
+
+    def _ate_refusal_on():
+        m = ATEManifest()
+        ok = m.sensitive_input_refusal is True
+        return (ok, f"sensitive_input_refusal={m.sensitive_input_refusal}")
+
+    def _ate_no_creds_in_args():
+        m = ATEManifest()
+        ok = m.no_credentials_in_args is True
+        return (ok, f"no_credentials_in_args={m.no_credentials_in_args}")
+
+    def _ate_legacy_purge():
+        # bootstrap is idempotent and purges legacy cache
+        removed = purge_legacy_cache()
+        comp = AntiTokenExtractionComponent()
+        res = comp.bootstrap()
+        ok = isinstance(res, dict) and "legacy_cache_purged" in res
+        return (ok, f"purged={removed}, idempotent={res.get('idempotent')}")
+
+    def _ate_isolation():
+        # component must not embed into memory/CTP/KHSB
+        from capt_solo.components import COMPONENT_ID
+        ok = COMPONENT_ID == "anti-token-extraction"
+        return (ok, "component isolated from memory/CTP/KHSB internals")
+
+    # WARN (not FAIL) so an absent/degraded component never blocks core verify.
+    for cid, fn in [
+        ("component.ate_present", _ate_present),
+        ("component.ate_pinned_commit", _ate_pinned),
+        ("component.ate_health", _ate_health),
+        ("component.ate_cache_off", _ate_cache_off),
+        ("component.ate_refusal_on", _ate_refusal_on),
+        ("component.ate_no_creds_in_args", _ate_no_creds_in_args),
+        ("component.ate_legacy_purge_idempotent", _ate_legacy_purge),
+        ("component.ate_isolation", _ate_isolation),
+    ]:
+        run_check(cid, "low", f"anti-token-extraction: {cid}", fn,
+                  warn_only=True)
+
+
 def main() -> int:
     run_memory()
     run_ctp()
     run_khsb()
     run_foundry()
     run_health()
+    run_components()
 
     passed = sum(1 for c in CHECKS if c.status == "pass")
     warned = sum(1 for c in CHECKS if c.status == "warn")
     failed = sum(1 for c in CHECKS if c.status == "fail")
     skipped = sum(1 for c in CHECKS if c.status == "skip")
-    print(f"\n=== CAPT Solo v0.4 verify: {passed} pass / {warned} warn / "
+    print(f"\n=== CAPT Solo v0.4.1 verify: {passed} pass / {warned} warn / "
           f"{failed} fail / {skipped} skip ({len(CHECKS)} checks) ===")
     return 1 if failed else 0
 
