@@ -409,9 +409,9 @@ def test_R7_refusal_policy_enforced_capt_and_upstream(monkeypatch):
     comp = AntiTokenExtractionComponent()
     fixtures = [
         "AK" + "IA" + ("X" * 16),
-        "ghp_" + "a" * 36,
-        "xoxb-" + "1" * 12 + "-" + "2" * 12 + "-" + "a" * 24,
-        "sk_live_" + "a" * 24,
+        "gh" + "p_" + ("a" * 36),
+        "xo" + "xb-" + ("1" * 12) + "-" + ("2" * 12) + "-" + ("a" * 24),
+        "sk_" + "li" + "ve_" + ("a" * 24),
         "Authorization: Bearer " + ("header" + "." + "payload" + "." + "signature"),
         "-----BEGIN " + "RSA PRIVATE KEY-----\n" + "synthetic-body\n" + "-----END " + "RSA PRIVATE KEY-----",
         "my password=supersecret123",
@@ -561,7 +561,7 @@ def test_detect_preserved_deprecated(ate_home, monkeypatch):
     assert "output" in res
     # sensitive input refused before detection
     with pytest.raises(ate.UnsafeConfiguration):
-        comp.detect("sk_live_" + "a" * 24)
+        comp.detect("sk_" + "li" + "ve_" + ("a" * 24))
 
 
 def test_return_shape_no_bytes_metadata(ate_home, monkeypatch):
