@@ -1,74 +1,66 @@
 #!/usr/bin/env python3
-"""Bundled local stdio server for the Anti-Token-Extraction component.
+"""Local stdio adapter for the pinned Anti-Token-Extraction package.
 
-This is the vendored local runtime that the component spawns as a child
-process over stdio (JSON-RPC 2.0, one JSON object per line). It is fully
-offline: no network, no credentials, cache mode off, sensitive-input refusal
-on. The pinned upstream (https://github.com/knowurknottty/anti-token-extraction
-@ b68adac...) is the canonical source; this server mirrors its contract.
-
-Protocol:
-  request  {"jsonrpc":"2.0","id":<str>,"method":<m>,"params":<obj>}
-  response {"jsonrpc":"2.0","id":<str>,"result":<obj>}
-           {"jsonrpc":"2.0","id":<str>,"error":<obj>}
-
-Methods: initialize, health, extract, shutdown.
+This adapter never implements credential extraction. It imports the installed
+upstream package and exposes only stateless tool-output compression and type
+detection over a bounded newline-delimited JSON-RPC channel.
 """
+
+from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
+from typing import Any
 
-# Token shapes we extract (high-precision, offline regexes).
-_TOKEN_PATTERNS = {
-    "aws_access_key": re.compile(r"AKIA[0-9A-Z]{16}"),
-    "github_token": re.compile(r"gh[pousr]_[A-Za-z0-9]{36,}"),
-    "slack_token": re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"),
-    "stripe_key": re.compile(r"(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{16,}"),
-    "google_api": re.compile(r"AIza[0-9A-Za-z_\-]{35}"),
-    "private_key": re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----"),
-    "bearer_token": re.compile(r"(?i)bearer\s+[A-Za-z0-9._\-]{20,}"),
-    "api_key_assign": re.compile(r"(?i)(api[_-]?key|apikey|secret[_-]?key)\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{16,}"),
-    "password_assign": re.compile(r"(?i)(password|passwd|pwd)\s*[:=]\s*['\"]?[^\\s'\"]{6,}"),
-}
-
-# Sensitive-input refusal: refuse CREDENTIAL ASSIGNMENTS (something submitted
-# as a secret), NOT bare tokens that are extraction targets (AKIA…, ghp_…).
-_SENSITIVE_PATTERNS = [
-    re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----"),
-    re.compile(r"(?i)bearer\s+[A-Za-z0-9._\-]{20,}"),
-    re.compile(r"(?i)(api[_-]?key|apikey|secret[_-]?key)\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{16,}"),
-    re.compile(r"(?i)(password|passwd|pwd)\s*[:=]\s*['\"]?[^\\s'\"]{6,}"),
-    re.compile(r"(?i)(session|auth|access)[_\-]?token\s*[:=]\s*['\"]?[A-Za-z0-9._\-]{20,}"),
-    re.compile(r"(?i)recovery[_-]?code\s*[:=]\s*['\"]?[A-Za-z0-9]{8,}"),
-    re.compile(r"(?i)(seed\s*phrase|mnemonic|recovery\s*phrase)\b"),
-]
+MAX_REQUEST_BYTES = 1_048_576
 
 
-def _refuses(text: str) -> bool:
-    return any(p.search(text) for p in _SENSITIVE_PATTERNS)
+def _load_upstream():
+    try:
+        from anti_token_extraction._core import rtk_compress, rtk_detect
+        from anti_token_extraction.security import process_sensitive_input
+    except Exception as exc:  # pragma: no cover - reported to parent process
+        raise RuntimeError(f"pinned anti-token-extraction package unavailable: {exc}") from exc
+    return rtk_compress, rtk_detect, process_sensitive_input
 
 
-def _extract(text: str) -> list:
-    found = []
-    for name, pat in _TOKEN_PATTERNS.items():
-        for m in pat.finditer(text):
-            found.append({"type": name, "match": m.group(0)})
-    return found
+def _secure_text(text: str, process_sensitive_input) -> str:
+    if not isinstance(text, str):
+        raise ValueError("text must be a string")
+    if len(text.encode("utf-8")) > MAX_REQUEST_BYTES:
+        raise ValueError("request exceeds 1 MiB limit")
+    return process_sensitive_input(text, policy="refuse").text
 
 
-def _handle(method: str, params: dict) -> dict:
+def _handle(method: str, params: dict[str, Any]) -> dict[str, Any]:
+    rtk_compress, rtk_detect, process_sensitive_input = _load_upstream()
     if method == "initialize":
-        return {"capabilities": {"cache": "off", "refusal": "on",
-                                 "transport": "stdio"}}
+        return {
+            "capabilities": {
+                "compression": True,
+                "detection": True,
+                "cache": "off",
+                "sensitive_input_policy": "refuse",
+                "transport": "stdio",
+            }
+        }
     if method == "health":
-        return {"ok": True, "detail": "stdio server operational"}
-    if method == "extract":
-        text = params.get("text", "")
-        if _refuses(text):
-            raise ValueError("sensitive input refused by policy")
-        return {"tokens": _extract(text)}
+        return {"ok": True, "detail": "pinned upstream runtime operational"}
+    if method == "compress":
+        text = _secure_text(params.get("text", ""), process_sensitive_input)
+        filter_name = params.get("filter_name", "auto")
+        if not isinstance(filter_name, str):
+            raise ValueError("filter_name must be a string")
+        output = rtk_compress(text, filter_name, 0, 0)
+        return {
+            "output": output,
+            "bytes_in": len(text.encode("utf-8")),
+            "bytes_out": len(output.encode("utf-8")),
+        }
+    if method == "detect":
+        text = _secure_text(params.get("text", ""), process_sensitive_input)
+        return {"detection": rtk_detect(text)}
     if method == "shutdown":
         return {"ok": True}
     raise ValueError(f"unknown method: {method}")
@@ -79,31 +71,37 @@ def main() -> int:
     parser.add_argument("--cache-mode", default="off")
     parser.add_argument("--refusal", default="on")
     args = parser.parse_args()
-    if args.cache_mode != "off":
-        sys.stderr.write("fatal: cache-mode must be off\n")
-        return 2
-    if args.refusal != "on":
-        sys.stderr.write("fatal: refusal must be on\n")
+    if args.cache_mode != "off" or args.refusal != "on":
+        sys.stderr.write("fatal: cache mode must be off and refusal must be on\n")
         return 2
 
-    for line in sys.stdin:
-        line = line.strip()
+    for raw_line in sys.stdin.buffer:
+        if len(raw_line) > MAX_REQUEST_BYTES + 4096:
+            sys.stderr.write("request line exceeds limit\n")
+            return 2
+        line = raw_line.decode("utf-8", errors="strict").strip()
         if not line:
             continue
+        rid = None
+        method = ""
         try:
             req = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        rid = req.get("id")
-        method = req.get("method", "")
-        params = req.get("params", {}) or {}
-        try:
+            if not isinstance(req, dict) or req.get("jsonrpc") != "2.0":
+                raise ValueError("invalid JSON-RPC request")
+            rid = req.get("id")
+            method = req.get("method", "")
+            params = req.get("params", {}) or {}
+            if not isinstance(params, dict):
+                raise ValueError("params must be an object")
             result = _handle(method, params)
             out = {"jsonrpc": "2.0", "id": rid, "result": result}
-        except Exception as e:
-            out = {"jsonrpc": "2.0", "id": rid,
-                   "error": {"code": -32000, "message": str(e)}}
-        sys.stdout.write(json.dumps(out) + "\n")
+        except Exception as exc:
+            out = {
+                "jsonrpc": "2.0",
+                "id": rid,
+                "error": {"code": -32000, "message": str(exc)},
+            }
+        sys.stdout.write(json.dumps(out, separators=(",", ":")) + "\n")
         sys.stdout.flush()
         if method == "shutdown":
             break
@@ -111,4 +109,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())
