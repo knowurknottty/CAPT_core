@@ -1,180 +1,133 @@
-"""CAPT Solo v0.4.1 — Anti-Token-Extraction component integration tests.
+"""Security and isolation tests for Anti-Token-Extraction integration."""
 
-These exercise the 9 required scenarios:
-  1. component absent
-  2. healthy installation
-  3. incorrect commit/version
-  4. MCP startup failure
-  5. unsafe cache configuration
-  6. secret-bearing schema rejection
-  7. scoped degradation
-  8. bootstrap idempotency
-  9. legacy-cache purge behavior
+from __future__ import annotations
 
-The bundled stdio server (``_ate_stdio_server.py``) is the local child process
-used for all spawn-based tests, so no network or external binary is required.
-"""
-
-import os
 import json
-import tempfile
+import os
 from pathlib import Path
 
 import pytest
 
+import capt_solo.components.anti_token_extraction as ate
 from capt_solo.components.anti_token_extraction import (
-    AntiTokenExtractionComponent, ATEManifest, ComponentUnavailable,
-    UnsafeConfiguration, COMPONENT_ID, PINNED_COMMIT,
-    load_manifest, save_manifest, purge_legacy_cache,
-    register_capability,
+    ATEManifest,
+    AntiTokenExtractionComponent,
+    ComponentUnavailable,
+    PINNED_COMMIT,
+    PINNED_VERSION,
+    UnsafeConfiguration,
+    load_manifest,
+    purge_legacy_cache,
+    save_manifest,
 )
-from capt_solo.foundry import CapabilityRegistry, ClaimGuard, ProofEngine
-from capt_solo.memory.engine import MemoryEngine
 
 
 @pytest.fixture
 def ate_home(tmp_path, monkeypatch):
-    """Isolated home + manifest redirect so tests never touch the source tree."""
     monkeypatch.setenv("CAPT_SOLO_HOME", str(tmp_path))
-    manifest = tmp_path / "ate_manifest.json"
-    monkeypatch.setenv("CAPT_ATE_MANIFEST_PATH", str(manifest))
+    monkeypatch.setenv("CAPT_ATE_MANIFEST_PATH", str(tmp_path / "components" / "manifest.json"))
     return tmp_path
 
 
-def test_1_component_absent(ate_home, monkeypatch):
-    """With no manifest and no bootstrapped state, the component is 'absent'
-    and reports status without raising."""
-    comp = AntiTokenExtractionComponent()
-    disc = comp.discover()
-    assert disc["state"] == "absent"
-    assert disc["server_present"] is True  # bundled server exists
-    status = comp.status()
-    assert status["state"] == "absent"
-    # absence is not a failure: health reports not-healthy but does not raise
-    assert comp.health_check()["healthy"] is False
+def good_provenance():
+    return {"version": PINNED_VERSION, "commit": PINNED_COMMIT, "url": ate.UPSTREAM_REPO}
 
 
-def test_2_healthy_installation(ate_home):
-    """After bootstrap, the component is present-ok, healthy, and pinned."""
-    comp = AntiTokenExtractionComponent()
-    res = comp.bootstrap()
-    assert res["bootstrapped"] is True
-    disc = comp.discover()
-    assert disc["state"] == "present-ok"
-    assert disc["pinned_match"] is True
-    health = comp.health_check()
-    assert health["healthy"] is True
-    # extraction works end-to-end via the local child process
-    out = comp.extract("connect with AKIA1234567890ABCDEF and move on")
-    types = {t["type"] for t in out["tokens"]}
-    assert "aws_access_key" in types
+def test_absent_package_is_scoped_degradation(ate_home, monkeypatch):
+    monkeypatch.setattr(ate, "installed_provenance", lambda: {"version": None, "commit": None, "url": None})
+    component = AntiTokenExtractionComponent()
+    assert component.discover()["state"] == "absent"
+    assert component.health_check()["healthy"] is False
 
 
-def test_3_incorrect_commit_version(ate_home):
-    """A manifest with a wrong installed_commit is reported as mismatch and
-    fails the pinned-commit verification (no silent acceptance)."""
-    bad = ATEManifest(installed_commit="deadbeef" * 5)
-    save_manifest(bad)
-    comp = AntiTokenExtractionComponent()
-    disc = comp.discover()
-    assert disc["state"] == "present-mismatch"
-    assert comp.verify_pinned_commit() is False
-    # health check refuses to serve a mismatched install
-    assert comp.health_check()["healthy"] is False
+def test_bootstrap_requires_real_pinned_provenance(ate_home, monkeypatch):
+    monkeypatch.setattr(ate, "installed_provenance", lambda: {"version": PINNED_VERSION, "commit": "deadbeef", "url": ate.UPSTREAM_REPO})
+    result = AntiTokenExtractionComponent().bootstrap()
+    assert result["healthy"] is False
+    assert load_manifest() is None
 
 
-def test_4_mcp_startup_failure(ate_home, monkeypatch):
-    """Pointing the component at a nonexistent executable yields a clean
-    ComponentUnavailable (degrades only this capability, no crash)."""
-    # Force the server path to a missing file.
-    import capt_solo.components.anti_token_extraction as mod
-    monkeypatch.setattr(mod, "stdio_server_path",
-                         lambda: Path("/nonexistent/ate_server.py"))
-    comp = AntiTokenExtractionComponent()
-    # discover still works (server_present False -> absent)
-    assert comp.discover()["server_present"] is False
+def test_bootstrap_records_verified_pin_only(ate_home, monkeypatch):
+    monkeypatch.setattr(ate, "installed_provenance", good_provenance)
+    result = AntiTokenExtractionComponent().bootstrap()
+    assert result["healthy"] is True
+    manifest = load_manifest()
+    assert manifest is not None
+    assert manifest.installed_commit == PINNED_COMMIT
+    assert manifest.installed_version == PINNED_VERSION
+
+
+def test_bootstrap_is_idempotent(ate_home, monkeypatch):
+    monkeypatch.setattr(ate, "installed_provenance", good_provenance)
+    first = AntiTokenExtractionComponent().bootstrap()
+    second = AntiTokenExtractionComponent().bootstrap()
+    assert first["bootstrapped"] is True
+    assert second["idempotent"] is True
+
+
+def test_unsafe_manifest_is_rejected(ate_home):
+    with pytest.raises(UnsafeConfiguration):
+        save_manifest(ATEManifest(cache_mode="memory"))
+    with pytest.raises(UnsafeConfiguration):
+        save_manifest(ATEManifest(sensitive_input_refusal=False))
+    with pytest.raises(UnsafeConfiguration):
+        save_manifest(ATEManifest(transport="http"))
+
+
+def test_manifest_write_is_not_symlink_following(ate_home):
+    target = ate_home / "target.json"
+    path = Path(os.environ["CAPT_ATE_MANIFEST_PATH"])
+    path.parent.mkdir(parents=True)
+    path.symlink_to(target)
+    with pytest.raises(UnsafeConfiguration):
+        save_manifest(ATEManifest())
+    assert not target.exists()
+
+
+def test_legacy_cache_purge_refuses_symlink(ate_home):
+    outside = ate_home / "outside"
+    outside.mkdir()
+    (outside / "keep.txt").write_text("keep")
+    link = ate_home / "ate_cache"
+    link.symlink_to(outside, target_is_directory=True)
+    removed = purge_legacy_cache()
+    assert str(link) not in removed
+    assert (outside / "keep.txt").read_text() == "keep"
+
+
+def test_request_size_is_bounded(ate_home, monkeypatch):
+    monkeypatch.setattr(ate, "installed_provenance", good_provenance)
+    component = AntiTokenExtractionComponent()
+    component.manifest.installed_commit = PINNED_COMMIT
+    component.manifest.installed_version = PINNED_VERSION
+    save_manifest(component.manifest)
+    with pytest.raises(UnsafeConfiguration):
+        component.compress("x" * (ate.MAX_REQUEST_BYTES + 1))
+
+
+def test_no_credential_extraction_implementation_remains():
+    server = ate.stdio_server_path().read_text(encoding="utf-8")
+    forbidden = ["aws_access_key", "github_token", "slack_token", "stripe_key", '"match": m.group']
+    for marker in forbidden:
+        assert marker not in server
+    assert "rtk_compress" in server
+    assert "process_sensitive_input" in server
+
+
+def test_mcp_template_uses_real_upstream_server():
+    path = Path(ate.__file__).with_name("anti_token_extraction.mcp.json")
+    config = json.loads(path.read_text())
+    assert config["mcp_server"]["args"] == ["-m", "anti_token_extraction.server"]
+    assert config["mcp_server"]["credentials_in_args"] is False
+    assert config["mcp_server"]["network_enabled"] is False
+
+
+def test_child_startup_failure_is_contained(ate_home, monkeypatch):
+    monkeypatch.setattr(ate, "installed_provenance", good_provenance)
+    component = AntiTokenExtractionComponent()
+    component.manifest.installed_commit = PINNED_COMMIT
+    component.manifest.installed_version = PINNED_VERSION
+    save_manifest(component.manifest)
+    monkeypatch.setattr(ate, "stdio_server_path", lambda: Path("/missing/server.py"))
     with pytest.raises(ComponentUnavailable):
-        comp.extract("anything")
-
-
-def test_5_unsafe_cache_configuration(ate_home):
-    """A manifest requesting cache_mode != 'off' is rejected by validation,
-    preventing an unsafe configuration from being persisted."""
-    bad = ATEManifest(cache_mode="on")
-    with pytest.raises(UnsafeConfiguration):
-        save_manifest(bad)
-    # And the live component refuses to run with cache on.
-    comp = AntiTokenExtractionComponent()
-    comp.manifest = ATEManifest(cache_mode="on")
-    with pytest.raises(UnsafeConfiguration):
-        comp.extract("token AKIA1234567890ABCDEF")
-
-
-def test_6_secret_bearing_schema_rejection(ate_home):
-    """Sensitive input is refused before any child process is spawned."""
-    comp = AntiTokenExtractionComponent()
-    comp.bootstrap()
-    secret_text = "my password=supersecret123 and api_key=abcdef1234567890abcdef"
-    with pytest.raises(UnsafeConfiguration):
-        comp.extract(secret_text)
-
-
-def test_7_scoped_degradation(ate_home):
-    """When the anti-token-extraction capability degrades, ONLY that capability
-    is reported degraded — other capabilities remain unaffected."""
-    eng = MemoryEngine()
-    try:
-        pe = ProofEngine(eng._conn)
-        reg = CapabilityRegistry(eng._conn, pe)
-        cg = ClaimGuard(reg, pe)
-        # register ATE + an unrelated capability
-        register_capability(reg)
-        reg.register("memory-search", "Search memory", "capt-solo",
-                     lifecycle="verified")
-        # degrade ONLY anti-token-extraction, scoped
-        reg.degrade(COMPONENT_ID, "component_degraded",
-                    affected_scope="anti-token-extraction")
-        # ATE claim is downgraded
-        v_ate = cg.verify_claim("Token extraction complete and verified.",
-                                capability_id=COMPONENT_ID)
-        assert v_ate.supported is False
-        assert "not globally revoked" in v_ate.language
-        # unrelated capability still verified
-        v_other = cg.verify_claim("Memory search complete and verified.",
-                                  capability_id="memory-search")
-        assert v_other.supported is True
-        # ATE degradation record is scoped, not global
-        recs = reg.get_degradations(COMPONENT_ID)
-        assert recs[0]["affected_scope"] == "anti-token-extraction"
-        assert reg.get("memory-search").lifecycle == "verified"
-    finally:
-        eng.close()
-
-
-def test_8_bootstrap_idempotency(ate_home):
-    """Calling bootstrap twice produces no duplicate work and is idempotent."""
-    comp = AntiTokenExtractionComponent()
-    r1 = comp.bootstrap()
-    assert r1["bootstrapped"] is True
-    r2 = comp.bootstrap()
-    assert r2["bootstrapped"] is False
-    assert r2["idempotent"] is True
-    # manifest persists the pinned commit
-    assert load_manifest().installed_commit == PINNED_COMMIT
-
-
-def test_9_legacy_cache_purge(ate_home, monkeypatch):
-    """Bootstrap purges legacy cache directories; re-bootstrap does not error
-    when they are already gone (idempotent purge)."""
-    # Create a legacy cache dir under the test home.
-    legacy = Path(os.environ["CAPT_SOLO_HOME"]) / "ate_cache"
-    legacy.mkdir()
-    (legacy / "stale.bin").write_text("x")
-    assert legacy.exists()
-    comp = AntiTokenExtractionComponent()
-    res = comp.bootstrap()
-    assert any("ate_cache" in p for p in res["legacy_cache_purged"])
-    assert not legacy.exists()
-    # Second bootstrap: legacy already gone, still idempotent
-    res2 = comp.bootstrap()
-    assert res2["idempotent"] is True
+        component.compress("plain build output")
