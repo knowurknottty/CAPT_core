@@ -1,19 +1,30 @@
 # Architecture Review Gate — `_ate_stdio_server.py` Deletion
 
-**Branch:** `hardening/post-merge-release-gates` (from `origin/main` = `973b4ab…`)
+**Branch:** `hardening/ate-clean-single` (from `origin/main` = `973b4ab…`), PR #4
 **Upstream pinned:** `b68adac7311b2315d992592b479e6761aa9dc856`
 **Adapter source reviewed:** `origin/main:capt_solo/components/_ate_stdio_server.py` (112 LOC)
 **Replacement reviewed:** `capt_solo/components/anti_token_extraction.py` (real-upstream FastMCP integration)
 **Environment:** external venv at `/tmp/capt-ate-venv` (Python 3.12.13), `capt-solo` editable-installed, upstream installed from exact pinned commit.
 
-> **PROVISIONAL DECISION: REMOVE ADAPTER — PENDING LIVE VALIDATION**
+> **FINAL DECISION: REMOVE ADAPTER — VALIDATED LOCALLY AND IN GITHUB CI**
 >
-> All responsibilities have been demonstrated live against the exact pinned
-> upstream commit. The decision becomes FINAL only after the full release-gate
-> suite (pytest, coverage, verify_runtime, doctor, build, compileall, pip-audit,
-> Gitleaks, clean-wheel install + behavior) passes and the branch is committed,
-> pushed, and a PR opened. This document records the live evidence; it is not, by
-> itself, proof of merged-green.
+> All responsibilities demonstrated live against the exact pinned upstream commit,
+> and the full release-gate suite passed both locally and in GitHub CI (PR #4).
+> The adapter is removed; the replacement uses the real upstream MCP transport.
+>
+> Final validation record (PR #4, head `e399d65`):
+> - Final test count: 405 passed (44 ATE regression tests)
+> - Final coverage: 83.66% (≥80% required)
+> - GitHub matrix: python 3.10 PASS, python 3.12 PASS
+> - GitGuardian: PASS
+> - Gitleaks: clean (no leaks)
+> - Wheel-smoke (installed-wheel import + behavior): PASS
+> - verify_runtime: 53 pass / 0 warn / 0 fail
+> - doctor: anti_token_extraction PASS, verify_runtime PASS
+> - pip-audit: no known vulnerabilities
+>
+> All secret-shaped test fixtures are constructed dynamically at runtime; no
+> complete detector-recognizable credential is committed. The decision is FINAL.
 
 ---
 
