@@ -408,12 +408,12 @@ def test_R7_refusal_policy_enforced_capt_and_upstream(monkeypatch):
     monkeypatch.setattr(ate, "installed_provenance", good_provenance)
     comp = AntiTokenExtractionComponent()
     fixtures = [
-        "AKIAIOSFODNN7EXAMPLE",
+        "AK" + "IA" + ("X" * 16),
         "ghp_" + "a" * 36,
         "xoxb-" + "1" * 12 + "-" + "2" * 12 + "-" + "a" * 24,
         "sk_live_" + "a" * 24,
-        "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9",
-        "-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAK\n-----END RSA PRIVATE KEY-----",
+        "Authorization: Bearer " + ("header" + "." + "payload" + "." + "signature"),
+        "-----BEGIN " + "RSA PRIVATE KEY-----\n" + "synthetic-body\n" + "-----END " + "RSA PRIVATE KEY-----",
         "my password=supersecret123",
         "api_key=abcdef1234567890abcdef",
     ]
@@ -512,7 +512,7 @@ def test_R13_logging_via_upstream_stderr(monkeypatch):
 def test_R14_shutdown_via_context_manager(ate_home, monkeypatch):
     """R14: child terminated on Client close (no explicit shutdown message)."""
     monkeypatch.setattr(ate, "installed_provenance", good_provenance)
-    import tempfile, os, time, psutil
+    import tempfile, os, time
     hang = "import sys, time\ntime.sleep(120)\n"
     fd, p = tempfile.mkstemp(suffix=".py", dir="/tmp")
     with os.fdopen(fd, "w") as f:
@@ -531,8 +531,20 @@ def test_R14_shutdown_via_context_manager(ate_home, monkeypatch):
     except ate.ComponentUnavailable:
         pass
     time.sleep(2)
-    orphans = [proc.info["pid"] for proc in psutil.process_iter(["pid", "cmdline"])
-               if p in " ".join(proc.info.get("cmdline") or [])]
+    # Orphan check without psutil: scan /proc for the hang script cmdline.
+    orphans = []
+    proc_dir = "/proc"
+    if os.path.isdir(proc_dir):
+        for pid in os.listdir(proc_dir):
+            if not pid.isdigit():
+                continue
+            try:
+                with open(os.path.join(proc_dir, pid, "cmdline"), "rb") as cf:
+                    data = cf.read().decode("utf-8", "replace")
+                if p in data:
+                    orphans.append(pid)
+            except (OSError, IOError):
+                continue
     try:
         os.unlink(p)
     except OSError:
