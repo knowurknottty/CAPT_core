@@ -36,9 +36,19 @@ class Receipt:
 class CTPRuntime:
     """Small append-only local transaction journal."""
 
-    def __init__(self, journal_path: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        journal_dir: Optional[Path] = None,
+        journal_path: Optional[Path] = None,
+    ) -> None:
+        if journal_dir is not None and journal_path is not None:
+            raise ValueError("provide journal_dir or journal_path, not both")
         ensure_dirs()
-        self._path = Path(journal_path) if journal_path else ctp_journal_dir() / "journal.jsonl"
+        if journal_path is not None:
+            self._path = Path(journal_path)
+        else:
+            root = Path(journal_dir) if journal_dir is not None else ctp_journal_dir()
+            self._path = root / "journal.jsonl"
         self._path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         if self._path.is_symlink():
             raise IntegrityError("CTP journal path must not be a symlink")
@@ -128,31 +138,25 @@ class CTPRuntime:
             if idempotency_key and idempotency_key in self._finalized_keys:
                 raise IdempotencyError(f"idempotency key already finalized: {idempotency_key}")
             tx_id = uuid.uuid4().hex
-            self._append(
-                {
-                    "type": "begin",
-                    "tx_id": tx_id,
-                    "timestamp": time.time(),
-                    "correlation_id": correlation_id,
-                    "idempotency_key": idempotency_key,
-                    "meta": dict(meta or {}),
-                }
-            )
+            self._append({
+                "type": "begin",
+                "tx_id": tx_id,
+                "timestamp": time.time(),
+                "correlation_id": correlation_id,
+                "idempotency_key": idempotency_key,
+                "meta": dict(meta or {}),
+            })
             return tx_id
 
     def validate(self, tx_id: str, result: Any) -> bool:
         self._require_pending(tx_id)
         ok = bool(result.get("ok")) if isinstance(result, dict) and "ok" in result else bool(result)
-        self._append(
-            {"type": "validate", "tx_id": tx_id, "timestamp": time.time(), "ok": ok}
-        )
+        self._append({"type": "validate", "tx_id": tx_id, "timestamp": time.time(), "ok": ok})
         return ok
 
     def note(self, tx_id: str, note: str) -> None:
         self._require_pending(tx_id)
-        self._append(
-            {"type": "note", "tx_id": tx_id, "timestamp": time.time(), "note": str(note)}
-        )
+        self._append({"type": "note", "tx_id": tx_id, "timestamp": time.time(), "note": str(note)})
 
     def commit(self, tx_id: str) -> Receipt:
         self._require_pending(tx_id)
@@ -180,7 +184,7 @@ class CTPRuntime:
 
     def integrity_check(self) -> bool:
         try:
-            probe = CTPRuntime(self._path)
+            probe = CTPRuntime(journal_path=self._path)
             probe.close()
             return True
         except Exception:
