@@ -44,7 +44,7 @@ def test_scenario_clean_home(tmp_path, monkeypatch):
     eng = MemoryEngine()
     try:
         bd = eng._db_path.parent.parent / "backups"
-        assert SCHEMA_VERSION == 4
+        assert SCHEMA_VERSION == 5
         assert bd.exists()
     finally:
         eng.close()
@@ -64,7 +64,7 @@ def test_scenario_migrated_v3(tmp_path, monkeypatch):
             "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1"
         ).fetchone()["version"]
         bd = eng2._db_path.parent.parent / "backups"
-        assert cur == 4
+        assert cur == 5
         assert bd.exists()
         # backup preserves the v3 manifest (pre-migration state)
         backups = sorted(bd.glob("*.db"))
@@ -85,7 +85,7 @@ def test_scenario_restart_no_extra_backup(tmp_path, monkeypatch):
             "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1"
         ).fetchone()["version"]
         n_after = len(sorted(bd.glob("*.db")))
-        assert cur == 4
+        assert cur == 5
         assert n_after == n_before  # no unnecessary additional backup
     finally:
         eng2.close()

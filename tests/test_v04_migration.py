@@ -47,8 +47,8 @@ def test_fresh_db_migrates_to_v4(tmp_path):
     eng = MemoryEngine()
     row = eng._conn.execute(
         "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").fetchone()
-    assert row["version"] == 4
-    assert SCHEMA_VERSION == 4
+    assert row["version"] == 5
+    assert SCHEMA_VERSION == 5
     for t in V4_TABLES:
         assert _table_exists(eng._conn, t), f"missing table {t}"
     eng.close()
@@ -87,7 +87,7 @@ def test_v3_db_upgrades_to_v4(tmp_path):
     eng = MemoryEngine()  # should migrate 3 -> 4
     row = eng._conn.execute(
         "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").fetchone()
-    assert row["version"] == 4
+    assert row["version"] == 5
     assert _table_exists(eng._conn, "capabilities")
     eng.close()
 
@@ -114,7 +114,7 @@ def test_backup_created_and_valid(tmp_path):
     # reopening triggers backup (3 -> 4) then migration
     eng2 = MemoryEngine()
     assert eng2._conn.execute(
-        "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").fetchone()["version"] == 4
+        "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").fetchone()["version"] == 5
     backup_dir = home / "backups"
     assert backup_dir.exists()
     backups = sorted(backup_dir.glob("*.db"))
@@ -200,7 +200,7 @@ def test_in_memory_explicit_no_backup(tmp_path):
     # schema still initializes in-memory
     row = eng._conn.execute(
         "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").fetchone()
-    assert row["version"] == 4
+    assert row["version"] == 5
     eng.close()
 
 

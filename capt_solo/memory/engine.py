@@ -37,7 +37,8 @@ from capt_solo.core.config import backup_dir, memory_db_path
 from capt_solo.core.errors import IntegrityError, MemoryError_
 from capt_solo.memory.search import SearchAdapter, default_adapter
 
-SCHEMA_VERSION = 4  # v0.4 adds foundry: capabilities, proof, skills, bubbles, governance
+SCHEMA_VERSION = 5  # v0.4.1 adds canonical memory fields: uncertainty, retention,
+                    # consent, identity_link, evidence_refs (Layer 3 hardening)
 
 
 @dataclass
@@ -55,6 +56,11 @@ class Memory:
     updated_at: float
     tier: str = "durable"
     lifecycle_state: str = "active"
+    uncertainty: Optional[float] = None
+    retention: str = "durable"
+    consent: str = "unset"
+    identity_link: Optional[str] = None
+    evidence_refs: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -64,11 +70,16 @@ class Memory:
             "tags": self.tags,
             "provenance": self.provenance,
             "confidence": self.confidence,
+            "uncertainty": self.uncertainty,
             "metadata": self.metadata,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "tier": self.tier,
             "lifecycle_state": self.lifecycle_state,
+            "retention": self.retention,
+            "consent": self.consent,
+            "identity_link": self.identity_link,
+            "evidence_refs": self.evidence_refs,
         }
 
 
@@ -87,6 +98,8 @@ class MemoryEngine:
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
+        self._require_consent_namespaces: set = set()
+        self._pre_migration_backup: Optional[str] = None
         self._init_schema()
         self._rebuild_index()
 
@@ -192,7 +205,8 @@ class MemoryEngine:
             self._conn.commit()  # persist v1 before any backup/migration
         # back up before any forward migration (idempotent: only if upgrading)
         if current < SCHEMA_VERSION:
-            self._backup_before_migration(current)
+            pre_backup = self._backup_before_migration(current)
+            self._pre_migration_backup = pre_backup.get("backup_path")
         # apply forward migrations transactionally
         self._migrate(current)
         self._conn.commit()
@@ -681,6 +695,67 @@ class MemoryEngine:
         if current < 4:
             self._create_v4()
             self._conn.execute("INSERT INTO schema_version (version) VALUES (4)")
+        if current < 5:
+            self._create_v5()
+            self._conn.execute("INSERT INTO schema_version (version) VALUES (5)")
+
+    def _create_v5(self) -> None:
+        """v0.4.1 canonical memory fields (Layer 3 hardening).
+
+        Adds uncertainty, retention, consent, identity_link, evidence_refs to
+        the memories table as backward-compatible nullable columns with safe
+        defaults. Existing rows are unaffected (defaults applied).
+        """
+        for col, dflt in (
+            ("uncertainty", "NULL"),
+            ("retention", "'durable'"),
+            ("consent", "'unset'"),
+            ("identity_link", "NULL"),
+            ("evidence_refs", "'[]'"),
+        ):
+            try:
+                self._conn.execute(
+                    f"ALTER TABLE memories ADD COLUMN {col} TEXT DEFAULT {dflt}"
+                    if col in ("retention", "consent")
+                    else f"ALTER TABLE memories ADD COLUMN {col} TEXT"
+                )
+            except sqlite3.OperationalError:
+                # column already exists (idempotent re-run)
+                pass
+
+    def rollback_to(self, version: int) -> Dict[str, Any]:
+        """Roll back the schema to a previous version using the pre-migration
+        backup taken by ``_init_schema`` when the store was opened.
+
+        Rollback is only permitted to a version lower than the current schema
+        version and requires a valid backup receipt. This is a safety gate, not
+        a convenience: it restores the backed-up database file and re-opens the
+        connection. Returns a receipt dict.
+        """
+        if version >= SCHEMA_VERSION:
+            raise MemoryError_(f"rollback target {version} must be < {SCHEMA_VERSION}")
+        backup_path = self._pre_migration_backup
+        if not backup_path or not Path(backup_path).exists():
+            raise MemoryError_(("rollback aborted: no verified pre-migration backup; "
+                                "refusing to mutate schema without a backup"))
+        self._conn.close()
+        Path(self._db_path).unlink()
+        shutil.copyfile(backup_path, str(self._db_path))
+        self._conn = sqlite3.connect(str(self._db_path))
+        self._conn.row_factory = sqlite3.Row
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA foreign_keys=ON")
+        self._rebuild_index()
+        return {
+            "rolled_back_to": version,
+            "restored_from": backup_path,
+            "current_version": self._current_version(),
+        }
+
+    def _current_version(self) -> int:
+        row = self._conn.execute(
+            "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1").fetchone()
+        return int(row["version"]) if row else 0
 
     # ----- index ---------------------------------------------------------
     def set_search_adapter(self, adapter: SearchAdapter) -> None:
@@ -716,23 +791,38 @@ class MemoryEngine:
         metadata: Optional[Dict[str, Any]] = None,
         tier: str = "durable",
         lifecycle_state: str = "active",
+        uncertainty: Optional[float] = None,
+        retention: str = "durable",
+        consent: str = "unset",
+        identity_link: Optional[str] = None,
+        evidence_refs: Optional[List[str]] = None,
     ) -> Memory:
         if not content:
             raise MemoryError_("content must be non-empty")
         if not (0.0 <= confidence <= 1.0):
             raise MemoryError_("confidence must be between 0.0 and 1.0")
+        if uncertainty is not None and not (0.0 <= uncertainty <= 1.0):
+            raise MemoryError_("uncertainty must be between 0.0 and 1.0")
+        # Consent enforcement (default-deny for sensitive namespaces).
+        if getattr(self, "_require_consent_namespaces", None) and \
+                namespace in self._require_consent_namespaces and consent != "granted":
+            raise MemoryError_(f"consent required to store in sensitive namespace: {namespace}")
         mid = uuid.uuid4().hex
         now = _now()
         tags = tags or []
         meta = metadata or {}
+        ev_refs = evidence_refs or []
         cur = self._conn.cursor()
         cur.execute(
             """INSERT INTO memories
                (memory_id, content, namespace, provenance, confidence, metadata,
-                created_at, updated_at, tier, lifecycle_state)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                created_at, updated_at, tier, lifecycle_state, uncertainty,
+                retention, consent, identity_link, evidence_refs)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (mid, content, namespace, provenance, confidence, json.dumps(meta),
-             now, now, tier, lifecycle_state),
+             now, now, tier, lifecycle_state,
+             json.dumps(uncertainty) if uncertainty is not None else None,
+             retention, consent, identity_link, json.dumps(ev_refs)),
         )
         for t in tags:
             cur.execute("INSERT OR IGNORE INTO tags (memory_id, tag) VALUES (?,?)", (mid, t))
@@ -763,6 +853,11 @@ class MemoryEngine:
         metadata: Optional[Dict[str, Any]] = None,
         tier: Optional[str] = None,
         lifecycle_state: Optional[str] = None,
+        uncertainty: Optional[float] = None,
+        retention: Optional[str] = None,
+        consent: Optional[str] = None,
+        identity_link: Optional[str] = None,
+        evidence_refs: Optional[List[str]] = None,
     ) -> Memory:
         existing = self.get(memory_id)
         if existing is None:
@@ -784,6 +879,23 @@ class MemoryEngine:
                 raise MemoryError_("confidence must be between 0.0 and 1.0")
             fields.append("confidence=?")
             params.append(confidence)
+        if uncertainty is not None:
+            if not (0.0 <= uncertainty <= 1.0):
+                raise MemoryError_("uncertainty must be between 0.0 and 1.0")
+            fields.append("uncertainty=?")
+            params.append(json.dumps(uncertainty))
+        if retention is not None:
+            fields.append("retention=?")
+            params.append(retention)
+        if consent is not None:
+            fields.append("consent=?")
+            params.append(consent)
+        if identity_link is not None:
+            fields.append("identity_link=?")
+            params.append(identity_link)
+        if evidence_refs is not None:
+            fields.append("evidence_refs=?")
+            params.append(json.dumps(evidence_refs))
         if tier is not None:
             fields.append("tier=?")
             params.append(tier)
@@ -1053,21 +1165,33 @@ class MemoryEngine:
         target.parent.mkdir(parents=True, exist_ok=True)
         mem_rows = self._conn.execute(
             "SELECT memory_id, content, namespace, provenance, confidence, "
+            "uncertainty, retention, consent, identity_link, evidence_refs, "
             "metadata, created_at, updated_at, tier, lifecycle_state FROM memories"
         ).fetchall()
         memories = []
         for r in mem_rows:
+            raw_unc = r["uncertainty"]
+            raw_ev = r["evidence_refs"]
+            try:
+                ev_refs = json.loads(raw_ev) if raw_ev else []
+            except (json.JSONDecodeError, TypeError):
+                ev_refs = []
             memories.append({
                 "memory_id": r["memory_id"],
                 "content": r["content"],
                 "namespace": r["namespace"],
                 "provenance": r["provenance"],
                 "confidence": r["confidence"],
+                "uncertainty": json.loads(raw_unc) if raw_unc else None,
                 "metadata": json.loads(r["metadata"]),
                 "created_at": r["created_at"],
                 "updated_at": r["updated_at"],
                 "tier": r["tier"],
                 "lifecycle_state": r["lifecycle_state"],
+                "retention": r["retention"] if "retention" in r.keys() else "durable",
+                "consent": r["consent"] if "consent" in r.keys() else "unset",
+                "identity_link": r["identity_link"] if "identity_link" in r.keys() else None,
+                "evidence_refs": ev_refs,
                 "tags": [t["tag"] for t in self._conn.execute(
                     "SELECT tag FROM tags WHERE memory_id=?", (r["memory_id"],))],
             })
@@ -1290,16 +1414,22 @@ class MemoryEngine:
     def _upsert(self, rec: Dict[str, Any]) -> None:
         mid = rec["memory_id"]
         cur = self._conn.cursor()
+        unc = rec.get("uncertainty")
+        ev_refs = rec.get("evidence_refs", [])
         cur.execute(
             """INSERT OR REPLACE INTO memories
                (memory_id, content, namespace, provenance, confidence, metadata,
-                created_at, updated_at, tier, lifecycle_state)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                created_at, updated_at, tier, lifecycle_state, uncertainty,
+                retention, consent, identity_link, evidence_refs)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (mid, rec["content"], rec.get("namespace", "default"),
              rec.get("provenance", "unknown"), rec.get("confidence", 1.0),
              json.dumps(rec.get("metadata", {})), rec.get("created_at", _now()),
              rec.get("updated_at", _now()), rec.get("tier", "durable"),
-             rec.get("lifecycle_state", "active")),
+             rec.get("lifecycle_state", "active"),
+             json.dumps(unc) if unc is not None else None,
+             rec.get("retention", "durable"), rec.get("consent", "unset"),
+             rec.get("identity_link"), json.dumps(ev_refs)),
         )
         cur.execute("DELETE FROM tags WHERE memory_id=?", (mid,))
         for t in rec.get("tags", []):
@@ -1339,8 +1469,45 @@ class MemoryEngine:
                 "SELECT COUNT(*) AS c FROM tags t LEFT JOIN memories m "
                 "ON t.memory_id=m.memory_id WHERE m.memory_id IS NULL").fetchone()
             return orphan["c"] == 0
-        except sqlite3.Error as e:  # pragma: no cover
-            raise IntegrityError(f"integrity check failed: {e}")
+        except sqlite3.DatabaseError:
+            return False
+
+    def recover_corrupt(self, *, quarantine_namespace: str = "quarantine") -> Dict[str, Any]:
+        """Scan memory rows for corruption (malformed metadata JSON, invalid
+        confidence) and quarantine affected records rather than crashing.
+
+        Returns a receipt describing what was found and quarantined. This is
+        bounded failure-domain handling (I-07): a few bad rows do not prevent
+        the rest of the store from operating.
+        """
+        receipt = {"scanned": 0, "quarantined": 0, "errors": []}
+        rows = self._conn.execute(
+            "SELECT memory_id, content, namespace, confidence, metadata FROM memories").fetchall()
+        for r in rows:
+            receipt["scanned"] += 1
+            mid = r["memory_id"]
+            try:
+                if not (0.0 <= float(r["confidence"]) <= 1.0):
+                    raise ValueError(f"confidence out of range: {r['confidence']}")
+                json.loads(r["metadata"])
+            except Exception as e:  # malformed row
+                receipt["errors"].append(f"{mid}: {e}")
+                # quarantine: move to a quarantine namespace, mark tombstone
+                try:
+                    self._conn.execute(
+                        "UPDATE memories SET namespace=?, lifecycle_state='quarantined' "
+                        "WHERE memory_id=?", (quarantine_namespace, mid))
+                    receipt["quarantined"] += 1
+                except sqlite3.Error as e2:
+                    receipt["errors"].append(f"{mid}: quarantine failed: {e2}")
+        self._conn.commit()
+        self._rebuild_index()
+        return receipt
+
+    def require_consent_for(self, *namespaces: str) -> None:
+        """Mark namespaces as requiring explicit consent (default-deny) before
+        store. Per I-05 privacy-preserving defaults."""
+        self._require_consent_namespaces.update(namespaces)
 
     def close(self) -> None:
         self._conn.commit()
@@ -1349,6 +1516,14 @@ class MemoryEngine:
     # ----- helpers -------------------------------------------------------
     @staticmethod
     def _row_to_memory(row: sqlite3.Row, tags: List[str]) -> Memory:
+        def _col(name, default):
+            return row[name] if name in row.keys() else default
+        def _safe_json(v, default):
+            try:
+                return json.loads(v) if v else default
+            except (json.JSONDecodeError, TypeError):
+                return default
+        raw_unc = _col("uncertainty", None)
         return Memory(
             memory_id=row["memory_id"],
             content=row["content"],
@@ -1356,9 +1531,14 @@ class MemoryEngine:
             tags=tags,
             provenance=row["provenance"],
             confidence=row["confidence"],
-            metadata=json.loads(row["metadata"]),
+            metadata=_safe_json(row["metadata"], {}),
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             tier=row["tier"] if "tier" in row.keys() else "durable",
             lifecycle_state=row["lifecycle_state"] if "lifecycle_state" in row.keys() else "active",
+            uncertainty=_safe_json(raw_unc, None) if raw_unc else None,
+            retention=_col("retention", "durable"),
+            consent=_col("consent", "unset"),
+            identity_link=_col("identity_link", None),
+            evidence_refs=_safe_json(_col("evidence_refs", "[]"), []),
         )
