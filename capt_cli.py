@@ -179,6 +179,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     archs.add_parser("list", help="list canonical subsystems")
     archs.add_parser("show", help="show a subsystem by id"); archs.add_parser("show").add_argument("id")
 
+    # canon (Phase 3L — hardened external surface over canonical subsystems)
+    cn = sub.add_parser("canon", help="canonical subsystem operations (episodes/knowledge/evidence/...)")
+    cns = cn.add_subparsers(dest="action")
+    p = cns.add_parser("episodes"); p.add_argument("--limit", type=int, default=20)
+    p = cns.add_parser("knowledge"); p.add_argument("--status", default=None)
+    p = cns.add_parser("evidence"); p.add_argument("--status", default=None)
+    p = cns.add_parser("autobiographical"); p.add_argument("--subject", default=None)
+    p = cns.add_parser("engrams"); p.add_argument("--state", default=None)
+    p = cns.add_parser("research-health")
+    p = cns.add_parser("self-check")
+
     # foundry (v0.4)
     fw = sub.add_parser("foundry", help="proof-governed skill/capability/bubble ops")
     fws = fw.add_subparsers(dest="action")
@@ -212,6 +223,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     # when optional subsystems (e.g. CTP) are missing from the tree.
     if args.group == "architecture":
         return _cmd_architecture(args, as_json)
+
+    if args.group == "canon":
+        return _cmd_canon(args, as_json)
 
     try:
         eng = MemoryEngine()
@@ -273,6 +287,43 @@ def _cmd_architecture(args, as_json) -> int:
             return _fail(f"subsystem not found: {args.id}")
         return _ok(sub, as_json)
     return _fail("unknown architecture action")
+
+
+def _cmd_canon(args, as_json) -> int:
+    """Hardened external surface over canonical subsystems (Phase 3L)."""
+    from capt_solo.capt_facade import CAPT
+    try:
+        capt = CAPT()  # local-first in-memory by default; explicit, no silent IO
+    except Exception as e:
+        return _fail(f"CAPT init failed: {type(e).__name__}: {e}")
+    try:
+        if args.action == "episodes":
+            items = capt.episodic.list_episodes(limit=args.limit)
+            return _ok([e.__dict__ for e in items], as_json)
+        if args.action == "knowledge":
+            items = capt.knowledge.list_knowledge(status=args.status)
+            return _ok([k.__dict__ for k in items], as_json)
+        if args.action == "evidence":
+            items = capt.evidence.list_evidence(status=args.status)
+            return _ok([e.__dict__ for e in items], as_json)
+        if args.action == "autobiographical":
+            items = capt.autobiographical.list_entries(subject_identity=args.subject)
+            return _ok([a.__dict__ for a in items], as_json)
+        if args.action == "engrams":
+            items = capt.engram.list_engrams(state=args.state)
+            return _ok([e.__dict__ for e in items], as_json)
+        if args.action == "research-health":
+            return _ok(capt.research.health(), as_json)
+        if args.action == "self-check":
+            return _ok({"ok": capt.verify_runtime()}, as_json)
+        return _fail("unknown canon action")
+    except Exception as e:  # surface as structured error, never silent
+        return _fail(f"{type(e).__name__}: {e}")
+    finally:
+        try:
+            capt.close()
+        except Exception:
+            pass
 
 
 def _cmd_memory(mgr, args, as_json) -> int:
