@@ -191,6 +191,8 @@ _DIM_OF_DERIVED = {
     "m/s": Dimension((0, 1, -1, 0, 0, 0, 0)),
     "m/s^2": Dimension((0, 1, -2, 0, 0, 0, 0)),
     "Hz": Dimension((0, 0, -1, 0, 0, 0, 0)),
+    "ohm": Dimension((1, 2, -3, -2, 0, 0, 0)),     # V/A = kg·m²·s⁻³·A⁻²
+    "F": Dimension((-1, -2, 4, 2, 0, 0, 0)),       # farad = C/V = A²·s⁴·kg⁻¹·m⁻²
 }
 
 _UNIT_DIMS = {**_DIM_OF_BASE, **_DIM_OF_DERIVED}
