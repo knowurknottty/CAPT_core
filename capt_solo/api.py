@@ -63,6 +63,7 @@ from capt_solo.meta_foundry import (
     MetaFoundry,
     MetaFoundryError,
     ProvenanceRecord,
+    register_character_genesis,
     register_childrens_studio,
 )
 
@@ -91,7 +92,8 @@ __all__ = [
     "Constraint", "ConstraintResult", "ConstraintViolationError",
     "CreationIntent", "DomainDefinition", "DomainNotFoundError",
     "DomainRegistry", "DomainSpecification", "MetaFoundry",
-    "MetaFoundryError", "ProvenanceRecord", "register_childrens_studio",
+    "MetaFoundryError", "ProvenanceRecord", "register_character_genesis",
+    "register_childrens_studio",
 ]
 
 
