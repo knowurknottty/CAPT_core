@@ -1,0 +1,35 @@
+{
+  "task_id": "TASK-102",
+  "title": "Workspace schema + CLI integration tests (negative + positive)",
+  "subsystem": "Workspace",
+  "phase": "S1",
+  "priority": 2,
+  "status": "ready",
+  "dependencies": [
+    "TASK-101"
+  ],
+  "invariants": [
+    "I-07",
+    "I-14"
+  ],
+  "required_evidence": [
+    "tests/test_workspace.py",
+    "tests/test_workspace_security.py"
+  ],
+  "required_tests": [
+    "tests/test_workspace.py",
+    "tests/test_workspace_security.py"
+  ],
+  "owner_gate": "none",
+  "assigned_agent": null,
+  "source": "Prompt #1 \u00a713",
+  "created_at": "2026-07-26T00:00:00Z",
+  "updated_at": "2026-07-26T00:00:00Z",
+  "completion_commit": null,
+  "required_capabilities": [
+    "filesystem_read",
+    "shell_execution",
+    "test_execution",
+    "structured_output"
+  ]
+}

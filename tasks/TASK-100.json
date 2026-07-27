@@ -1,0 +1,44 @@
+{
+  "task_id": "TASK-100",
+  "title": "Build CAPT Universal Workspace layer (scaffold + schemas + docs + CLI)",
+  "subsystem": "Workspace",
+  "phase": "S1",
+  "priority": 1,
+  "status": "active",
+  "dependencies": [],
+  "invariants": [
+    "I-10",
+    "I-11",
+    "I-14"
+  ],
+  "required_evidence": [
+    "AGENTS.md",
+    "WORKSPACE.md",
+    "CURRENT_STATE.md",
+    "CHECKPOINT.md",
+    "TASK_QUEUE.md",
+    "SECURITY_BOUNDARIES.md",
+    "TOOLING.md",
+    "RELEASE_STATE.md",
+    "architecture/*.schema.json"
+  ],
+  "required_tests": [
+    "tests/test_workspace.py",
+    "tests/test_workspace_security.py"
+  ],
+  "owner_gate": "none",
+  "assigned_agent": null,
+  "source": "Prompt #1 Universal Workspace",
+  "created_at": "2026-07-26T00:00:00Z",
+  "updated_at": "2026-07-26T00:00:00Z",
+  "completion_commit": null,
+  "required_capabilities": [
+    "filesystem_read",
+    "filesystem_write",
+    "shell_execution",
+    "git_read",
+    "git_commit",
+    "test_execution",
+    "structured_output"
+  ]
+}

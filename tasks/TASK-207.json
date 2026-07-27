@@ -1,0 +1,49 @@
+{
+  "task_id": "TASK-207",
+  "title": "Final release verification (build, install, runtime, CLI, workspace, schemas, smoke, packaging, public API, plugin)",
+  "subsystem": "Release",
+  "phase": "S1",
+  "priority": 1,
+  "status": "ready",
+  "dependencies": [
+    "TASK-100",
+    "TASK-101",
+    "TASK-102",
+    "TASK-200",
+    "TASK-201",
+    "TASK-202",
+    "TASK-203",
+    "TASK-204",
+    "TASK-205"
+  ],
+  "invariants": [
+    "I-08",
+    "I-09",
+    "I-15"
+  ],
+  "required_evidence": [
+    "dist/*.whl",
+    "verify_runtime.py",
+    "capt_cli.py",
+    "architecture/*.schema.json"
+  ],
+  "required_tests": [
+    "tests/test_workspace.py",
+    "tests/test_workspace_security.py",
+    "tests/test_architecture_fitness.py"
+  ],
+  "owner_gate": "none",
+  "assigned_agent": null,
+  "source": "Prompt #2 Final Verification",
+  "created_at": "2026-07-26T00:00:00Z",
+  "updated_at": "2026-07-26T00:00:00Z",
+  "completion_commit": null,
+  "required_capabilities": [
+    "filesystem_read",
+    "shell_execution",
+    "git_read",
+    "test_execution",
+    "package_installation",
+    "structured_output"
+  ]
+}

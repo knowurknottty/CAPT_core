@@ -1,0 +1,27 @@
+{
+  "task_id": "TASK-205",
+  "title": "Add LICENSE file (MIT) to resolve release blocker",
+  "subsystem": "Release",
+  "phase": "S1",
+  "priority": 1,
+  "status": "ready",
+  "dependencies": [],
+  "invariants": [
+    "I-08"
+  ],
+  "required_evidence": [
+    "LICENSE"
+  ],
+  "required_tests": [],
+  "owner_gate": "licensing",
+  "assigned_agent": null,
+  "source": "Prompt #2 Objective 7 / RELEASE_STATE.md",
+  "created_at": "2026-07-26T00:00:00Z",
+  "updated_at": "2026-07-26T00:00:00Z",
+  "completion_commit": null,
+  "required_capabilities": [
+    "filesystem_write",
+    "git_read",
+    "structured_output"
+  ]
+}

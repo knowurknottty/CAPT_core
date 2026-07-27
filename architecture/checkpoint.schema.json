@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://capt.dev/schemas/checkpoint.schema.json",
+  "title": "CAPT Checkpoint Record",
+  "description": "Machine-readable checkpoint. CHECKPOINT.md is the live copy; archived copies go to checkpoints/.",
+  "type": "object",
+  "required": [
+    "checkpoint_id", "branch", "commit", "completed", "in_progress",
+    "active_files", "tests_status", "root_cause", "next_command",
+    "next_commit_boundary", "owner_gate", "generated_at"
+  ],
+  "properties": {
+    "checkpoint_id": {"type": "string", "minLength": 1},
+    "branch": {"type": "string", "minLength": 1},
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$",
+      "description": "Full or short commit SHA this checkpoint was written against."
+    },
+    "completed": {"type": "string"},
+    "in_progress": {"type": "string"},
+    "active_files": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "tests_status": {
+      "type": "string",
+      "description": "Verbatim test result string; never fabricated."
+    },
+    "root_cause": {"type": "string"},
+    "next_command": {"type": "string", "minLength": 1},
+    "next_commit_boundary": {"type": "string"},
+    "owner_gate": {
+      "type": "string",
+      "enum": ["none", "public_private_boundary", "licensing", "security", "destructive_migration", "canonical_conflict", "external_credential"]
+    },
+    "generated_at": {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": false
+}

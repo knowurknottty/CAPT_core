@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://capt.dev/schemas/workspace.schema.json",
+  "title": "CAPT Universal Workspace Contract",
+  "description": "Describes the required files and key fields of a valid CAPT workspace. Used by `capt workspace validate`.",
+  "type": "object",
+  "required": ["required_files", "state_fields", "schemas"],
+  "properties": {
+    "required_files": {
+      "type": "array",
+      "description": "Root files that must exist for the workspace to be navigable.",
+      "items": {
+        "type": "object",
+        "required": ["path", "role"],
+        "properties": {
+          "path": {"type": "string"},
+          "role": {"type": "string", "enum": ["entrypoint", "canon", "state", "checkpoint", "tasks", "security", "tooling", "release", "schema"]},
+          "required": {"type": "boolean"}
+        }
+      }
+    },
+    "state_fields": {
+      "type": "array",
+      "description": "Required headings/fields that CURRENT_STATE.md must contain.",
+      "items": {"type": "string", "enum": [
+        "branch", "head", "cleanliness", "release_target", "completed_phases",
+        "active_phase", "known_failing_tests", "known_architectural_debt",
+        "unresolved_owner_decisions", "release_blockers", "last_verified_tests",
+        "last_verified_runtime", "generated_at", "source_commit"
+      ]}
+    },
+    "schemas": {
+      "type": "array",
+      "description": "Machine-readable schemas that must exist.",
+      "items": {"type": "string", "enum": [
+        "workspace.schema.json", "task.schema.json", "checkpoint.schema.json", "agent-capabilities.schema.json"
+      ]}
+    },
+    "directories": {
+      "type": "array",
+      "description": "Directories that should exist for workspace operation.",
+      "items": {"type": "string", "enum": [
+        "decisions", "evidence", "memory", "knowledge", "tasks", "checkpoints", "logs", "tools", "architecture", "docs"
+      ]}
+    }
+  },
+  "additionalProperties": false
+}

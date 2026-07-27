@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://capt.dev/schemas/task.schema.json",
+  "title": "CAPT Task Record",
+  "description": "Machine-readable task record under tasks/. Validated by `capt workspace validate`.",
+  "type": "object",
+  "required": [
+    "task_id", "title", "subsystem", "phase", "priority", "status",
+    "dependencies", "invariants", "required_evidence", "required_tests",
+    "owner_gate", "source", "created_at", "updated_at"
+  ],
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "pattern": "^TASK-[0-9]{3,}$",
+      "description": "Stable unique task ID."
+    },
+    "title": {"type": "string", "minLength": 1},
+    "subsystem": {"type": "string", "minLength": 1},
+    "phase": {"type": "string", "pattern": "^[0-9]+[A-Z]?$|^S[0-9]+$"},
+    "priority": {"type": "integer", "minimum": 1, "maximum": 5},
+    "status": {
+      "type": "string",
+      "enum": ["blocked", "ready", "active", "verification", "complete", "deferred", "rejected"]
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^TASK-[0-9]{3,}$"}
+    },
+    "invariants": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^I-(0[1-9]|1[0-5])$"}
+    },
+    "required_evidence": {"type": "array", "items": {"type": "string"}},
+    "required_tests": {"type": "array", "items": {"type": "string"}},
+    "owner_gate": {
+      "type": "string",
+      "enum": ["none", "public_private_boundary", "licensing", "security", "destructive_migration", "canonical_conflict", "external_credential"]
+    },
+    "assigned_agent": {"type": ["string", "null"]},
+    "source": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "completion_commit": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{7,40}$"
+    },
+    "required_capabilities": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Capability categories required to execute this task (see agent-capabilities.schema.json)."
+    }
+  },
+  "additionalProperties": false
+}

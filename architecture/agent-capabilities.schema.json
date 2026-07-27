@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://capt.dev/schemas/agent-capabilities.schema.json",
+  "title": "CAPT Agent Capability Manifest",
+  "description": "Declares the capabilities a harness/agent possesses. Tasks match against these. Missing capabilities must be reported honestly.",
+  "type": "object",
+  "required": ["agent", "capabilities"],
+  "properties": {
+    "agent": {"type": "string", "minLength": 1},
+    "schema_version": {"type": "integer", "minimum": 1},
+    "capabilities": {
+      "type": "object",
+      "description": "Capability category -> boolean (or enum level).",
+      "properties": {
+        "filesystem_read": {"type": "boolean"},
+        "filesystem_write": {"type": "boolean"},
+        "shell_execution": {"type": "boolean"},
+        "git_read": {"type": "boolean"},
+        "git_commit": {"type": "boolean"},
+        "network_access": {"type": "boolean"},
+        "browser_access": {"type": "boolean"},
+        "package_installation": {"type": "boolean"},
+        "secrets_access": {"type": "boolean"},
+        "test_execution": {"type": "boolean"},
+        "long_context": {"type": "boolean"},
+        "structured_output": {"type": "boolean"},
+        "persistent_session": {"type": "boolean"},
+        "parallel_workers": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "notes": {"type": "string"}
+  },
+  "additionalProperties": false
+}

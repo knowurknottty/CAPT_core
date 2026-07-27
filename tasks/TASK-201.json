@@ -1,0 +1,33 @@
+{
+  "task_id": "TASK-201",
+  "title": "Resolve version identity drift (README v0.1 / docs v0.4.0 / pyproject 0.4.1)",
+  "subsystem": "Release",
+  "phase": "S1",
+  "priority": 1,
+  "status": "ready",
+  "dependencies": [],
+  "invariants": [
+    "I-08",
+    "I-15"
+  ],
+  "required_evidence": [
+    "README.md",
+    "pyproject.toml",
+    "docs/RELEASE_*.md"
+  ],
+  "required_tests": [
+    "tests/test_v04_release_scenarios.py"
+  ],
+  "owner_gate": "none",
+  "assigned_agent": null,
+  "source": "Prompt #2 Objective 3 / DEBT-002",
+  "created_at": "2026-07-26T00:00:00Z",
+  "updated_at": "2026-07-26T00:00:00Z",
+  "completion_commit": null,
+  "required_capabilities": [
+    "filesystem_read",
+    "filesystem_write",
+    "git_read",
+    "structured_output"
+  ]
+}

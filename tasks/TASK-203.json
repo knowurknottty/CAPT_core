@@ -1,0 +1,32 @@
+{
+  "task_id": "TASK-203",
+  "title": "Add I-15 to CAPT_CANON invariant table (canon/ADR reconciliation)",
+  "subsystem": "Canon",
+  "phase": "S1",
+  "priority": 1,
+  "status": "ready",
+  "dependencies": [],
+  "invariants": [
+    "I-10",
+    "I-11",
+    "I-15"
+  ],
+  "required_evidence": [
+    "docs/CAPT_CANON.md"
+  ],
+  "required_tests": [
+    "tests/test_architecture_fitness.py"
+  ],
+  "owner_gate": "none",
+  "assigned_agent": null,
+  "source": "Prompt #2 Objective 5 (ADR-0006 establishes I-15)",
+  "created_at": "2026-07-26T00:00:00Z",
+  "updated_at": "2026-07-26T00:00:00Z",
+  "completion_commit": null,
+  "required_capabilities": [
+    "filesystem_read",
+    "filesystem_write",
+    "git_read",
+    "structured_output"
+  ]
+}

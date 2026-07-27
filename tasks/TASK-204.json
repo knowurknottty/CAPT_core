@@ -1,0 +1,33 @@
+{
+  "task_id": "TASK-204",
+  "title": "Harden foundry/harness.py os.system injection (shell-free skill sandbox)",
+  "subsystem": "Security",
+  "phase": "S1",
+  "priority": 1,
+  "status": "ready",
+  "dependencies": [],
+  "invariants": [
+    "I-05",
+    "I-07"
+  ],
+  "required_evidence": [
+    "capt_solo/foundry/harness.py"
+  ],
+  "required_tests": [
+    "tests/test_workspace_security.py",
+    "tests/test_v04_foundry.py"
+  ],
+  "owner_gate": "none",
+  "assigned_agent": null,
+  "source": "Prompt #2 Objective 7",
+  "created_at": "2026-07-26T00:00:00Z",
+  "updated_at": "2026-07-26T00:00:00Z",
+  "completion_commit": null,
+  "required_capabilities": [
+    "filesystem_read",
+    "filesystem_write",
+    "shell_execution",
+    "test_execution",
+    "structured_output"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "task_id": "TASK-200",
+  "title": "Reconcile architecture/debt.yaml with evidence (Phases 3B-3M resolved items)",
+  "subsystem": "Debt",
+  "phase": "S1",
+  "priority": 2,
+  "status": "ready",
+  "dependencies": [],
+  "invariants": [
+    "I-14",
+    "I-15"
+  ],
+  "required_evidence": [
+    "architecture/debt.yaml",
+    "docs/ARCHITECTURAL_DEBT.md"
+  ],
+  "required_tests": [
+    "tests/test_architecture_fitness.py"
+  ],
+  "owner_gate": "none",
+  "assigned_agent": null,
+  "source": "Prompt #2 Objective 3",
+  "created_at": "2026-07-26T00:00:00Z",
+  "updated_at": "2026-07-26T00:00:00Z",
+  "completion_commit": null,
+  "required_capabilities": [
+    "filesystem_read",
+    "filesystem_write",
+    "git_read",
+    "structured_output"
+  ]
+}
