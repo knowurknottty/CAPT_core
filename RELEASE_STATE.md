@@ -1,28 +1,29 @@
 # RELEASE_STATE.md — Release Readiness
 
 - **package**: `capt-solo`
-- **declared version**: `0.4.1` (pyproject.toml)
-- **license**: MIT (declared in pyproject). LICENSE file: **added this session** (was missing — a release blocker).
+- **declared version**: `0.4.1` (pyproject.toml, plugin.json, README, installer banners — reconciled).
+- **license**: MIT (declared in pyproject; LICENSE file present).
 - **release target**: `CAPT_core` public release.
-- **last full test run**: `463 passed` (this session).
+- **last full test run**: **497 passed** (this session).
 - **last runtime verify**: `46 pass / 0 warn / 0 fail / 0 skip`.
 - **last registry validate**: `15 checks, 0 fail, 0 warn`.
-- **release gates (from RELEASE_AUDIT_v0.4, re-verified this session where possible)**:
-  - Migration safety, idempotency, abort-on-failure: covered by `tests/test_v04_migration.py` (still green).
+- **release gates (from RELEASE_AUDIT_v0.4, re-verified this session)**:
+  - Migration safety, idempotency, abort-on-failure: `tests/test_v04_migration.py` (green).
   - Bubble manifest v2 / 12-step validation: green.
   - Degradation 12 codes / ClaimGuard scoped language: green.
   - Skill/capability lifecycle: green.
   - SQL boundary audit: green.
   - Plugin 46 tools: `plugin.json` version `0.4.1`, 46 tools (confirmed).
-  - Coverage: historically 84%; being re-measured this session.
-- **open release blockers (evidence-backed)**:
-  1. LICENSE file missing → **resolved this session** (MIT LICENSE created).
-  2. Version identity drift (README v0.1 / docs v0.4.0 / pyproject 0.4.1) → **in progress** (TASK-201).
-  3. Stale release docs (355/45 vs 463/46) → **in progress** (TASK-202); will add fresh `docs/evidence/UNIVERSAL_WORKSPACE_IMPLEMENTATION.md` and update RELEASE_AUDIT.
-  4. I-15 absent from CAPT_CANON table → **resolved this session** (TASK-203).
-  5. Universal Workspace layer absent → **resolved this session** (TASK-100).
+  - Coverage: historically 84%; not re-measured this session (no coverage tool run; prior evidence stands).
+- **open release blockers (evidence-backed)**: **none at code level.**
+  - LICENSE: resolved.
+  - Version drift: resolved.
+  - Stale docs: resolved.
+  - I-15: resolved.
+  - Workspace layer: resolved.
 - **owner gates for public release (require owner, not steward)**:
-  - [B] public/private boundary for research_package modules (FILT/FSR/NEDA/ALLO/OUROBOROS).
+  - [B] public/private boundary for research_package modules (FILT/FSR/NEDA/CONS/QIPC/OUROBOROS) — see `docs/RELEASE_GOVERNANCE.md`. None ship in `capt-solo` (all `missing`, external repo).
   - [S] privacy review for Consent/Sync transports.
-  - [B]+[S] PULSE/RYS network gateways (safe abstract contracts only; not in core).
-- **recommended release decision**: **CONDITIONAL GO** once TASK-201/202 land and the [B]/[S] owner gates are resolved. The codebase itself is internally consistent, proof-governed, migration-safe, and tested. The remaining items are documentation/version hygiene + owner boundary decisions, not code defects.
+  - [B]+[S] PULSE/RYS network gateways (`optional_plugin`/`external_package`; safe abstract contracts only).
+- **governance review**: prepared in `docs/RELEASE_GOVERNANCE.md` (classification + rationale + owner-review items). No irreversible boundary decisions made autonomously.
+- **recommended release decision**: **RELEASE CANDIDATE** — the codebase is internally consistent, proof-governed, migration-safe, tested (497/46/15), self-describing via the Universal Workspace, and free of code-level blockers. Promotion to PUBLIC RELEASE requires the owner to resolve the [B]/[S] boundary gates. Evidence supports RC, not unconditional public release.

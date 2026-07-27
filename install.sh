@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CAPT Solo v0.1 — installer
+# CAPT Solo v0.4.1 — installer
 # One-command install: detect Hermes, install plugin + skills, init runtime.
 set -euo pipefail
 
@@ -9,7 +9,7 @@ HERMES_CONFIG_DIR="${HERMES_CONFIG_DIR:-$HOME/.hermes}"
 PLUGIN_TARGET="$HERMES_CONFIG_DIR/plugins/capt-solo"
 SKILLS_TARGET="$HERMES_CONFIG_DIR/skills"
 
-echo "== CAPT Solo v0.1 installer =="
+echo "== CAPT Solo v0.4.1 installer =="
 echo "Source : $CAPT_SOLO_SRC"
 echo "Home   : $INSTALL_PREFIX"
 echo "Hermes : $HERMES_CONFIG_DIR"
