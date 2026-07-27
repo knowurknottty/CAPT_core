@@ -77,23 +77,36 @@ capt-solo/
 ├── TOOLING.md                # workspace CLI reference
 ├── RELEASE_STATE.md          # release readiness
 ├── architecture/             # registry.yaml + JSON schemas
-├── capt_solo/                # the runtime (core, memory, ctp, khsb, foundry, plugin, skills, api, workspace)
+├── capt_solo/                # the runtime (core, memory, ctp, khsb, foundry, plugin, skills, api, workspace, evidence)
 ├── docs/                     # canonical architecture, ADRs, evidence, subsystem docs
-├── tests/                    # pytest suite (463 tests)
-├── capt_cli.py               # CLI (memory/session/procedure/prospective/retrieval/canon/foundry/architecture/workspace)
+├── tests/                    # pytest suite (594 tests + evidence suite)
+├── capt_cli.py               # CLI (memory/session/procedure/prospective/retrieval/canon/foundry/architecture/workspace/verify/evidence/mission/selfmod)
 ├── verify_runtime.py         # 46-check structured verification harness
 ├── doctor.sh / verify.sh / install.sh / uninstall.sh
-└── pyproject.toml            # version 0.4.1, MIT
+└── pyproject.toml            # version 0.4.2, MIT
 ```
 
 ## Verification
 
 ```bash
-python3 -m pytest -q            # full suite (463 passed)
+python3 -m pytest -q            # full suite (594 passed + evidence suite)
 python3 verify_runtime.py       # 46 structured checks
 python3 architecture/validate_registry.py   # registry fitness
 python3 capt_cli.py workspace validate       # workspace consistency
+python3 capt_cli.py verify status            # VSI verification state
+python3 capt_cli.py evidence status          # evidence store summary
 ```
+
+## Evidence Engine
+
+The governed evidence layer (`capt_solo/evidence/`) distinguishes what is
+present / believed / inferred / attempted / changed / verified / valid /
+invalidated / project-local / globally-reusable — these concepts do not collapse
+into one field. It provides proof-preserving evidence reuse (VSI integration),
+first-class invalidation events, project workspace isolation, scoped
+memory-promotion boundaries, self-modification governance, mission checkpoint/
+restart recovery, and long-session efficiency controls. See `docs/EVIDENCE_MODEL.md`
+and `docs/VSI_MODEL.md`.
 
 ## License
 

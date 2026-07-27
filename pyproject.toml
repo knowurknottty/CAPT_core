@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "capt-solo"
-version = "0.4.1"
+version = "0.4.2"
 description = "Local-first cognitive runtime for individual developers, integrating with Hermes."
 readme = "README.md"
 requires-python = ">=3.8"

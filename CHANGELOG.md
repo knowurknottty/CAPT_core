@@ -3,6 +3,57 @@
 All notable changes to CAPT Solo are documented here. This project adheres to
 semantic versioning. The canonical public baseline is **v0.4.1**.
 
+## [0.4.2] — 2026-07-27 (governed evidence + invalidation + workspace isolation)
+
+Adds the Evidence Engine layer on top of the Verified State Identity (VSI)
+subsystem. Implements the long-horizon engineering pass: proof-preserving
+evidence reuse, first-class invalidation events, project workspace isolation,
+scoped memory-promotion boundaries, self-modification governance, mission
+checkpoint/restart recovery, long-session efficiency controls, and a structured
+guard decision contract.
+
+### Added
+- `capt_solo/evidence/core.py`: `EvidenceRecord`/`EvidenceClaim`/`EvidenceSource`/
+  `EvidenceClass` (12 classes)/`EvidenceStatus` (8 statuses)/`EvidenceScope`/
+  `EvidenceRelation`/`EvidenceBundle`/`EvidenceQuery`/`EvidenceDecision`. Explicit
+  separation of present/believed/inferred/attempted/changed/verified/valid/
+  invalidated/project-local/globally-reusable — no collapse into one field.
+- `capt_solo/evidence/invalidation.py`: `InvalidationEvent`/`Reason`/`Rule`/
+  `Scope`/`Decision`/`Graph`. Scoped invalidation (path-based changes affect only
+  overlapping evidence; HEAD/lockfile/env/policy are FULL-scope global
+  invalidators). Transitive closure supported.
+- `capt_solo/evidence/reuse.py`: `EvidenceReuseEngine` — deterministic reuse vs
+  re-verification. Repeated equivalent state => reuse, no rerun, no false
+  confidence increase.
+- `capt_solo/evidence/proof_graph.py`: indexed claim/evidence/verification/
+  invalidation graph with BFS traversal + cycle protection.
+- `capt_solo/evidence/workspace_isolation.py`: `ProjectWorkspace`/`ProjectContext`.
+  Bounded `.capt/` boundary; rejects traversal + symlink escape; unbound workspace
+  blocks all project/global persistence; global writes never implicit.
+- `capt_solo/evidence/promotion.py`: `PromotionPipeline` (workspace -> candidate ->
+  quarantine/validate -> explicit project/global promotion). Forbidden content
+  auto-quarantined; inferred/synthetic quarantined until corroborated.
+- `capt_solo/evidence/selfmod.py`: `SelfModificationGovernor` with full lifecycle,
+  dedup (anti-loop), per-mission cap, global-policy quarantine + external approval,
+  mandatory rollback path.
+- `capt_solo/evidence/checkpoint.py`: `MissionCheckpoint`/`CheckpointStore`/
+  `detect_divergence`/`resume_plan`. Completed missions are not restarted.
+- `capt_solo/evidence/metrics.py`: `EfficiencyMetrics`/`AntiLoopGuard`.
+- `capt_solo/evidence/guard.py`: `build_guard_decision()`/`reuse_decision()` —
+  structured contract a runtime guard consumes to avoid verification loops.
+- `capt_solo/evidence/integration.py`: VSI<->Evidence bridge (proof-preserving
+  reuse; invalidation marks VSI records affected/unaffected).
+- CLI: `capt evidence ...`, `capt mission ...`, `capt selfmod ...`.
+- `docs/EVIDENCE_MODEL.md`: operational documentation of the evidence layer.
+
+### Evidence
+- `tests/test_evidence_core.py`: 11 passed (evidence core, invalidation, reuse, proof graph).
+- `tests/test_evidence_workspace.py`: 17 passed (isolation, promotion, selfmod, checkpoint, metrics).
+- `tests/test_evidence_cli.py`: 5 passed (CLI integration).
+- `tests/test_evidence_adversarial.py`: 12 passed (representative + negative/adversarial).
+- Baseline HEAD `a0124c1` unchanged (clean tree); prior 594-pass verification
+  reused per VSI. New evidence-package code is covered by the targeted tests above.
+
 ## [0.4.1] — 2026-07-26 (canonical public architecture convergence)
 
 This release repairs the clean-clone/build baseline and aligns the version
