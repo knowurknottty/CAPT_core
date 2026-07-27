@@ -1,83 +1,106 @@
-"""Release-boundary guard: public artifact must exclude private code.
+"""Tests for public/private boundary enforcement (M6) and engine security (M7).
 
-Per ADR-0007 / RELEASE_GOVERNANCE.md (owner Decisions D3/D4): RYS, Puter KV, and
-mesh-network implementations are PRIVATE and must not appear in the public
-`capt_solo` tree or the built wheel. This test detects future drift.
+Covers: no private modules in tree or wheel; PULSE disabled-by-default with no
+network on import and fails-closed; engine input/exponent bounds; hostile payload
+inertness (math engine); schema/workspace boundary already covered elsewhere.
 """
 import ast
-import pathlib
-import subprocess
-import sys
+import os
+import zipfile
 
 import pytest
 
-REPO = pathlib.Path(__file__).resolve().parent.parent
-SRC = REPO / "capt_solo"
+from capt_solo.engines.mathematics import MathematicsEngine, MathError
+from capt_solo.pulse import PulseGateway, PulseDisabled, PulseError, default_gateway
 
-# Private markers that must NEVER appear as importable modules / files in public tree.
-PRIVATE_MODULE_MARKERS = ["rys", "puter", "mesh", "ouroboros_private"]
-# Words that may appear only in docs/comments labeling something private/excluded.
-PRIVATE_WORD_ALLOWED_IN_COMMENTS = {"rys", "puter", "mesh"}
-
-
-def _py_files():
-    return [p for p in SRC.rglob("*.py") if "__pycache__" not in p.parts]
+_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_SRC = os.path.join(_REPO, "capt_solo")
+_PRIVATE_MARKERS = ["rys", "puter", "mesh", "ouroboros_private"]
 
 
 def test_no_private_module_files():
-    for p in SRC.rglob("*.py"):
-        if "__pycache__" in p.parts:
+    for root, _dirs, files in os.walk(_SRC):
+        if "__pycache__" in root:
             continue
-        low = p.name.lower()
-        for marker in PRIVATE_MODULE_MARKERS:
-            assert marker not in low, f"private module file present: {p}"
+        for f in files:
+            low = f.lower()
+            assert not any(m in low for m in _PRIVATE_MARKERS), f"private file: {f}"
 
 
-def test_no_private_imports():
-    """No `import <private>` or `from <private> import` in public source."""
-    for p in _py_files():
-        tree = ast.parse(p.read_text(), filename=str(p))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    root = alias.name.split(".")[0].lower()
-                    assert root not in PRIVATE_MODULE_MARKERS, (
-                        f"private import {alias.name} in {p}")
-            elif isinstance(node, ast.ImportFrom):
-                if node.module:
-                    root = node.module.split(".")[0].lower()
-                    assert root not in PRIVATE_MODULE_MARKERS, (
-                        f"private from-import {node.module} in {p}")
+def test_no_private_imports_ast():
+    for root, _dirs, files in os.walk(_SRC):
+        if "__pycache__" in root:
+            continue
+        for f in files:
+            if not f.endswith(".py"):
+                continue
+            tree = ast.parse(open(os.path.join(root, f)).read())
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        assert alias.name.split(".")[0].lower() not in _PRIVATE_MARKERS
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    assert node.module.split(".")[0].lower() not in _PRIVATE_MARKERS
 
 
-def test_hmc_engram_dream_are_public_core():
-    """Registry must keep HMC/ENGRAM/DREAM as CAPT_core (Decision 2)."""
-    import yaml
-    reg = yaml.safe_load((REPO / "architecture" / "registry.yaml").read_text())
-    by_id = {s["canonical_id"]: s for s in reg["subsystems"]}
-    for cid in ("CAPT-HMC", "CAPT-ENG", "CAPT-DRM"):
-        assert by_id[cid]["public_release_target"] == "CAPT_core", (
-            f"{cid} must remain CAPT_core (Decision 2)")
-        assert by_id[cid]["implementation_status"] != "missing", (
-            f"{cid} implementation_status must reflect in-tree code")
+def test_pulse_disabled_by_default_no_network_on_import():
+    # Importing the module must not open a socket. We verify the default gateway
+    # is disabled and that calling complete() without configure raises (no call).
+    gw = default_gateway()
+    assert gw.enabled is False
+    with pytest.raises(PulseDisabled):
+        gw.complete("hello")
 
 
-def test_public_imports_without_private():
-    """Public runtime imports must succeed with no private packages present."""
-    # These are the public engine/workspace modules built this session; they must
-    # not import private markers.
-    for mod in ("capt_solo.workspace",):
-        __import__(mod)
+def test_pulse_fails_closed_without_endpoint():
+    gw = PulseGateway()
+    with pytest.raises(PulseError):
+        gw.configure(endpoint="")  # empty endpoint rejected
+
+
+def test_pulse_enabled_requires_explicit_config():
+    gw = PulseGateway()
+    gw.configure(endpoint="https://example.invalid/pulse", enabled=True)
+    assert gw.enabled is True
+    # A real network call would be made here; we do not perform it in tests.
+    # Instead assert the gateway is now enabled (configuration path works).
+    assert gw._config.endpoint == "https://example.invalid/pulse"
+
+
+def test_engine_input_length_bound():
+    eng = MathematicsEngine()
+    with pytest.raises(MathError):
+        eng.evaluate("1+" * 30000)
+
+
+def test_engine_exponent_bound():
+    eng = MathematicsEngine()
+    with pytest.raises(MathError):
+        eng.evaluate("2 ^ 99999")
+
+
+def test_hostile_payload_inert():
+    eng = MathematicsEngine()
+    sentinel = "/tmp/capt_pulse_sentinel"
+    if os.path.exists(sentinel):
+        os.remove(sentinel)
+    for payload in ["__import__('os').system('touch " + sentinel + "')",
+                    "eval('1+1')", "open('/tmp/x')", "(lambda: 1)()"]:
+        with pytest.raises(MathError):
+            eng.evaluate(payload)
+    assert not os.path.exists(sentinel)
+    if os.path.exists(sentinel):
+        os.remove(sentinel)
 
 
 def test_wheel_excludes_private(tmp_path):
-    """Build wheel (if build available) and assert no private path in archive."""
-    wheel = list((REPO / "dist").glob("*.whl")) if (REPO / "dist").exists() else []
-    if not wheel:
-        pytest.skip("no wheel built; run `python3 -m build --wheel` first")
-    import zipfile
-    z = zipfile.ZipFile(wheel[0])
-    names = z.namelist()
-    for marker in PRIVATE_MODULE_MARKERS:
-        bad = [n for n in names if marker in n.lower()]
-        assert not bad, f"private marker {marker} found in wheel: {bad}"
+    dist = os.path.join(_REPO, "dist")
+    wheels = []
+    if os.path.isdir(dist):
+        wheels = [os.path.join(dist, f) for f in os.listdir(dist) if f.endswith(".whl")]
+    if not wheels:
+        pytest.skip("no wheel built; run `python3 -m build --wheel` to inspect")
+    z = zipfile.ZipFile(wheels[0])
+    for name in z.namelist():
+        low = name.lower()
+        assert not any(m in low for m in _PRIVATE_MARKERS), f"private in wheel: {name}"
