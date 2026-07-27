@@ -45,7 +45,7 @@ BUBBLE_LIFECYCLE = {
 
 BUBBLE_FORMAT = "capt-solo-knowledge-bubble"
 BUBBLE_FORMAT_VERSION = 2  # v0.4 expanded manifest
-CAPT_SOLO_VERSION = "0.4.0"
+CAPT_SOLO_VERSION = "0.4.1"
 
 # manifest validation order (manifest checked BEFORE payload)
 MANIFEST_VALIDATION_ORDER = [

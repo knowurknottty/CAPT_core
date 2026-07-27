@@ -10,7 +10,6 @@ backups/
 *.db-shm
 
 # CTP journals
-ctp/
 journal.log
 state.json
 
