@@ -19,6 +19,13 @@
   data; DREAM output labeled inferred (never overwrites canonical memory).
 - **PULSE gateway** (`capt_solo.pulse`): optional, disabled-by-default, no network
   on import, fails closed.
+- **Verified State Identity (VSI) verification subsystem**
+  (`capt_solo/verification/`): verification is bound to the STATE being verified,
+  not to conversation age. A `VerifiedStateIdentity` captures repo/branch/HEAD/
+  scoped file hashes/dependency/runtime/environment/command/scope. When the VSI is
+  unchanged, prior evidence is reused (no rerun); when it changes, only the
+  affected scope is re-verified. Eliminates verification loops on long missions.
+  `capt verify run --scope X` and `capt verify status` CLI commands.
 - **Universal Workspace layer**: repository-native, harness-neutral execution
   context. Root `AGENTS.md` (single entrypoint + authority order + startup
   procedure + owner gates), `WORKSPACE.md`, `CURRENT_STATE.md`, `CHECKPOINT.md`,

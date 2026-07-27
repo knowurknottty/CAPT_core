@@ -45,3 +45,6 @@ credentials.*
 build/
 dist/
 *.egg-info/
+
+# Local verification-state cache (VSI records; git-ignored, local-only)
+.capt_verify/

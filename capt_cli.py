@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -206,12 +207,27 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--in-progress", dest="in_progress", default="")
     wss.add_parser("archive-checkpoint")
 
+    # verify (Verified State Identity — independent of runtime; local-first)
+    vf = sub.add_parser("verify", help="Verified State Identity verification (reuse prior evidence when state unchanged)")
+    vfs = vf.add_subparsers(dest="action")
+    p = vfs.add_parser("run", help="verify a scope; reuse prior evidence if VSI unchanged")
+    p.add_argument("--scope", default="full",
+                   choices=[s.value for s in __import__("capt_solo.verification.scope", fromlist=["VerificationScope"]).VerificationScope])
+    p.add_argument("--force", action="store_true", help="ignore VSI reuse and re-run")
+    p.add_argument("--command", default=None, help="override verification command")
+    p.add_argument("--store", default=None, help="path to verification records JSONL")
+    vfs.add_parser("status", help="show latest verification record")
+
     args = parser.parse_args(argv)
     if not args.group:
         parser.print_help()
         return 1
 
     as_json = args.json
+
+    # verify group is independent of the memory runtime.
+    if args.group == "verify":
+        return _cmd_verify(args, as_json)
 
     # Architecture commands are independent of the runtime and must work even
     # when optional subsystems (e.g. CTP) are missing from the tree.
@@ -348,6 +364,44 @@ def _cmd_workspace(args, as_json) -> int:
     if code != 0:
         return _fail(json.dumps(data, default=str))
     return _ok(data, as_json)
+
+
+def _cmd_verify(args, as_json) -> int:
+    """Verified State Identity verification (local-first; no network I/O)."""
+    from capt_solo.verification import (
+        VerificationEngine, VerificationStore, VerificationScope,
+    )
+    repo = os.path.abspath(os.path.dirname(__file__))  # capt_cli.py lives at repo root
+    if args.action == "status":
+        store = VerificationStore(os.path.join(repo, ".capt_verify", "records.jsonl"))
+        latest = store.latest()
+        if latest is None:
+            return _ok({"status": "no_verification_recorded"}, as_json)
+        return _ok({
+            "record_id": latest.get("record_id"),
+            "status": latest.get("status"),
+            "scope": latest.get("vsi", {}).get("verification_scope"),
+            "head": latest.get("vsi", {}).get("head_commit", "")[:12],
+            "evidence": latest.get("evidence", {}).get("location"),
+            "created_at": latest.get("created_at"),
+        }, as_json)
+    if args.action != "run":
+        return _fail("unknown verify action (expected run|status)")
+    scope = VerificationScope(args.scope)
+    store = VerificationStore(args.store) if args.store else None
+    engine = VerificationEngine(repo, store=store)
+    result = engine.verify(scope, command=args.command, force=args.force)
+    out = {
+        "status": result.status.value,
+        "scope": scope.value,
+        "ran_scope": result.ran_scope.value if result.ran_scope else None,
+        "reused_record_id": result.reused_record_id,
+        "new_record_id": result.new_record_id,
+        "diff_reasons": result.diff_reasons,
+        "confidence_note": result.confidence_note,
+        "evidence": result.evidence.location if result.evidence else None,
+    }
+    return _ok(out, as_json)
 
 
 def _cmd_memory(mgr, args, as_json) -> int:
