@@ -48,6 +48,23 @@ from capt_solo.lifecycle import (
 from capt_solo.memory.engine import Memory, MemoryEngine
 from capt_solo.memory.search import SearchAdapter, SearchHit
 from capt_solo.memory import csg, antitoken, context, pipeline, trust, models
+from capt_solo.meta_foundry import (
+    CompiledArtifact,
+    CompilerDefinition,
+    CompilerNotExecutableError,
+    Constraint,
+    ConstraintResult,
+    ConstraintViolationError,
+    CreationIntent,
+    DomainDefinition,
+    DomainNotFoundError,
+    DomainRegistry,
+    DomainSpecification,
+    MetaFoundry,
+    MetaFoundryError,
+    ProvenanceRecord,
+    register_childrens_studio,
+)
 
 __all__ = [
     # config
@@ -69,6 +86,12 @@ __all__ = [
     "CTPRuntime", "Receipt",
     # khsb
     "KHSB", "Message",
+    # meta foundry v0.4
+    "CompiledArtifact", "CompilerDefinition", "CompilerNotExecutableError",
+    "Constraint", "ConstraintResult", "ConstraintViolationError",
+    "CreationIntent", "DomainDefinition", "DomainNotFoundError",
+    "DomainRegistry", "DomainSpecification", "MetaFoundry",
+    "MetaFoundryError", "ProvenanceRecord", "register_childrens_studio",
 ]
 
 
