@@ -1,6 +1,6 @@
 {
   "name": "capt-solo",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Local-first cognitive runtime for Hermes (memory, CTP transactions, KHSB bus, adaptive lifecycle, sessions, procedures, prospective memory, retrieval feedback).",
   "entry": "capt_solo.plugin",
   "tools": [

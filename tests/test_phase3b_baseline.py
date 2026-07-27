@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parent.parent
-CANONICAL_VERSION = "0.4.1"
+CANONICAL_VERSION = "0.4.2"
 
 
 def test_b_version_identity_consistent():

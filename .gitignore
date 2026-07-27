@@ -48,3 +48,6 @@ dist/
 
 # Local verification-state cache (VSI records; git-ignored, local-only)
 .capt_verify/
+
+# CLI evidence workspace (evidence, checkpoints, selfmod; local-only artifacts)
+.capt/
