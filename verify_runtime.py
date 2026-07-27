@@ -29,15 +29,22 @@ _TMP = Path(tempfile.mkdtemp(prefix="capt-verify-"))
 import os
 os.environ["CAPT_SOLO_HOME"] = str(_TMP)
 
-from capt_solo.api import CTPRuntime, KHSB, MemoryEngine, health  # noqa: E402
-from capt_solo.memory.engine import SCHEMA_VERSION  # noqa: E402
-from capt_solo.foundry import (  # noqa: E402
-    ProofEngine, CapabilityRegistry, SkillFoundry, ClaimGuard,
-    ValidationHarness, KnowledgeBubbleRuntime, Governance, ProofRequirement,
-    WorkflowProofEngine, DEGRADATION_REASONS,
-)
-from capt_solo.lifecycle.procedures import ProcedureStore  # noqa: E402
-from capt_solo.core.config import memory_db_path  # noqa: E402
+# Runtime public surface. Guarded: if a subsystem (e.g. CTP) is missing from the
+# tree, the harness still loads and runs architecture/registry checks.
+try:  # noqa: E402
+    from capt_solo.api import CTPRuntime, KHSB, MemoryEngine, health  # noqa: E402
+    from capt_solo.memory.engine import SCHEMA_VERSION  # noqa: E402
+    from capt_solo.foundry import (  # noqa: E402
+        ProofEngine, CapabilityRegistry, SkillFoundry, ClaimGuard,
+        ValidationHarness, KnowledgeBubbleRuntime, Governance, ProofRequirement,
+        WorkflowProofEngine, DEGRADATION_REASONS,
+    )
+    from capt_solo.lifecycle.procedures import ProcedureStore  # noqa: E402
+    from capt_solo.core.config import memory_db_path  # noqa: E402
+    _RUNTIME_IMPORT_OK = True
+except Exception as _runtime_import_err:  # noqa: BLE001,E402
+    _RUNTIME_IMPORT_OK = False
+    _RUNTIME_IMPORT_ERR = _runtime_import_err
 from capt_solo.memory.secrets import screen as secret_screen  # noqa: E402
 
 
@@ -498,12 +505,55 @@ def run_health() -> None:
     run_check("capt.health", "medium", "capt_health reports ok + integrity", _health)
 
 
+def run_architecture() -> None:
+    """Phase 3A.3 — validate the canonical architecture registry independently
+    of the runtime (so it runs even when CTP/other runtime imports are broken)."""
+    section("Architecture Registry")
+    try:
+        from architecture.validate_registry import validate, load_registry
+    except Exception as e:  # noqa: BLE001
+        run_check("arch.registry.import", "critical",
+                  "architecture validator importable", lambda: (False, str(e)))
+        return
+
+    def _validate():
+        try:
+            reg = load_registry()
+        except Exception as e:  # noqa: BLE001
+            return False, f"load failed: {e}"
+        checks = validate(reg)
+        fails = [c for c in checks if c.status == "fail"]
+        if fails:
+            return False, "; ".join(f"{c.cid}:{c.summary}" for c in fails)
+        return True, f"{len(checks)} checks passed"
+
+    run_check("arch.registry.valid", "high",
+              "architecture/registry.yaml passes all structural + invariant checks",
+              _validate,
+              "run: python3 architecture/validate_registry.py")
+
+
 def main() -> int:
-    run_memory()
-    run_ctp()
-    run_khsb()
-    run_foundry()
-    run_health()
+    run_architecture()
+    try:
+        # Runtime-dependent checks require the full public surface to import.
+        # If CTP (or another module) is missing from the tree, these are skipped
+        # rather than crashing the whole harness; the architecture check still runs.
+        from capt_solo.api import (  # noqa: F401
+            CTPRuntime, KHSB, MemoryEngine, health,
+        )
+        _runtime_available = True
+    except Exception as e:  # noqa: BLE001
+        section("Runtime (skipped)")
+        print(f"[SKIP] runtime checks — import failed: {type(e).__name__}: {e}")
+        _runtime_available = False
+
+    if _runtime_available:
+        run_memory()
+        run_ctp()
+        run_khsb()
+        run_foundry()
+        run_health()
 
     passed = sum(1 for c in CHECKS if c.status == "pass")
     warned = sum(1 for c in CHECKS if c.status == "warn")

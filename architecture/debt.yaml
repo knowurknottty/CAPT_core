@@ -1,0 +1,259 @@
+# Architectural debt (machine-readable companion to docs/ARCHITECTURAL_DEBT.md)
+schema_version: 1
+generated: "2026-07-26"
+items:
+  - id: DEBT-001
+    subsystem: CTP
+    layer: L6
+    problem: capt_solo/ctp/ gitignored + absent from tree; fresh clone cannot import
+    evidence: BASELINE_EVIDENCE_REPORT B1; git ls-files capt_solo/ctp/ empty
+    impact: verify_runtime + pytest fail on clean clone
+    severity: critical
+    maturity_gap: disconnected->Beta
+    blocked_capability: transaction journal unavailable
+    remediation: Restore verified wheel source into tree (Phase 3B.1)
+    dependencies: []
+    owner_gate: none
+    status: open
+    target_phase: 3B
+    verification: import succeeds; ctp.* checks pass
+  - id: DEBT-002
+    subsystem: Version identity
+    layer: all
+    problem: pyproject 0.1.0 vs wheel/docs 0.4.1 vs tag v0.4.0
+    evidence: BASELINE B2
+    impact: ambiguous release identity
+    severity: high
+    maturity_gap: n/a
+    blocked_capability: reproducible builds
+    remediation: Resolve to v0.4.1 via evidence (Phase 3B.2)
+    dependencies: []
+    owner_gate: "[C] if two equally authoritative histories"
+    status: open
+    target_phase: 3B
+    verification: single version across metadata/docs/tag
+  - id: DEBT-003
+    subsystem: Episodic/ECHO
+    layer: L3
+    problem: SessionStore is current episodic impl; ECHO canonical interface not adopted
+    evidence: MATRIX M2; CANONICAL L3.3
+    impact: episodic semantics incomplete
+    severity: medium
+    maturity_gap: partial->Beta
+    blocked_capability: canonical ECHO API
+    remediation: Canonicalize ECHO, merge SessionStore (Phase 3D)
+    dependencies: [DEBT-001]
+    owner_gate: none
+    status: open
+    target_phase: 3D
+    verification: ECHO API tests pass
+  - id: DEBT-004
+    subsystem: Proof Ledger
+    layer: L5
+    problem: Approximated by ProofEngine+governance; no explicit ledger
+    evidence: MATRIX M9; CANONICAL L5.6
+    impact: ledger integrity not explicit
+    severity: medium
+    maturity_gap: Beta->Production
+    blocked_capability: tamper-evident ledger
+    remediation: Merge explicit ledger (Phase 3G)
+    dependencies: []
+    owner_gate: none
+    status: open
+    target_phase: 3G
+    verification: ledger append/verify tests
+  - id: DEBT-005
+    subsystem: Autobiographical
+    layer: L3
+    problem: No implementation anywhere
+    evidence: MATRIX M6
+    impact: autobiographical layer absent
+    severity: medium
+    maturity_gap: Concept->Beta
+    blocked_capability: narrative self
+    remediation: Implement integration layer (Phase 3F)
+    dependencies: [DEBT-003]
+    owner_gate: none
+    status: open
+    target_phase: 3F
+    verification: autobiographical tests
+  - id: DEBT-006
+    subsystem: Replay
+    layer: L3
+    problem: Only skill/docs references; no module
+    evidence: MATRIX P4
+    impact: replay not first-class
+    severity: medium
+    maturity_gap: Concept->Beta
+    blocked_capability: deterministic replay
+    remediation: Canonicalize replay API (Phase 3E)
+    dependencies: []
+    owner_gate: none
+    status: open
+    target_phase: 3E
+    verification: replay fixtures
+  - id: DEBT-007
+    subsystem: Consent
+    layer: L3
+    problem: No implementation
+    evidence: MATRIX M7
+    impact: sensitive ops lack consent gate
+    severity: medium
+    maturity_gap: Concept->Beta
+    blocked_capability: local consent ledger
+    remediation: Implement consent model (Phase 3E)
+    dependencies: []
+    owner_gate: "[S] privacy review at integration"
+    status: open
+    target_phase: 3E
+    verification: consent tests
+  - id: DEBT-008
+    subsystem: Synchronization
+    layer: L3
+    problem: No implementation; abstraction canonical
+    evidence: MATRIX Synchronization
+    impact: cross-instance reconcile absent
+    severity: medium
+    maturity_gap: Planned->Beta
+    blocked_capability: local FS/export sync
+    remediation: Implement transport-neutral contract + local transports (Phase 3E)
+    dependencies: []
+    owner_gate: "abstraction un-gated; transports [S]"
+    status: open
+    target_phase: 3E
+    verification: sync round-trip tests
+  - id: DEBT-009
+    subsystem: HMC
+    layer: L3
+    problem: Absent from capt-solo; external only
+    evidence: MATRIX M1
+    impact: holographic memory absent
+    severity: high
+    maturity_gap: Research->Beta
+    blocked_capability: VSA compression
+    remediation: Canonicalize HMC (Phase 3I)
+    dependencies: []
+    owner_gate: none
+    status: open
+    target_phase: 3I
+    verification: HMC round-trip benchmark
+  - id: DEBT-010
+    subsystem: ENGRAM
+    layer: L3
+    problem: Absent from capt-solo; external only
+    evidence: MATRIX M3
+    impact: durable encode absent
+    severity: high
+    maturity_gap: Research->Beta
+    blocked_capability: engram records
+    remediation: Canonicalize ENGRAM (Phase 3I)
+    dependencies: []
+    owner_gate: none
+    status: open
+    target_phase: 3I
+    verification: engram tests
+  - id: DEBT-011
+    subsystem: DREAM
+    layer: L3/L10
+    problem: Absent; external only
+    evidence: MATRIX M4
+    impact: consolidation loop absent
+    severity: high
+    maturity_gap: Research->Beta
+    blocked_capability: consolidation
+    remediation: Canonicalize DREAM (Phase 3I)
+    dependencies: [DEBT-009, DEBT-010]
+    owner_gate: none
+    status: open
+    target_phase: 3I
+    verification: DREAM cycle tests
+  - id: DEBT-012
+    subsystem: IMMU
+    layer: L5
+    problem: Absent; external only
+    evidence: MATRIX X3
+    impact: immune verification absent
+    severity: medium
+    maturity_gap: Research->Beta
+    blocked_capability: bubble quarantine verify
+    remediation: Adopt IMMU (Phase 3G/3K)
+    dependencies: []
+    owner_gate: none
+    status: open
+    target_phase: 3G/3K
+    verification: immu tests
+  - id: DEBT-013
+    subsystem: Continuous Learning
+    layer: L10
+    problem: Absent; external candidate
+    evidence: MATRIX X14
+    impact: governed learning absent
+    severity: medium
+    maturity_gap: Research->Beta
+    blocked_capability: feedback->proposal loop
+    remediation: Establish foundation (Phase 3J)
+    dependencies: []
+    owner_gate: none
+    status: open
+    target_phase: 3J
+    verification: learning proposal tests
+  - id: DEBT-014
+    subsystem: Research adapters
+    layer: L2/L10
+    problem: CIG/HDR/META/NEDA/PLAST/ALLO/FILT/FSR/OUROBOROS not integrated
+    evidence: MATRIX X1-X14
+    impact: optional cognition absent
+    severity: low
+    maturity_gap: Research->Experimental
+    blocked_capability: bounded adapters
+    remediation: Add optional adapters (Phase 3K)
+    dependencies: []
+    owner_gate: "[B] for FILT/FSR/NEDA/ALLO/OUROBOROS"
+    status: open
+    target_phase: 3K
+    verification: adapter smoke tests
+  - id: DEBT-015
+    subsystem: PULSE/RYS/cloud-sync
+    layer: L7/L11
+    problem: Network capabilities not in baseline
+    evidence: MATRIX X6/X11
+    impact: external gateways absent
+    severity: low
+    maturity_gap: Research->opt-in
+    blocked_capability: LLM/bridge/cloud
+    remediation: Safe abstract contracts + mocks (Phase 3L)
+    dependencies: []
+    owner_gate: "[S]+[B] for PULSE/RYS"
+    status: open
+    target_phase: 3L
+    verification: boundary tests, disabled by default
+  - id: DEBT-016
+    subsystem: Memory coherence
+    layer: L3
+    problem: No cross-module memory coherence check
+    evidence: BASELINE P5
+    impact: incoherent memory possible
+    severity: low
+    maturity_gap: partial->Beta
+    blocked_capability: coherence check
+    remediation: Add coherence check (Phase 3C)
+    dependencies: []
+    owner_gate: none
+    status: open
+    target_phase: 3C
+    verification: coherence tests
+  - id: DEBT-017
+    subsystem: Identity explicitness
+    layer: L0
+    problem: Identity only implicit in semantic.py
+    evidence: CANONICAL L0.1
+    impact: identity scoping weak
+    severity: low
+    maturity_gap: Beta->Production
+    blocked_capability: explicit identity store
+    remediation: Make Identity explicit (Phase 3C)
+    dependencies: []
+    owner_gate: none
+    status: open
+    target_phase: 3C
+    verification: identity tests

@@ -49,17 +49,34 @@ from typing import Any, Dict, List, Optional
 _SRC = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_SRC))
 
-from capt_solo.api import (  # noqa: E402
-    LifecycleManager,
-    MemoryEngine,
-)
-from capt_solo.core.errors import CaptSoloError  # noqa: E402
-from capt_solo.foundry import (  # noqa: E402
-    ProofEngine, ProofRequirement, CapabilityRegistry, ClaimGuard, SkillFoundry,
-    ValidationHarness, KnowledgeBubbleRuntime, Governance,
-    SkillCurator, CompositionEngine,
-)
-from capt_solo.ctp.journal import CTPRuntime  # noqa: E402
+# Runtime public surface. Guarded so the CLI loads even when an optional
+# subsystem (e.g. CTP) is missing from the tree — architecture commands must
+# still run. Runtime commands report a clear error instead of crashing import.
+try:  # noqa: E402
+    from capt_solo.api import (  # noqa: E402
+        LifecycleManager,
+        MemoryEngine,
+    )
+    from capt_solo.core.errors import CaptSoloError  # noqa: E402
+    from capt_solo.foundry import (  # noqa: E402
+        ProofEngine, ProofRequirement, CapabilityRegistry, ClaimGuard, SkillFoundry,
+        ValidationHarness, KnowledgeBubbleRuntime, Governance,
+        SkillCurator, CompositionEngine,
+    )
+    from capt_solo.ctp.journal import CTPRuntime  # noqa: E402
+    _RUNTIME_OK = True
+except Exception as _runtime_err:  # noqa: E402, BLE001
+    _RUNTIME_OK = False
+    _runtime_err = _runtime_err
+    # Stand-ins so module-level references don't NameError at import time.
+    # Runtime commands check _RUNTIME_OK and fail with a clear message.
+    class CaptSoloError(Exception):  # type: ignore
+        pass
+    LifecycleManager = MemoryEngine = None  # type: ignore
+    ProofEngine = ProofRequirement = CapabilityRegistry = None  # type: ignore
+    ClaimGuard = SkillFoundry = ValidationHarness = None  # type: ignore
+    KnowledgeBubbleRuntime = Governance = SkillCurator = None  # type: ignore
+    CompositionEngine = CTPRuntime = None  # type: ignore
 
 
 def _json_or_human(data: Any, as_json: bool) -> str:
@@ -155,6 +172,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     rts.add_parser("adaptation")
     p = rts.add_parser("reset"); p.add_argument("--namespace", default="default")
 
+    # architecture (Phase 3A enforcement)
+    arch = sub.add_parser("architecture", help="canonical architecture registry + fitness")
+    archs = arch.add_subparsers(dest="action")
+    archs.add_parser("validate", help="validate architecture/registry.yaml")
+    archs.add_parser("list", help="list canonical subsystems")
+    archs.add_parser("show", help="show a subsystem by id"); archs.add_parser("show").add_argument("id")
+
     # foundry (v0.4)
     fw = sub.add_parser("foundry", help="proof-governed skill/capability/bubble ops")
     fws = fw.add_subparsers(dest="action")
@@ -183,6 +207,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
 
     as_json = args.json
+
+    # Architecture commands are independent of the runtime and must work even
+    # when optional subsystems (e.g. CTP) are missing from the tree.
+    if args.group == "architecture":
+        return _cmd_architecture(args, as_json)
+
     try:
         eng = MemoryEngine()
         mgr = LifecycleManager(eng)
@@ -208,6 +238,41 @@ def main(argv: Optional[List[str]] = None) -> int:
         except Exception:
             pass
     return 1
+
+
+def _cmd_architecture(args, as_json) -> int:
+    from architecture.validate_registry import validate, load_registry, REGISTRY_PATH
+    if args.action == "validate":
+        try:
+            reg = load_registry()
+        except Exception as e:
+            return _fail(f"registry load failed: {e}")
+        checks = validate(reg)
+        fails = [c for c in checks if c.status == "fail"]
+        out = {
+            "ok": not fails,
+            "checks": len(checks),
+            "fail": len(fails),
+            "details": [
+                {"id": c.cid, "status": c.status, "severity": c.severity, "summary": c.summary}
+                for c in checks
+            ],
+        }
+        return _ok(out, as_json) if not fails else _fail(str(out))
+    if args.action == "list":
+        reg = load_registry()
+        return _ok([
+            {"id": s["canonical_id"], "name": s["canonical_name"], "layer": s["architectural_layer"],
+             "maturity": s["maturity"], "target": s["public_release_target"]}
+            for s in reg["subsystems"]
+        ], as_json)
+    if args.action == "show":
+        reg = load_registry()
+        sub = next((s for s in reg["subsystems"] if s["canonical_id"] == args.id), None)
+        if sub is None:
+            return _fail(f"subsystem not found: {args.id}")
+        return _ok(sub, as_json)
+    return _fail("unknown architecture action")
 
 
 def _cmd_memory(mgr, args, as_json) -> int:
@@ -317,6 +382,8 @@ def _cmd_retrieval(mgr, args, as_json) -> int:
 
 def _cmd_foundry(mgr, args, as_json) -> int:
     """v0.4 foundry CLI — uses public foundry APIs only (no direct SQL)."""
+    if not _RUNTIME_OK:
+        return _fail(f"runtime unavailable: {_runtime_err}")
     eng = mgr._eng
     pe = ProofEngine(eng._conn)
     reg = CapabilityRegistry(eng._conn, pe)

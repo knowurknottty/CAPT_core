@@ -1,0 +1,1925 @@
+schema_version: 1
+generated: '2026-07-26'
+source_of_truth: docs/CAPT_CANON.md, docs/CANONICAL_ARCHITECTURE.md, docs/CANONICAL_OWNERSHIP_MATRIX.md
+invariants:
+- I-01
+- I-02
+- I-03
+- I-04
+- I-05
+- I-06
+- I-07
+- I-08
+- I-09
+- I-10
+- I-11
+- I-12
+- I-13
+- I-14
+- I-15
+maturity_levels:
+- Production
+- Beta
+- Experimental
+- Prototype
+- Research
+- Concept
+- Planned
+- Deprecated
+release_targets:
+- CAPT_core
+- external_package
+- optional_plugin
+- research_package
+- private
+subsystems:
+- canonical_id: CAPT-IDN
+  canonical_name: Identity
+  aliases:
+  - L0
+  architectural_layer: L0
+  conceptual_sublayer: identity
+  canonical_definition: Self/agent identity and boundary; scopes state per identity.
+  maturity: Beta
+  public_release_target: CAPT_core
+  implementation_status: partial
+  current_repository: capt-solo
+  current_path: lifecycle/semantic.py (implicit)
+  reference_implementation: implicit semantic.py
+  expected_namespace: capt_solo.memory
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite identities (to be explicit)
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-04
+  - I-05
+  - I-13
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_v03_sessions
+  deprecation_state: active
+- canonical_id: CAPT-ONT
+  canonical_name: Ontology
+  aliases:
+  - L0.5
+  architectural_layer: L0.5
+  conceptual_sublayer: ontology
+  canonical_definition: Shared vocabulary upstream of Memory/Knowledge/Trust/Governance.
+  maturity: Concept
+  public_release_target: CAPT_core
+  implementation_status: spec-only
+  current_repository: (none)
+  current_path: '-'
+  reference_implementation: "CAPT_CANON \xA74"
+  expected_namespace: capt_solo.ontology
+  required_dependencies:
+  - none
+  optional_dependencies: []
+  persistence_behavior: document
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-12
+  owning_adrs:
+  - ADR-0002
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-CON
+  canonical_name: Constitution
+  aliases:
+  - L1
+  architectural_layer: L1
+  conceptual_sublayer: constitution
+  canonical_definition: Governing invariants and allowed behavior.
+  maturity: Concept
+  public_release_target: CAPT_core
+  implementation_status: spec-only
+  current_repository: (none)
+  current_path: '-'
+  reference_implementation: "CAPT_CANON \xA72"
+  expected_namespace: capt_solo.constitution
+  required_dependencies:
+  - none
+  optional_dependencies: []
+  persistence_behavior: document
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-10
+  - I-11
+  owning_adrs:
+  - ADR-0001
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-REA
+  canonical_name: Reasoning Core
+  aliases:
+  - L2
+  architectural_layer: L2
+  conceptual_sublayer: reasoning
+  canonical_definition: Inference routing across reasoning strategies.
+  maturity: Beta
+  public_release_target: CAPT_core
+  implementation_status: partial
+  current_repository: capt-solo
+  current_path: (implicit orchestration)
+  reference_implementation: lifecycle/foundry
+  expected_namespace: capt_solo.reasoning
+  required_dependencies:
+  - capt_solo.memory
+  optional_dependencies:
+  - capt_solo.trust
+  persistence_behavior: in-process
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-02
+  - I-04
+  owning_adrs:
+  - ADR-0001
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-CIG
+  canonical_name: CIG
+  aliases:
+  - Causal Inference
+  architectural_layer: L2
+  conceptual_sublayer: reasoning
+  canonical_definition: Causal inference over events/memories.
+  maturity: Research
+  public_release_target: CAPT_core
+  implementation_status: missing
+  current_repository: biocapt-ecosystem
+  current_path: modules/cig_mobile.py
+  reference_implementation: none (adopt)
+  expected_namespace: capt_solo.reasoning.cig
+  required_dependencies:
+  - numpy
+  optional_dependencies: []
+  persistence_behavior: derived graph
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-02
+  - I-04
+  owning_adrs:
+  - ADR-0001
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-HDR
+  canonical_name: HDR
+  aliases:
+  - Hyperdim Reasoning
+  architectural_layer: L2
+  conceptual_sublayer: reasoning
+  canonical_definition: Hyperdimensional/vector-symbolic reasoning.
+  maturity: Research
+  public_release_target: CAPT_core
+  implementation_status: missing
+  current_repository: biocapt-ecosystem
+  current_path: modules/hdr_mobile.py
+  reference_implementation: none (adopt)
+  expected_namespace: capt_solo.reasoning.hdr
+  required_dependencies:
+  - numpy
+  optional_dependencies:
+  - biocapt_rust (opt)
+  persistence_behavior: in-memory
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-03
+  owning_adrs:
+  - ADR-0001
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-META
+  canonical_name: META
+  aliases:
+  - Metacognition
+  architectural_layer: L2
+  conceptual_sublayer: reasoning
+  canonical_definition: Self-monitoring, confidence calibration.
+  maturity: Research
+  public_release_target: CAPT_core
+  implementation_status: missing
+  current_repository: biocapt-ecosystem
+  current_path: modules/meta_mobile.py
+  reference_implementation: none (adopt)
+  expected_namespace: capt_solo.reasoning.meta
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: in-memory
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-04
+  owning_adrs:
+  - ADR-0001
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-CONS
+  canonical_name: CONSC
+  aliases:
+  - "\u03A6"
+  - Global Workspace
+  architectural_layer: L2
+  conceptual_sublayer: reasoning
+  canonical_definition: Global workspace integration (analogical).
+  maturity: Research
+  public_release_target: research_package
+  implementation_status: missing
+  current_repository: biocapt-ecosystem
+  current_path: modules/consc_mobile.py
+  reference_implementation: none
+  expected_namespace: capt_solo.reasoning.consc
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: in-memory
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-14
+  owning_adrs:
+  - ADR-0003
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-QIPC
+  canonical_name: QIPC
+  aliases:
+  - Quantum-Inspired Consensus
+  architectural_layer: L2
+  conceptual_sublayer: reasoning
+  canonical_definition: Consensus over uncertain beliefs.
+  maturity: Research
+  public_release_target: research_package
+  implementation_status: missing
+  current_repository: biocapt-ecosystem
+  current_path: modules/qipc_mobile.py
+  reference_implementation: none
+  expected_namespace: capt_solo.reasoning.qipc
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: in-memory
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-04
+  owning_adrs:
+  - ADR-0001
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-RYS
+  canonical_name: RYS Bridge
+  aliases:
+  - rys
+  architectural_layer: L2
+  conceptual_sublayer: reasoning
+  canonical_definition: Recursive yield bridge to CAPT-RYS.
+  maturity: Research
+  public_release_target: external_package
+  implementation_status: missing
+  current_repository: biocapt-ecosystem/AIM-CAPTRYS
+  current_path: modules/rys_mobile.py
+  reference_implementation: none
+  expected_namespace: capt_solo.external.rys
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: none
+  network_behavior: external (gated)
+  security_classification: local+remote
+  invariant_mappings:
+  - I-01
+  - I-09
+  owning_adrs:
+  - ADR-0005
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-CLOOP
+  canonical_name: Cognitive Loop
+  aliases:
+  - cognitive loop
+  architectural_layer: L2
+  conceptual_sublayer: reasoning
+  canonical_definition: Perceive-reason-act control loop.
+  maturity: Research
+  public_release_target: CAPT_core
+  implementation_status: missing
+  current_repository: biocapt-ecosystem
+  current_path: registry COGNITIVE_LOOP
+  reference_implementation: none (adopt)
+  expected_namespace: capt_solo.reasoning.loop
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: in-memory
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-07
+  owning_adrs:
+  - ADR-0001
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-NEDA
+  canonical_name: NEDA
+  aliases:
+  - Neural Event-Driven
+  architectural_layer: L2
+  conceptual_sublayer: reasoning
+  canonical_definition: Thalamic event-driven arch (analogical).
+  maturity: Research
+  public_release_target: research_package
+  implementation_status: missing
+  current_repository: biocapt-ecosystem
+  current_path: modules/neda_mobile.py
+  reference_implementation: none
+  expected_namespace: capt_solo.reasoning.neda
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: in-memory
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-14
+  owning_adrs:
+  - ADR-0003
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-MEM
+  canonical_name: MemoryEngine
+  aliases:
+  - mem
+  architectural_layer: L3
+  conceptual_sublayer: core
+  canonical_definition: SQLite-backed canonical memory store.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: memory/engine.py
+  reference_implementation: engine.py
+  expected_namespace: capt_solo.memory.engine
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite SCHEMA_VERSION=4 (32 tables)
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-02
+  - I-04
+  - I-05
+  - I-08
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_memory
+  - test_v02_models
+  - test_v03_*
+  deprecation_state: active
+- canonical_id: CAPT-CSG
+  canonical_name: CSG
+  aliases:
+  - csg
+  architectural_layer: L3
+  conceptual_sublayer: core
+  canonical_definition: Cognitive state graph.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: memory/csg.py
+  reference_implementation: csg.py
+  expected_namespace: capt_solo.memory.csg
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite nodes/edges
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-07
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_v02_csg
+  deprecation_state: active
+- canonical_id: CAPT-EPI
+  canonical_name: Episodic Memory
+  aliases:
+  - ECHO
+  - episodic
+  architectural_layer: L3
+  conceptual_sublayer: episodic
+  canonical_definition: Time-ordered episodic timeline (canonical ECHO).
+  maturity: Beta
+  public_release_target: CAPT_core
+  implementation_status: partial
+  current_repository: capt-solo/biocapt-ecosystem
+  current_path: lifecycle/sessions.py / echo_mobile.py
+  reference_implementation: SessionStore (merge ECHO)
+  expected_namespace: capt_solo.memory.episodic
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite sessions/events
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-04
+  - I-08
+  owning_adrs:
+  - ADR-0001
+  - ADR-0004
+  expected_tests:
+  - test_v03_sessions
+  deprecation_state: active
+- canonical_id: CAPT-SEM
+  canonical_name: Semantic Memory
+  aliases:
+  - semantic
+  architectural_layer: L3
+  conceptual_sublayer: semantic
+  canonical_definition: Concept index.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: lifecycle/semantic.py
+  reference_implementation: semantic.py
+  expected_namespace: capt_solo.memory.semantic
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite semantic_index_metadata
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-04
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_v03_*
+  deprecation_state: active
+- canonical_id: CAPT-PRO
+  canonical_name: Procedural Memory
+  aliases:
+  - procedural
+  architectural_layer: L3
+  conceptual_sublayer: procedural
+  canonical_definition: Procedures and run history.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: lifecycle/procedures.py
+  reference_implementation: procedures.py
+  expected_namespace: capt_solo.memory.procedural
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite procedures*
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-08
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_v03_procedures
+  deprecation_state: active
+- canonical_id: CAPT-PRS
+  canonical_name: Prospective Memory
+  aliases:
+  - prospective
+  architectural_layer: L3
+  conceptual_sublayer: prospective
+  canonical_definition: Future/intended memories.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: lifecycle/prospective.py
+  reference_implementation: prospective.py
+  expected_namespace: capt_solo.memory.prospective
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite prospective_memories
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-04
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_v03_prospective
+  deprecation_state: active
+- canonical_id: CAPT-AUTO
+  canonical_name: Autobiographical Memory
+  aliases:
+  - auto
+  architectural_layer: L3
+  conceptual_sublayer: autobiographical
+  canonical_definition: Narrative self over episodic/semantic/prospective.
+  maturity: Concept
+  public_release_target: CAPT_core
+  implementation_status: missing
+  current_repository: (none)
+  current_path: '-'
+  reference_implementation: none (design)
+  expected_namespace: capt_solo.memory.autobiographical
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite (derived)
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-04
+  - I-05
+  owning_adrs:
+  - ADR-0001
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-HMC
+  canonical_name: HMC
+  aliases:
+  - Holographic Memory Core
+  - holographic
+  architectural_layer: L3
+  conceptual_sublayer: compression
+  canonical_definition: FFT/VSA holographic memory (hippocampus analogue).
+  maturity: Research
+  public_release_target: CAPT_core
+  implementation_status: missing
+  current_repository: biocapt-ecosystem
+  current_path: modules/hmc_mobile.py
+  reference_implementation: none (canonicalize)
+  expected_namespace: capt_solo.memory.hmc
+  required_dependencies:
+  - numpy
+  optional_dependencies:
+  - biocapt_rust (opt)
+  persistence_behavior: SQLite holograms
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-03
+  - I-14
+  owning_adrs:
+  - ADR-0003
+  - ADR-0004
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-ENG
+  canonical_name: ENGRAM
+  aliases:
+  - engram
+  architectural_layer: L3
+  conceptual_sublayer: compression
+  canonical_definition: Long-term encoding/consolidation metadata.
+  maturity: Research
+  public_release_target: CAPT_core
+  implementation_status: missing
+  current_repository: biocapt-ecosystem
+  current_path: modules/engram_mobile.py
+  reference_implementation: none (merge)
+  expected_namespace: capt_solo.memory.engram
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: SQLite
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-14
+  owning_adrs:
+  - ADR-0003
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-DRM
+  canonical_name: DREAM
+  aliases:
+  - dream
+  - consolidation
+  architectural_layer: L3
+  conceptual_sublayer: consolidation
+  canonical_definition: Offline consolidation orchestration (L3+L10).
+  maturity: Research
+  public_release_target: CAPT_core
+  implementation_status: missing
+  current_repository: biocapt-ecosystem
+  current_path: dream_consolidator_mobile.py
+  reference_implementation: none (canonicalize)
+  expected_namespace: capt_solo.learning.dream
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: SQLite checkpoints
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-07
+  - I-14
+  owning_adrs:
+  - ADR-0003
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-CTX
+  canonical_name: Context Builder
+  aliases:
+  - context
+  architectural_layer: L3
+  conceptual_sublayer: retrieval
+  canonical_definition: Assemble context windows from memory.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: memory/context.py
+  reference_implementation: context.py
+  expected_namespace: capt_solo.memory.context
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-06
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_v02_*
+  deprecation_state: active
+- canonical_id: CAPT-SCH
+  canonical_name: Search/Retrieval
+  aliases:
+  - search
+  - retrieval
+  architectural_layer: L3
+  conceptual_sublayer: retrieval
+  canonical_definition: Memory retrieval and search.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: memory/search.py
+  reference_implementation: search.py
+  expected_namespace: capt_solo.memory.search
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite indexes
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-04
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_*
+  deprecation_state: active
+- canonical_id: CAPT-DDUP
+  canonical_name: Deduplicate
+  aliases:
+  - dedupe
+  architectural_layer: L3
+  conceptual_sublayer: retrieval
+  canonical_definition: Detect/merge duplicate memories.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: memory/deduplicate.py
+  reference_implementation: deduplicate.py
+  expected_namespace: capt_solo.memory.deduplicate
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: none
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-06
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_v02_models
+  deprecation_state: active
+- canonical_id: CAPT-NORM
+  canonical_name: Normalize
+  aliases:
+  - normalize
+  architectural_layer: L3
+  conceptual_sublayer: retrieval
+  canonical_definition: Normalize memory content.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: memory/normalize.py
+  reference_implementation: normalize.py
+  expected_namespace: capt_solo.memory.normalize
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: none
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-06
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_*
+  deprecation_state: active
+- canonical_id: CAPT-ATOK
+  canonical_name: Memory Compression (AntiToken)
+  aliases:
+  - antitoken
+  - anti-token
+  architectural_layer: L3
+  conceptual_sublayer: compression
+  canonical_definition: Deterministic token-reduction, fidelity-guarded.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: memory/antitoken.py
+  reference_implementation: antitoken.py
+  expected_namespace: capt_solo.memory.antitoken
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: stateless
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-05
+  - I-09
+  owning_adrs:
+  - ADR-0005
+  expected_tests:
+  - test_v04_degradation
+  deprecation_state: active
+- canonical_id: CAPT-RFA
+  canonical_name: Retrieval Feedback
+  aliases:
+  - feedback
+  architectural_layer: L3
+  conceptual_sublayer: retrieval
+  canonical_definition: Adaptive retrieval from feedback.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: lifecycle/feedback.py
+  reference_implementation: feedback.py
+  expected_namespace: capt_solo.memory.feedback
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite retrieval_feedback
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-04
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_v03_feedback
+  deprecation_state: active
+- canonical_id: CAPT-RPLY
+  canonical_name: Replay
+  aliases:
+  - replay
+  architectural_layer: L3
+  conceptual_sublayer: retrieval
+  canonical_definition: Deterministic replay of memories/sessions.
+  maturity: Concept
+  public_release_target: CAPT_core
+  implementation_status: spec-only
+  current_repository: capt-solo
+  current_path: docs/capt-recovery skill
+  reference_implementation: none (canonicalize)
+  expected_namespace: capt_solo.memory.replay
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-07
+  owning_adrs:
+  - ADR-0001
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-TTL
+  canonical_name: TTL/Retention
+  aliases:
+  - ttl
+  - retention
+  architectural_layer: L3
+  conceptual_sublayer: retention
+  canonical_definition: Retention policies and expiry.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: memory/engine.py, lifecycle/lifecycle.py
+  reference_implementation: engine/lifecycle
+  expected_namespace: capt_solo.memory.retention
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite memory_retention_policies
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-05
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_v03_lifecycle
+  deprecation_state: active
+- canonical_id: CAPT-TEMP
+  canonical_name: Temporal Ordering
+  aliases:
+  - temporal
+  architectural_layer: L3
+  conceptual_sublayer: core
+  canonical_definition: Time-ordered memory access.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: memory/models.py
+  reference_implementation: models.py
+  expected_namespace: capt_solo.memory
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite timestamps
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-04
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_*
+  deprecation_state: active
+- canonical_id: CAPT-EXIM
+  canonical_name: Export/Import
+  aliases:
+  - export
+  - import
+  architectural_layer: L3
+  conceptual_sublayer: migration
+  canonical_definition: JSON export/import of memories.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: memory/engine.py
+  reference_implementation: engine.py
+  expected_namespace: capt_solo.memory.engine
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: file
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-05
+  - I-08
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - verify_runtime mem.export_json
+  deprecation_state: active
+- canonical_id: CAPT-MIG
+  canonical_name: Migration
+  aliases:
+  - migration
+  architectural_layer: L3
+  conceptual_sublayer: migration
+  canonical_definition: Forward-only schema migration.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: memory/engine.py
+  reference_implementation: engine.py
+  expected_namespace: capt_solo.memory.engine
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite schema_version
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-08
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_migration
+  - test_v03_migration
+  - test_v04_migration
+  deprecation_state: active
+- canonical_id: CAPT-SYNC
+  canonical_name: Synchronization
+  aliases:
+  - sync
+  architectural_layer: L3
+  conceptual_sublayer: sync
+  canonical_definition: Transport-neutral memory reconciliation (abstraction).
+  maturity: Planned
+  public_release_target: CAPT_core
+  implementation_status: missing
+  current_repository: (none)
+  current_path: '-'
+  reference_implementation: none (canonicalize)
+  expected_namespace: capt_solo.memory.sync
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite + transport
+  network_behavior: transport-dependent (LAN/P2P/cloud gated)
+  security_classification: local (abstraction); transports LAN/P2P/cloud gated [S]
+  invariant_mappings:
+  - I-01
+  - I-05
+  - I-07
+  owning_adrs:
+  - ADR-0005
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-CONSENT
+  canonical_name: Consent
+  aliases:
+  - consent
+  architectural_layer: L3
+  conceptual_sublayer: consent
+  canonical_definition: Local consent ledger for sensitive ops.
+  maturity: Concept
+  public_release_target: CAPT_core
+  implementation_status: missing
+  current_repository: (none)
+  current_path: '-'
+  reference_implementation: none (design)
+  expected_namespace: capt_solo.memory.consent
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite consent_records
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-05
+  owning_adrs:
+  - ADR-0005
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-SEC
+  canonical_name: Secrets Screening
+  aliases:
+  - secrets
+  architectural_layer: L3
+  conceptual_sublayer: consent
+  canonical_definition: Screen secrets before persistence.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: memory/secrets.py
+  reference_implementation: secrets.py
+  expected_namespace: capt_solo.memory.secrets
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: stateless
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-05
+  owning_adrs:
+  - ADR-0005
+  expected_tests:
+  - verify_runtime secret_screening
+  deprecation_state: active
+- canonical_id: CAPT-KBUB
+  canonical_name: Knowledge Bubbles
+  aliases:
+  - bubble
+  - knowledge bubble
+  architectural_layer: L4
+  conceptual_sublayer: knowledge
+  canonical_definition: Portable verifiable knowledge packages.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: foundry/bubble.py
+  reference_implementation: bubble.py
+  expected_namespace: capt_solo.foundry.bubble
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite knowledge_bubbles + .capt-bubble.json
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-02
+  - I-05
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_v04_plugin
+  - verify_runtime bubble_*
+  deprecation_state: active
+- canonical_id: CAPT-KHSB
+  canonical_name: KHSB
+  aliases:
+  - khsb
+  - bus
+  architectural_layer: L4
+  conceptual_sublayer: knowledge
+  canonical_definition: In-process pub/sub + request/reply bus.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: khsb/bus.py
+  reference_implementation: bus.py
+  expected_namespace: capt_solo.khsb
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: in-memory
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-06
+  - I-07
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_khsb
+  - verify_runtime khsb.*
+  deprecation_state: active
+- canonical_id: CAPT-CUR
+  canonical_name: Curator
+  aliases:
+  - curator
+  architectural_layer: L4
+  conceptual_sublayer: knowledge
+  canonical_definition: Curate knowledge/skills into trusted sets.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: foundry/curator.py
+  reference_implementation: curator.py
+  expected_namespace: capt_solo.foundry.curator
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-02
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_v04_curator
+  deprecation_state: active
+- canonical_id: CAPT-TRU
+  canonical_name: Trust Engine
+  aliases:
+  - trust
+  architectural_layer: L5
+  conceptual_sublayer: trust
+  canonical_definition: Trust scoring of memories/evidence/agents.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: memory/trust.py
+  reference_implementation: trust.py
+  expected_namespace: capt_solo.memory.trust
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-02
+  - I-04
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_*
+  deprecation_state: active
+- canonical_id: CAPT-EVID
+  canonical_name: Evidence Engine
+  aliases:
+  - evidence
+  architectural_layer: L5
+  conceptual_sublayer: trust
+  canonical_definition: Collect/weigh evidence for claims.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: foundry/proof.py
+  reference_implementation: proof.py
+  expected_namespace: capt_solo.foundry.proof
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite proof_evidence
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-02
+  - I-04
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_*
+  deprecation_state: active
+- canonical_id: CAPT-PROV
+  canonical_name: Provenance
+  aliases:
+  - provenance
+  architectural_layer: L5
+  conceptual_sublayer: trust
+  canonical_definition: Origin/derivation of entities/claims.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: memory/models.py, foundry/proof.py
+  reference_implementation: models/proof
+  expected_namespace: capt_solo.memory
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-02
+  - I-12
+  owning_adrs:
+  - ADR-0002
+  expected_tests:
+  - test_*
+  deprecation_state: active
+- canonical_id: CAPT-CLG
+  canonical_name: ClaimGuard
+  aliases:
+  - claimguard
+  architectural_layer: L5
+  conceptual_sublayer: trust
+  canonical_definition: Verify claims; scoped downgrade.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: foundry/claimguard.py
+  reference_implementation: claimguard.py
+  expected_namespace: capt_solo.foundry.claimguard
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-02
+  - I-04
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_*
+  deprecation_state: active
+- canonical_id: CAPT-PRF
+  canonical_name: Proof Engine
+  aliases:
+  - proof
+  architectural_layer: L5
+  conceptual_sublayer: trust
+  canonical_definition: Proof/evidence integrity + requirements.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: foundry/proof.py
+  reference_implementation: proof.py
+  expected_namespace: capt_solo.foundry.proof
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite proof_*
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-02
+  - I-04
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_*
+  deprecation_state: active
+- canonical_id: CAPT-PLDG
+  canonical_name: Proof Ledger
+  aliases:
+  - ledger
+  - proof ledger
+  architectural_layer: L5
+  conceptual_sublayer: trust
+  canonical_definition: Immutable ledger of proofs/receipts.
+  maturity: Beta
+  public_release_target: CAPT_core
+  implementation_status: missing (approximated)
+  current_repository: capt-solo
+  current_path: foundry/proof.py + governance.py
+  reference_implementation: ProofEngine+Governance (merge)
+  expected_namespace: capt_solo.foundry.ledger
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite governance_audit + ledger
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-02
+  - I-07
+  owning_adrs:
+  - ADR-0001
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-IMMU
+  canonical_name: IMMU
+  aliases:
+  - immune
+  - constitution
+  architectural_layer: L5
+  conceptual_sublayer: trust
+  canonical_definition: Immune-style verification/quarantine.
+  maturity: Research
+  public_release_target: CAPT_core
+  implementation_status: missing
+  current_repository: biocapt-ecosystem
+  current_path: modules/immu_mobile.py
+  reference_implementation: none (adopt)
+  expected_namespace: capt_solo.foundry.immu
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: SQLite
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-02
+  - I-07
+  owning_adrs:
+  - ADR-0001
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-LIFE
+  canonical_name: Lifecycle Manager
+  aliases:
+  - lifecycle
+  architectural_layer: L6
+  conceptual_sublayer: execution
+  canonical_definition: Orchestrate memory/knowledge lifecycle.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: lifecycle/lifecycle.py
+  reference_implementation: lifecycle.py
+  expected_namespace: capt_solo.lifecycle
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-07
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_v03_lifecycle
+  deprecation_state: active
+- canonical_id: CAPT-SESS
+  canonical_name: Session Store
+  aliases:
+  - session
+  architectural_layer: L6
+  conceptual_sublayer: execution
+  canonical_definition: Session management (merge into ECHO).
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: lifecycle/sessions.py
+  reference_implementation: sessions.py
+  expected_namespace: capt_solo.lifecycle.sessions
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite sessions*
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-08
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_v03_sessions
+  deprecation_state: active
+- canonical_id: CAPT-PROC
+  canonical_name: Procedure Store
+  aliases:
+  - procedure
+  architectural_layer: L6
+  conceptual_sublayer: execution
+  canonical_definition: Procedure definitions/runs.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: lifecycle/procedures.py
+  reference_implementation: procedures.py
+  expected_namespace: capt_solo.lifecycle.procedures
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite procedure*
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-08
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_v03_procedures
+  deprecation_state: active
+- canonical_id: CAPT-MGR
+  canonical_name: Manager
+  aliases:
+  - manager
+  architectural_layer: L6
+  conceptual_sublayer: execution
+  canonical_definition: High-level orchestration.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: lifecycle/manager.py
+  reference_implementation: manager.py
+  expected_namespace: capt_solo.lifecycle.manager
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: in-memory
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-07
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_*
+  deprecation_state: active
+- canonical_id: CAPT-CTP
+  canonical_name: CTP
+  aliases:
+  - ctp
+  - journal
+  architectural_layer: L6
+  conceptual_sublayer: execution
+  canonical_definition: Append-only local transaction journal.
+  maturity: Beta
+  public_release_target: CAPT_core
+  implementation_status: disconnected
+  current_repository: capt-solo (wheel only)
+  current_path: capt_solo/ctp/journal.py (NOT in tree)
+  reference_implementation: wheel journal.py (restore)
+  expected_namespace: capt_solo.ctp
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: JSONL journal
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-07
+  - I-08
+  owning_adrs:
+  - ADR-0004
+  expected_tests:
+  - verify_runtime ctp.*
+  deprecation_state: active
+- canonical_id: CAPT-CLI
+  canonical_name: CLI
+  aliases:
+  - cli
+  architectural_layer: L6
+  conceptual_sublayer: execution
+  canonical_definition: Command-line interface.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: capt_cli.py
+  reference_implementation: capt_cli.py
+  expected_namespace: capt_solo.cli
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: none
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-08
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_v04_cli
+  deprecation_state: active
+- canonical_id: CAPT-RSDK
+  canonical_name: Runtime SDK
+  aliases:
+  - api
+  - runtime sdk
+  architectural_layer: L6
+  conceptual_sublayer: execution
+  canonical_definition: Public runtime API surface.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: api.py
+  reference_implementation: api.py
+  expected_namespace: capt_solo.api
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: none
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-08
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - verify_runtime public_api_smoke
+  deprecation_state: active
+- canonical_id: CAPT-PULSE
+  canonical_name: PULSE
+  aliases:
+  - pulse
+  - LLM gateway
+  architectural_layer: L7
+  conceptual_sublayer: communication
+  canonical_definition: LLM/model gateway (analogical motor cortex).
+  maturity: Research
+  public_release_target: optional_plugin
+  implementation_status: missing
+  current_repository: biocapt-ecosystem
+  current_path: modules/pulse_mobile.py
+  reference_implementation: none
+  expected_namespace: capt_solo.communication.pulse
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: none
+  network_behavior: external (gated)
+  security_classification: local+remote
+  invariant_mappings:
+  - I-01
+  - I-05
+  - I-09
+  owning_adrs:
+  - ADR-0005
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-GOV
+  canonical_name: Governance
+  aliases:
+  - governance
+  architectural_layer: L8
+  conceptual_sublayer: governance
+  canonical_definition: Audit, governance receipts, policy enforcement.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: foundry/governance.py
+  reference_implementation: governance.py
+  expected_namespace: capt_solo.foundry.governance
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite governance_audit
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-02
+  - I-07
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_v04_curator
+  - verify_runtime governance_*
+  deprecation_state: active
+- canonical_id: CAPT-GATES
+  canonical_name: Release Gates
+  aliases:
+  - gates
+  - verify
+  architectural_layer: L8
+  conceptual_sublayer: governance
+  canonical_definition: verify_runtime/doctor/verify validation.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: verify_runtime.py, doctor.sh, verify.sh
+  reference_implementation: verify_runtime.py
+  expected_namespace: capt_solo.verify
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: none
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-07
+  - I-08
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - verify_runtime self
+  deprecation_state: active
+- canonical_id: CAPT-SF
+  canonical_name: Skill Foundry
+  aliases:
+  - skillfoundry
+  architectural_layer: L9
+  conceptual_sublayer: skills
+  canonical_definition: Skill publish/validate lifecycle.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: foundry/skill_foundry.py
+  reference_implementation: skill_foundry.py
+  expected_namespace: capt_solo.foundry.skill_foundry
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite skills*
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-02
+  - I-08
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_v04_foundry
+  deprecation_state: active
+- canonical_id: CAPT-RADAR
+  canonical_name: Skill Radar
+  aliases:
+  - radar
+  architectural_layer: L9
+  conceptual_sublayer: skills
+  canonical_definition: Skill discovery (merged into Foundry).
+  maturity: Research
+  public_release_target: CAPT_core
+  implementation_status: missing
+  current_repository: biocapt-ecosystem
+  current_path: registry SKILL_RADAR
+  reference_implementation: none (merge)
+  expected_namespace: capt_solo.foundry.skill_foundry
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: none
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-06
+  owning_adrs:
+  - ADR-0001
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-PSDK
+  canonical_name: Plugin SDK
+  aliases:
+  - plugin
+  architectural_layer: L9
+  conceptual_sublayer: skills
+  canonical_definition: Hermes plugin entry + extension API.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: plugin/__init__.py, plugin.json
+  reference_implementation: plugin/__init__.py
+  expected_namespace: capt_solo.plugin
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: none
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-08
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_plugin
+  - test_v04_plugin
+  deprecation_state: active
+- canonical_id: CAPT-BSKL
+  canonical_name: Bundled Skills
+  aliases:
+  - skills
+  architectural_layer: L9
+  conceptual_sublayer: skills
+  canonical_definition: 8 bundled CAPT skills.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: skills/*
+  reference_implementation: skills/*
+  expected_namespace: capt_solo.skills
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: none
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-06
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_*
+  deprecation_state: active
+- canonical_id: CAPT-LRN
+  canonical_name: Learning/Adaptation
+  aliases:
+  - learning
+  architectural_layer: L10
+  conceptual_sublayer: learning
+  canonical_definition: Parameter/behavior adaptation.
+  maturity: Research
+  public_release_target: CAPT_core
+  implementation_status: missing
+  current_repository: biocapt-ecosystem
+  current_path: registry LEARNING,ADAPTATION
+  reference_implementation: none (adopt)
+  expected_namespace: capt_solo.learning
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: SQLite
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-04
+  owning_adrs:
+  - ADR-0001
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-CONSOL
+  canonical_name: Consolidation-as-Learning
+  aliases:
+  - consolidation
+  architectural_layer: L10
+  conceptual_sublayer: learning
+  canonical_definition: DREAM consolidation as learning.
+  maturity: Beta
+  public_release_target: CAPT_core
+  implementation_status: partial
+  current_repository: capt-solo/biocapt-ecosystem
+  current_path: lifecycle transitions / dream_*
+  reference_implementation: lifecycle (merge DREAM)
+  expected_namespace: capt_solo.learning
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-07
+  owning_adrs:
+  - ADR-0001
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-CL
+  canonical_name: Continuous Learning
+  aliases:
+  - contlearning
+  architectural_layer: L10
+  conceptual_sublayer: learning
+  canonical_definition: Ongoing learning loop (permanently L10).
+  maturity: Research
+  public_release_target: CAPT_core
+  implementation_status: missing
+  current_repository: biocapt-ecosystem
+  current_path: capt/modules/continuous_learning_module.py (candidate)
+  reference_implementation: none (adopt)
+  expected_namespace: capt_solo.learning.continuous
+  required_dependencies:
+  - sqlite3
+  optional_dependencies: []
+  persistence_behavior: SQLite
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-04
+  - I-07
+  owning_adrs:
+  - ADR-0001
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-OURO
+  canonical_name: OUROBOROS
+  aliases:
+  - ouroboros
+  architectural_layer: L10
+  conceptual_sublayer: learning
+  canonical_definition: Self-referential learning loop (research).
+  maturity: Research
+  public_release_target: research_package
+  implementation_status: missing
+  current_repository: biocapt-ecosystem
+  current_path: registry OUROBOROS
+  reference_implementation: none
+  expected_namespace: capt_solo.learning.ouroboros
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: in-memory
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-14
+  owning_adrs:
+  - ADR-0003
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-CAPT
+  canonical_name: CAPTLANG
+  aliases:
+  - captlang
+  architectural_layer: L11
+  conceptual_sublayer: external
+  canonical_definition: "CAPT dialect compiler \u2192 WASM."
+  maturity: Research
+  public_release_target: external_package
+  implementation_status: missing
+  current_repository: Biocapt-ecosystem-fullcaptlang
+  current_path: src/captlang/, codegen_wasm.py
+  reference_implementation: none
+  expected_namespace: captlang (external)
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: none
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-06
+  owning_adrs:
+  - ADR-0001
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-HERM
+  canonical_name: Hermes Plugin Interface
+  aliases:
+  - hermes
+  architectural_layer: L11
+  conceptual_sublayer: external
+  canonical_definition: Bridge to Hermes agent runtime.
+  maturity: Production
+  public_release_target: CAPT_core
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: plugin/__init__.py
+  reference_implementation: plugin/__init__.py
+  expected_namespace: capt_solo.plugin
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: none
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-08
+  owning_adrs:
+  - ADR-0001
+  expected_tests:
+  - test_plugin
+  deprecation_state: active
+- canonical_id: CAPT-FILT
+  canonical_name: FILT
+  aliases:
+  - attentional filter
+  architectural_layer: L2
+  conceptual_sublayer: reasoning
+  canonical_definition: Attentional filter (DISABLED in source).
+  maturity: Research
+  public_release_target: research_package
+  implementation_status: missing
+  current_repository: biocapt-ecosystem
+  current_path: modules/filt_mobile.py (DISABLED)
+  reference_implementation: none
+  expected_namespace: capt_solo.reasoning.filt
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: in-memory
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-14
+  owning_adrs:
+  - ADR-0003
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-FSR
+  canonical_name: FSR
+  aliases:
+  - feedback regulator
+  architectural_layer: L2
+  conceptual_sublayer: reasoning
+  canonical_definition: Feedback regulator (DISABLED in source).
+  maturity: Research
+  public_release_target: research_package
+  implementation_status: missing
+  current_repository: biocapt-ecosystem
+  current_path: modules/fsr_mobile.py (DISABLED)
+  reference_implementation: none
+  expected_namespace: capt_solo.reasoning.fsr
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: in-memory
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-14
+  owning_adrs:
+  - ADR-0003
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-PLAST
+  canonical_name: PLAST
+  aliases:
+  - Hebbian
+  - BCM
+  architectural_layer: L10
+  conceptual_sublayer: learning
+  canonical_definition: Hebbian/BCM learning (fold into consolidation).
+  maturity: Research
+  public_release_target: CAPT_core
+  implementation_status: missing
+  current_repository: biocapt-ecosystem
+  current_path: modules/plast_mobile.py
+  reference_implementation: none (fold)
+  expected_namespace: capt_solo.learning.plast
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: SQLite
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-14
+  owning_adrs:
+  - ADR-0003
+  expected_tests: []
+  deprecation_state: active
+- canonical_id: CAPT-ALLO
+  canonical_name: ALLO
+  aliases:
+  - allostatic
+  architectural_layer: L2
+  conceptual_sublayer: reasoning
+  canonical_definition: Allostatic regulation (analogical).
+  maturity: Research
+  public_release_target: research_package
+  implementation_status: missing
+  current_repository: biocapt-ecosystem
+  current_path: modules/allo_mobile.py
+  reference_implementation: none
+  expected_namespace: capt_solo.reasoning.allo
+  required_dependencies: []
+  optional_dependencies: []
+  persistence_behavior: in-memory
+  network_behavior: none
+  security_classification: local
+  invariant_mappings:
+  - I-14
+  owning_adrs:
+  - ADR-0003
+  expected_tests: []
+  deprecation_state: active
