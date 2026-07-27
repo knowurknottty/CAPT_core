@@ -796,6 +796,7 @@ class MemoryEngine:
         consent: str = "unset",
         identity_link: Optional[str] = None,
         evidence_refs: Optional[List[str]] = None,
+        memory_id: Optional[str] = None,
     ) -> Memory:
         if not content:
             raise MemoryError_("content must be non-empty")
@@ -807,7 +808,7 @@ class MemoryEngine:
         if getattr(self, "_require_consent_namespaces", None) and \
                 namespace in self._require_consent_namespaces and consent != "granted":
             raise MemoryError_(f"consent required to store in sensitive namespace: {namespace}")
-        mid = uuid.uuid4().hex
+        mid = memory_id or uuid.uuid4().hex
         now = _now()
         tags = tags or []
         meta = metadata or {}
