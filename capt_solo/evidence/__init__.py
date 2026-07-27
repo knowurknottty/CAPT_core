@@ -27,6 +27,19 @@ from .invalidation import (
 )
 from .reuse import EvidenceReuseEngine, ReuseOutcome
 from .proof_graph import ProofGraph
+from .workspace_isolation import (
+    ProjectWorkspace, ProjectContext, WorkspaceScope, BindState, WorkspaceIsolationError,
+)
+from .promotion import (
+    PromotionPipeline, MemoryCandidate, PromotionState, PromotionError,
+)
+from .selfmod import (
+    SelfModificationGovernor, SelfModificationRecord, SelfModState, SelfModError,
+)
+from .checkpoint import (
+    MissionCheckpoint, CheckpointStore, CheckpointStatus, detect_divergence, resume_plan,
+)
+from .metrics import EfficiencyMetrics, AntiLoopGuard
 
 __all__ = [
     "EvidenceRecord", "EvidenceClaim", "EvidenceSource", "EvidenceClass",
@@ -35,4 +48,10 @@ __all__ = [
     "InvalidationEvent", "InvalidationReason", "InvalidationRule", "InvalidationScope",
     "InvalidationDecision", "InvalidationGraph", "scan_invalidation",
     "EvidenceReuseEngine", "ReuseOutcome", "ProofGraph",
+    "ProjectWorkspace", "ProjectContext", "WorkspaceScope", "BindState",
+    "WorkspaceIsolationError",
+    "PromotionPipeline", "MemoryCandidate", "PromotionState", "PromotionError",
+    "SelfModificationGovernor", "SelfModificationRecord", "SelfModState", "SelfModError",
+    "MissionCheckpoint", "CheckpointStore", "CheckpointStatus", "detect_divergence",
+    "resume_plan", "EfficiencyMetrics", "AntiLoopGuard",
 ]
