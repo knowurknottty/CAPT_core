@@ -16,6 +16,7 @@ from .core import (
     MetaFoundryError,
     ProvenanceRecord,
 )
+from .character_genesis import register as register_character_genesis
 from .childrens_studio import register as register_childrens_studio
 
 __all__ = [
@@ -33,5 +34,6 @@ __all__ = [
     "MetaFoundry",
     "MetaFoundryError",
     "ProvenanceRecord",
+    "register_character_genesis",
     "register_childrens_studio",
 ]
