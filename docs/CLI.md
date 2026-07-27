@@ -37,6 +37,35 @@ runs, prospective intents, retrieval feedback). The `procedure runs <id>` and
 `retrieval feedback` commands call domain methods (`ProcedureStore.get_runs`,
 `FeedbackStore.list_feedback`) — no raw SQL.
 
+### architecture
+- `validate` — validate `architecture/registry.yaml` (fitness checks).
+- `list` — list canonical subsystems.
+- `show <id>` — show a subsystem by id.
+
+### canon
+- `show` — show constitutional invariants I-01..I-15.
+- `check <text>` — (if implemented) check a statement against invariants.
+
+### workspace (Universal Workspace layer)
+Local-first, no network I/O. Operates on repository state so a fresh agent can
+discover authority, state, tasks, and capabilities without a bootstrap prompt.
+- `status` — branch/HEAD/clean/active_task/owner_gates/concurrency.
+- `validate` — schema + consistency checks (files, dirs, schemas, tasks,
+  checkpoint, task deps, registry namespaces). Exit nonzero on any `fail`.
+- `bootstrap` — minimal ordered reading list for a newly attached agent.
+- `checkpoint [--task T] [--next CMD] [--in-progress TXT]` — regenerate CHECKPOINT.md.
+- `tasks` — list `tasks/*.json`.
+- `next` — highest-priority READY task with satisfied deps + capabilities.
+- `capabilities` — default local-first capability manifest.
+- `archive-checkpoint` — move CHECKPOINT.md to `checkpoints/CKPT-<commit>.md`.
+
+Example:
+```bash
+python3 capt_cli.py workspace validate      # CI gate for workspace consistency
+python3 capt_cli.py workspace bootstrap      # what to read first
+python3 capt_cli.py workspace next           # what to do next
+```
+
 ## Implemented
 
 - All foundry subcommands (skills, capabilities, bubbles, governance).

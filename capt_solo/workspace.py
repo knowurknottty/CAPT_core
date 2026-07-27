@@ -377,14 +377,39 @@ def workspace_status() -> Dict[str, Any]:
     rc3, status = _git(["status", "--porcelain"])
     clean = (status == "")
     active = next_task()
+    # Concurrency detection: any task already claimed 'active' by another agent,
+    # or more than one 'active' task (potential parallel claim), or an 'active'
+    # task that already records a completion commit (inconsistent state).
+    tasks = list_tasks()
+    active_tasks = [t for t in tasks if t.get("status") == "active"]
+    concurrent = []
+    for t in active_tasks:
+        assignee = t.get("assigned_agent")
+        if assignee and assignee not in ("steward", "auto", "self", None):
+            concurrent.append({"task_id": t["task_id"], "assigned_agent": assignee,
+                               "reason": "claimed by another agent"})
+        if t.get("completion_commit"):
+            concurrent.append({"task_id": t["task_id"], "reason": "active but has completion_commit"})
+    if len(active_tasks) > 1:
+        concurrent.append({"reason": f"{len(active_tasks)} tasks marked active (possible parallel claim)"})
+    # Last verified test count is sourced from CURRENT_STATE.md (living state),
+    # not hardcoded, to avoid drift.
+    last_tests = "unknown"
+    cs = REPO_ROOT / "CURRENT_STATE.md"
+    if cs.exists():
+        m = re.search(r"(\d+)\s+passed", cs.read_text())
+        if m:
+            last_tests = f"{m.group(1)} passed (from CURRENT_STATE.md)"
     return {
         "branch": branch or "unknown",
         "head": (head or "")[:7],
         "clean": clean,
         "active_task": active.get("task_id") if active else None,
-        "current_phase": "Stewardship",
-        "last_verified_tests": "463 passed (this session)",
-        "owner_gates": ["public_private_boundary", "licensing", "security", "destructive_migration", "canonical_conflict", "external_credential"],
+        "current_phase": "RC convergence",
+        "last_verified_tests": last_tests,
+        "concurrency": concurrent,
+        "owner_gates": ["public_private_boundary", "licensing", "security",
+                        "destructive_migration", "canonical_conflict", "external_credential"],
         "next_action": active.get("title") if active else "none ready",
     }
 

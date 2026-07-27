@@ -200,3 +200,90 @@ def test_workspace_module_no_network_imports():
     assert "requests" not in src
     assert "urllib.request" not in src
     assert "http.client" not in src
+
+
+# ---------------------------------------------------------------------------
+# Capability spoofing + schema bypass (trust-boundary)
+# ---------------------------------------------------------------------------
+
+def test_capability_spoofing_rejected_by_schema():
+    """An agent cannot grant itself a capability the manifest does not define."""
+    import capt_solo.workspace as WS
+    manifest = WS.capabilities_manifest(agent="hostile")
+    # Spoof: claim a capability key that is not in the schema.
+    manifest["capabilities"]["god_mode"] = True
+    errs = WS._validate_against_schema(manifest, WS.load_schema("agent-capabilities"))
+    assert errs, "spoofed capability key must be rejected (additionalProperties:false)"
+
+
+def test_capability_manifest_default_denies_network():
+    """Default local-first manifest must NOT claim network/browser/secrets."""
+    import capt_solo.workspace as WS
+    caps = WS.capabilities_manifest()["capabilities"]
+    assert caps["network_access"] is False
+    assert caps["browser_access"] is False
+    assert caps["secrets_access"] is False
+
+
+def test_task_cannot_spoof_capability_not_in_manifest():
+    """A task requiring a capability absent from the manifest must be skipped."""
+    import capt_solo.workspace as WS
+    import tempfile
+    from pathlib import Path as P
+    d = P(tempfile.mkdtemp(prefix="hermes-verify-capskip-"))
+    (d / "tasks").mkdir()
+    rec = {"task_id": "TASK-X", "title": "needs god_mode", "subsystem": "x",
+           "phase": "S1", "priority": 1, "status": "ready", "dependencies": [],
+           "invariants": ["I-01"], "required_evidence": [], "required_tests": [],
+           "owner_gate": "none", "assigned_agent": None, "source": "t",
+           "created_at": "2026-07-27T00:00:00Z", "updated_at": "2026-07-27T00:00:00Z",
+           "completion_commit": None, "required_capabilities": ["god_mode"]}
+    (d / "tasks" / "TASK-X.json").write_text(json.dumps(rec))
+    orig = WS.REPO_ROOT
+    WS.REPO_ROOT = d
+    try:
+        # Manifest legitimately lacks god_mode -> task must be skipped.
+        assert WS.next_task(WS.capabilities_manifest()["capabilities"]) is None
+    finally:
+        WS.REPO_ROOT = orig
+
+
+def test_task_additionalproperties_bypass_rejected():
+    """A task record with an undefined field must fail schema validation."""
+    import capt_solo.workspace as WS
+    rec = {"task_id": "TASK-Y", "title": "x", "subsystem": "x", "phase": "S1",
+           "priority": 1, "status": "ready", "dependencies": [], "invariants": ["I-01"],
+           "required_evidence": [], "required_tests": [], "owner_gate": "none",
+           "assigned_agent": None, "source": "t", "created_at": "2026-07-27T00:00:00Z",
+           "updated_at": "2026-07-27T00:00:00Z", "completion_commit": None,
+           "self_promote_to_owner": True}  # undefined, authority-granting field
+    errs = WS._validate_against_schema(rec, WS.load_schema("task"))
+    assert errs, "undefined authority-granting field must be rejected"
+
+
+# ---------------------------------------------------------------------------
+# Concurrency detection in workspace_status
+# ---------------------------------------------------------------------------
+
+def test_workspace_status_detects_concurrent_active_tasks(tmp_path):
+    import capt_solo.workspace as WS
+    # Plant two 'active' tasks in a temp workspace to simulate parallel claims.
+    (tmp_path / "tasks").mkdir()
+    base = {"title": "t", "subsystem": "x", "phase": "S1", "priority": 1,
+            "status": "active", "dependencies": [], "invariants": ["I-01"],
+            "required_evidence": [], "required_tests": [], "owner_gate": "none",
+            "assigned_agent": "agent-A", "source": "t",
+            "created_at": "2026-07-27T00:00:00Z", "updated_at": "2026-07-27T00:00:00Z",
+            "completion_commit": None, "required_capabilities": []}
+    (tmp_path / "tasks" / "TASK-A.json").write_text(json.dumps({**base, "task_id": "TASK-A"}))
+    (tmp_path / "tasks" / "TASK-B.json").write_text(json.dumps({**base, "task_id": "TASK-B", "assigned_agent": "agent-B"}))
+    # CURRENT_STATE.md must exist for last_verified_tests parsing; point REPO_ROOT.
+    (tmp_path / "CURRENT_STATE.md").write_text("497 passed\n")
+    orig = WS.REPO_ROOT
+    WS.REPO_ROOT = tmp_path
+    try:
+        st = WS.workspace_status()
+        assert st["concurrency"], "two active tasks must be flagged as concurrency"
+    finally:
+        WS.REPO_ROOT = orig
+
