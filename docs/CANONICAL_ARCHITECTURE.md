@@ -20,6 +20,7 @@
 | Layer | Name | Canonical role |
 |-------|------|----------------|
 | 0 | Identity | Self/agent identity and boundary |
+| 0.5 | Ontology | Shared vocabulary and meaning — **upstream of Memory, Knowledge, Trust, Governance** (those layers consume ontology; they do not independently define reality) |
 | 1 | Constitution | Governing principles, invariants, allowed behavior |
 | 2 | Reasoning | Inference, causal/hyperdim/metacognitive reasoning, consensus, recursive yield |
 | 3 | Memory | All memory kinds, storage, compression, retrieval, consolidation, lifecycle of memories |
@@ -29,8 +30,10 @@
 | 7 | Communication | LLM/external gateways, message routing |
 | 8 | Governance | Audit, release gates, policy enforcement |
 | 9 | Skills | Skill foundry, plugin SDK, bundled skills |
-| 10 | Learning | Adaptation, consolidation-as-learning, continuous learning |
+| 10 | Learning | Adaptation, consolidation-as-learning, continuous learning (Continuous Learning permanently Layer 10) |
 | 11 | External Interfaces | DSL/compiler, SDKs, bridges to external systems |
+
+> **Ontology is upstream.** Layer 3 (Memory), Layer 4 (Knowledge), Layer 5 (Trust), and Layer 8 (Governance) consume the shared ontology defined in `CAPT_CANON.md §4`. They do not each define their own reality. Any term in that ontology has one canonical meaning project-wide.
 
 ---
 
@@ -46,6 +49,23 @@
 - **Persistent state:** `identities` table (currently only implicit in `lifecycle/semantic.py` + `engine.py`; to be made explicit).
 - **Communication model:** in-process calls.
 - **Failure boundaries:** identity resolution failure → operate in anonymous/local-only mode; never impersonate.
+
+---
+
+## Layer 0.5 — Ontology
+
+> **Upstream of Memory, Knowledge, Trust, Governance.** Those layers consume this ontology; they do not independently define reality. Canonical definitions live in `CAPT_CANON.md §4` and are the single source of meaning for: entity, relationship, identity, claim, evidence, provenance, confidence, uncertainty, truth, contradiction, temporal ordering, observation, inference, procedure, skill, memory.
+
+### L0.5.1 Ontology vocabulary
+- **Purpose:** Provide one shared, explicit meaning for every core term across layers.
+- **Responsibilities:** define terms; prevent layer-local redefinition; serve as the schema contract for Memory/Knowledge/Trust/Governance.
+- **Public APIs:** `Ontology.term(name)`, `Ontology.validate(entity)`.
+- **Dependencies:** none (foundational; consumed by L3/L4/L5/L8).
+- **Upward dependencies:** consumed by Memory, Knowledge, Trust, Governance, Reasoning.
+- **Downward dependencies:** none.
+- **Persistent state:** ontology document (versioned); optionally `ontology_terms` table.
+- **Communication model:** in-process; read-only reference.
+- **Failure boundaries:** unknown term → reject, never invent meaning ad hoc.
 
 ---
 
@@ -137,6 +157,8 @@
 ---
 
 ## Layer 3 — Memory
+
+> **Architectural decomposition (conceptual sublayers — no runtime change).** Memory is not one subsystem. It decomposes into: Identity Memory, Working Memory, Episodic Memory (ECHO), Semantic Memory, Procedural Memory, Autobiographical Memory, HMC Compression, DREAM Consolidation, Replay, Retrieval, Synchronization (canonical capability), Consent, Retention, Migration, Provenance, Evidence linkage. Responsibilities are clarified below; implementation is unchanged unless a later phase explicitly canonicalizes a component.
 
 ### L3.1 MemoryEngine (core store)
 - **Purpose:** SQLite-backed canonical memory store.
@@ -298,13 +320,19 @@
 - **Persistent state:** `schema_version`.
 - **Failure boundaries:** migration fail → restore from backup, abort.
 
-### L3.22 Synchronization
-- **Purpose:** Multi-instance memory sync.
-- **Canonical Home:** L3 Memory + L11 External. **Release Target:** undecided — owner decides (network surface = security exposure + public/private boundary).
-- **Current Location:** absent in CAPT_core and bioCAPT scan.
-- **Public APIs (canonical):** `Sync.push()`, `Sync.pull()` (TBD).
-- **Dependencies:** L3.1, L5, L11.
-- **Failure boundaries:** conflict → last-writer-wins with provenance, never silent loss.
+### L3.22 Synchronization (canonical capability — abstraction not gated)
+- **Purpose:** Reconcile memory state across instances/transports.
+- **Canonical Home:** L3 Memory. **Release Target:** CAPT_core — the *abstraction* is a canonical capability and is NOT subject to the owner security/boundary gate.
+- **Architecture vs implementation:** The synchronization **abstraction** (push/pull/merge with provenance, last-writer-wins with provenance, never silent loss) is architecturally required and un-gated. Only its **transport implementations** are subject to security review:
+  - filesystem (local) — no gate
+  - LAN — security review (network boundary)
+  - removable media — no gate (local)
+  - peer-to-peer — security review (network boundary)
+  - cloud — security review + consent (network + privacy)
+- **Current Location:** absent in CAPT_core and bioCAPT scan (abstraction to be defined; transports implemented per above).
+- **Public APIs (canonical):** `Sync.push()`, `Sync.pull()`, `Sync.merge()`.
+- **Dependencies:** L3.1, L5, L11 (transport-specific).
+- **Failure boundaries:** conflict → last-writer-wins with provenance, never silent loss; transport failure → degrade to local-only, no cascade.
 
 ### L3.23 Consent
 - **Purpose:** Track user consent for data handling/operations.
@@ -534,10 +562,11 @@
 - **Purpose:** DREAM consolidation as the learning mechanism (see L3.10).
 - **Dependencies:** L3.8–L3.10.
 
-### L10.3 Continuous Learning
+### L10.3 Continuous Learning (permanently Layer 10)
 - **Purpose:** Ongoing learning loop.
-- **Canonical Home:** L10 Learning. **Release Target:** CAPT_core (adopt canonical implementation) — note `capt/modules/continuous_learning_module.py` (792 LOC) exists externally as an orphan; owner decides inclusion.
-- **Current Location:** `biocapt-ecosystem/capt/modules/continuous_learning_module.py` (not in registry).
+- **Canonical Home:** L10 Learning — **permanently assigned**; architecture does not depend on implementation completeness. (Prior "orphan" terminology removed; the external `continuous_learning_module.py` is one candidate implementation, not the architecture.)
+- **Release Target:** CAPT_core (adopt canonical implementation).
+- **Current Location:** candidate impl `biocapt-ecosystem/capt/modules/continuous_learning_module.py` (792 LOC, not in registry) — implementation may remain incomplete; architecture is settled.
 - **Public APIs:** `ContinuousLearning.step()`.
 - **Dependencies:** L10.1, L3.
 
@@ -619,4 +648,4 @@ The bioCAPT registry lists ~46 modules (NEDA, QIPC, CONSC, PLAST, CIG, HDR, META
 | Brain-lobe modules (NEDA…) | "missing (external)" | assigned to L2/L5/L10/etc.; default research package |
 | Autobiographical | "missing" | L3 Memory, CAPT_core (design canonical interface) |
 | Consent | "missing" | L3 Memory (privacy-reviewed), CAPT_core (canonicalize) |
-| Synchronization | "missing" | L3 + L11; **undecided** (owner: security + boundary) |
+| Synchronization | "missing" | L3 Memory — **canonical capability (abstraction un-gated)**; only transports (LAN/P2P/cloud) subject to [S] review |
