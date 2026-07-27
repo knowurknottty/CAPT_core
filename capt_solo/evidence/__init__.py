@@ -40,6 +40,7 @@ from .checkpoint import (
     MissionCheckpoint, CheckpointStore, CheckpointStatus, detect_divergence, resume_plan,
 )
 from .metrics import EfficiencyMetrics, AntiLoopGuard
+from .guard import build_guard_decision, reuse_decision
 
 __all__ = [
     "EvidenceRecord", "EvidenceClaim", "EvidenceSource", "EvidenceClass",
@@ -54,4 +55,5 @@ __all__ = [
     "SelfModificationGovernor", "SelfModificationRecord", "SelfModState", "SelfModError",
     "MissionCheckpoint", "CheckpointStore", "CheckpointStatus", "detect_divergence",
     "resume_plan", "EfficiencyMetrics", "AntiLoopGuard",
+    "build_guard_decision", "reuse_decision",
 ]

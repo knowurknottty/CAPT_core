@@ -218,6 +218,56 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--store", default=None, help="path to verification records JSONL")
     vfs.add_parser("status", help="show latest verification record")
 
+    # evidence (governed evidence engine — independent of runtime; local-first)
+    ef = sub.add_parser("evidence", help="governed evidence engine (status/show/trace/invalidate/reuse-decision/conflicts)")
+    efs = ef.add_subparsers(dest="action")
+    efs.add_parser("status", help="summary of evidence store")
+    p = efs.add_parser("show", help="show an evidence record by id")
+    p.add_argument("record_id")
+    p = efs.add_parser("trace", help="trace what supports a claim")
+    p.add_argument("claim_id")
+    p = efs.add_parser("invalidate", help="record an invalidation event")
+    p.add_argument("--reason", required=True)
+    p.add_argument("--path", action="append", default=[], help="changed path (repeatable)")
+    p.add_argument("--claim", default=None, help="optional claim id to scope")
+    p = efs.add_parser("reuse-decision", help="structured guard decision for a claim")
+    p.add_argument("claim_id")
+    p.add_argument("--vsi", default="equivalent", choices=["equivalent", "changed", "unknown"])
+    p.add_argument("--user-fresh", action="store_true")
+    efs.add_parser("conflicts", help="list conflicted evidence")
+
+    # mission (checkpoint / resume / status)
+    mf = sub.add_parser("mission", help="mission checkpoint and restart recovery")
+    mfs = mf.add_subparsers(dest="action")
+    p = mfs.add_parser("checkpoint", help="save a mission checkpoint")
+    p.add_argument("--mission-id", required=True)
+    p.add_argument("--project-id", default="capt-solo")
+    p.add_argument("--objective", default="")
+    p.add_argument("--phase", default="0")
+    p.add_argument("--next", dest="next_action", default="")
+    p.add_argument("--head", default="")
+    mfs.add_parser("status", help="list checkpoints")
+    p = mfs.add_parser("resume", help="resume plan for a checkpoint")
+    p.add_argument("mission_id")
+
+    # selfmod (self-modification governance)
+    sf = sub.add_parser("selfmod", help="self-modification governance (status/propose/diff/rollback)")
+    sfs = sf.add_subparsers(dest="action")
+    sfs.add_parser("status", help="list self-modification records")
+    p = sfs.add_parser("propose", help="propose a governed self-modification")
+    p.add_argument("--mission-id", default="cli")
+    p.add_argument("--change", required=True)
+    p.add_argument("--rationale", default="")
+    p.add_argument("--scope", default="project_local", choices=["project_local", "global_policy", "skill", "prompt"])
+    p.add_argument("--diff", default="")
+    p.add_argument("--rollback", default="")
+    p = sfs.add_parser("diff", help="show a self-modification diff")
+    p.add_argument("record_id")
+    p.add_argument("--mission-id", default="cli")
+    p = sfs.add_parser("rollback", help="roll back a self-modification")
+    p.add_argument("record_id")
+    p.add_argument("--mission-id", default="cli")
+
     args = parser.parse_args(argv)
     if not args.group:
         parser.print_help()
@@ -228,6 +278,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     # verify group is independent of the memory runtime.
     if args.group == "verify":
         return _cmd_verify(args, as_json)
+    # evidence / mission / selfmod groups are independent of the memory runtime.
+    if args.group == "evidence":
+        return _cmd_evidence(args, as_json)
+    if args.group == "mission":
+        return _cmd_mission(args, as_json)
+    if args.group == "selfmod":
+        return _cmd_selfmod(args, as_json)
 
     # Architecture commands are independent of the runtime and must work even
     # when optional subsystems (e.g. CTP) are missing from the tree.
@@ -402,6 +459,161 @@ def _cmd_verify(args, as_json) -> int:
         "evidence": result.evidence.location if result.evidence else None,
     }
     return _ok(out, as_json)
+
+
+def _evidence_store_path(repo):
+    return os.path.join(repo, ".capt", "evidence", "evidence.jsonl")
+
+
+def _evidence_load(repo):
+    from capt_solo.evidence.core import EvidenceRecord
+    path = _evidence_store_path(repo)
+    if not os.path.exists(path):
+        return []
+    out = []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                out.append(EvidenceRecord.from_dict(json.loads(line)))
+    return out
+
+
+def _evidence_save(repo, records):
+    from capt_solo.evidence.core import EvidenceRecord
+    path = _evidence_store_path(repo)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        for r in records:
+            f.write(json.dumps(r.to_dict()) + "\n")
+
+
+def _cmd_evidence(args, as_json) -> int:
+    from capt_solo.evidence import (
+        EvidenceRecord, EvidenceClaim, EvidenceSource, EvidenceClass, EvidenceStatus,
+        ProofGraph,
+    )
+    from capt_solo.evidence.guard import build_guard_decision
+    from capt_solo.evidence.invalidation import scan_invalidation, InvalidationReason
+    repo = os.path.abspath(os.path.dirname(__file__))
+    action = args.action
+    if action == "status":
+        recs = _evidence_load(repo)
+        by_status = {}
+        for r in recs:
+            by_status[r.status] = by_status.get(r.status, 0) + 1
+        return _ok({"total": len(recs), "by_status": by_status}, as_json)
+    if action == "show":
+        recs = _evidence_load(repo)
+        rec = next((r for r in recs if r.record_id == args.record_id), None)
+        if rec is None:
+            return _fail(f"evidence not found: {args.record_id}")
+        return _ok(rec.to_dict(), as_json)
+    if action == "trace":
+        recs = _evidence_load(repo)
+        g = ProofGraph()
+        for r in recs:
+            g.add_node(r.record_id, "evidence", r.record_id)
+            g.link(r.record_id, r.claim.claim_id)
+        supporters = g.what_supports_claim(args.claim_id)
+        return _ok({"claim_id": args.claim_id if hasattr(args, "claim_id") else args.claim_id,
+                    "supporting_evidence": supporters}, as_json)
+    if action == "invalidate":
+        recs = _evidence_load(repo)
+        ev = scan_invalidation(args.reason, args.path, recs)
+        # apply status change to affected records
+        for r in recs:
+            if r.record_id in ev.affected_evidence_ids:
+                r.status = EvidenceStatus.INVALIDATED.value
+                r.invalidation_links.append(ev.event_id)
+        _evidence_save(repo, recs)
+        return _ok({"event_id": ev.event_id, "affected": ev.affected_evidence_ids,
+                    "unaffected": ev.unaffected_evidence_ids,
+                    "invalidation_scope": ev.invalidation_scope}, as_json)
+    if action == "reuse-decision":
+        recs = _evidence_load(repo)
+        decision = build_guard_decision(claim_id=args.claim_id, vsi_state=args.vsi,
+                                        evidence=recs, user_fresh=args.user_fresh)
+        return _ok(decision, as_json)
+    if action == "conflicts":
+        recs = _evidence_load(repo)
+        conflicts = [r.record_id for r in recs if r.status == EvidenceStatus.CONFLICTED.value]
+        return _ok({"conflicts": conflicts}, as_json)
+    return _fail("unknown evidence action (expected status|show|trace|invalidate|reuse-decision|conflicts)")
+
+
+def _cmd_mission(args, as_json) -> int:
+    from capt_solo.evidence import MissionCheckpoint, CheckpointStore, detect_divergence, resume_plan
+    repo = os.path.abspath(os.path.dirname(__file__))
+    action = args.action
+    store = CheckpointStore(repo)
+    if action == "checkpoint":
+        cp = MissionCheckpoint(
+            mission_id=args.mission_id, project_id=args.project_id,
+            objective=args.objective, current_phase=args.phase,
+            next_safe_action=args.next_action, latest_verified_state=args.head)
+        store.save(cp)
+        return _ok({"saved": args.mission_id, "path": os.path.join(repo, ".capt", "checkpoints", f"{args.mission_id}.json")}, as_json)
+    if action == "status":
+        ids = store.list_ids()
+        return _ok({"checkpoints": ids}, as_json)
+    if action == "resume":
+        cp = store.load(args.mission_id)
+        if cp is None:
+            return _fail(f"checkpoint not found: {args.mission_id}")
+        div = detect_divergence(cp, current_head=cp.latest_verified_state or "",
+                                current_branch="", current_files=cp.files_changed)
+        plan = resume_plan(cp, div)
+        return _ok({"mission_id": args.mission_id, **plan}, as_json)
+    return _fail("unknown mission action (expected checkpoint|status|resume)")
+
+
+def _cmd_selfmod(args, as_json) -> int:
+    from capt_solo.evidence import SelfModificationGovernor, SelfModState
+    repo = os.path.abspath(os.path.dirname(__file__))
+    # Persist governors per mission in .capt/selfmod/<mission>.json
+    import tempfile
+    gov_dir = os.path.join(repo, ".capt", "selfmod")
+    os.makedirs(gov_dir, exist_ok=True)
+    mission = getattr(args, "mission_id", "cli") if hasattr(args, "mission_id") else "cli"
+    gov_path = os.path.join(gov_dir, f"{mission}.json")
+    gov = SelfModificationGovernor(mission_id=mission)
+    if os.path.exists(gov_path):
+        import json as _json
+        data = _json.load(open(gov_path))
+        for rd in data.get("records", []):
+            from capt_solo.evidence import SelfModificationRecord
+            gov._records.append(SelfModificationRecord(**rd))
+    action = args.action
+    if action == "status":
+        return _ok({"mission": mission, "records": [r.to_dict() for r in gov.records()]}, as_json)
+    if action == "propose":
+        rec = gov.propose(
+            proposed_change=args.change, rationale=args.rationale,
+            triggering_evidence="cli", original_behavior="", expected_improvement="",
+            risk_analysis="cli-proposed", affected_scope=args.scope,
+            diff=args.diff, tests_or_validation="", rollback_path=args.rollback,
+            approval_requirement="global_approval" if args.scope == "global_policy" else "project_local")
+        _json_dump(gov, gov_path)
+        return _ok({"record_id": rec.record_id, "status": rec.status}, as_json)
+    if action == "diff":
+        rec = next((r for r in gov.records() if r.record_id == args.record_id), None)
+        if rec is None:
+            return _fail(f"record not found: {args.record_id}")
+        return _ok({"record_id": rec.record_id, "diff": rec.diff, "status": rec.status}, as_json)
+    if action == "rollback":
+        try:
+            rec = gov.rollback(args.record_id)
+        except Exception as e:
+            return _fail(str(e))
+        _json_dump(gov, gov_path)
+        return _ok({"record_id": rec.record_id, "status": rec.status}, as_json)
+    return _fail("unknown selfmod action (expected status|propose|diff|rollback)")
+
+
+def _json_dump(gov, path):
+    import json as _json
+    _json.dump({"records": [r.to_dict() for r in gov.records()]}, open(path, "w"), indent=2)
 
 
 def _cmd_memory(mgr, args, as_json) -> int:
