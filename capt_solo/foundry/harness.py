@@ -37,6 +37,8 @@ import hashlib
 import json
 import os
 import re
+import shlex
+import subprocess
 import tempfile
 import time
 import traceback
@@ -185,6 +187,13 @@ class ValidationHarness:
         # isolated execution: run workflow steps that are safe (no network/
         # destructive). We execute only steps prefixed with 'echo' or marked
         # safe, in an isolated temp dir. This is real execution, not a mock.
+        #
+        # SECURITY (TASK-204): previously this used os.system(f"cd {workdir} &&
+        # {st} ..."), which is a shell-injection surface — skill workflow content
+        # is untrusted, and a step like `echo x; rm -rf ~` would execute the
+        # trailing command. We now run echo shell-FREE: the command is parsed
+        # with shlex and executed without a shell, so shell metacharacters are
+        # treated as literal text and cannot inject additional commands.
         safe = True
         try:
             workdir = tempfile.mkdtemp(prefix="skill-exec-")
@@ -194,7 +203,21 @@ class ValidationHarness:
                     continue
                 # only allow echo-style safe steps in the harness sandbox
                 if st.lower().startswith("echo") or st.lower().startswith("#"):
-                    os.system(f"cd {workdir} && {st} >/dev/null 2>&1")
+                    try:
+                        parts = shlex.split(st)
+                    except ValueError:
+                        parts = st.split()
+                    if not parts or parts[0].lower() != "echo":
+                        s.warnings.append(f"non-echo command blocked in sandbox: {st[:60]}")
+                        continue
+                    # shell-free: arguments are passed directly, no shell
+                    # interpretation, so embedded `; rm -rf ~` is inert.
+                    proc = subprocess.run(
+                        parts, cwd=workdir,
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    )
+                    if proc.returncode != 0:
+                        s.warnings.append(f"echo step returned non-zero: {st[:60]}")
                 else:
                     # non-trivial step: record as requiring manual review
                     s.warnings.append(f"step not auto-executed in sandbox: {st[:60]}")

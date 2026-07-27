@@ -1,40 +1,16 @@
 #!/usr/bin/env python3
-"""CAPT Solo v0.3 — Memory Review CLI.
+"""CAPT Solo — unified local-first cognitive runtime CLI.
 
-Local CLI for inspecting and controlling memory, sessions, procedures,
-prospective memory, and retrieval feedback.
+Groups: memory, session, procedure, prospective, retrieval, canon, foundry,
+architecture, workspace. All commands support --json for machine-readable output
+and return nonzero exit codes on failure. No raw SQL is exposed. No credentials
+are printed. The CLI is local-first and performs no network I/O.
 
 Usage:
-    capt memory list [--namespace NS] [--json]
-    capt memory inspect <id> [--json]
-    capt memory search <query> [--json]
-    capt memory candidates [--json]
-    capt memory conflicts [--json]
-    capt memory pending [--json]
-    capt memory promote <id> --state <state> --evidence <e1,e2> [--actor user]
-    capt memory pin <id>
-    capt memory archive <id>
-    capt memory restore <id>
-    capt memory explain <id> [--json]
-    capt session list [--json]
-    capt session status <id> [--json]
-    capt session checkpoint <id> --next-action <text>
-    capt session resume <id> [--json]
-    capt session consolidate <id>
-    capt session close <id>
-    capt procedure list [--json]
-    capt procedure inspect <id> [--json]
-    capt procedure runs <id> [--json]
-    capt prospective list [--json]
-    capt prospective ready [--json]
-    capt prospective resolve <id>
-    capt retrieval feedback [--json]
-    capt retrieval adaptation [--json]
-    capt retrieval reset [--namespace NS]
-
-All commands support --json for machine-readable output and return
-nonzero exit codes on failure. No raw SQL is exposed. No credentials
-are printed.
+    python3 capt_cli.py workspace validate
+    python3 capt_cli.py architecture validate
+    python3 capt_cli.py foundry list-skills
+    python3 capt_cli.py memory list --json
 """
 
 from __future__ import annotations
@@ -177,7 +153,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     archs = arch.add_subparsers(dest="action")
     archs.add_parser("validate", help="validate architecture/registry.yaml")
     archs.add_parser("list", help="list canonical subsystems")
-    archs.add_parser("show", help="show a subsystem by id"); archs.add_parser("show").add_argument("id")
+    _show = archs.add_parser("show", help="show a subsystem by id")
+    _show.add_argument("id")
 
     # canon (Phase 3L — hardened external surface over canonical subsystems)
     cn = sub.add_parser("canon", help="canonical subsystem operations (episodes/knowledge/evidence/...)")
@@ -212,6 +189,23 @@ def main(argv: Optional[List[str]] = None) -> int:
     fws.add_parser("curate")
     fws.add_parser("audit")
 
+    # workspace (Universal Workspace layer — additive, local-first)
+    ws = sub.add_parser("workspace", help="universal workspace operations (status/validate/bootstrap/checkpoint/tasks/next/capabilities)")
+    wss = ws.add_subparsers(dest="action")
+    wss.add_parser("status")
+    wss.add_parser("validate")
+    wss.add_parser("bootstrap")
+    wss.add_parser("tasks")
+    p = wss.add_parser("next")
+    p.add_argument("--capabilities", default=None, help="JSON dict of capability->bool (default: local-agent manifest)")
+    wss.add_parser("capabilities")
+    p = wss.add_parser("checkpoint")
+    p.add_argument("--task", default=None)
+    p.add_argument("--next", dest="next_cmd", default="")
+    p.add_argument("--files", default=None)
+    p.add_argument("--in-progress", dest="in_progress", default="")
+    wss.add_parser("archive-checkpoint")
+
     args = parser.parse_args(argv)
     if not args.group:
         parser.print_help()
@@ -242,6 +236,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return _cmd_retrieval(mgr, args, as_json)
         if args.group == "foundry":
             return _cmd_foundry(mgr, args, as_json)
+        if args.group == "workspace":
+            return _cmd_workspace(args, as_json)
     except CaptSoloError as e:
         return _fail(str(e))
     except Exception as e:  # surface as structured error
@@ -324,6 +320,34 @@ def _cmd_canon(args, as_json) -> int:
             capt.close()
         except Exception:
             pass
+
+
+def _cmd_workspace(args, as_json) -> int:
+    """Universal Workspace commands (local-first; no network I/O)."""
+    from capt_solo.workspace import run_command
+    caps = None
+    if getattr(args, "capabilities", None):
+        try:
+            caps = json.loads(args.capabilities)
+        except Exception as e:
+            return _fail(f"--capabilities must be JSON: {e}")
+    action = args.action
+    cargs = {}
+    if action == "next":
+        cargs["capabilities"] = caps
+    if action == "capabilities":
+        cargs["agent"] = "cli"
+    if action == "checkpoint":
+        cargs = {
+            "task": getattr(args, "task", None),
+            "next": getattr(args, "next_cmd", ""),
+            "files": getattr(args, "files", None),
+            "in_progress": getattr(args, "in_progress", ""),
+        }
+    code, data = run_command(action, cargs)
+    if code != 0:
+        return _fail(json.dumps(data, default=str))
+    return _ok(data, as_json)
 
 
 def _cmd_memory(mgr, args, as_json) -> int:
