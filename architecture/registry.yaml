@@ -556,10 +556,10 @@ subsystems:
   canonical_definition: FFT/VSA holographic memory (hippocampus analogue).
   maturity: Research
   public_release_target: CAPT_core
-  implementation_status: missing
-  current_repository: biocapt-ecosystem
-  current_path: modules/hmc_mobile.py
-  reference_implementation: none (canonicalize)
+  implementation_status: partial
+  current_repository: capt-solo
+  current_path: memory/hmc.py
+  reference_implementation: memory/hmc.py (canonicalized in-tree, Decision 2)
   expected_namespace: capt_solo.memory.hmc
   required_dependencies:
   - numpy
@@ -585,10 +585,10 @@ subsystems:
   canonical_definition: Long-term encoding/consolidation metadata.
   maturity: Research
   public_release_target: CAPT_core
-  implementation_status: missing
-  current_repository: biocapt-ecosystem
-  current_path: modules/engram_mobile.py
-  reference_implementation: none (merge)
+  implementation_status: partial
+  current_repository: capt-solo
+  current_path: memory/engram.py
+  reference_implementation: memory/engram.py (canonicalized in-tree, Decision 2)
   expected_namespace: capt_solo.memory.engram
   required_dependencies: []
   optional_dependencies: []
@@ -611,10 +611,10 @@ subsystems:
   canonical_definition: Offline consolidation orchestration (L3+L10).
   maturity: Research
   public_release_target: CAPT_core
-  implementation_status: missing
-  current_repository: biocapt-ecosystem
-  current_path: dream_consolidator_mobile.py
-  reference_implementation: none (canonicalize)
+  implementation_status: partial
+  current_repository: capt-solo
+  current_path: learning/dream.py
+  reference_implementation: learning/dream.py (canonicalized in-tree, Decision 2)
   expected_namespace: capt_solo.learning.dream
   required_dependencies: []
   optional_dependencies: []

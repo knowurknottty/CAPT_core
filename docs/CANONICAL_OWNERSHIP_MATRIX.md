@@ -58,9 +58,9 @@
 | Procedural Memory | L3 Memory | capt-solo | lifecycle/procedures.py | CAPT_core | complete | Production | 391 LOC, procedure_* tables, test_v03_procedures. | none |
 | Prospective Memory | L3 Memory | capt-solo | lifecycle/prospective.py | CAPT_core | complete | Production | 265 LOC, prospective_memories, test_v03_prospective. | none |
 | Autobiographical Memory | L3 Memory | (none) | — | CAPT_core | missing | Concept | No implementation anywhere (forensic confirms absent). | none (design canonical interface) |
-| HMC (Holographic Memory Core) | L3 Memory | biocapt-ecosystem | .../hmc_mobile.py (+hmc.rs, rustfft) | CAPT_core (Rust accel external pkg) | missing | Research | External impl; not in capt-solo. | none (canonicalize; accel optional) |
-| ENGRAM | L3 Memory | biocapt-ecosystem | .../engram_mobile.py | CAPT_core | missing | Research | External impl; not adopted. | none (merge into consolidation) |
-| DREAM / Consolidation | L3 Memory / L10 | biocapt-ecosystem | .../dream_consolidator_mobile.py, dream_cycle_rpc_mobile.py | CAPT_core | missing | Research | External impl; capt-solo has only lifecycle-transition stand-in. | none (canonicalize loop) |
+| HMC (Holographic Memory Core) | L3 Memory | capt-solo | memory/hmc.py | CAPT_core | partial | Research | In-tree canonical impl (94 LOC, deterministic lossy holographic compression); registry reconciled D2/ADR-0007. Compression ratios are design targets, not verified benchmarks. | none (finish + test) |
+| ENGRAM | L3 Memory | capt-solo | memory/engram.py | CAPT_core | partial | Research | In-tree canonical impl (150 LOC, lifecycle + provenance); registry reconciled D2/ADR-0007. | none (finish + test) |
+| DREAM / Consolidation | L3 Memory / L10 | capt-solo | learning/dream.py | CAPT_core | partial | Research | In-tree canonical impl (97 LOC, offline consolidation to knowledge); registry reconciled D2/ADR-0007. | none (finish + test) |
 | Context Builder | L3 Memory | capt-solo | memory/context.py | CAPT_core | complete | Production | 164 LOC, tests. | none |
 | Search / Retrieval | L3 Memory | capt-solo | memory/search.py | CAPT_core | complete | Production | 102 LOC, tests. | none |
 | Deduplicate | L3 Memory | capt-solo | memory/deduplicate.py | CAPT_core | complete | Production | 100 LOC, test_v02_models. | none |
