@@ -19,6 +19,10 @@ from typing import Any, Dict, List, Optional
 
 from capt_solo.core.errors import MemoryError_
 from capt_solo.memory.engine import MemoryEngine
+from capt_solo.memory.types import (
+    MemoryType, MemoryRecord, validate_memory_record, memory_type_from_string,
+    RevisionEntry,
+)
 
 
 class ConsolidationState(str, Enum):
@@ -39,6 +43,9 @@ class Engram:
     created_at: float = field(default_factory=time.time)
     consolidated_at: Optional[float] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    memory_type: str = MemoryType.OBSERVATION.value
+    provenance_chain: List[str] = field(default_factory=list)
+    revisions: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return self.__dict__
@@ -60,6 +67,8 @@ class EngramStore:
         source_evidence: Optional[List[str]] = None,
         confidence: float = 1.0,
         state: str = ConsolidationState.RAW.value,
+        memory_type: str = MemoryType.OBSERVATION.value,
+        provenance_chain: Optional[List[str]] = None,
     ) -> Engram:
         if not content:
             raise MemoryError_("content required")
@@ -67,6 +76,11 @@ class EngramStore:
             raise MemoryError_("confidence must be 0..1")
         if state not in (s.value for s in ConsolidationState):
             raise MemoryError_("invalid consolidation state")
+        # validate the canonical memory-type taxonomy
+        try:
+            memory_type_from_string(memory_type)
+        except ValueError:
+            raise MemoryError_(f"invalid memory_type: {memory_type!r}")
         e = Engram(
             engram_id=uuid.uuid4().hex,
             content=content,
@@ -74,6 +88,8 @@ class EngramStore:
             source_episodes=source_episodes or [],
             source_evidence=source_evidence or [],
             confidence=confidence,
+            memory_type=memory_type,
+            provenance_chain=provenance_chain or [],
         )
         self._eng.store(
             json.dumps({"content": content, "state": state}),
@@ -84,7 +100,7 @@ class EngramStore:
             confidence=confidence,
             evidence_refs=source_evidence or [],
             metadata={"engram": e.to_dict()},
-            tags=["engram", state],
+            tags=["engram", state, memory_type],
         )
         return e
 
@@ -118,6 +134,35 @@ class EngramStore:
             return None
         return self._from_mem(mem)
 
+    def revise_engram(self, engram_id: str, *, new_content: str,
+                      kind: str = "revision", note: str = "") -> Engram:
+        """Non-destructive revision: appends a revision entry recording the prior
+        content hash; updates content but preserves the revision history. The
+        prior content is NOT erased (recoverable via revisions)."""
+        import hashlib
+        import time
+        e = self.get_engram(engram_id)
+        if e is None:
+            raise MemoryError_(f"engram not found: {engram_id}")
+        if kind not in ("revision", "correction", "supersession"):
+            raise MemoryError_(f"invalid revision kind: {kind!r}")
+        prior_hash = hashlib.sha256(e.content.encode()).hexdigest()[:16]
+        new_hash = hashlib.sha256(new_content.encode()).hexdigest()[:16]
+        e.revisions.append({
+            "revision_id": f"rev-{len(e.revisions) + 1}",
+            "prior_content_hash": prior_hash,
+            "new_content_hash": new_hash,
+            "kind": kind,
+            "timestamp": time.time(),
+            "note": note,
+        })
+        e.content = new_content
+        if kind == "correction":
+            e.metadata["is_correction"] = True
+        self._eng.update(engram_id, metadata={"engram": e.to_dict()},
+                         tags=["engram", e.state, e.memory_type])
+        return e
+
     def list_engrams(self, *, state: Optional[str] = None,
                      limit: int = 100) -> List[Engram]:
         rows = self._eng.list(namespace=self.NAMESPACE, limit=limit)
@@ -147,4 +192,7 @@ class EngramStore:
             created_at=d.get("created_at", mem.created_at),
             consolidated_at=d.get("consolidated_at"),
             metadata=d.get("metadata", {}),
+            memory_type=d.get("memory_type", MemoryType.OBSERVATION.value),
+            provenance_chain=d.get("provenance_chain", []),
+            revisions=d.get("revisions", []),
         )

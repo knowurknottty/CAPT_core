@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 from capt_solo.knowledge.evidence import EvidenceStore, VerificationStatus
 from capt_solo.knowledge.knowledge import KnowledgeStore, KnowledgeStatus
 from capt_solo.memory.engram import ConsolidationState, EngramStore
+from capt_solo.memory.types import MemoryType, MemoryRecord, validate_memory_record
 
 
 @dataclass
@@ -95,3 +96,27 @@ class DreamConsolidator:
         # Kept simple: caller stores the returned session. This method is a hook
         # for future session-history storage.
         return None
+
+    def propose_knowledge_record(self, engram: Any) -> MemoryRecord:
+        """Return a proposed MemoryRecord for a consolidated engram.
+
+        The proposed record is explicitly labeled is_inferred=True and is NOT
+        written to canonical memory by this method — the caller decides whether
+        (and how) to persist it. This enforces the boundary that DREAM-generated
+        or recombined material must remain labeled as inferred/synthetic until
+        verified, and must never silently overwrite canonical memory.
+        """
+        import uuid
+        rec = MemoryRecord(
+            record_id=f"dream-{uuid.uuid4().hex[:12]}",
+            memory_type=MemoryType.INFERENCE,
+            content=engram.content,
+            provenance_chain=[f"engram:{engram.engram_id}", "dream_consolidation"],
+            confidence=engram.confidence,
+            source_refs=[engram.engram_id],
+            evidence_refs=list(engram.source_evidence),
+            is_inferred=True,
+        )
+        # Quarantine check: inferred records without provenance are flagged.
+        validate_memory_record(rec)
+        return rec
