@@ -41,6 +41,9 @@ from .checkpoint import (
 )
 from .metrics import EfficiencyMetrics, AntiLoopGuard
 from .guard import build_guard_decision, reuse_decision
+from .integration import (
+    vsi_record_to_evidence, build_reuse_from_vsi, invalidate_vsi_records,
+)
 
 __all__ = [
     "EvidenceRecord", "EvidenceClaim", "EvidenceSource", "EvidenceClass",
@@ -56,4 +59,5 @@ __all__ = [
     "MissionCheckpoint", "CheckpointStore", "CheckpointStatus", "detect_divergence",
     "resume_plan", "EfficiencyMetrics", "AntiLoopGuard",
     "build_guard_decision", "reuse_decision",
+    "vsi_record_to_evidence", "build_reuse_from_vsi", "invalidate_vsi_records",
 ]

@@ -28,6 +28,7 @@ class EvidenceClass(str, Enum):
     DERIVED_INFERENCE = "derived_inference"
     SIMULATION_RESULT = "simulation_result"
     EXTERNAL_REFERENCE = "external_reference"
+    VERIFICATION = "verification"
 
 
 class EvidenceStatus(str, Enum):

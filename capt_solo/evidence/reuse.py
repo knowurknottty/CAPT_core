@@ -138,7 +138,7 @@ class EvidenceReuseEngine:
         decision = EvidenceDecision(
             state_identity=state_identity,
             verification_status="CURRENT" if outcome == ReuseOutcome.REUSE_CURRENT_EVIDENCE else "REQUIRED",
-            evidence_status="CURRENT" if outcome == ReuseOutcome.REUSE_CURRENT_EVIDENCE else "INVALIDATED",
+            evidence_status=EvidenceStatus.CURRENT.value if outcome == ReuseOutcome.REUSE_CURRENT_EVIDENCE else EvidenceStatus.INVALIDATED.value,
             invalidation_events=[event.__dict__] if event else [],
             action=outcome.value,
             reason=reason,
