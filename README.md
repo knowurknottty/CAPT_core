@@ -30,6 +30,27 @@ git clone <repo> capt-solo && cd capt-solo
 - **Universal Workspace** — the repository is self-describing. Start at
   `AGENTS.md`; resume via `CURRENT_STATE.md` and `CHECKPOINT.md`; operate via
   `capt workspace` (status/validate/bootstrap/checkpoint/tasks/next/capabilities).
+- **Engines (v0.4.1)** — bounded, safe, defensible public engines:
+  - **Mathematics** (`capt_solo.engines.mathematics`) — safe AST parser (no
+    `eval`/`exec`), exact `Fraction` arithmetic, approximate arithmetic with
+    uncertainty propagation, dimensional quantities over 7 SI base dims,
+    structural-affine linear solving, extrema-safe intervals, derivation traces.
+  - **Physics** (`capt_solo.engines.physics`) — built on the math substrate;
+    classical mechanics, basic thermodynamics, elementary circuits, waves. Every
+    relation is explicitly classified (established law / model / approximation /
+    empirical / hypothesis / speculative); dimensional validation enforced.
+  - **Invention** (`capt_solo.engines.invention`) — structured 17-step workflow
+    with explainable feasibility scoring, constraint tracking, contradiction
+    detection, safety gates, and revision history. Integrates math/physics
+    results directly. No patentability claims.
+  - **Memory convergence** — explicit 14-type memory taxonomy
+    (`capt_solo.memory.types`): Event/Observation/Episode/Interpretation/
+    Inference/Belief/Identity Narrative/Autobiographical/Semantic/Revision/
+    Correction/Supersession/Provenance/Replay. Non-destructive revision, provenance
+    chains, quarantine of malformed data, DREAM output labeled inferred (never
+    silently overwrites canonical memory).
+  - **PULSE** (`capt_solo.pulse`) — optional LLM gateway, **disabled by default**,
+    no network on import, fails closed. Not enabled unless explicitly configured.
 - **Docs** — `docs/` holds the canonical architecture, ADRs, subsystem docs, and
   evidence reports. Root `CAPT_CANON.md`, `CANONICAL_ARCHITECTURE.md`,
   `CANONICAL_OWNERSHIP_MATRIX.md` are pointers to the canonical sources.

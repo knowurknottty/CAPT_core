@@ -1,8 +1,24 @@
 # CAPT Solo — Changelog
 
-## v0.4.1 (2026-07-27) — Universal Workspace + Release Hardening
+## v0.4.1 (2026-07-27) — Engines + Memory Convergence + Release Hardening
 
 ### Added
+- **Public engines** (owner priority):
+  - `capt_solo.engines.mathematics` — safe AST parser (no eval/exec), exact
+    `Fraction` arithmetic, dimensional quantities (7 SI base dims), structural-
+    affine linear solving, extrema-safe intervals, derivation provenance.
+  - `capt_solo.engines.physics` — on the math substrate; classical mechanics,
+    thermodynamics, circuits, waves; every relation explicitly classified
+    (established law / model / approximation / empirical / hypothesis /
+    speculative); dimensional validation.
+  - `capt_solo.engines.invention` — structured 17-step workflow, explainable
+    feasibility scoring, contradiction detection, safety gates, revision history;
+    integrates math/physics results; no patentability claims.
+- **Memory convergence** (`capt_solo.memory.types`): explicit 14-type memory
+  taxonomy, non-destructive revision, provenance chains, quarantine of malformed
+  data; DREAM output labeled inferred (never overwrites canonical memory).
+- **PULSE gateway** (`capt_solo.pulse`): optional, disabled-by-default, no network
+  on import, fails closed.
 - **Universal Workspace layer**: repository-native, harness-neutral execution
   context. Root `AGENTS.md` (single entrypoint + authority order + startup
   procedure + owner gates), `WORKSPACE.md`, `CURRENT_STATE.md`, `CHECKPOINT.md`,
