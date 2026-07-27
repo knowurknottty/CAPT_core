@@ -1,5 +1,39 @@
 # CAPT Solo — Changelog
 
+## v0.4.1 (2026-07-27) — Universal Workspace + Release Hardening
+
+### Added
+- **Universal Workspace layer**: repository-native, harness-neutral execution
+  context. Root `AGENTS.md` (single entrypoint + authority order + startup
+  procedure + owner gates), `WORKSPACE.md`, `CURRENT_STATE.md`, `CHECKPOINT.md`,
+  `TASK_QUEUE.md`, `SECURITY_BOUNDARIES.md`, `TOOLING.md`, `RELEASE_STATE.md`,
+  `CONTRIBUTING.md`. JSON Schemas for workspace/task/checkpoint/agent-capabilities.
+- **`capt workspace` CLI group**: `status` / `validate` / `bootstrap` /
+  `checkpoint` / `tasks` / `next` / `capabilities` / `archive-checkpoint`.
+  Local-first, no network I/O; `validate` is a CI gate for workspace consistency.
+- **Concurrency detection** in `workspace_status` (parallel active-task claims,
+  other-agent claims, active+completion_commit inconsistency).
+- **Release-boundary governance review** (`docs/RELEASE_GOVERNANCE.md`): every
+  subsystem classified PUBLIC / RESEARCH / EXTERNAL / OPTIONAL from registry
+  evidence; owner [B]/[S] gates prepared (no irreversible decisions made).
+- **MIT LICENSE** (resolves a release blocker; consistent with pyproject).
+
+### Fixed
+- Version identity drift: README, release docs, installer/verify/uninstall
+  banners reconciled to `0.4.1`.
+- I-15 ("Evidence over implementation", ADR-0006) added to the CAPT_CANON
+  invariant table (canon/ADR reconciliation).
+- `architecture show` duplicate subparser that broke the entire CLI parse.
+- `foundry/harness.py` skill-execution sandbox: replaced `os.system` shell
+  injection with shell-free `subprocess.run(shlex.split(...))`.
+- `architecture/debt.yaml`: all 17 items reconciled to `resolved` with evidence.
+
+### Security
+- Capability spoofing and schema `additionalProperties` bypass rejected by
+  validation; default capability manifest denies network/browser/secrets.
+- Negative regression tests for hostile task content, harness injection, and
+  capability spoofing.
+
 ## v0.4.0 (2026-07-19) — Proof-Governed Cognitive Operating System
 
 ### Added
