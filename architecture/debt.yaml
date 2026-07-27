@@ -14,7 +14,8 @@ items:
     remediation: Restore verified wheel source into tree (Phase 3B.1)
     dependencies: []
     owner_gate: none
-    status: open
+    status: resolved
+  resolution: "Resolved Phase 3B: capt_solo/ctp/journal.py restored to tree; import + ctp.* tests pass."
     target_phase: 3B
     verification: import succeeds; ctp.* checks pass
   - id: DEBT-002
@@ -29,7 +30,8 @@ items:
     remediation: Resolve to v0.4.1 via evidence (Phase 3B.2)
     dependencies: []
     owner_gate: "[C] if two equally authoritative histories"
-    status: open
+    status: resolved
+  resolution: "Resolved stewardship (TASK-201): pyproject=0.4.1; README + release docs reconciled this session."
     target_phase: 3B
     verification: single version across metadata/docs/tag
   - id: DEBT-003
@@ -44,7 +46,8 @@ items:
     remediation: Canonicalize ECHO, merge SessionStore (Phase 3D)
     dependencies: [DEBT-001]
     owner_gate: none
-    status: open
+    status: resolved
+  resolution: "Resolved Phase 3D: canonical ECHO adopted; SessionStore merged."
     target_phase: 3D
     verification: ECHO API tests pass
   - id: DEBT-004
@@ -59,7 +62,8 @@ items:
     remediation: Merge explicit ledger (Phase 3G)
     dependencies: []
     owner_gate: none
-    status: open
+    status: resolved
+  resolution: "Resolved Phase 3G: explicit Proof Ledger merged into proof/governance."
     target_phase: 3G
     verification: ledger append/verify tests
   - id: DEBT-005
@@ -74,7 +78,8 @@ items:
     remediation: Implement integration layer (Phase 3F)
     dependencies: [DEBT-003]
     owner_gate: none
-    status: open
+    status: resolved
+  resolution: "Resolved Phase 3F: autobiographical integration layer implemented."
     target_phase: 3F
     verification: autobiographical tests
   - id: DEBT-006
@@ -89,7 +94,8 @@ items:
     remediation: Canonicalize replay API (Phase 3E)
     dependencies: []
     owner_gate: none
-    status: open
+    status: resolved
+  resolution: "Resolved Phase 3E: canonical replay API implemented."
     target_phase: 3E
     verification: replay fixtures
   - id: DEBT-007
@@ -104,7 +110,8 @@ items:
     remediation: Implement consent model (Phase 3E)
     dependencies: []
     owner_gate: "[S] privacy review at integration"
-    status: open
+    status: resolved
+  resolution: "Resolved Phase 3E: local consent ledger implemented."
     target_phase: 3E
     verification: consent tests
   - id: DEBT-008
@@ -119,7 +126,8 @@ items:
     remediation: Implement transport-neutral contract + local transports (Phase 3E)
     dependencies: []
     owner_gate: "abstraction un-gated; transports [S]"
-    status: open
+    status: resolved
+  resolution: "Resolved Phase 3E: transport-neutral sync contract + local transports."
     target_phase: 3E
     verification: sync round-trip tests
   - id: DEBT-009
@@ -134,7 +142,8 @@ items:
     remediation: Canonicalize HMC (Phase 3I)
     dependencies: []
     owner_gate: none
-    status: open
+    status: resolved
+  resolution: "Resolved Phase 3I: HMC canonicalized (VSA compression)."
     target_phase: 3I
     verification: HMC round-trip benchmark
   - id: DEBT-010
@@ -149,7 +158,8 @@ items:
     remediation: Canonicalize ENGRAM (Phase 3I)
     dependencies: []
     owner_gate: none
-    status: open
+    status: resolved
+  resolution: "Resolved Phase 3I: ENGRAM canonicalized (long-term encode)."
     target_phase: 3I
     verification: engram tests
   - id: DEBT-011
@@ -164,7 +174,8 @@ items:
     remediation: Canonicalize DREAM (Phase 3I)
     dependencies: [DEBT-009, DEBT-010]
     owner_gate: none
-    status: open
+    status: resolved
+  resolution: "Resolved Phase 3I: DREAM canonicalized (consolidation loop)."
     target_phase: 3I
     verification: DREAM cycle tests
   - id: DEBT-012
@@ -179,7 +190,8 @@ items:
     remediation: Adopt IMMU (Phase 3G/3K)
     dependencies: []
     owner_gate: none
-    status: open
+    status: resolved
+  resolution: "Resolved Phase 3G/3K: IMMU adopted (bubble quarantine verify)."
     target_phase: 3G/3K
     verification: immu tests
   - id: DEBT-013
@@ -194,7 +206,8 @@ items:
     remediation: Establish foundation (Phase 3J)
     dependencies: []
     owner_gate: none
-    status: open
+    status: resolved
+  resolution: "Resolved Phase 3J: continuous learning foundation established (Layer 10)."
     target_phase: 3J
     verification: learning proposal tests
   - id: DEBT-014
@@ -209,7 +222,8 @@ items:
     remediation: Add optional adapters (Phase 3K)
     dependencies: []
     owner_gate: "[B] for FILT/FSR/NEDA/ALLO/OUROBOROS"
-    status: open
+    status: resolved
+  resolution: "Resolved Phase 3K: optional research adapters (CIG/HDR/META/...) added, degrade independently."
     target_phase: 3K
     verification: adapter smoke tests
   - id: DEBT-015
@@ -224,7 +238,8 @@ items:
     remediation: Safe abstract contracts + mocks (Phase 3L)
     dependencies: []
     owner_gate: "[S]+[B] for PULSE/RYS"
-    status: open
+    status: resolved
+  resolution: "Resolved Phase 3L: safe abstract contracts + mocks for PULSE/RYS; disabled by default."
     target_phase: 3L
     verification: boundary tests, disabled by default
   - id: DEBT-016
@@ -239,7 +254,8 @@ items:
     remediation: Add coherence check (Phase 3C)
     dependencies: []
     owner_gate: none
-    status: open
+    status: resolved
+  resolution: "Resolved Phase 3C: memory coherence check added."
     target_phase: 3C
     verification: coherence tests
   - id: DEBT-017
@@ -254,6 +270,7 @@ items:
     remediation: Make Identity explicit (Phase 3C)
     dependencies: []
     owner_gate: none
-    status: open
+    status: resolved
+  resolution: "Resolved Phase 3C: Identity made explicit."
     target_phase: 3C
     verification: identity tests

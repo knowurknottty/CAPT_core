@@ -1,5 +1,15 @@
 # CAPT Solo v0.4 — Release Audit & Gate Matrix
 
+> **Stewardship reconciliation (2026-07-26):** The numbers below were captured in
+> an earlier session snapshot. Re-verified this session: `pytest` → **463 passed**
+> (not 355) and `verify_runtime.py` → **46 pass / 0 warn / 0 fail / 0 skip** (not
+> 45). The increase reflects Phases 3B–3M (CTP restore, memory hardening, ECHO,
+> replay/consent/sync, autobiographical, knowledge/evidence, execution boundaries,
+> HMC/ENGRAM/DREAM, continuous learning, research adapters, external interface,
+> release verification) which added suites. All 17 release gates remain PASS.
+> The Universal Workspace layer (this session) adds `tests/test_workspace.py` +
+> `tests/test_workspace_security.py` (34 tests) and does not break existing gates.
+
 Generated: 2026-07-19. All claims backed by live test execution in this session.
 No claim made without a passing test, passing verify_runtime check, or direct
 code inspection. Verification status: FRESH (all commands re-run this session).

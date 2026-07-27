@@ -1,4 +1,4 @@
-# CAPT Solo v0.1
+# CAPT Solo v0.4.1
 
 Local-first cognitive runtime for individual developers, integrating natively
 with Hermes. Zero cloud, zero external database, zero Docker, zero network.
@@ -14,36 +14,66 @@ git clone <repo> capt-solo && cd capt-solo
 ## What you get
 
 - **Memory Engine** — SQLite store with tags, namespaces, provenance, confidence,
-  metadata, semantic-search adapter interface, export/import, backups.
+  metadata, semantic-search adapter interface, export/import, backups, forward-only
+  migration with backup-gated safety.
 - **CTP Runtime** — append-only transaction journals with receipts, idempotency,
   correlation ids, audit trail, and crash recovery.
 - **KHSB** — in-process message bus (publish/subscribe/request/reply/timeout/ack).
-- **Hermes Plugin** — 10 stable public tools (`capt_store_memory`, etc.).
-- **8 Skills** — bootstrap, debug, arch-decision, memory-review, knowledge-capture,
-  transaction, session-recap, recovery.
-- **Docs** — ARCHITECTURE, API, SECURITY, DATA_MODEL, MIGRATIONS, PLUGIN_GUIDE,
-  SKILL_GUIDE, EXTENDING, ROADMAP.
+- **Foundry** — proof-governed skill/capability/bubble lifecycle (validation,
+  proof aggregation, ClaimGuard scoped degradation, 12-step bubble validation,
+  governance CTP-bounded audit).
+- **Canonical subsystems** — episodic/ECHO, semantic, procedural, prospective,
+  autobiographical, HMC, ENGRAM, DREAM, replay, consent, local sync, continuous
+  learning, research adapters (optional, degrade independently).
+- **Hermes Plugin** — 46 stable public tools (`capt_store_memory`, …,
+  `capt_verify_claim`, `capt_build_bubble`, …).
+- **Universal Workspace** — the repository is self-describing. Start at
+  `AGENTS.md`; resume via `CURRENT_STATE.md` and `CHECKPOINT.md`; operate via
+  `capt workspace` (status/validate/bootstrap/checkpoint/tasks/next/capabilities).
+- **Docs** — `docs/` holds the canonical architecture, ADRs, subsystem docs, and
+  evidence reports. Root `CAPT_CANON.md`, `CANONICAL_ARCHITECTURE.md`,
+  `CANONICAL_OWNERSHIP_MATRIX.md` are pointers to the canonical sources.
 
 ## Principles
 
 Zero cloud · Zero external DB · Zero Docker · Zero network · One-command
 install · One-command health · Portable · Deterministic · Human-readable ·
-Backward-compatible migrations.
+Backward-compatible migrations · Workspace-native (no giant bootstrap prompt).
 
 ## Layout
 
 ```
 capt-solo/
-├── capt_solo/        # the runtime (core, memory, ctp, khsb, plugin, skills, api)
-├── docs/             # 9 documentation files
-├── tests/            # pytest suite (>95% public-surface coverage)
-├── install.sh        # one-command install
-├── doctor.sh         # environment diagnostics
-├── uninstall.sh      # remove plugin/skills (+ --purge for data)
-├── verify.sh         # one-command health check
-└── verify_runtime.py # the verification harness invoked by verify.sh
+├── AGENTS.md                 # universal agent entrypoint (authority order + startup)
+├── CAPT_CANON.md             # pointer → docs/CAPT_CANON.md (constitutional invariants)
+├── CANONICAL_ARCHITECTURE.md # pointer → docs/CANONICAL_ARCHITECTURE.md
+├── CANONICAL_OWNERSHIP_MATRIX.md # pointer → docs/CANONICAL_OWNERSHIP_MATRIX.md
+├── WORKSPACE.md              # workspace contract (state classes, permissions)
+├── CURRENT_STATE.md          # authoritative live state
+├── CHECKPOINT.md             # immediate resume contract
+├── TASK_QUEUE.md             # human-readable task queue
+├── SECURITY_BOUNDARIES.md    # trust model + untrusted-content handling
+├── TOOLING.md                # workspace CLI reference
+├── RELEASE_STATE.md          # release readiness
+├── architecture/             # registry.yaml + JSON schemas
+├── capt_solo/                # the runtime (core, memory, ctp, khsb, foundry, plugin, skills, api, workspace)
+├── docs/                     # canonical architecture, ADRs, evidence, subsystem docs
+├── tests/                    # pytest suite (463 tests)
+├── capt_cli.py               # CLI (memory/session/procedure/prospective/retrieval/canon/foundry/architecture/workspace)
+├── verify_runtime.py         # 46-check structured verification harness
+├── doctor.sh / verify.sh / install.sh / uninstall.sh
+└── pyproject.toml            # version 0.4.1, MIT
+```
+
+## Verification
+
+```bash
+python3 -m pytest -q            # full suite (463 passed)
+python3 verify_runtime.py       # 46 structured checks
+python3 architecture/validate_registry.py   # registry fitness
+python3 capt_cli.py workspace validate       # workspace consistency
 ```
 
 ## License
 
-Open-source. See repository for the exact license file.
+MIT. See `LICENSE`.

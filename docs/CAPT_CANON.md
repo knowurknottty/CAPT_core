@@ -42,6 +42,7 @@ These are laws. Future implementations may not violate them without explicit own
 | I-12 | Ontology is shared and upstream | Memory/Knowledge/Trust/Governance consume one ontology (§4); they do not each define reality. |
 | I-13 | Canonical home is permanent unless re-canonicalized | A subsystem's layer/home changes only via an architecture update, not via repo movement. |
 | I-14 | Forensic corpus is evidence, not authority | The forensic reconstruction informs; it does not authorize deletion, simplification, or redesign. |
+| I-15 | Evidence over implementation | Disagreements are resolved through explicit evidence and a recorded architectural decision. Existing code is never self-justifying architectural authority. A violation of any invariant requires cited ID, evidence of necessity, explicit owner approval, recorded exception, and canonical doc update. |
 
 ---
 

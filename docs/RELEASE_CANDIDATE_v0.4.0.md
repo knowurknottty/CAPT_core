@@ -1,5 +1,12 @@
 # CAPT Solo v0.4.0 — Release Candidate Report
 
+> **Stewardship reconciliation (2026-07-26):** Re-verified this session:
+> `pytest` → **463 passed** (prior snapshot 355); `verify_runtime.py` → **46 checks
+> pass** (prior 45). Version identity: `pyproject.toml` = `0.4.1`, `plugin.json` =
+> `0.4.1`, 46 tools. README previously said `v0.1` and has been corrected to
+> `v0.4.1`. The Universal Workspace layer (AGENTS.md, WORKSPACE.md, schemas,
+> `capt workspace` CLI) was added this session and is additive. All 17 gates PASS.
+
 Generated: 2026-07-20T04:06:55Z (candidate-state capture).
 All evidence below was generated AFTER the candidate-state capture, in this
 sequential verification pass. No prior-session result is used as final evidence.
