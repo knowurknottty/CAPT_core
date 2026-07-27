@@ -15,6 +15,9 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+dependencies = [
+    "pyyaml>=5.4",
+]
 
 [project.urls]
 Homepage = "https://github.com/inversion-labs/capt-solo"
@@ -27,6 +30,10 @@ packages = [
     "capt_solo.ctp",
     "capt_solo.khsb",
     "capt_solo.plugin",
+    "capt_solo.knowledge",
+    "capt_solo.execution",
+    "capt_solo.learning",
+    "capt_solo.research",
 ]
 
 [project.entry-points.hermes_plugins]
