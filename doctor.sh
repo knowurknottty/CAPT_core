@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CAPT Solo v0.4 — doctor
+# CAPT Solo v0.5.0 — source-checkout diagnostics
 # Diagnoses the local environment and reports what is and isn't available.
 # Emits STRUCTURED checks: check_id | status | severity | summary | evidence | remediation | duration_ms
 # Status: pass | warn | fail | skip
@@ -9,7 +9,7 @@ CAPT_SOLO_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_PREFIX="${CAPT_SOLO_HOME:-$HOME/.capt-solo}"
 HERMES_CONFIG_DIR="${HERMES_CONFIG_DIR:-$HOME/.hermes}"
 
-echo "== CAPT Solo v0.4 doctor =="
+echo "== CAPT Solo v0.5.0 doctor =="
 
 emit() { # check_id status severity summary evidence remediation
   local cid="$1" st="$2" sev="$3" sum="$4" ev="$5" rem="$6"
@@ -63,50 +63,52 @@ else
   emit "runtime.memory_db" "warn" "low" "Memory DB not present" "no memory.db" "init runtime"
 fi
 
-if [ -f "$INSTALL_PREFIX/data/ctp/journal.log" ]; then
-  emit "runtime.ctp_journal" "pass" "info" "CTP journal exists" "$INSTALL_PREFIX/data/ctp/journal.log" "n/a"
+if [ -f "$INSTALL_PREFIX/data/ctp/journal.jsonl" ]; then
+  emit "runtime.ctp_journal" "pass" "info" "CTP journal exists" "$INSTALL_PREFIX/data/ctp/journal.jsonl" "n/a"
 else
   emit "runtime.ctp_journal" "warn" "low" "CTP journal not present" "no journal" "init runtime"
 fi
 
-# --- v0.4 checks ---
-if PYTHONPATH="$CAPT_SOLO_SRC" python3 -c 'from capt_solo.memory.engine import SCHEMA_VERSION; import sys; sys.exit(0 if SCHEMA_VERSION==4 else 1)' 2>/dev/null; then
-  emit "v04.schema_version" "pass" "critical" "Schema version is 4" "SCHEMA_VERSION=4" "run migration"
+# --- schema and release checks ---
+if PYTHONPATH="$CAPT_SOLO_SRC" python3 -c 'from capt_solo.memory.engine import SCHEMA_VERSION; import sys; sys.exit(0 if SCHEMA_VERSION==5 else 1)' 2>/dev/null; then
+  emit "schema.version" "pass" "critical" "Schema version is 5" "SCHEMA_VERSION=5" "run migration"
 else
-  emit "v04.schema_version" "fail" "critical" "Schema version != 4" "check engine.SCHEMA_VERSION" "run migration"
+  emit "schema.version" "fail" "critical" "Schema version != 5" "check engine.SCHEMA_VERSION" "run migration"
 fi
 
 if [ -d "$INSTALL_PREFIX/backups" ]; then
-  emit "v04.backup_dir" "pass" "high" "Migration backup dir present" "$INSTALL_PREFIX/backups" "n/a"
+  emit "migration.backup_dir" "pass" "high" "Migration backup dir present" "$INSTALL_PREFIX/backups" "n/a"
 else
-  emit "v04.backup_dir" "warn" "medium" "Migration backup dir absent" "no backups/" "init triggers backup"
+  emit "migration.backup_dir" "warn" "medium" "Migration backup dir absent" "no backups/" "init triggers backup"
 fi
 
 if PYTHONPATH="$CAPT_SOLO_SRC" python3 -c 'from capt_solo.foundry import DEGRADATION_REASONS; import sys; sys.exit(0 if len(DEGRADATION_REASONS)==12 else 1)' 2>/dev/null; then
-  emit "v04.foundry_import" "pass" "high" "Foundry importable + 12 degradation codes" "DEGRADATION_REASONS=12" "n/a"
+  emit "foundry.import" "pass" "high" "Foundry importable + 12 degradation codes" "DEGRADATION_REASONS=12" "n/a"
 else
-  emit "v04.foundry_import" "fail" "high" "Foundry import or codes failed" "import/count error" "check foundry package"
+  emit "foundry.import" "fail" "high" "Foundry import or codes failed" "import/count error" "check foundry package"
 fi
 
 if PYTHONPATH="$CAPT_SOLO_SRC" python3 "$CAPT_SOLO_SRC/capt_cli.py" --help >/dev/null 2>&1; then
-  emit "v04.cli_available" "pass" "medium" "CLI available" "capt_cli.py --help ok" "n/a"
+  emit "cli.available" "pass" "medium" "CLI available" "capt_cli.py --help ok" "n/a"
 else
-  emit "v04.cli_available" "fail" "medium" "CLI not runnable" "cli error" "check capt_cli.py"
+  emit "cli.available" "fail" "medium" "CLI not runnable" "cli error" "check capt_cli.py"
 fi
 
 if PYTHONPATH="$CAPT_SOLO_SRC" python3 -c "import json,sys; d=json.load(open('$HERMES_CONFIG_DIR/plugins/capt-solo/plugin.json')); sys.exit(0 if len(d.get('tools',[]))==46 else 1)" 2>/dev/null; then
-  emit "v04.plugin_tools" "pass" "high" "Plugin tool count is 46" "46 tools" "n/a"
+  emit "plugin.tools" "pass" "high" "Plugin tool count is 46" "46 tools" "n/a"
 elif [ -f "$CAPT_SOLO_SRC/capt_solo/plugin/plugin.json" ]; then
   CNT=$(python3 -c "import json; print(len(json.load(open('$CAPT_SOLO_SRC/capt_solo/plugin/plugin.json')).get('tools',[])))")
-  emit "v04.plugin_tools" "warn" "medium" "Plugin tools counted from source (not installed)" "source tools=$CNT" "run install.sh to deploy plugin"
+  emit "plugin.tools" "warn" "medium" "Plugin tools counted from source (not installed)" "source tools=$CNT" "run install.sh to deploy plugin"
 else
-  emit "v04.plugin_tools" "fail" "high" "Plugin tool count != 46" "no plugin.json" "add v0.4 tools"
+  emit "plugin.tools" "fail" "high" "Plugin tool count != 46" "no plugin.json" "restore plugin manifest"
 fi
 
-if PYTHONPATH="$CAPT_SOLO_SRC" CAPT_SOLO_HOME="$(mktemp -d)" python3 "$CAPT_SOLO_SRC/verify_runtime.py" >/dev/null 2>&1; then
-  emit "v04.verify_runtime" "pass" "critical" "verify_runtime passes" "exit 0" "n/a"
+DOCTOR_TMP="$(mktemp -d)"
+trap 'rm -rf -- "$DOCTOR_TMP"' EXIT
+if PYTHONPATH="$CAPT_SOLO_SRC" CAPT_SOLO_HOME="$DOCTOR_TMP" python3 "$CAPT_SOLO_SRC/verify_runtime.py" >/dev/null 2>&1; then
+  emit "runtime.verify" "pass" "critical" "verify_runtime passes" "exit 0" "n/a"
 else
-  emit "v04.verify_runtime" "fail" "critical" "verify_runtime failed" "nonzero exit" "run verify_runtime.py for details"
+  emit "runtime.verify" "fail" "critical" "verify_runtime failed" "nonzero exit" "run verify_runtime.py for details"
 fi
 
 t1=$(python3 -c 'import time; print(int(time.time()*1000))')

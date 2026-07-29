@@ -369,7 +369,7 @@ subsystems:
   required_dependencies:
   - sqlite3
   optional_dependencies: []
-  persistence_behavior: SQLite SCHEMA_VERSION=4 (32 tables)
+  persistence_behavior: SQLite SCHEMA_VERSION=5
   network_behavior: none
   security_classification: local
   invariant_mappings:

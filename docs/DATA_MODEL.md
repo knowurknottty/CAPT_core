@@ -7,7 +7,7 @@ All persistent state lives under `~/.capt-solo`.
 ├── data/
 │   ├── memory.db            # SQLite: memories + tags
 │   ├── ctp/
-│   │   ├── journal.log      # append-only transaction journal (JSON lines)
+│   │   ├── journal.jsonl    # append-only transaction journal (JSON lines)
 │   │   └── state.json       # reserved for runtime state (currently unused)
 │   └── khsb/                # reserved for future KHSB persistence
 └── backups/                 # backup_*.db, memory_export_*.json
@@ -40,7 +40,7 @@ Primary key: `(memory_id, tag)`. Index: `idx_tags_tag`.
 ### `schema_version`
 | Column | Type | Notes |
 |--------|------|-------|
-| `version` | INTEGER PK | Current schema version (v0.4 = 4). |
+| `version` | INTEGER PK | Current schema version (`SCHEMA_VERSION = 5`). |
 
 ## v0.4 — Foundry tables (`memory.db`)
 
@@ -139,7 +139,7 @@ Primary key: `(scope, type)`.
 | `approved_by` | TEXT | Actor who approved. |
 | `ctp_tx_id` | TEXT | CTP receipt for install. |
 
-## `ctp/journal.log`
+## `ctp/journal.jsonl`
 
 One JSON object per line, append-only, in event order:
 

@@ -175,12 +175,15 @@ def validate_release(
         Path("capt_solo/__init__.py"),
         Path("capt_solo/plugin/plugin.json"),
         Path("capt_solo/foundry/bubble.py"),
+        Path("capt_solo/memory/engine.py"),
         MANIFEST_PATH,
         Path("README.md"),
         Path("CHANGELOG.md"),
         Path("docs/CHANGELOG.md"),
         Path("docs/PUBLIC_ARCHITECTURE.md"),
         Path("docs/PUBLIC_API_STABILITY.md"),
+        Path("docs/DATA_MODEL.md"),
+        Path("docs/MIGRATIONS.md"),
         Path("docs/tutorials/VERIFY_AI_WORK_IN_FIVE_MINUTES.md"),
     )
     missing = [str(path) for path in required_paths if not (root / path).is_file()]
@@ -215,6 +218,46 @@ def validate_release(
         "version.identity",
         len(versions) == 1 and versions == {"0.5.0"},
         json.dumps(version_sources, sort_keys=True),
+    ))
+
+    schema_version = int(_match(
+        r"^SCHEMA_VERSION\s*=\s*(\d+)",
+        _read(root, Path("capt_solo/memory/engine.py")),
+        "capt_solo/memory/engine.py",
+    ))
+    schema_documents = {
+        "doctor.sh": _read(root, Path("doctor.sh")),
+        "docs/PUBLIC_API_STABILITY.md": _read(
+            root, Path("docs/PUBLIC_API_STABILITY.md")
+        ),
+        "docs/DATA_MODEL.md": _read(root, Path("docs/DATA_MODEL.md")),
+        "docs/MIGRATIONS.md": _read(root, Path("docs/MIGRATIONS.md")),
+    }
+    stale_schema = [
+        name
+        for name, text in schema_documents.items()
+        if (
+            "SCHEMA_VERSION=4" in text
+            or "SCHEMA_VERSION = 4" in text
+            or "Stable schema v4" in text
+            or "| schema v4 |" in text
+        )
+    ]
+    declared_current = all(
+        (
+            "SCHEMA_VERSION=5" in text
+            or "SCHEMA_VERSION = 5" in text
+            or "schema v5" in text
+        )
+        for text in schema_documents.values()
+    )
+    checks.append(_check(
+        "schema.identity",
+        schema_version == 5 and not stale_schema and declared_current,
+        (
+            f"runtime={schema_version} stale_documents={stale_schema} "
+            f"all_declare_current={declared_current}"
+        ),
     ))
 
     actual_packages = _source_packages(root)

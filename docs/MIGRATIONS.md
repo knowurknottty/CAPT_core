@@ -1,8 +1,8 @@
-# CAPT Solo v0.4 — Migrations
+# CAPT Solo v0.5 — Migrations
 
 CAPT Solo uses forward-only, backup-gated SQLite migrations. The schema version
 is stored in the `schema_version` table. The current version is
-`SCHEMA_VERSION = 4`.
+`SCHEMA_VERSION = 5`.
 
 ## Migration safety gate
 
@@ -28,6 +28,12 @@ runs. This is a SAFETY GATE, not best-effort:
 workflows, workflow_proofs, governance_audit, capability_degradations, and
 other v0.4 tables. The migration is idempotent: re-opening an already-v4
 database performs no backup and no re-application.
+
+## Canonical memory migration (4 -> 5)
+
+`_create_v5()` adds the canonical memory fields `uncertainty`, `retention`,
+`consent`, `identity_link`, and `evidence_refs` with backward-compatible
+defaults. Opening an already-v5 database performs no backup or re-application.
 
 ## In-memory databases
 
@@ -67,8 +73,8 @@ must use a real path.
 
 ## Verification
 
-- `tests/test_v04_migration.py` (8 tests: fresh->v4, idempotent, v3->v4,
-  backup valid+integrity, backup filename uniqueness, abort-on-failure,
-  in-memory explicit, v4 functional).
+- `tests/test_v04_migration.py` covers the backup-gated v3-to-v4 path.
+- `tests/test_phase3c_memory_hardening.py` covers fresh v5 state and the
+  v4-to-v5 canonical-memory migration.
 - `verify_runtime.py` (schema_version, migration_backup_dir).
-- `doctor.sh` (schema version is 4, backup dir present).
+- `doctor.sh` (schema version is 5, backup dir present).

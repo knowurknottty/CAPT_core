@@ -51,7 +51,7 @@
 | RYS Bridge | L2 Reasoning / L11 | biocapt-ecosystem / AIM-CAPTRYS | .../rys_mobile.py | external package / optional plugin | missing | Research | External impl; bridge to CAPT-RYS. | **boundary + security** |
 | Cognitive Loop | L2 Reasoning | biocapt-ecosystem | registry COGNITIVE_LOOP | CAPT_core | missing | Research | External registry entry; not in capt-solo. | none |
 | NEDA (Neural Event-Driven) | L2 Reasoning | biocapt-ecosystem | .../neda_mobile.py (+neda.rs) | research package | missing | Research | External impl. | **boundary** |
-| MemoryEngine | L3 Memory | capt-solo | memory/engine.py | CAPT_core | complete | Production | 1364 LOC, 32 tables, SCHEMA_VERSION=4, test_memory + migration tests pass in-tree. | none |
+| MemoryEngine | L3 Memory | capt-solo | capt_solo/memory/engine.py | CAPT_core | complete | Production | Versioned SQLite at SCHEMA_VERSION=5; memory and migration tests run in-tree. | none |
 | CSG | L3 Memory | capt-solo | memory/csg.py | CAPT_core | complete | Production | 375 LOC, test_v02_csg, verify_runtime. | none |
 | Episodic Memory (ECHO) | L3 Memory | capt-solo (SessionStore) / biocapt-ecosystem (echo_mobile.py) | lifecycle/sessions.py / .../echo_mobile.py | CAPT_core | partial | Beta | SessionStore complete (572 LOC, test_v03_sessions) but ECHO canonical ring-buffer interface not adopted. | none (adopt ECHO, merge) |
 | Semantic Memory | L3 Memory | capt-solo | lifecycle/semantic.py | CAPT_core | complete | Production | 153 LOC, semantic_index_metadata, tests. | none |

@@ -41,7 +41,7 @@ from both wheel and sdist environments.
 | `capt_solo` | Stable | Runtime SDK | 0.5 | `__version__` remains compatible | wheel + sdist | distribution contract |
 | `capt_solo.api` | Stable | Runtime SDK | 0.5 | facade symbols preserved within v0 | wheel + sdist | `test_api.py`, installed runtime smoke |
 | `capt_solo.core` | Stable | Core | 0.5 | config and error hierarchy preserved | wheel + sdist | API/runtime tests |
-| `capt_solo.memory` | Stable | Memory | schema v4 | migrations are forward-only and backup-gated | wheel + sdist | memory and migration suites |
+| `capt_solo.memory` | Stable | Memory | schema v5 | migrations are forward-only and backup-gated | wheel + sdist | memory and migration suites |
 | `capt_solo.ctp` | Stable | Transactions | journal v0 | append-only event compatibility; no silent rewrite | wheel + sdist | CTP tests and installed smoke |
 | `capt_solo.khsb` | Stable | Knowledge/coordination service | 0.5 | in-process API; no network behavior | wheel + sdist | KHSB/runtime tests |
 | `capt_solo.lifecycle` | Stable | Lifecycle service | 0.5 | existing session/procedure APIs preserved | wheel + sdist | v0.3 lifecycle suites |
@@ -176,7 +176,7 @@ security-motivated removal may fail closed immediately and will be documented.
 | Format | Tier/version | Compatibility promise | Proof |
 |---|---|---|---|
 | ContextPack canonical JSON | Stable v1 | exact canonical fixture and digest | `test_contextpack_v1.py` |
-| Memory SQLite | Stable schema v4 | forward migration with backup gate | migration suites |
+| Memory SQLite | Stable schema v5 | forward migration with backup gate | migration suites |
 | CTP JSONL journal | Stable v0 | append-only; unknown/corrupt records fail integrity | CTP suites |
 | Knowledge Bubble manifest | Stable v2 | validation before install; prior versions handled explicitly | bubble suites |
 | Plugin manifest JSON | Stable 0.5 | packaged and tool inventory tested | plugin/distribution suites |

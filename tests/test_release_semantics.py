@@ -54,6 +54,15 @@ def test_version_drift_fails_closed(release_copy):
     assert "version.identity" in _failures(release_copy)
 
 
+def test_schema_drift_fails_closed(release_copy):
+    stability = release_copy / "docs/PUBLIC_API_STABILITY.md"
+    stability.write_text(
+        stability.read_text(encoding="utf-8").replace("schema v5", "schema v4"),
+        encoding="utf-8",
+    )
+    assert "schema.identity" in _failures(release_copy)
+
+
 def test_stale_live_state_fails_closed(release_copy):
     current = release_copy / "CURRENT_STATE.md"
     current.write_text(
@@ -67,7 +76,7 @@ def test_stale_live_state_fails_closed(release_copy):
 def test_public_inventory_drift_fails_closed(release_copy):
     manifest_path = release_copy / "docs/release/PUBLIC_API_MANIFEST_V0.5.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    manifest["packages"]["stable"].remove("capt_solo.evidence")
+    manifest["packages"]["provisional"].remove("capt_solo.evidence")
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     assert "public_api.package_inventory" in _failures(release_copy)
 

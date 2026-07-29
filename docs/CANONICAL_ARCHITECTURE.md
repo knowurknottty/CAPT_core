@@ -176,7 +176,7 @@ migration in v0.5.
 - **Dependencies:** sqlite3, L0 Identity (scoping), L5 Trust (trust scores).
 - **Upward dependencies:** all layers.
 - **Downward dependencies:** SQLite, core.config.
-- **Persistent state:** 32 tables, SCHEMA_VERSION=4.
+- **Persistent state:** versioned SQLite, `SCHEMA_VERSION=5`.
 - **Communication model:** in-process.
 - **Failure boundaries:** DB corrupt → refuse writes, expose read-only + backup/restore.
 
