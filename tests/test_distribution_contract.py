@@ -178,3 +178,23 @@ def test_installed_artifact_profiles_and_cli(built_artifacts, kind, tmp_path):
     doctor_result = json.loads(doctor.stdout)
     assert doctor_result["ok"] is True
     assert not (tmp_path / "runtime-home").exists()
+
+    tutorial_output = tmp_path / f"{kind}-tutorial-output"
+    tutorial = _run(
+        [
+            str(python),
+            str(REPO / "examples/verification_first/run.py"),
+            "--output",
+            str(tutorial_output),
+        ],
+        cwd=tmp_path,
+        env=env,
+    )
+    tutorial_result = json.loads(tutorial.stdout)
+    assert tutorial_result["ok"] is True
+    assert tutorial_result["before"] == "PASS"
+    assert tutorial_result["after_mutation"] == "FAIL"
+    assert tutorial_result["prior_evidence_applicable_after_mutation"] is False
+    assert tutorial_result["next_decision"] == "RUN_TARGETED_VERIFICATION"
+    for origin in tutorial_result["module_origins"].values():
+        assert str(REPO) not in origin
