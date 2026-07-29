@@ -1,10 +1,10 @@
 # CAPT_CANON — Constitutional Architecture
 
 **Status:** Highest-level architectural document in CAPT. Everything else derives from it.
-**Baseline:** Phase 2 architecture accepted (commit `a2f0630`). Phase 1 inventory accepted (commit `33cc37a`).
-**Branch:** `integration/full-public-architecture`
-**Date:** 2026-07-26
-**Issue:** #5
+**Historical baseline:** Phase 2 architecture accepted at `a2f0630`; Phase 1
+inventory accepted at `33cc37a`.
+**Current release line:** `0.5.x`
+**Date reconciled:** 2026-07-29
 
 > This document is an engineering constitution, not marketing. It exists so that future implementation cannot accidentally redefine CAPT. Code changes conform to this architecture. The architecture does not drift to match whatever code happens to exist.
 
@@ -12,13 +12,21 @@
 
 ## 1. Core Philosophy
 
-CAPT is a local-first cognitive runtime for individual agents. Its purpose is not a feature set; it is a *discipline*:
+CAPT is a local-first verification substrate with cognitive-runtime services.
+Its purpose is not a feature set; it is a *discipline*:
 
 - **Cognition is modular and inspectable.** Every mental function is a subsystem with explicit responsibilities, dependencies, and failure boundaries — not a monolith.
 - **Truth is earned, not asserted.** Claims are only as strong as the evidence and provenance behind them. The system records uncertainty rather than hiding it.
 - **The agent belongs to the user.** Local-first, privacy-preserving, and degradable-by-default are not options; they are the baseline.
 - **Architecture governs implementation.** When code and architecture conflict, the code changes — not the architecture. Exceptions require explicit owner approval recorded against a named invariant.
 - **Biological terminology is a design language, not decoration.** Where CAPT uses hippocampus/holographic/consolidation analogues, the mapping is either algorithmically faithful or explicitly analogical. Neither is stripped for convenience.
+
+### Public architecture
+
+ADR-0008 defines six public pillars: Identity & Scope, Evidence, Verification,
+Context, Transactions, and Governance. This is the public mental model, not a
+replacement for the constitutional L0-L11 ownership layers or the subsystem
+registry. It does not require six physical packages.
 
 ---
 

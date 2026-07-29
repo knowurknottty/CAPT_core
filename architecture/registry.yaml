@@ -40,7 +40,7 @@ subsystems:
   architectural_layer: L0
   conceptual_sublayer: identity
   canonical_definition: Self/agent identity and boundary; scopes state per identity.
-  maturity: Beta
+  maturity: Production
   public_release_target: CAPT_core
   implementation_status: partial
   current_repository: capt-solo
@@ -69,24 +69,27 @@ subsystems:
   architectural_layer: L0.5
   conceptual_sublayer: ontology
   canonical_definition: Shared vocabulary upstream of Memory/Knowledge/Trust/Governance.
-  maturity: Concept
+  maturity: Beta
   public_release_target: CAPT_core
-  implementation_status: spec-only
-  current_repository: (none)
-  current_path: '-'
-  reference_implementation: "CAPT_CANON \xA74"
+  implementation_status: partial
+  current_repository: capt-solo
+  current_path: capt_solo/ontology/__init__.py
+  reference_implementation: capt_solo/ontology/__init__.py
   expected_namespace: capt_solo.ontology
   required_dependencies:
   - none
   optional_dependencies: []
-  persistence_behavior: document
+  persistence_behavior: immutable in-process records
   network_behavior: none
   security_classification: local
   invariant_mappings:
   - I-12
   owning_adrs:
   - ADR-0002
-  expected_tests: []
+  - ADR-0010
+  expected_tests:
+  - test_phase3g_knowledge_evidence.py
+  - test_distribution_contract.py
   deprecation_state: active
 - canonical_id: CAPT-CON
   canonical_name: Constitution
@@ -360,8 +363,8 @@ subsystems:
   public_release_target: CAPT_core
   implementation_status: complete
   current_repository: capt-solo
-  current_path: memory/engine.py
-  reference_implementation: engine.py
+  current_path: capt_solo/memory/engine.py
+  reference_implementation: capt_solo/memory/engine.py
   expected_namespace: capt_solo.memory.engine
   required_dependencies:
   - sqlite3
@@ -1133,13 +1136,13 @@ subsystems:
   public_release_target: CAPT_core
   implementation_status: complete
   current_repository: capt-solo
-  current_path: foundry/proof.py
-  reference_implementation: proof.py
-  expected_namespace: capt_solo.foundry.proof
+  current_path: capt_solo/evidence
+  reference_implementation: capt_solo/evidence/core.py
+  expected_namespace: capt_solo.evidence
   required_dependencies:
   - sqlite3
   optional_dependencies: []
-  persistence_behavior: SQLite proof_evidence
+  persistence_behavior: caller-selected JSONL/records; no implicit persistence
   network_behavior: none
   security_classification: local
   invariant_mappings:
@@ -1147,8 +1150,13 @@ subsystems:
   - I-04
   owning_adrs:
   - ADR-0001
+  - ADR-0009
+  - ADR-0010
   expected_tests:
-  - test_*
+  - test_evidence_core.py
+  - test_evidence_workspace.py
+  - test_evidence_adversarial.py
+  - test_distribution_contract.py
   deprecation_state: active
 - canonical_id: CAPT-PROV
   canonical_name: Provenance
@@ -1404,12 +1412,12 @@ subsystems:
   architectural_layer: L6
   conceptual_sublayer: execution
   canonical_definition: Append-only local transaction journal.
-  maturity: Beta
+  maturity: Production
   public_release_target: CAPT_core
-  implementation_status: disconnected
-  current_repository: capt-solo (wheel only)
-  current_path: capt_solo/ctp/journal.py (NOT in tree)
-  reference_implementation: wheel journal.py (restore)
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: capt_solo/ctp/journal.py
+  reference_implementation: capt_solo/ctp/journal.py
   expected_namespace: capt_solo.ctp
   required_dependencies: []
   optional_dependencies: []
@@ -1421,8 +1429,10 @@ subsystems:
   - I-08
   owning_adrs:
   - ADR-0004
+  - ADR-0010
   expected_tests:
-  - verify_runtime ctp.*
+  - test_ctp.py
+  - test_distribution_contract.py
   deprecation_state: active
 - canonical_id: CAPT-CLI
   canonical_name: CLI
@@ -1437,7 +1447,7 @@ subsystems:
   current_repository: capt-solo
   current_path: capt_cli.py
   reference_implementation: capt_cli.py
-  expected_namespace: capt_solo.cli
+  expected_namespace: capt_cli
   required_dependencies: []
   optional_dependencies: []
   persistence_behavior: none
@@ -1447,8 +1457,10 @@ subsystems:
   - I-08
   owning_adrs:
   - ADR-0001
+  - ADR-0010
   expected_tests:
   - test_v04_cli
+  - test_distribution_contract.py
   deprecation_state: active
 - canonical_id: CAPT-RSDK
   canonical_name: Runtime SDK
@@ -1485,13 +1497,13 @@ subsystems:
   architectural_layer: L7
   conceptual_sublayer: communication
   canonical_definition: LLM/model gateway (analogical motor cortex).
-  maturity: Research
+  maturity: Experimental
   public_release_target: optional_plugin
-  implementation_status: missing
-  current_repository: biocapt-ecosystem
-  current_path: modules/pulse_mobile.py
-  reference_implementation: none
-  expected_namespace: capt_solo.communication.pulse
+  implementation_status: complete
+  current_repository: capt-solo
+  current_path: capt_solo/pulse.py
+  reference_implementation: capt_solo/pulse.py
+  expected_namespace: capt_solo.pulse
   required_dependencies: []
   optional_dependencies: []
   persistence_behavior: none
@@ -1503,7 +1515,9 @@ subsystems:
   - I-09
   owning_adrs:
   - ADR-0005
-  expected_tests: []
+  expected_tests:
+  - test_release_boundary.py
+  - test_distribution_contract.py
   deprecation_state: active
 - canonical_id: CAPT-GOV
   canonical_name: Governance
@@ -1541,14 +1555,14 @@ subsystems:
   - verify
   architectural_layer: L8
   conceptual_sublayer: governance
-  canonical_definition: verify_runtime/doctor/verify validation.
+  canonical_definition: Runtime, architecture, workspace, packaging, semantic freshness, and artifact validation.
   maturity: Production
   public_release_target: CAPT_core
   implementation_status: complete
   current_repository: capt-solo
-  current_path: verify_runtime.py, doctor.sh, verify.sh
-  reference_implementation: verify_runtime.py
-  expected_namespace: capt_solo.verify
+  current_path: verify_runtime.py, doctor.sh, verify.sh, tools/validate_release.py
+  reference_implementation: verify_runtime.py + tools/validate_release.py
+  expected_namespace: capt_cli
   required_dependencies: []
   optional_dependencies: []
   persistence_behavior: none
@@ -1559,8 +1573,11 @@ subsystems:
   - I-08
   owning_adrs:
   - ADR-0001
+  - ADR-0010
   expected_tests:
   - verify_runtime self
+  - test_release_semantics.py
+  - test_distribution_contract.py
   deprecation_state: active
 - canonical_id: CAPT-SF
   canonical_name: Skill Foundry
@@ -1726,12 +1743,12 @@ subsystems:
   architectural_layer: L10
   conceptual_sublayer: learning
   canonical_definition: Ongoing learning loop (permanently L10).
-  maturity: Research
+  maturity: Experimental
   public_release_target: CAPT_core
-  implementation_status: missing
-  current_repository: biocapt-ecosystem
-  current_path: capt/modules/continuous_learning_module.py (candidate)
-  reference_implementation: none (adopt)
+  implementation_status: partial
+  current_repository: capt-solo
+  current_path: capt_solo/learning/continuous.py
+  reference_implementation: capt_solo/learning/continuous.py
   expected_namespace: capt_solo.learning.continuous
   required_dependencies:
   - sqlite3
@@ -1744,7 +1761,8 @@ subsystems:
   - I-07
   owning_adrs:
   - ADR-0001
-  expected_tests: []
+  expected_tests:
+  - test_phase3j_continuous_learning.py
   deprecation_state: active
 - canonical_id: CAPT-OURO
   canonical_name: OUROBOROS

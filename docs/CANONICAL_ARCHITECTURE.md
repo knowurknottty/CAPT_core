@@ -1,10 +1,10 @@
 # CANONICAL ARCHITECTURE — CAPT
 
-**Status:** Architectural source of truth (Phase 2)
-**Baseline inventory:** accepted — `docs/BASELINE_EVIDENCE_REPORT.md`, `docs/FULL_ARCHITECTURE_IMPLEMENTATION_MATRIX.md`, `docs/STUB_SPEC_MISSING_REGISTER.md` (commit `33cc37a`)
-**Branch:** `integration/full-public-architecture`
-**Date:** 2026-07-26
-**Issue:** #5
+**Status:** Internal constitutional ownership architecture
+**Historical baseline inventory:** accepted at `33cc37a`
+**Current release line:** `0.5.x`
+**Date reconciled:** 2026-07-29
+**Public conceptual model:** `docs/PUBLIC_ARCHITECTURE.md` (ADR-0008)
 
 ## Governing rules for this document
 
@@ -13,7 +13,16 @@
 - Every subsystem is assigned a **Canonical Home** (a CAPT layer) and a **Release Target** (CAPT_core / external package / optional plugin / research package / private / undecided).
 - Current code location does **not** determine canonical home. Components currently living in `biocapt-ecosystem` are classified by where they *belong*, not where they are.
 - Terminology: we **canonicalize**, **integrate**, **adopt the canonical implementation**, **merge the canonical implementation**, or **reimplement the canonical interface**. We do not "port bioCAPT modules."
-- No runtime code changed. No public APIs changed. This is architecture only.
+- Public API stability is declared separately in
+  `docs/PUBLIC_API_STABILITY.md`; this document assigns internal ownership.
+
+## Public architecture relationship
+
+The public six pillars—Identity & Scope, Evidence, Verification, Context,
+Transactions, and Governance—are cross-layer concepts implemented by current
+subsystems. The L0-L11 model below remains the permanent internal ownership and
+dependency map. The six pillars do not require a package rename or record
+migration in v0.5.
 
 ## Layer index
 
@@ -467,7 +476,8 @@
 ### L6.5 CTP (Cognitive Transaction Protocol)
 - **Purpose:** Append-only local transaction journal with immutable receipts, idempotency, integrity.
 - **Canonical Home:** L6 Execution. **Release Target:** CAPT_core (restore verified wheel source into committed tree; currently gitignored/disconnected).
-- **Current Location:** built in wheel `capt_solo/ctp/journal.py` (8048 B) + `__init__.py`; **absent from committed tree** (`.gitignore` has `ctp/`).
+- **Current Location:** committed and packaged at
+  `capt_solo/ctp/journal.py` plus `capt_solo/ctp/__init__.py`.
 - **Public APIs:** `CTPRuntime.begin/commit/abort`, `Receipt`.
 - **Dependencies:** core.config, core.errors, L8 (audit).
 - **Persistent state:** JSONL journal.
@@ -622,8 +632,11 @@ The bioCAPT registry lists ~46 modules (NEDA, QIPC, CONSC, PLAST, CIG, HDR, META
 
 ## Architectural conflicts discovered (recorded, not silently resolved)
 
-1. **CTP location vs gitignore** — CTP is imported by core but gitignored and absent from tree. Canonical home = L6 Execution, CAPT_core. Resolution: restore verified wheel source (autonomous; not a boundary/licensing/security/irreconcilable issue).
-2. **Version identity** — pyproject `0.1.0` vs wheel/docs `0.4.1` vs tag `v0.4.0`. Canonical version must be set. → **OWNER: irreconcilable canonical behavior (which version is canonical)**.
+1. **CTP location vs gitignore — resolved.** CTP is committed, packaged, and
+   covered by source and installed-artifact tests.
+2. **Version identity — resolved for the current release line.** Package,
+   runtime, plugin, bubble, README, and changelog declarations use `0.5.0`.
+   The existing `v0.4.0` tag is historical; no v0.5 tag is authorized yet.
 3. **ECHO vs SessionStore** — SessionStore is the current episodic implementation; ECHO is the canonical episodic interface. Resolution: adopt ECHO canonical interface, merge SessionStore into it (autonomous).
 4. **Proof Ledger vs ProofEngine+governance** — Proof Ledger is canonical; current code approximates it. Resolution: merge into explicit ledger (autonomous).
 5. **Skill Radar vs Skill Foundry** — Radar is a Skill Foundry capability. Resolution: merge (autonomous).

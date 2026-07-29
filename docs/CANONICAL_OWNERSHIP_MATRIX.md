@@ -1,10 +1,10 @@
 # CANONICAL OWNERSHIP MATRIX
 
-**Phase:** 2.5 — companion to CANONICAL_ARCHITECTURE.md and CAPT_CANON.md
-**Baseline inventory:** accepted (commit `33cc37a`); Phase 2 architecture accepted (commit `a2f0630`)
-**Branch:** `integration/full-public-architecture`
-**Date:** 2026-07-26
-**Issue:** #5
+**Status:** Current ownership companion to `CANONICAL_ARCHITECTURE.md` and
+`CAPT_CANON.md`
+**Historical baseline:** inventory `33cc37a`; Phase 2 architecture `a2f0630`
+**Current release line:** `0.5.x`
+**Date reconciled:** 2026-07-29
 
 ## Column definitions
 
@@ -40,7 +40,7 @@
 | Component | Canonical Home | Current Repo | Current Path | Planned Public Repo | Current Status | Canonical Maturity | Maturity Evidence | Owner Decision |
 |-----------|---------------|-------------|-------------|---------------------|----------------|---------------------|-------------------|----------------|
 | Identity | L0 Identity | capt-solo | lifecycle/semantic.py (implicit) | CAPT_core | partial | Beta | Implicit refs in semantic.py/engine.py; no explicit table/API yet → not Production. | none (autonomous: make explicit) |
-| Ontology | L0.5 Ontology | (none) | — | CAPT_core | spec-only | Concept | Defined in CAPT_CANON §4; no code. | none |
+| Ontology | L0.5 Ontology | capt-solo | capt_solo/ontology/__init__.py | CAPT_core | partial | Beta | Shared vocabulary implementation is in-tree, packaged, and consumed by Knowledge/Learning; public tier remains provisional. | none |
 | Constitution | L1 Constitution | (none) | — | CAPT_core | spec-only | Concept | Documented as invariant set (CAPT_CANON §2); no enforcement code. | none |
 | Reasoning Core | L2 Reasoning | capt-solo | (implicit orchestration) | CAPT_core | partial | Beta | Orchestration implicit in lifecycle/foundry; no dedicated Reasoner class. | none |
 | CIG (Causal Inference) | L2 Reasoning | biocapt-ecosystem | .../cig_mobile.py | CAPT_core | missing | Research | External research impl; not in capt-solo. | none (adopt canonical impl) |
@@ -81,7 +81,7 @@
 | Curator | L4 Knowledge | capt-solo | foundry/curator.py | CAPT_core | complete | Production | 115 LOC, test_v04_curator. | none |
 | Semantic Index | L4 Knowledge | capt-solo | lifecycle/semantic.py | CAPT_core | complete | Production | see Semantic Memory. | none |
 | Trust Engine | L5 Trust | capt-solo | memory/trust.py | CAPT_core | complete | Production | 136 LOC, tests. | none |
-| Evidence Engine | L5 Trust | capt-solo | foundry/proof.py (proof_evidence) | CAPT_core | complete | Production | proof_evidence table, tests. | none |
+| Evidence Engine | L5 Trust | capt-solo | evidence/ + foundry/proof.py | CAPT_core | complete | Beta | Canonical EvidenceRecord, invalidation, reuse, isolation, checkpoint, provider, CLI, and adversarial tests are in-tree and packaged; API remains provisional. | none |
 | Provenance | L5 Trust | capt-solo | memory/models.py, foundry/proof.py | CAPT_core | complete | Production | pervasive provenance, tests. | none |
 | ClaimGuard | L5 Trust | capt-solo | foundry/claimguard.py | CAPT_core | complete | Production | 208 LOC, verify_runtime claimguard_*, test. | none |
 | Proof Engine | L5 Trust | capt-solo | foundry/proof.py | CAPT_core | complete | Production | 303 LOC, verify_runtime proof_*, test. | none |
@@ -91,10 +91,10 @@
 | Session Store | L6 Execution | capt-solo | lifecycle/sessions.py | CAPT_core | complete | Production | 572 LOC, test_v03_sessions (to merge into ECHO). | none (merge into ECHO) |
 | Procedure Store | L6 Execution | capt-solo | lifecycle/procedures.py | CAPT_core | complete | Production | see Procedural Memory. | none |
 | Manager | L6 Execution | capt-solo | lifecycle/manager.py | CAPT_core | complete | Production | 334 LOC, tests. | none |
-| CTP | L6 Execution | capt-solo (wheel only) | capt_solo/ctp/journal.py (NOT in tree) | CAPT_core | disconnected | Beta | Wheel has 8048-B impl + verify_runtime ctp.* checks, but absent from committed tree → not Production until restored. | none (restore from verified wheel; not a gate) |
+| CTP | L6 Execution | capt-solo | capt_solo/ctp/journal.py | CAPT_core | complete | Production | Source is committed and shipped in wheel/sdist; CTP and installed-profile tests cover receipts and integrity. | none |
 | CLI | L6 Execution | capt-solo | capt_cli.py | CAPT_core | complete | Production | test_v04_cli. | none |
 | Runtime SDK | L6 Execution | capt-solo | api.py | CAPT_core | complete | Production | public api surface, verify_runtime public_api_smoke. | none |
-| PULSE (LLM Gateway) | L7 Communication / L11 | biocapt-ecosystem | .../pulse_mobile.py | optional plugin / external package | missing | Research | External impl; network/LLM surface. | **boundary + security** |
+| PULSE (LLM Gateway) | L7 Communication / L11 | capt-solo | capt_solo/pulse.py | optional plugin | complete | Experimental | In-tree public optional gateway; disabled by default, no network on import, explicit configuration required. | security review |
 | Governance | L8 Governance | capt-solo | foundry/governance.py | CAPT_core | complete | Production | 137 LOC, verify_runtime governance_*, test_v04_curator. | none (depends on CTP restore) |
 | Release Gates | L8 Governance | capt-solo | verify_runtime.py, doctor.sh, verify.sh | CAPT_core | complete | Production | 52 check_ids defined; runs in-tree (gated only by ctp import). | none |
 | Migration Governance | L8 Governance | capt-solo | memory/engine.py + verify_runtime | CAPT_core | complete | Production | migration_backup_dir check, tests. | none |
@@ -104,7 +104,7 @@
 | Bundled Skills (8) | L9 Skills | capt-solo | skills/* | CAPT_core | complete | Production | 8 SKILL.md, tests. | none |
 | Learning / Adaptation | L10 Learning | biocapt-ecosystem | registry LEARNING, ADAPTATION | CAPT_core | missing | Research | External registry entries; not adopted. | none (adopt) |
 | Consolidation-as-Learning | L10 Learning | capt-solo (partial) / biocapt-ecosystem | lifecycle transitions / dream_* | CAPT_core | partial | Beta | Lifecycle transitions present; full DREAM loop external. | none |
-| Continuous Learning | L10 Learning | biocapt-ecosystem | capt/modules/continuous_learning_module.py (792 LOC candidate) | CAPT_core | missing | Research | External candidate impl (792 LOC, not in registry); architecture permanently Layer 10 regardless of impl completeness. | none (adopt; no longer "orphan") |
+| Continuous Learning | L10 Learning | capt-solo | capt_solo/learning/continuous.py | CAPT_core | partial | Experimental | Bounded in-tree implementation with tests; research maturity and compatibility limits remain explicit. | none |
 | OUROBOROS | L10 Learning | biocapt-ecosystem | registry OUROBOROS | research package | missing | Research | External registry entry. | **boundary** |
 | CAPTLANG (compiler/DSL) | L11 External | Biocapt-ecosystem-fullcaptlang | src/captlang/, codegen_wasm.py, Makefile.captlang | external package | missing | Research | External build tooling; 30 compiler-known modules. | none (build tooling) |
 | Plugin SDK (cross) | L11 / L9 | capt-solo | plugin/ | CAPT_core | complete | Production | see Plugin SDK. | none |
@@ -120,11 +120,9 @@
 
 ## Maturity summary
 
-- **Production (in capt-solo, verified):** MemoryEngine, CSG, Semantic, Procedural, Prospective, Context, Search, Dedupe, Normalize, AntiToken, Retrieval Feedback, TTL/Retention, Temporal, Export/Import, Migration, Secrets, Knowledge Bubbles, KHSB, Curator, Trust, Evidence, Provenance, ClaimGuard, Proof Engine, Lifecycle, Session, Procedure, Manager, CLI, Runtime SDK, Governance, Release Gates, Migration Gov, Skill Foundry, Plugin SDK, Bundled Skills, Hermes Plugin. (37 subsystems)
-- **Beta (partial / approximated / disconnected-but-built):** Identity, Reasoning Core, Episodic (ECHO), Proof Ledger, CTP, Consolidation-as-Learning. (6)
-- **Concept (defined, no impl):** Ontology, Constitution, Autobiographical, Replay, Consent, Synchronization (abstraction). (6)
-- **Planned:** Synchronization (impl scheduled). (1)
-- **Research (external / metaphorical / disabled):** CIG, HDR, META, CONSC, QIPC, RYS Bridge, Cognitive Loop, NEDA, HMC, ENGRAM, DREAM, Memory Compression (Holographic), IMMU, PULSE, Skill Radar, Learning/Adaptation, Continuous Learning, OUROBOROS, CAPTLANG, FILT, FSR, PLAST, ALLO, +30 registry modules. (24)
+The machine-readable maturity inventory is `architecture/registry.yaml`.
+Numerical summaries are intentionally generated from that file during release
+verification rather than copied into this document.
 
 Maturity is independent of architectural importance: e.g. HMC is Research-maturity but architecturally permanent in L3; Ontology is Concept-maturity but foundational (L0.5).
 
@@ -137,7 +135,8 @@ Only four gate types (per issue: public/private boundary, licensing uncertainty,
 1. **Public/private boundary [B]** — CONSC, QIPC, NEDA, ALLO, FILT, FSR, OUROBOROS, +30 registry modules, RYS Bridge, PULSE. Decision: which enter public release vs stay research/private. (Continuous Learning and Synchronization are NO LONGER gated — CL is permanently L10; Sync abstraction is canonical/un-gated, only transports reviewed.)
 2. **Licensing uncertainty [L]** — bioCAPT `modules/*_mobile.py` carry unspecified license vs capt-solo MIT. Any component adopted into CAPT_core from bioCAPT requires license reconciliation before merge. (CTP is capt-solo's own wheel code — no external license issue.)
 3. **Security exposure [S]** — PULSE (LLM/network), RYS Bridge (external call), Consent (privacy), and Synchronization **transports** (LAN/P2P/cloud). These need owner-approved integration design before wiring into public runtime. (Synchronization *abstraction* is un-gated.)
-4. **Irreconcilable canonical behavior [C]** — canonical version identity (pyproject 0.1.0 vs wheel/docs 0.4.1 vs tag v0.4.0). Owner picks canonical version + tag.
+4. **Version/publication [C] — resolved for v0.5 development.** `0.5.0` is the
+   current unreleased version. Tagging and publication remain owner actions.
 
 ## Everything else proceeds autonomously
 

@@ -31,6 +31,12 @@ Every ADR uses a stable structure:
 | ADR-0004 | Canonical, reference, and current implementations are distinct | Accepted |
 | ADR-0005 | Local-first; optional network transports | Accepted |
 | ADR-0006 | Evidence over implementation | Accepted |
+| ADR-0007 | Owner release decisions for the public boundary | Accepted |
+| ADR-0008 | Six-pillar public architecture | Accepted |
+| ADR-0009 | Canonical evidence ownership | Accepted |
+| ADR-0010 | Public API stability tiers | Accepted |
+| ADR-0011 | Public verification record terminology | Accepted |
+| ADR-0012 | Future record convergence without v0.5 migration | Accepted |
 
 ## Rules
 
