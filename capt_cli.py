@@ -254,6 +254,19 @@ def main(argv: Optional[List[str]] = None) -> int:
     p = cvs.add_parser("plan-drill", help="produce a safe, non-executing sandbox drill plan")
     p.add_argument("pack")
     p.add_argument("--environment", default="sandbox")
+    p = cvs.add_parser("collect", help="build an inspectable pack from local provider snapshots")
+    p.add_argument("--pack-id", default="local-continuity")
+    p.add_argument("--component", default="capt-solo")
+    p.add_argument("--tier", default="C1", choices=["C0", "C1", "C2", "C3"])
+    p.add_argument("--scope", default="local runtime snapshot")
+    p.add_argument("--roles", required=True, help="JSON role list")
+    p.add_argument("--claims", required=True, help="JSON claim list")
+    p.add_argument("--mission-id", default=None)
+    p.add_argument("--include-memory", action="store_true")
+    p.add_argument("--output", default=None, help="explicit local JSON output path")
+    p = cvs.add_parser("receipt-append", help="append a receipt to an explicit local chain")
+    p.add_argument("receipt")
+    p.add_argument("--chain", required=True)
 
     # mission (checkpoint / resume / status)
     mf = sub.add_parser("mission", help="mission checkpoint and restart recovery")
@@ -485,7 +498,8 @@ def _cmd_verify(args, as_json) -> int:
 def _cmd_continuity(args, as_json) -> int:
     """Local CVE v0.2 policy evaluation.  It never executes a drill."""
     from capt_solo.continuity import (
-        ContinuityError, ContinuityPack, evaluate_pack, load_policy, plan_drill,
+        ContinuityError, ContinuityPack, ReceiptChain, build_pack_from_providers,
+        evaluate_pack, load_policy, plan_drill,
         validate_pack, verify_receipt,
     )
     repo = Path(__file__).resolve().parent
@@ -495,6 +509,30 @@ def _cmd_continuity(args, as_json) -> int:
         if args.action == "validate-policy":
             return _ok({"valid": True, "policy_id": policy["policy_id"],
                         "clauses": [a["id"] for a in policy["articles"]]}, as_json)
+        if args.action == "collect":
+            from capt_solo.evidence import CheckpointStore
+            from capt_solo.evidence.providers import MemoryProvider, MissionProvider
+            providers = [MissionProvider(CheckpointStore(str(repo), create=False), args.mission_id or "")]
+            if args.include_memory:
+                if not _RUNTIME_OK:
+                    return _fail("memory provider unavailable: runtime imports failed")
+                providers.append(MemoryProvider(MemoryEngine()))
+            try:
+                roles, claims = json.loads(args.roles), json.loads(args.claims)
+            except json.JSONDecodeError as exc:
+                return _fail("--roles and --claims must be JSON: " + str(exc))
+            pack = build_pack_from_providers(
+                pack_id=args.pack_id, component=args.component,
+                tier=args.tier, scope=args.scope, roles=roles, claims=claims,
+                policy_id=policy["policy_id"], providers=providers)
+            data = pack.to_dict()
+            if args.output:
+                Path(args.output).write_text(json.dumps(data, indent=2), encoding="utf-8")
+                data = {"saved": str(args.output), "pack": data}
+            return _ok(data, as_json)
+        if args.action == "receipt-append":
+            receipt = json.loads(Path(args.receipt).read_text(encoding="utf-8"))
+            return _ok(ReceiptChain(Path(args.chain)).append(receipt), as_json)
         pack_raw = json.loads(Path(args.pack).read_text(encoding="utf-8"))
         pack = ContinuityPack.from_dict(pack_raw)
         if args.action == "validate-pack":
@@ -628,6 +666,7 @@ def _cmd_mission(args, as_json) -> int:
         div = detect_divergence(cp, current_head=cp.latest_verified_state or "",
                                 current_branch="", current_files=cp.files_changed)
         plan = resume_plan(cp, div)
+        store.record_event(args.mission_id, "resumed")
         return _ok({"mission_id": args.mission_id, **plan}, as_json)
     return _fail("unknown mission action (expected checkpoint|status|resume)")
 

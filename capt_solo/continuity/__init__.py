@@ -10,9 +10,13 @@ from .runtime import (
     ContinuityEvidence, ContinuityReceipt, HandoffState, load_policy,
     validate_pack, evaluate_pack, verify_receipt, plan_drill,
 )
+from .graph import EvidenceGraph, EvidenceNode
+from .integration import build_pack_from_providers
+from .receipts import ReceiptChain
 
 __all__ = [
     "ContinuityError", "ContinuityTier", "EvaluationStatus", "ContinuityPack",
     "ContinuityEvidence", "ContinuityReceipt", "HandoffState", "load_policy",
     "validate_pack", "evaluate_pack", "verify_receipt", "plan_drill",
+    "EvidenceGraph", "EvidenceNode", "build_pack_from_providers", "ReceiptChain",
 ]

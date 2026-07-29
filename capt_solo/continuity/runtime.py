@@ -196,6 +196,11 @@ def validate_pack(pack: ContinuityPack, policy: Dict[str, Any]) -> List[Dict[str
         findings.append({"status": "BLOCK", "code": "required_role_missing", "detail": "tier requires: " + ", ".join(sorted(required_roles))})
     if pack.tier in {"C2", "C3"} and not pack.handoff:
         findings.append({"status": "BLOCK", "code": "handoff_missing", "detail": "C2/C3 needs a reversible handoff record"})
+    expected = pack.metadata.get("expected_provider_versions")
+    observed = pack.metadata.get("provider_versions")
+    if expected is not None and expected != observed:
+        findings.append({"status": "BLOCK", "code": "provider_version_mismatch",
+                         "detail": "provider versions differ from the pack's declared expectation"})
     return findings
 
 
@@ -207,9 +212,52 @@ def _concentration(evidence: Iterable[ContinuityEvidence]) -> Dict[str, Any]:
             "largest_source_share": (largest / total) if total else 1.0}
 
 
+_CLAUSES_BY_CODE = {
+    "policy_mismatch": ["CVE-08"], "role_identity_missing": ["CVE-05", "CVE-07"],
+    "role_independence_failed": ["CVE-07"], "required_role_missing": ["CVE-07"],
+    "handoff_missing": ["CVE-09"], "evidence_missing": ["CVE-02", "CVE-06"],
+    "invalid_evidence": ["CVE-02", "CVE-06"], "expired_evidence": ["CVE-06"],
+    "unknown_evidence": ["CVE-02"], "clock_skew": ["CVE-02", "CVE-06"],
+    "provider_version_mismatch": ["CVE-08"], "evidence_concentration": ["CVE-07"],
+}
+_REMEDIATION_BY_CODE = {
+    "policy_mismatch": "rebuild the pack against the loaded policy",
+    "role_identity_missing": "supply stable, inspectable role identities",
+    "role_independence_failed": "assign independent operator and reviewer identities",
+    "required_role_missing": "supply every role required by the selected tier",
+    "handoff_missing": "record a reversible handoff before evaluating this tier",
+    "evidence_missing": "collect evidence through an approved provider or external pack",
+    "invalid_evidence": "replace invalidated evidence and preserve its invalidation reason",
+    "expired_evidence": "collect fresh evidence for the same claim",
+    "unknown_evidence": "verify the evidence status before evaluating",
+    "clock_skew": "correct the source clock or collect evidence after clock reconciliation",
+    "provider_version_mismatch": "recollect evidence or update the declared provider-version expectation",
+    "evidence_concentration": "add an independent evidence source or lower the tier",
+}
+
+
+def _explain(findings: List[Dict[str, str]], evidence: List[ContinuityEvidence],
+             metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
+    supporting = sorted(item.evidence_id for item in evidence)
+    nodes = {str(node.get("node_id")): node for node in
+             metadata.get("evidence_graph", {}).get("nodes", []) if isinstance(node, dict)}
+    def graph_path() -> List[str]:
+        if not supporting: return ["graph:missing-evidence"]
+        path = [supporting[0]]
+        while nodes.get(path[-1], {}).get("dependencies"):
+            path.append(sorted(nodes[path[-1]]["dependencies"])[0])
+        return path
+    return [{"code": item["code"], "violated_clauses": _CLAUSES_BY_CODE.get(item["code"], []),
+             "supporting_evidence": supporting, "missing_evidence": [] if item["code"] not in
+             {"evidence_missing", "unknown_evidence"} else ["verified provider evidence"],
+             "graph_path": graph_path(), "recommended_remediation": _REMEDIATION_BY_CODE.get(item["code"], "inspect the finding"),
+             "confidence": 1.0 if item["status"] == "BLOCK" else 0.5} for item in findings]
+
+
 def evaluate_pack(pack: ContinuityPack, policy: Dict[str, Any], now: Optional[datetime] = None) -> Dict[str, Any]:
     findings = validate_pack(pack, policy)
     statuses = [e.evaluation_status(now) for e in pack.evidence]
+    evaluated_at = now or datetime.now(timezone.utc)
     if not pack.evidence:
         findings.append({"status": "BLOCK", "code": "evidence_missing", "detail": "no evidence supplied"})
     elif EvaluationStatus.INVALID_EVIDENCE in statuses:
@@ -218,6 +266,8 @@ def evaluate_pack(pack: ContinuityPack, policy: Dict[str, Any], now: Optional[da
         findings.append({"status": "BLOCK", "code": "expired_evidence", "detail": "an evidence record has expired"})
     elif EvaluationStatus.UNKNOWN in statuses:
         findings.append({"status": "BLOCK", "code": "unknown_evidence", "detail": "evidence is not verified/current"})
+    if any(_parse_time(e.collected_at) > evaluated_at for e in pack.evidence):
+        findings.append({"status": "BLOCK", "code": "clock_skew", "detail": "evidence timestamp is later than evaluation time"})
     concentration = _concentration(pack.evidence)
     if pack.tier in {"C2", "C3"} and concentration["largest_source_share"] > 0.8:
         findings.append({"status": "WARN", "code": "evidence_concentration", "detail": "over 80% of evidence comes from one source"})
@@ -227,9 +277,9 @@ def evaluate_pack(pack: ContinuityPack, policy: Dict[str, Any], now: Optional[da
     elif findings:
         state = EvaluationStatus.WARN
     receipt = ContinuityReceipt("0.2", pack.pack_id, digest(policy), digest(pack.to_dict()), state.value,
-                                datetime.now(timezone.utc).isoformat())
+                                evaluated_at.isoformat())
     return {"status": state.value, "findings": findings, "concentration": concentration,
-            "receipt": receipt.to_dict(), "proof_graph": {
+            "explanations": _explain(findings, pack.evidence, pack.metadata), "receipt": receipt.to_dict(), "proof_graph": {
                 "claim_nodes": [str(c.get("claim_id", "")) for c in pack.claims],
                 "evidence_nodes": [e.evidence_id for e in pack.evidence],
                 "edges": [{"from": e.evidence_id, "to": c.get("claim_id", "")}

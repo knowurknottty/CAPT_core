@@ -38,6 +38,10 @@ safe drill planning. It deliberately does not claim external PULSE, Hyper-MCP,
 Android, CAPT-RYS, or bioCAPT evidence: those components are outside this
 checkout and require their own packs and real evidence.
 
+Phase II adds provider-backed pack collection, a deterministic evidence graph,
+mission checkpoint events, metadata-only memory evidence, explainable blocks,
+and an explicit local receipt chain. See [CVE_V0.2_PHASE_II.md](CVE_V0.2_PHASE_II.md).
+
 | CVE clauses | Runtime mechanism |
 |---|---|
 | 01, 03, 05 | Local JSON packs, secret screening, explicit role records |

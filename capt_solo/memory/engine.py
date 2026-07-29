@@ -24,12 +24,14 @@ Extension point: vector search is added later by supplying a
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import sqlite3
 import time
 import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -1472,6 +1474,34 @@ class MemoryEngine:
             return orphan["c"] == 0
         except sqlite3.DatabaseError:
             return False
+
+    def continuity_status(self) -> Dict[str, Any]:
+        """Return policy-neutral, non-content operational evidence.
+
+        This method deliberately exposes counts and a digest of stable record
+        metadata, never memory content or database paths.  It performs no
+        mutation, export, backup, restore, network operation, or CVE lookup.
+        """
+        rows = self._conn.execute(
+            "SELECT memory_id, updated_at, retention, lifecycle_state FROM memories "
+            "ORDER BY memory_id"
+        ).fetchall()
+        material = [{"memory_id": row["memory_id"], "updated_at": row["updated_at"],
+                     "retention": row["retention"], "lifecycle_state": row["lifecycle_state"]}
+                    for row in rows]
+        state = json.dumps(material, sort_keys=True, separators=(",", ":"))
+        latest_update = max((float(row["updated_at"]) for row in rows), default=0.0)
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "integrity": self.integrity_check(),
+            "record_count": len(material),
+            "retention_policy": sorted({row["retention"] for row in rows}),
+            "lifecycle_counts": {state_name: sum(1 for row in rows if row["lifecycle_state"] == state_name)
+                                 for state_name in sorted({row["lifecycle_state"] for row in rows})},
+            "restore_capability": True,
+            "state_digest": "sha256:" + hashlib.sha256(state.encode("utf-8")).hexdigest(),
+            "timestamp": datetime.fromtimestamp(latest_update, timezone.utc).isoformat(),
+        }
 
     def recover_corrupt(self, *, quarantine_namespace: str = "quarantine") -> Dict[str, Any]:
         """Scan memory rows for corruption (malformed metadata JSON, invalid

@@ -47,6 +47,7 @@ class MissionCheckpoint:
     commit_references: List[str] = field(default_factory=list)
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     status: str = CheckpointStatus.ACTIVE.value
+    event_digest: str = ""
 
     def to_dict(self) -> Dict:
         return self.__dict__
@@ -58,15 +59,45 @@ class MissionCheckpoint:
 
 
 class CheckpointStore:
-    def __init__(self, root: str) -> None:
+    def __init__(self, root: str, *, create: bool = True) -> None:
         self._root = os.path.abspath(root)
         self._dir = os.path.join(self._root, ".capt", "checkpoints")
-        os.makedirs(self._dir, exist_ok=True)
+        if create:
+            os.makedirs(self._dir, exist_ok=True)
+        self._events_path = os.path.join(self._dir, "events.jsonl")
+
+    @staticmethod
+    def _digest(value: Dict) -> str:
+        return "sha256:" + hashlib.sha256(
+            json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+    def _append_event(self, cp: MissionCheckpoint, event_type: str) -> Dict:
+        if event_type not in {"created", "checkpoint", "completed", "rollback", "aborted", "resumed"}:
+            raise ValueError("unsupported mission event: " + event_type)
+        event = {"mission_id": cp.mission_id, "project_id": cp.project_id,
+                 "event_type": event_type, "timestamp": cp.timestamp,
+                 "status": cp.status, "phase": cp.current_phase,
+                 "checkpoint_digest": cp.event_digest}
+        event["event_digest"] = self._digest(event)
+        with open(self._events_path, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(event, sort_keys=True, separators=(",", ":")) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        return event
 
     def save(self, cp: MissionCheckpoint) -> str:
+        os.makedirs(self._dir, exist_ok=True)
         path = os.path.join(self._dir, f"{cp.mission_id}.json")
+        existed = os.path.exists(path)
+        payload = cp.to_dict().copy(); payload.pop("event_digest", None)
+        cp.event_digest = self._digest(payload)
         with open(path, "w") as f:
             json.dump(cp.to_dict(), f, indent=2)
+        event_type = "created" if not existed else "checkpoint"
+        if cp.status == CheckpointStatus.COMPLETED.value: event_type = "completed"
+        if cp.status == CheckpointStatus.STALE.value: event_type = "rollback"
+        if cp.status == CheckpointStatus.INTERRUPTED.value: event_type = "aborted"
+        self._append_event(cp, event_type)
         return path
 
     def load(self, mission_id: str) -> Optional[MissionCheckpoint]:
@@ -77,7 +108,24 @@ class CheckpointStore:
             return MissionCheckpoint.from_dict(json.load(f))
 
     def list_ids(self) -> List[str]:
-        return [f[:-5] for f in os.listdir(self._dir) if f.endswith(".json")]
+        if not os.path.isdir(self._dir): return []
+        return sorted(f[:-5] for f in os.listdir(self._dir) if f.endswith(".json"))
+
+    def events(self, mission_id: str = "") -> List[Dict]:
+        if not os.path.exists(self._events_path): return []
+        result = []
+        with open(self._events_path, encoding="utf-8") as handle:
+            for line in handle:
+                if line.strip():
+                    event = json.loads(line)
+                    if not mission_id or event.get("mission_id") == mission_id:
+                        result.append(event)
+        return result
+
+    def record_event(self, mission_id: str, event_type: str) -> Dict:
+        cp = self.load(mission_id)
+        if cp is None: raise ValueError("checkpoint not found: " + mission_id)
+        return self._append_event(cp, event_type)
 
 
 def detect_divergence(cp: MissionCheckpoint, *,
