@@ -1,0 +1,72 @@
+{
+  "schema_version": "1.0",
+  "release_line": "0.5",
+  "version": "0.5.0",
+  "release_status": "hardening",
+  "candidate_sha": "UNFROZEN",
+  "public_architecture": "six-pillars",
+  "packages": {
+    "stable": [
+      "capt_solo",
+      "capt_solo.contextpack",
+      "capt_solo.core",
+      "capt_solo.ctp",
+      "capt_solo.khsb",
+      "capt_solo.lifecycle",
+      "capt_solo.memory",
+      "capt_solo.plugin"
+    ],
+    "provisional": [
+      "capt_solo.continuity",
+      "capt_solo.evidence",
+      "capt_solo.execution",
+      "capt_solo.foundry",
+      "capt_solo.knowledge",
+      "capt_solo.ontology",
+      "capt_solo.verification"
+    ],
+    "experimental": [
+      "capt_solo.engines",
+      "capt_solo.learning",
+      "capt_solo.research"
+    ]
+  },
+  "command_line": {
+    "entry_point": "capt = capt_cli:main",
+    "stable_groups": [
+      "doctor",
+      "memory",
+      "procedure",
+      "prospective",
+      "release",
+      "retrieval",
+      "session"
+    ],
+    "provisional_groups": [
+      "architecture",
+      "canon",
+      "continuity",
+      "evidence",
+      "foundry",
+      "mission",
+      "selfmod",
+      "verify",
+      "workspace"
+    ],
+    "experimental_groups": []
+  },
+  "package_data": [
+    "capt_solo/plugin/plugin.json",
+    "capt_solo/skills/*/SKILL.md"
+  ],
+  "authoritative_documents": [
+    "README.md",
+    "CHANGELOG.md",
+    "CURRENT_STATE.md",
+    "CHECKPOINT.md",
+    "RELEASE_STATE.md",
+    "docs/CAPT_CANON.md",
+    "docs/PUBLIC_ARCHITECTURE.md",
+    "docs/PUBLIC_API_STABILITY.md"
+  ]
+}

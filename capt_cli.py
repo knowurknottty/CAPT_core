@@ -2,7 +2,7 @@
 """CAPT Solo — unified local-first cognitive runtime CLI.
 
 Groups: memory, session, procedure, prospective, retrieval, canon, foundry,
-architecture, workspace. All commands support --json for machine-readable output
+architecture, workspace, release. All commands support --json for machine-readable output
 and return nonzero exit codes on failure. No raw SQL is exposed. No credentials
 are printed. The CLI is local-first and performs no network I/O.
 
@@ -102,6 +102,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         "doctor",
         help="inspect the installed runtime without creating persistent state",
     )
+
+    # release validation is read-only and independent of runtime persistence.
+    rel = sub.add_parser("release", help="release semantic and artifact validation")
+    rels = rel.add_subparsers(dest="action")
+    p = rels.add_parser("validate", help="fail closed on stale release claims")
+    p.add_argument("--root", default=".", help="source checkout to validate")
+    p.add_argument("--dist-dir", default=None, help="optional wheel/sdist directory")
+    p.add_argument("--final", action="store_true", help="enforce frozen candidate checks")
+    p.add_argument("--candidate-sha", default=None)
 
     # memory
     m = sub.add_parser("memory")
@@ -317,6 +326,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.group == "doctor":
         return _cmd_doctor(as_json)
+    if args.group == "release":
+        return _cmd_release(args, as_json)
 
     # verify group is independent of the memory runtime.
     if args.group == "verify":
@@ -424,6 +435,21 @@ def _cmd_doctor(as_json: bool) -> int:
         print(_json_or_human(result, as_json))
         return 1
     return _ok(result, as_json)
+
+
+def _cmd_release(args, as_json: bool) -> int:
+    if args.action != "validate":
+        return _fail("unknown release action (expected validate)")
+    from capt_solo.release_validation import result_document, validate_release
+
+    result = result_document(validate_release(
+        Path(args.root),
+        dist_dir=Path(args.dist_dir) if args.dist_dir else None,
+        final=args.final,
+        candidate_sha=args.candidate_sha,
+    ))
+    print(_json_or_human(result, as_json))
+    return 0 if result["ok"] else 1
 
 
 def _cmd_architecture(args, as_json) -> int:

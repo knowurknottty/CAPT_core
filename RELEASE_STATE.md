@@ -1,32 +1,34 @@
 # RELEASE_STATE.md — Release Readiness
 
 - **package**: `capt-solo`
-- **declared version**: `0.4.1` (pyproject.toml, plugin.json, README, installer banners).
-- **license**: MIT (approved for this safe public release — Decision 6). LICENSE present.
-- **release target**: `CAPT_core` public release (local only; **not published** — Decision 5).
-- **last full test run**: **502 passed** (pre-engine baseline; will rise as engines land).
-- **last runtime verify**: `46 pass / 0 warn / 0 fail / 0 skip`.
-- **last registry validate**: `15 checks, 0 fail, 0 warn`.
+- **version**: `0.5.0`
+- **candidate_sha**: `UNFROZEN`
+- **release_status**: `HARDENING — NOT RELEASE READY`
+- **publication_status**: `NOT PUBLISHED`
+- **license**: MIT; `LICENSE` is included in source distributions.
+- **release boundary**: public CAPT Core runtime and documented package data;
+  no credentials, private coordination services, user state, or `.capt_state/`.
 
-## Owner decisions applied (ADR-0007)
-1. **D1** Research modules (FILT/FSR/NEDA/CONS/QIPC/OUROBOROS) may be public *if real*; none have code in tree → documented specs only, not shipped.
-2. **D2** Memory systems (HMC/ENGRAM/DREAM + episodic/autobiographical/semantic/governance/provenance/consent/replay/revision/retention/export/import/recovery) finished + public. HMC/ENGRAM/DREAM stay `CAPT_core` (registry reconciled to `partial`).
-3. **D3** Puter KV + mesh sync PRIVATE; local consent/sync abstractions public.
-4. **D4** PULSE public (optional, disabled-by-default); RYS private (excluded).
-5. **D5** Do NOT publish. Local commits only; owner publishes manually.
-6. **D6** MIT approved; reconcile metadata/headers/docs.
+## Gate status
 
-## Public/private boundary (canonical: docs/RELEASE_GOVERNANCE.md)
-- **PUBLIC:** all `CAPT_core` code in tree + new Mathematics/Physics/Invention engines + PULSE (optional) + local consent/sync abstractions.
-- **PRIVATE (excluded):** RYS, Puter KV, mesh, private coordination, credentials, endpoints. **None present in tree** (verified).
-- **RESEARCH (spec, no code):** FILT/FSR/NEDA/CONS/QIPC/OUROBOROS/CIG/HDR/META/… (documented as specifications).
+| Gate | State | Evidence authority |
+|---|---|---|
+| Packaging inventory | Implemented; final rerun pending | `tests/test_distribution_contract.py` |
+| Installed CLI and profiles | Implemented; final rerun pending | `capt doctor`, `tools/profile_smoke.py` |
+| Public architecture/API | Drafted; validation pending | ADR-0008 through ADR-0012 |
+| Semantic freshness | In progress | `capt release validate` |
+| Verification-first tutorial | Pending | tutorial test and output bundle |
+| Security closure | Pending | canonical scan and dependency audit |
+| Exact candidate evidence | Pending | frozen-SHA evidence bundle |
+| Owner publication | Withheld | ADR-0007 |
 
-## Open release gates
-- None blocking at code level. All prior [B]/[S] gates **resolved by owner decisions** (ADR-0007).
-- Remaining: finish + test the three engines and memory convergence to reach
-  **SAFE PUBLIC RELEASE READY** (owner's primary priority). Publication itself is
-  withheld per D5 until owner triggers it.
+## Release rule
 
-## Recommended release decision
-**RELEASE CANDIDATE** → progressing to **SAFE PUBLIC RELEASE READY** as engines
-and memory convergence complete and verification passes. Publication deferred per D5.
+A previous audit, historical test total, local build artifact, or successful
+source-tree import is not release evidence for this candidate. Release readiness
+requires all gates to be rerun against one frozen candidate and the resulting
+failures to be closed or explicitly accepted by the owner.
+
+## Current decision
+
+**NOT RELEASE READY. NOT PUBLISHED.**
