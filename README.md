@@ -1,112 +1,150 @@
-# CAPT Solo v0.5.0
+# CAPT Core v0.5.0
 
-Local-first cognitive runtime for individual developers, integrating natively
-with Hermes. Zero cloud, zero external database, zero Docker, zero network.
+> AI work is easy to generate and hard to verify.
 
-## Quick start
+CAPT is a local-first verification substrate for AI systems. It binds claims,
+context, tool results, and actions to evidence, state, policy, and receipts so
+they can be inspected, reproduced, invalidated, and recovered across models and
+runtimes.
 
-```bash
-git clone <repo> capt-solo && cd capt-solo
-./install.sh        # detect Hermes, install plugin + skills, init runtime
-./verify.sh         # one-command health check (memory + CTP + KHSB)
-```
+CAPT is pre-release software. It has not been published to a package registry,
+tagged as v0.5.0, or approved for public release. See `RELEASE_STATE.md` for the
+current gate status.
 
-## What you get
+## What CAPT Does
 
-- **Memory Engine** — SQLite store with tags, namespaces, provenance, confidence,
-  metadata, semantic-search adapter interface, export/import, backups, forward-only
-  migration with backup-gated safety.
-- **CTP Runtime** — append-only transaction journals with receipts, idempotency,
-  correlation ids, audit trail, and crash recovery.
-- **KHSB** — in-process message bus (publish/subscribe/request/reply/timeout/ack).
-- **Foundry** — proof-governed skill/capability/bubble lifecycle (validation,
-  proof aggregation, ClaimGuard scoped degradation, 12-step bubble validation,
-  governance CTP-bounded audit).
-- **Canonical subsystems** — episodic/ECHO, semantic, procedural, prospective,
-  autobiographical, HMC, ENGRAM, DREAM, replay, consent, local sync, continuous
-  learning, research adapters (optional, degrade independently).
-- **Hermes Plugin** — 46 stable public tools (`capt_store_memory`, …,
-  `capt_verify_claim`, `capt_build_bubble`, …).
-- **Universal Workspace** — the repository is self-describing. Start at
-  `AGENTS.md`; resume via `CURRENT_STATE.md` and `CHECKPOINT.md`; operate via
-  `capt workspace` (status/validate/bootstrap/checkpoint/tasks/next/capabilities).
-- **Engines** — bounded, safe, defensible public engines:
-  - **Mathematics** (`capt_solo.engines.mathematics`) — safe AST parser (no
-    `eval`/`exec`), exact `Fraction` arithmetic, approximate arithmetic with
-    uncertainty propagation, dimensional quantities over 7 SI base dims,
-    structural-affine linear solving, extrema-safe intervals, derivation traces.
-  - **Physics** (`capt_solo.engines.physics`) — built on the math substrate;
-    classical mechanics, basic thermodynamics, elementary circuits, waves. Every
-    relation is explicitly classified (established law / model / approximation /
-    empirical / hypothesis / speculative); dimensional validation enforced.
-  - **Invention** (`capt_solo.engines.invention`) — structured 17-step workflow
-    with explainable feasibility scoring, constraint tracking, contradiction
-    detection, safety gates, and revision history. Integrates math/physics
-    results directly. No patentability claims.
-  - **Memory convergence** — explicit 14-type memory taxonomy
-    (`capt_solo.memory.types`): Event/Observation/Episode/Interpretation/
-    Inference/Belief/Identity Narrative/Autobiographical/Semantic/Revision/
-    Correction/Supersession/Provenance/Replay. Non-destructive revision, provenance
-    chains, quarantine of malformed data, DREAM output labeled inferred (never
-    silently overwrites canonical memory).
-  - **PULSE** (`capt_solo.pulse`) — optional LLM gateway, **disabled by default**,
-    no network on import, fails closed. Not enabled unless explicitly configured.
-- **Docs** — `docs/` holds the canonical architecture, ADRs, subsystem docs, and
-  evidence reports. Root `CAPT_CANON.md`, `CANONICAL_ARCHITECTURE.md`,
-  `CANONICAL_OWNERSHIP_MATRIX.md` are pointers to the canonical sources.
+- records evidence with provenance, scope, confidence, and invalidation;
+- binds verification to concrete repository and runtime state through Verified
+  State Identity (VSI);
+- builds deterministic ContextPack v1 artifacts with explicit assumptions and
+  protected-fact validation;
+- records consequential local operations through append-only CTP receipts;
+- preserves local memory, recovery, export, and migration behavior;
+- exposes explicit governance, capability, proof, and failure boundaries;
+- runs underneath models and protocols rather than requiring one provider.
 
-## Principles
+## What CAPT Does Not Do
 
-Zero cloud · Zero external DB · Zero Docker · Zero network · One-command
-install · One-command health · Portable · Deterministic · Human-readable ·
-Backward-compatible migrations · Workspace-native (no giant bootstrap prompt).
+CAPT does not train foundation models, replace model providers, replace MCP or
+A2A, require cloud state, expose hidden model reasoning, turn every claim into
+fact, remove uncertainty, or guarantee legal, scientific, or security
+correctness by branding alone.
 
-## Layout
+## Five-Minute Verification Flow
 
-```
-capt-solo/
-├── AGENTS.md                 # universal agent entrypoint (authority order + startup)
-├── CAPT_CANON.md             # pointer → docs/CAPT_CANON.md (constitutional invariants)
-├── CANONICAL_ARCHITECTURE.md # pointer → docs/CANONICAL_ARCHITECTURE.md
-├── CANONICAL_OWNERSHIP_MATRIX.md # pointer → docs/CANONICAL_OWNERSHIP_MATRIX.md
-├── WORKSPACE.md              # workspace contract (state classes, permissions)
-├── CURRENT_STATE.md          # authoritative live state
-├── CHECKPOINT.md             # immediate resume contract
-├── TASK_QUEUE.md             # human-readable task queue
-├── SECURITY_BOUNDARIES.md    # trust model + untrusted-content handling
-├── TOOLING.md                # workspace CLI reference
-├── RELEASE_STATE.md          # release readiness
-├── architecture/             # registry.yaml + JSON schemas
-├── capt_solo/                # the runtime (core, memory, ctp, khsb, foundry, plugin, skills, api, workspace, evidence)
-├── docs/                     # canonical architecture, ADRs, evidence, subsystem docs
-├── tests/                    # pytest suite (594 tests + evidence suite)
-├── capt_cli.py               # CLI (memory/session/procedure/prospective/retrieval/canon/foundry/architecture/workspace/verify/evidence/mission/selfmod)
-├── verify_runtime.py         # 46-check structured verification harness
-├── doctor.sh / verify.sh / install.sh / uninstall.sh
-└── pyproject.toml            # version 0.5.0, MIT
-```
-
-## Verification
+From an obtained source checkout:
 
 ```bash
-python3 -m pytest -q            # full suite (594 passed + evidence suite)
-python3 verify_runtime.py       # 46 structured checks
-python3 architecture/validate_registry.py   # registry fitness
-python3 capt_cli.py workspace validate       # workspace consistency
-python3 capt_cli.py verify status            # VSI verification state
-python3 capt_cli.py evidence status          # evidence store summary
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install .
+capt --json doctor
+python examples/verification_first/run.py --output /tmp/capt-verification-demo
 ```
 
-## Evidence Engine
+The example creates a local subject, captures state-bound verification evidence,
+produces a CTP receipt and deterministic ContextPack, changes the subject, and
+shows that the earlier verification no longer applies. It performs no network
+activity.
 
-The governed evidence layer (`capt_solo/evidence/`) distinguishes what is
-present / believed / inferred / attempted / changed / verified / valid /
-invalidated / project-local / globally-reusable — these concepts do not collapse
-into one field. It provides proof-preserving evidence reuse (VSI integration),
-first-class invalidation events, project workspace isolation, scoped
-memory-promotion boundaries, self-modification governance, mission checkpoint/
-restart recovery, and long-session efficiency controls. See `docs/EVIDENCE_MODEL.md`
-and `docs/VSI_MODEL.md`.
+Detailed walkthrough:
+`docs/tutorials/VERIFY_AI_WORK_IN_FIVE_MINUTES.md`.
+
+## Adopt Only What You Need
+
+| Profile | Import | Persistence | Network | Stability |
+|---|---|---|---|---|
+| Evidence | `capt_solo.evidence` | none by default | none | Provisional |
+| Verification | `capt_solo.verification` | optional local JSONL | none | Provisional |
+| Context | `capt_solo.contextpack` | none | none | Stable ContextPack v1 |
+| Transaction | `capt_solo.ctp` | explicit local JSONL | none | Stable |
+| Workspace | `capt_solo.workspace` | explicit workspace files | none | Provisional |
+| Full runtime | `capt_solo.api` | local SQLite and JSONL | none by default | Stable facade |
+
+The complete compatibility declaration is in
+`docs/PUBLIC_API_STABILITY.md`.
+
+## Public Architecture
+
+CAPT's public model has six pillars:
+
+1. Identity & Scope
+2. Evidence
+3. Verification
+4. Context
+5. Transactions
+6. Governance
+
+Memory, Workspace, Knowledge, Foundry, KHSB, Lifecycle, and domain engines are
+services or adapters over those pillars. The constitutional L0-L11 model and
+subsystem registry remain the internal ownership and research catalogue.
+
+See `docs/PUBLIC_ARCHITECTURE.md`.
+
+## Local-First Boundary
+
+- No required cloud account, external database, or Docker runtime.
+- Core imports perform no network activity.
+- PULSE is an experimental optional gateway, disabled by default, and imports
+  its network library only after explicit configuration and use.
+- SQLite and inspectable local files are the default stores.
+- `CAPT_SOLO_HOME` controls runtime persistence.
+- Export, deletion, and exit do not require a service account.
+
+“Local-first” means no network requirement or hidden egress. It does not mean
+the optional PULSE module is incapable of an explicitly authorized network call.
+
+## Verification Commands
+
+Run these commands against the checkout you are evaluating:
+
+```bash
+python3 -m pytest -q
+python3 verify_runtime.py
+python3 -m compileall -q capt_solo capt_cli.py tools
+python3 capt_cli.py architecture validate
+python3 capt_cli.py workspace validate
+python3 capt_cli.py release validate
+python3 -m build
+```
+
+Do not copy test totals or artifact hashes between commits. Exact final-candidate
+evidence belongs in `docs/release/RELEASE_VERIFICATION_V0.5.md`.
+
+## Installed CLI
+
+Installing the distribution provides `capt`:
+
+```bash
+capt --help
+capt --json doctor
+capt verify status
+capt evidence status
+```
+
+Repository-only commands such as architecture and workspace validation require a
+source checkout containing the governed files they inspect.
+
+## Research Heritage
+
+CAPT grew from a biologically inspired cognitive architecture. HMC, ENGRAM,
+DREAM, cognitive modules, and domain engines remain documented and testable
+where implemented. They do not define the public verification kernel and their
+research maturity is stated separately from stable API status.
+
+The internal catalogue lives in `architecture/registry.yaml` and
+`docs/CANONICAL_ARCHITECTURE.md`.
+
+## Security and Release Status
+
+- Security policy and trust boundaries: `SECURITY_BOUNDARIES.md`
+- Public/private boundary: `docs/RELEASE_GOVERNANCE.md`
+- Current release decision: `RELEASE_STATE.md`
+- Bounded release security report:
+  `docs/security/RELEASE_SECURITY_REPORT_V0.5.md`
+
+No tag, publication, upload, deployment, or merge is authorized by a passing
+local verification run.
 
 ## License
 

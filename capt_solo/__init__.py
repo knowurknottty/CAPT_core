@@ -1,12 +1,8 @@
-"""CAPT Solo v0.1 — local-first cognitive runtime for individual developers.
+"""CAPT Core v0.5 — local-first verification and cognitive runtime.
 
-Public surface is intentionally small and stable. Everything under
-``capt_solo.*`` that is not re-exported from :mod:`capt_solo.api` is an
-implementation detail and may change between minor versions.
-
-Future capabilities (distributed KHSB, remote memory stores, multi-agent
-federation, bioCAPT integration) are reserved as extension points only and
-are NOT implemented in v0.1.
+``capt_solo.api`` is the stable full-runtime convenience facade. Deliberate
+package-level public surfaces and their compatibility tiers are declared in
+``docs/PUBLIC_API_STABILITY.md``.
 """
 
 __version__ = "0.5.0"
