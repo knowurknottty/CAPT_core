@@ -1,4 +1,4 @@
-"""CAPT Solo v0.4 verification harness.
+"""CAPT Solo v0.5 verification harness.
 
 Exercises the public surface of all subsystems (Memory, CTP, KHSB, Foundry)
 and emits STRUCTURED checks. Every check emits:
@@ -559,7 +559,7 @@ def main() -> int:
     warned = sum(1 for c in CHECKS if c.status == "warn")
     failed = sum(1 for c in CHECKS if c.status == "fail")
     skipped = sum(1 for c in CHECKS if c.status == "skip")
-    print(f"\n=== CAPT Solo v0.4 verify: {passed} pass / {warned} warn / "
+    print(f"\n=== CAPT Solo v0.5 verify: {passed} pass / {warned} warn / "
           f"{failed} fail / {skipped} skip ({len(CHECKS)} checks) ===")
     return 1 if failed else 0
 
