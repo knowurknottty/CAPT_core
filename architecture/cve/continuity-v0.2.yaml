@@ -1,0 +1,14 @@
+csl_version: '0.2'
+policy_id: capt-cve-continuity-v0.2
+default_action: block
+tiers: [C0, C1, C2, C3]
+articles:
+  - {id: CVE-01, title: Human agency and reversible control}
+  - {id: CVE-02, title: Inspectable truth and provenance}
+  - {id: CVE-03, title: Sovereignty and portability}
+  - {id: CVE-04, title: Non-extraction and bounded retention}
+  - {id: CVE-05, title: Explicit consent and minimal trust}
+  - {id: CVE-06, title: Recoverability and safe drills}
+  - {id: CVE-07, title: Anti-capture and independent review}
+  - {id: CVE-08, title: Semantic integrity and policy parity}
+  - {id: CVE-09, title: Operational continuity and handoff}

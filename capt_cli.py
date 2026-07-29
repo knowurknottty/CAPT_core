@@ -236,6 +236,25 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--user-fresh", action="store_true")
     efs.add_parser("conflicts", help="list conflicted evidence")
 
+    # continuity (CVE v0.2 — policy evaluation only; no production actions)
+    cv = sub.add_parser("continuity", help="CVE v0.2 operational-continuity evidence runtime")
+    cvs = cv.add_subparsers(dest="action")
+    p = cvs.add_parser("validate-policy", help="validate a CSL v0.2 policy")
+    p.add_argument("--policy", default=None)
+    p = cvs.add_parser("validate-pack", help="validate a continuity evidence pack")
+    p.add_argument("pack")
+    p.add_argument("--policy", default=None)
+    p = cvs.add_parser("evaluate", help="evaluate a pack; BLOCK exits nonzero")
+    p.add_argument("pack")
+    p.add_argument("--policy", default=None)
+    p = cvs.add_parser("receipt-verify", help="verify a receipt against pack and policy digests")
+    p.add_argument("receipt")
+    p.add_argument("pack")
+    p.add_argument("--policy", default=None)
+    p = cvs.add_parser("plan-drill", help="produce a safe, non-executing sandbox drill plan")
+    p.add_argument("pack")
+    p.add_argument("--environment", default="sandbox")
+
     # mission (checkpoint / resume / status)
     mf = sub.add_parser("mission", help="mission checkpoint and restart recovery")
     mfs = mf.add_subparsers(dest="action")
@@ -281,6 +300,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     # evidence / mission / selfmod groups are independent of the memory runtime.
     if args.group == "evidence":
         return _cmd_evidence(args, as_json)
+    if args.group == "continuity":
+        return _cmd_continuity(args, as_json)
     if args.group == "mission":
         return _cmd_mission(args, as_json)
     if args.group == "selfmod":
@@ -459,6 +480,49 @@ def _cmd_verify(args, as_json) -> int:
         "evidence": result.evidence.location if result.evidence else None,
     }
     return _ok(out, as_json)
+
+
+def _cmd_continuity(args, as_json) -> int:
+    """Local CVE v0.2 policy evaluation.  It never executes a drill."""
+    from capt_solo.continuity import (
+        ContinuityError, ContinuityPack, evaluate_pack, load_policy, plan_drill,
+        validate_pack, verify_receipt,
+    )
+    repo = Path(__file__).resolve().parent
+    policy_path = getattr(args, "policy", None) or repo / "architecture" / "cve" / "continuity-v0.2.yaml"
+    try:
+        policy = load_policy(policy_path)
+        if args.action == "validate-policy":
+            return _ok({"valid": True, "policy_id": policy["policy_id"],
+                        "clauses": [a["id"] for a in policy["articles"]]}, as_json)
+        pack_raw = json.loads(Path(args.pack).read_text(encoding="utf-8"))
+        pack = ContinuityPack.from_dict(pack_raw)
+        if args.action == "validate-pack":
+            findings = validate_pack(pack, policy)
+            result = {"valid": not any(x["status"] == "BLOCK" for x in findings),
+                      "findings": findings}
+            if not result["valid"]:
+                print(_json_or_human(result, as_json))
+                return 2
+            return _ok(result, as_json)
+        if args.action == "evaluate":
+            result = evaluate_pack(pack, policy)
+            if result["status"] == "BLOCK":
+                print(_json_or_human(result, as_json))
+                return 2
+            return _ok(result, as_json)
+        if args.action == "receipt-verify":
+            receipt = json.loads(Path(args.receipt).read_text(encoding="utf-8"))
+            result = verify_receipt(receipt, pack, policy)
+            if not result["valid"]:
+                print(_json_or_human(result, as_json))
+                return 2
+            return _ok(result, as_json)
+        if args.action == "plan-drill":
+            return _ok(plan_drill(pack, args.environment), as_json)
+        return _fail("unknown continuity action")
+    except (OSError, json.JSONDecodeError, ContinuityError) as exc:
+        return _fail(str(exc))
 
 
 def _evidence_store_path(repo):

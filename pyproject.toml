@@ -35,6 +35,7 @@ packages = [
     "capt_solo.learning",
     "capt_solo.research",
     "capt_solo.engines",
+    "capt_solo.continuity",
 ]
 
 [project.entry-points.hermes_plugins]
