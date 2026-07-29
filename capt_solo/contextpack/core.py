@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
@@ -25,14 +27,33 @@ _FACT_PATTERNS = (
 )
 
 
-def _freeze(value: Any) -> Any:
-    if isinstance(value, dict): return tuple((str(k), _freeze(value[k])) for k in sorted(value))
-    if isinstance(value, (list, tuple)): return tuple(_freeze(v) for v in value)
-    return value
+class _FrozenMap(tuple):
+    """Marks immutable mappings so empty maps never become empty sequences."""
+
+
+def _freeze(value: Any, depth: int = 0, seen: Optional[set] = None) -> Any:
+    """Convert untrusted JSON-shaped input to a deeply immutable safe form."""
+    if depth > 64: raise ValueError("embedded value exceeds maximum nesting depth")
+    seen = set() if seen is None else seen
+    if isinstance(value, (dict, list, tuple)):
+        ident = id(value)
+        if ident in seen: raise ValueError("embedded value contains a cycle")
+        seen.add(ident)
+        try:
+            if isinstance(value, dict):
+                return _FrozenMap((unicodedata.normalize("NFC", str(k)), _freeze(value[k], depth + 1, seen)) for k in sorted(value, key=str))
+            return tuple(_freeze(v, depth + 1, seen) for v in value)
+        finally:
+            seen.remove(ident)
+    if isinstance(value, str): return unicodedata.normalize("NFC", value)
+    if isinstance(value, float) and not math.isfinite(value): raise ValueError("non-finite numeric value is unsupported")
+    if isinstance(value, int) and not isinstance(value, bool) and value.bit_length() > 53: raise ValueError("integer exceeds canonical safe range")
+    if value is None or isinstance(value, (bool, int, float)): return value
+    raise TypeError("embedded value must be JSON-shaped")
 
 
 def _thaw(value: Any) -> Any:
-    if isinstance(value, tuple) and all(isinstance(x, tuple) and len(x) == 2 and isinstance(x[0], str) for x in value):
+    if isinstance(value, _FrozenMap):
         return {k: _thaw(v) for k, v in value}
     if isinstance(value, tuple): return [_thaw(v) for v in value]
     return value
@@ -48,7 +69,7 @@ def _clock(value: str) -> str:
 
 
 def canonical_json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return json.dumps(_thaw(_freeze(value)), ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
 def _digest(value: Any) -> str:
@@ -61,7 +82,11 @@ class RecordRef:
     record_digest: str
     origin: str
     embedded: Any = field(default_factory=tuple)
-    def __post_init__(self): object.__setattr__(self, "embedded", _freeze(self.embedded))
+    def __post_init__(self):
+        object.__setattr__(self, "record_id", unicodedata.normalize("NFC", self.record_id))
+        object.__setattr__(self, "record_digest", unicodedata.normalize("NFC", self.record_digest))
+        object.__setattr__(self, "origin", unicodedata.normalize("NFC", self.origin))
+        object.__setattr__(self, "embedded", _freeze(self.embedded))
     def to_dict(self): return {"record_id": self.record_id, "record_digest": self.record_digest, "origin": self.origin, "embedded": _thaw(self.embedded)}
 
 
@@ -269,6 +294,9 @@ def validate_context_pack(pack: ContextPack) -> ContextPackValidation:
     bad_refs = tuple(ref.record_id for ref in refs if not ref.record_id or not ref.record_digest or not ref.origin)
     if bad_refs:
         blocks.append(ContextPackBlock("PROVENANCE_BLOCK", "unstable_reference", "Referenced records require stable id, digest, and origin", ("invariants", "evidence", "memory", "receipts"), bad_refs, "Supply stable record references", True))
+    duplicate_ids = tuple(sorted({ref.record_id for ref in refs if sum(1 for item in refs if item.record_id == ref.record_id) > 1}))
+    if duplicate_ids:
+        blocks.append(ContextPackBlock("INTEGRITY_BLOCK", "duplicate_record_id", "Referenced record IDs must be unique across semantic sections", ("invariants", "evidence", "memory", "receipts"), duplicate_ids, "Use distinct stable records or preserve relationship explicitly", True))
     missing = tuple(f.fact_id for f in pack.protected_facts if f.required and f.validation_status != "preserved")
     if missing:
         refs = tuple(ref for f in pack.protected_facts if f.fact_id in missing for ref in f.source_refs)

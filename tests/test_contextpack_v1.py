@@ -1,5 +1,7 @@
 import os
 import sys
+import json
+import socket
 from datetime import datetime, timezone
 
 import pytest
@@ -97,3 +99,44 @@ def test_existing_context_builder_result_adapter_ignores_trace_id():
         token_budget=_budget(), evaluation_clock=CLOCK, confidence=1.0,
         assumption_review_status="reviewed_none_found", protected_fact_review_status="reviewed")
     assert pack.memory[0].record_digest.startswith("sha256:")
+
+
+def test_canonical_fixture_is_a_permanent_compatibility_sentinel():
+    root = os.path.dirname(os.path.abspath(__file__))
+    fixture = os.path.join(root, "fixtures", "contextpack_v1", "canonical_pack.json")
+    expected = open(os.path.join(root, "fixtures", "contextpack_v1", "canonical_pack.sha256")).read().strip()
+    raw = json.loads(open(fixture).read())
+    pack = __import__("capt_solo.contextpack", fromlist=["ContextPack"]).ContextPack.from_dict(raw)
+    assert pack.digest == expected
+    assert canonical_json(pack.to_dict()) == open(fixture).read().strip()
+
+
+def test_hostile_embedded_values_are_rejected_and_unicode_is_normalized():
+    with pytest.raises(ValueError): _ref("nan", float("nan"))
+    with pytest.raises(ValueError): _ref("huge", 2 ** 80)
+    deep = value = []
+    for _ in range(70):
+        nxt = []; value.append(nxt); value = nxt
+    with pytest.raises(ValueError): _ref("deep", deep)
+    cyc = []; cyc.append(cyc)
+    with pytest.raises(ValueError): _ref("cyclic", cyc)
+    composed = _ref("unicode", {"value": "é"})
+    decomposed = _ref("unicode", {"value": "e\u0301"})
+    assert canonical_json(composed.to_dict()) == canonical_json(decomposed.to_dict())
+
+
+def test_duplicate_looking_unicode_record_ids_are_an_integrity_block():
+    one = _ref("é", "Never delete evidence")
+    two = _ref("e\u0301", "Never delete evidence")
+    pack = _pack(evidence=(one, two), rendered="Never delete evidence")
+    result = validate_context_pack(pack)
+    assert any(block.code == "duplicate_record_id" for block in result.blocks)
+
+
+def test_contextpack_does_not_touch_capt_state_or_network(tmp_path, monkeypatch):
+    state = tmp_path / ".capt_state"; state.write_text("sentinel")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(socket, "socket", lambda *a, **k: (_ for _ in ()).throw(AssertionError("network")))
+    pack = _pack()
+    assert validate_context_pack(pack).status == "PASS"
+    assert state.read_text() == "sentinel"
