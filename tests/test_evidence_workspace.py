@@ -1,5 +1,6 @@
 """Tests for workspace isolation, promotion, self-modification, checkpoint, metrics (Phases 5-9)."""
 import os, sys, tempfile
+import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from capt_solo.evidence import (
@@ -220,6 +221,19 @@ def test_checkpoint_completed_not_restarted():
     loaded = store.load("done")
     plan = resume_plan(loaded, {})
     assert plan["next_action"] == "DO_NOT_RESTART_COMPLETED_MISSION"
+
+
+def test_checkpoint_store_rejects_path_traversal_mission_id(tmp_path):
+    """Caller-controlled mission IDs must not select files outside .capt/checkpoints."""
+    store = CheckpointStore(str(tmp_path))
+    checkpoint = MissionCheckpoint(mission_id="../../outside", project_id="p", objective="o")
+
+    with pytest.raises(ValueError, match="mission_id"):
+        store.save(checkpoint)
+    with pytest.raises(ValueError, match="mission_id"):
+        store.load("../outside")
+
+    assert not (tmp_path / "outside.json").exists()
 
 
 def test_antiloop_detects_repeat():

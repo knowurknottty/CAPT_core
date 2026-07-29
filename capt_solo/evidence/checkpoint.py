@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -59,12 +60,20 @@ class MissionCheckpoint:
 
 
 class CheckpointStore:
+    _MISSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
     def __init__(self, root: str, *, create: bool = True) -> None:
         self._root = os.path.abspath(root)
         self._dir = os.path.join(self._root, ".capt", "checkpoints")
         if create:
             os.makedirs(self._dir, exist_ok=True)
         self._events_path = os.path.join(self._dir, "events.jsonl")
+
+    def _checkpoint_path(self, mission_id: str) -> str:
+        """Return a checkpoint path that cannot escape the checkpoint store."""
+        if not isinstance(mission_id, str) or not self._MISSION_ID_RE.fullmatch(mission_id):
+            raise ValueError("mission_id must contain only letters, digits, '.', '_' or '-'")
+        return os.path.join(self._dir, f"{mission_id}.json")
 
     @staticmethod
     def _digest(value: Dict) -> str:
@@ -87,7 +96,7 @@ class CheckpointStore:
 
     def save(self, cp: MissionCheckpoint) -> str:
         os.makedirs(self._dir, exist_ok=True)
-        path = os.path.join(self._dir, f"{cp.mission_id}.json")
+        path = self._checkpoint_path(cp.mission_id)
         existed = os.path.exists(path)
         payload = cp.to_dict().copy(); payload.pop("event_digest", None)
         cp.event_digest = self._digest(payload)
@@ -101,7 +110,7 @@ class CheckpointStore:
         return path
 
     def load(self, mission_id: str) -> Optional[MissionCheckpoint]:
-        path = os.path.join(self._dir, f"{mission_id}.json")
+        path = self._checkpoint_path(mission_id)
         if not os.path.exists(path):
             return None
         with open(path) as f:
