@@ -23,11 +23,15 @@ distillation.
 
 ## Canonical contract
 
-`schema_version` is the literal string `"context-pack/v1"`. Serialization uses
-canonical JSON: UTF-8, stable key ordering, compact separators, and a SHA-256
-digest over the pack excluding its `digest` field. Given identical source
-state, configuration, and evaluation clock, construction returns byte-stable
-logical content and the same digest.
+`schema_version` is the literal string `"capt.contextpack.v1"`.
+`canonicalization_version` is `"capt-json-v1"`; `digest_algorithm` is
+`"sha256"`. `evaluation_clock` is a visible, normalized ISO-8601 UTC field.
+Serialization uses UTF-8, deterministic key and list ordering, compact
+separators, explicit nulls, normalized timestamps, fixed JSON numeric values,
+and never Python `repr()`. Intentional paths remain evidence; ambient local
+paths do not enter a pack. The digest covers every semantic field below except
+`digest` itself. Given identical source state, configuration, and evaluation
+clock, construction returns identical canonical bytes and digest.
 
 Required fields:
 
@@ -39,13 +43,30 @@ Required fields:
 | `evidence` | Existing selected evidence records and their provenance |
 | `memory` | Existing task-relevant retrieval/context-builder output only |
 | `assumptions` | Explicit assumption, status, supporting evidence, missing evidence, required validation |
-| `protected_facts` | Paths, identifiers, versions, numbers, negations, errors, constraints, uncertainty, provenance |
+| `assumption_review_status` | `reviewed_none_found`, `reviewed_with_entries`, or `not_reviewed` |
+| `protected_facts` | Source-derived paths, identifiers, versions, numbers, negations, errors, constraints, uncertainty, provenance |
+| `protected_fact_review_status` | `reviewed` or `not_reviewed`; the latter blocks |
 | `receipts` | Existing receipt references, not new signing authority |
 | `rendered_context` | Model-neutral context produced from the existing builder |
 | `token_budget` | Input budget, estimated use, remaining budget |
 | `handoff` | Deterministic next-action resume artifact derived from pack contents |
 | `confidence` | Explicit bounded confidence and unknowns; never silently promoted |
+| `evaluation_clock` | Explicit input clock used for deterministic construction and validation |
 | `digest` | Canonical pack digest |
+
+Every referenced evidence, memory, assumption, receipt, invariant, and
+protected fact has a stable `record_id`, `record_digest`, and `origin`. Portable
+embedded material keeps those references alongside its embedded representation.
+The builder preserves existing evidence status, uncertainty, contradictions,
+confidence, provenance, and materially distinct duplicate claims; it only
+canonicalizes order. It does not reconcile semantics.
+
+`token_budget` distinguishes `maximum_input_tokens`, `reserved_output_tokens`,
+`available_input_tokens`, `estimated_input_tokens`, `remaining_tokens`,
+`tokenizer_id`, `estimation_method`, and `measurement_status`. The latter is
+one of `measured`, `tokenizer_estimated`, `heuristic_estimated`, or `unknown`.
+An exceeded declared budget blocks, while an estimate never masquerades as a
+model-exact measurement.
 
 ## Construction flow
 
@@ -62,10 +83,20 @@ Mission + Intent + constraints
      BLOCK -> explain protected-fact loss; emit no usable pack
 ```
 
-AntiToken remains a validation boundary, not a summarizer. If its existing
-fidelity checks or ContextPack protected-fact checks show loss, generation
-returns an explainable `BLOCK` with missing facts and remediation. It must not
-silently truncate or replace facts.
+AntiToken remains a validation boundary, not a summarizer. Protected facts are
+first derived from source evidence, memories, constraints, and mission inputs;
+the validator then compares those expected facts against `rendered_context`.
+It reports facts as preserved, altered, or missing. It never defines source
+truth from already-reduced output. A candidate pack is immutable; validation is
+a separate immutable result that references its digest and never mutates it.
+
+`ContextPackValidation` includes `pack_digest`, status, typed blocks, warnings,
+missing and altered facts, token accounting, and remediation. Block categories
+are `SCHEMA_BLOCK`, `INTEGRITY_BLOCK`, `FIDELITY_BLOCK`, `BUDGET_BLOCK`,
+`PROVENANCE_BLOCK`, and `DETERMINISM_BLOCK`. Every block has a machine code,
+explanation, affected fields, source references, remediation, and whether a
+revised input may permit reconstruction. A blocked candidate is not a usable
+ContextPack.
 
 ## API shape
 
@@ -79,16 +110,23 @@ render_handoff(pack) -> Handoff
 ```
 
 `MissionIntent`, `Assumption`, `ProtectedFact`, `ContextPack`,
-`ContextPackValidation`, and `Handoff` are immutable dataclasses with
-`to_dict()` / `from_dict()` compatibility methods. The CLI adds a separate
+`ContextPackValidation`, and `Handoff` are deeply immutable dataclasses:
+tuples replace lists, nested values are immutable dataclasses or canonical
+tuple pairs, and parsing defensively converts mutable input. They provide
+`to_dict()` / `from_dict()` compatibility methods. `handoff` is derived from
+the semantic pack fields, never accepted as caller-authored authoritative
+prose; it contains mission/objective, established facts, unknowns, active
+assumptions, blockers, failed attempts, next justified action, approvals, and
+the pack digest. The CLI adds a separate
 `context` group after the public API and tests exist. It does not alter existing
 `memory`, `mission`, `evidence`, or `continuity` command semantics.
 
 ## Error semantics
 
 - Invalid schema, timestamps, confidence, or digest: `BLOCK`.
-- Missing intent, assumptions field, protected facts, or evaluation clock:
-  `BLOCK`; no inferred default.
+- Missing intent, protected-fact review, or evaluation clock: `BLOCK`; no
+  inferred default. The assumptions collection is required but may be empty;
+  `reviewed_none_found` differs from `not_reviewed`, which blocks.
 - Protected-fact loss: `BLOCK` with exact missing facts and source references.
 - Empty retrieved memory is valid only when represented explicitly as empty;
   unknown evidence stays `unknown`, not successful retrieval.
@@ -99,9 +137,13 @@ render_handoff(pack) -> Handoff
 
 Tests must prove Phase I / Phase II continuity compatibility, existing context
 builder adaptation, canonical ordering, repeatability with an explicit clock,
-digest tamper detection, protected-fact preservation, explainable blocks,
-assumption visibility, handoff repeatability, token accounting, no hidden
-writes, and no network access.
+digest tamper detection, source-to-rendered protected-fact preservation,
+explainable typed blocks, assumption visibility, handoff repeatability, token
+accounting, no hidden writes, and no network access. Round trips must preserve
+canonical bytes and digest: object → canonical dict → canonical JSON → parsed
+object → canonical JSON. Strict v1 parsing rejects unknown semantic fields;
+compatibility-inspection mode reports and preserves them without silently
+recalculating a valid digest.
 
 ## Deferred interface contracts
 
