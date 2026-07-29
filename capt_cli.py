@@ -91,9 +91,17 @@ def _fail(msg: str) -> int:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    parser = argparse.ArgumentParser(prog="capt", description="CAPT Solo memory review CLI")
+    parser = argparse.ArgumentParser(
+        prog="capt",
+        description="CAPT Solo local-first verification and cognitive runtime CLI",
+    )
     parser.add_argument("--json", action="store_true", help="machine-readable output")
     sub = parser.add_subparsers(dest="group")
+
+    sub.add_parser(
+        "doctor",
+        help="inspect the installed runtime without creating persistent state",
+    )
 
     # memory
     m = sub.add_parser("memory")
@@ -307,6 +315,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     as_json = args.json
 
+    if args.group == "doctor":
+        return _cmd_doctor(as_json)
+
     # verify group is independent of the memory runtime.
     if args.group == "verify":
         return _cmd_verify(args, as_json)
@@ -355,6 +366,64 @@ def main(argv: Optional[List[str]] = None) -> int:
         except Exception:
             pass
     return 1
+
+
+def _cmd_doctor(as_json: bool) -> int:
+    """Inspect the installed package without hidden persistence or network I/O."""
+    from importlib import metadata, resources
+
+    checks = []
+
+    def check(check_id: str, operation) -> None:
+        try:
+            evidence = operation()
+            if evidence is False:
+                raise RuntimeError("check returned false")
+            checks.append({
+                "id": check_id,
+                "status": "pass",
+                "evidence": str(evidence),
+            })
+        except Exception as exc:  # diagnostic boundary: preserve exact failure
+            checks.append({
+                "id": check_id,
+                "status": "fail",
+                "evidence": f"{type(exc).__name__}: {exc}",
+            })
+
+    check("package.version", lambda: metadata.version("capt-solo"))
+    check("profile.evidence", lambda: __import__("capt_solo.evidence").evidence.__name__)
+    check("profile.verification", lambda: __import__("capt_solo.verification").verification.__name__)
+    check("profile.context", lambda: __import__("capt_solo.contextpack").contextpack.__name__)
+    check("profile.transaction", lambda: __import__("capt_solo.ctp").ctp.__name__)
+    check("profile.workspace", lambda: __import__("capt_solo.workspace").workspace.__name__)
+    check("profile.runtime", lambda: __import__("capt_solo.api").api.__name__)
+    check(
+        "data.plugin_manifest",
+        lambda: resources.files("capt_solo").joinpath("plugin/plugin.json").is_file(),
+    )
+    check(
+        "data.bundled_skills",
+        lambda: len(list(resources.files("capt_solo").joinpath("skills").glob("*/SKILL.md"))) == 8,
+    )
+
+    def _pulse_disabled() -> bool:
+        from capt_solo.pulse import default_gateway
+        return default_gateway().enabled is False
+
+    check("network.default_disabled", _pulse_disabled)
+    failed = [item for item in checks if item["status"] == "fail"]
+    result = {
+        "ok": not failed,
+        "checks": checks,
+        "side_effects": "none",
+        "network": "not used",
+        "persistence": "not created",
+    }
+    if failed:
+        print(_json_or_human(result, as_json))
+        return 1
+    return _ok(result, as_json)
 
 
 def _cmd_architecture(args, as_json) -> int:

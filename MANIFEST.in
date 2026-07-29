@@ -1,0 +1,22 @@
+include LICENSE
+include README.md
+include capt_cli.py
+include capt_solo/plugin/plugin.json
+recursive-include capt_solo/skills SKILL.md
+
+prune tests
+prune .capt
+prune .capt_state
+prune .capt_verify
+prune build
+prune dist
+global-exclude __pycache__
+global-exclude *.py[cod]
+global-exclude .DS_Store
+global-exclude *.db
+global-exclude *.db-journal
+global-exclude *.db-shm
+global-exclude *.db-wal
+global-exclude *.env
+global-exclude *.key
+global-exclude *.pem

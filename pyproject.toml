@@ -21,24 +21,25 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/inversion-labs/capt-solo"
 
-[tool.setuptools]
-packages = [
-    "capt_solo",
-    "capt_solo.core",
-    "capt_solo.memory",
-    "capt_solo.ctp",
-    "capt_solo.khsb",
-    "capt_solo.plugin",
-    "capt_solo.knowledge",
-    "capt_solo.execution",
-    "capt_solo.learning",
-    "capt_solo.research",
-    "capt_solo.engines",
-    "capt_solo.continuity",
-    "capt_solo.contextpack",
-    "capt_solo.foundry",
-    "capt_solo.lifecycle",
-]
-
 [project.entry-points.hermes_plugins]
 capt-solo = "capt_solo.plugin:get_plugin"
+
+[project.scripts]
+capt = "capt_cli:main"
+
+[tool.setuptools]
+include-package-data = false
+py-modules = ["capt_cli"]
+
+[tool.setuptools.packages.find]
+include = [
+    "capt_solo",
+    "capt_solo.*",
+]
+namespaces = false
+
+[tool.setuptools.package-data]
+capt_solo = [
+    "plugin/plugin.json",
+    "skills/*/SKILL.md",
+]
