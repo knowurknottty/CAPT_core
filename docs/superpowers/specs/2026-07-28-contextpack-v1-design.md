@@ -116,8 +116,10 @@ tuple pairs, and parsing defensively converts mutable input. They provide
 `to_dict()` / `from_dict()` compatibility methods. `handoff` is derived from
 the semantic pack fields, never accepted as caller-authored authoritative
 prose; it contains mission/objective, established facts, unknowns, active
-assumptions, blockers, failed attempts, next justified action, approvals, and
-the pack digest. The CLI adds a separate
+assumptions, blockers, failed attempts, next justified action, and approvals.
+`render_handoff(pack)` adds the fixed `pack_digest` after pack construction.
+This detached linkage avoids a circular digest while the semantic handoff body
+remains digest-covered. The CLI adds a separate
 `context` group after the public API and tests exist. It does not alter existing
 `memory`, `mission`, `evidence`, or `continuity` command semantics.
 

@@ -36,6 +36,7 @@ packages = [
     "capt_solo.research",
     "capt_solo.engines",
     "capt_solo.continuity",
+    "capt_solo.contextpack",
 ]
 
 [project.entry-points.hermes_plugins]
