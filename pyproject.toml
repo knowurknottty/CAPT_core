@@ -4,15 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "capt-solo"
-version = "0.4.2"
+version = "0.5.0"
 description = "Local-first cognitive runtime for individual developers, integrating with Hermes."
 readme = "README.md"
 requires-python = ">=3.8"
-license = { text = "MIT" }
+license = "MIT"
 keywords = ["capt", "hermes", "memory", "cognitive", "local-first"]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
 dependencies = [
@@ -37,6 +36,8 @@ packages = [
     "capt_solo.engines",
     "capt_solo.continuity",
     "capt_solo.contextpack",
+    "capt_solo.foundry",
+    "capt_solo.lifecycle",
 ]
 
 [project.entry-points.hermes_plugins]

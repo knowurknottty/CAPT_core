@@ -1,7 +1,22 @@
 # Changelog
 
 All notable changes to CAPT Solo are documented here. This project adheres to
-semantic versioning. The canonical public baseline is **v0.4.1**.
+semantic versioning. The current unreleased public candidate is **v0.5.0**.
+
+## [0.5.0] — Unreleased (ContextPack v1 public contract)
+
+### Added
+- `capt_solo.contextpack`: a versioned, deterministic ContextPack v1 exchange
+  format with canonical JSON, digest verification, protected facts, explicit
+  assumptions, AntiToken generation gating, and handoff/resume artifacts.
+
+### Fixed
+- Checkpoint mission identifiers are now filename-safe, preventing path traversal
+  outside the local checkpoint store.
+
+### Packaging
+- Package metadata now uses the SPDX `MIT` license expression; the obsolete
+  license classifier/table metadata was removed.
 
 ## [0.4.2] — 2026-07-27 (governed evidence + invalidation + workspace isolation)
 

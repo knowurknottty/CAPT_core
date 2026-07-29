@@ -1,4 +1,4 @@
-# CAPT Solo v0.4.1
+# CAPT Solo v0.5.0
 
 Local-first cognitive runtime for individual developers, integrating natively
 with Hermes. Zero cloud, zero external database, zero Docker, zero network.
@@ -30,7 +30,7 @@ git clone <repo> capt-solo && cd capt-solo
 - **Universal Workspace** — the repository is self-describing. Start at
   `AGENTS.md`; resume via `CURRENT_STATE.md` and `CHECKPOINT.md`; operate via
   `capt workspace` (status/validate/bootstrap/checkpoint/tasks/next/capabilities).
-- **Engines (v0.4.1)** — bounded, safe, defensible public engines:
+- **Engines** — bounded, safe, defensible public engines:
   - **Mathematics** (`capt_solo.engines.mathematics`) — safe AST parser (no
     `eval`/`exec`), exact `Fraction` arithmetic, approximate arithmetic with
     uncertainty propagation, dimensional quantities over 7 SI base dims,
@@ -83,7 +83,7 @@ capt-solo/
 ├── capt_cli.py               # CLI (memory/session/procedure/prospective/retrieval/canon/foundry/architecture/workspace/verify/evidence/mission/selfmod)
 ├── verify_runtime.py         # 46-check structured verification harness
 ├── doctor.sh / verify.sh / install.sh / uninstall.sh
-└── pyproject.toml            # version 0.4.2, MIT
+└── pyproject.toml            # version 0.5.0, MIT
 ```
 
 ## Verification
