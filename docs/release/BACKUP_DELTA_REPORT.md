@@ -1,3 +1,5 @@
+> SUPERSEDED — historical archaeology artifact. Authoritative live state is CURRENT_STATE.md / RELEASE_STATE.md. Branch names and SHAs here are from earlier phases and do not describe the current candidate.
+
 # BACKUP_DELTA_REPORT — capt-core-v05-hardening-backup
 
 Generated: 2026-07-30

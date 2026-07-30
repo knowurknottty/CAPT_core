@@ -74,3 +74,12 @@ degraded component never blocks core verification). `doctor.sh` emits
   pinned and provenance-verified via `direct_url.json` at install time.
 - Compression uses the upstream RTK algorithm; false negatives are possible.
 - No cryptographic attestation of the installed child process beyond commit pin.
+
+## Relationship to `capt_solo.memory.antitoken`
+
+`capt_solo/memory/antitoken.py` is a SEPARATE, older in-tree capability (v0.2):
+deterministic prompt-token compression with NO LLM or network access, used by
+the memory/context subsystem. The component here (`components/anti_token_
+extraction.py`) is the v0.4.1 optional tool-output compression via the pinned
+external upstream MCP server. They share a conceptual goal (token reduction)
+but are distinct implementations with different dependency and runtime profiles.

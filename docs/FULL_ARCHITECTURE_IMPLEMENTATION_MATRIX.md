@@ -1,3 +1,5 @@
+> SUPERSEDED — historical architecture inventory. Contains a FALSE claim that capt_solo/ctp/journal.py is gitignored/missing from tree. VERIFIED: ctp/journal.py is tracked and present (8048 bytes). Do not treat this doc's 'MISSING FROM TREE' rows as current state. Authoritative: EXACT_SHA_RELEASE_VALIDATION.md + BASELINE_REVALIDATION.md.
+
 # FULL ARCHITECTURE IMPLEMENTATION MATRIX
 
 **Phase:** 1 — Full architecture census

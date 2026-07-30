@@ -1,0 +1,35 @@
+{
+  "pass": "RECURSION_PASS_2_RELEASE_TRUTH",
+  "candidate_sha": "c4b954cc2d3168c3bc5345fab0c0e5d0eaa9ebea",
+  "findings": [
+    {
+      "id": "F7",
+      "title": "FALSE claim CTP missing from tree (FULL_ARCHITECTURE_IMPLEMENTATION_MATRIX.md)",
+      "severity": "MEDIUM",
+      "disposition": "RESOLVED",
+      "action": "verified ctp/journal.py tracked+present; added superseded header"
+    },
+    {
+      "id": "F8",
+      "title": "docs not in wheel",
+      "severity": "LOW",
+      "disposition": "ACCEPTED",
+      "action": "standard packaging; no claim asserts docs in wheel"
+    },
+    {
+      "id": "F9",
+      "title": "bandit/semgrep/pip-audit not run at SHA",
+      "severity": "MEDIUM",
+      "disposition": "OWNER_GATED",
+      "action": "same as F3; CI runs on push"
+    },
+    {
+      "id": "F10",
+      "title": "RELEASE_SECURITY_REPORT_V0.5.md not generated",
+      "severity": "MEDIUM",
+      "disposition": "OWNER_GATED",
+      "action": "same as F4; generate before freeze"
+    }
+  ],
+  "verdict": "No BLOCKER, no HIGH. Public claims truthful and evidenced. F7 resolved. F9/F10 owner-gated pre-freeze."
+}

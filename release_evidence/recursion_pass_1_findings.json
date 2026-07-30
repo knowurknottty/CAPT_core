@@ -1,0 +1,49 @@
+{
+  "pass": "RECURSION_PASS_1_TECHNICAL",
+  "candidate_sha": "c4b954cc2d3168c3bc5345fab0c0e5d0eaa9ebea",
+  "findings": [
+    {
+      "id": "F1",
+      "title": "antitoken vs anti_token_extraction naming collision",
+      "severity": "LOW",
+      "disposition": "RESOLVED",
+      "action": "doc note added to ANTI_TOKEN_EXTRACTION.md"
+    },
+    {
+      "id": "F2",
+      "title": "historical docs reference old branches",
+      "severity": "LOW",
+      "disposition": "RESOLVED",
+      "action": "superseded headers added to 5 archaeology docs"
+    },
+    {
+      "id": "F3",
+      "title": "bandit/semgrep/pip-audit not run locally at SHA",
+      "severity": "MEDIUM",
+      "disposition": "OWNER_GATED",
+      "action": "runs in release-security.yml on push; or run locally pre-freeze"
+    },
+    {
+      "id": "F4",
+      "title": "RELEASE_SECURITY_REPORT_V0.5.md not generated",
+      "severity": "MEDIUM",
+      "disposition": "OWNER_GATED",
+      "action": "generate before freeze (doc 07 requirement)"
+    },
+    {
+      "id": "F5",
+      "title": "ATE external dep appears hidden",
+      "severity": "FALSE_POSITIVE",
+      "disposition": "ACCEPTED",
+      "action": "verified optional/lazy import; not in runtime deps"
+    },
+    {
+      "id": "F6",
+      "title": "verify_runtime.py is v0.4 harness on v0.5",
+      "severity": "LOW",
+      "disposition": "ACCEPTED",
+      "action": "supplementary; primary gate is capt release validate"
+    }
+  ],
+  "verdict": "No BLOCKER, no HIGH. Convergence technically complete. F3/F4 are owner-gated pre-freeze process steps."
+}
