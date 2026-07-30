@@ -49,12 +49,22 @@ def _project_id(repo: str) -> str:
 
 
 def _scoped_files(repo: str, scope: VerificationScope) -> List[str]:
-    """Return absolute paths of files relevant to a scope (tracked + untracked)."""
+    """Return absolute paths of files relevant to a scope (tracked + untracked).
+
+    Untracked files are included because they can still ship in a build or
+    affect runtime (e.g. an untracked module under a packaged path). Excluding
+    them from the identity would let prior verification be reused for a tree
+    whose effective content differs — a release-evidence spoofing risk.
+    """
     globs = SCOPE_PATH_GLOBS.get(scope, [])
     if scope == VerificationScope.FULL:
-        # all tracked files
-        out = _git(repo, "ls-files")
-        files = [os.path.join(repo, f) for f in out.splitlines() if f]
+        # Tracked files plus untracked, non-ignored files. `git ls-files
+        # --others --exclude-standard` surfaces untracked content that a build
+        # could pick up; .gitignored artifacts (e.g. .capt_verify/, venvs) are
+        # still excluded by --exclude-standard.
+        tracked = _git(repo, "ls-files").splitlines()
+        untracked = _git(repo, "ls-files", "--others", "--exclude-standard").splitlines()
+        files = [os.path.join(repo, f) for f in tracked + untracked if f]
     else:
         files = []
         for root, _dirs, fs in os.walk(repo):
@@ -192,7 +202,10 @@ def diff_vsi(old: VerifiedStateIdentity, new: VerifiedStateIdentity) -> List[Dic
         reasons.append({"reason": VsiDiffReason.SCOPE_EXPANDED if broader else VsiDiffReason.COMMAND_CHANGED,
                         "detail": f"{old.verification_scope} -> {new.verification_scope}"})
     if old.scope_file_hashes != new.scope_file_hashes:
-        changed = set(new.scope_file_hashes) ^ set(old.scope_file_hashes)
+        changed = {
+            p for p in set(new.scope_file_hashes) | set(old.scope_file_hashes)
+            if new.scope_file_hashes.get(p) != old.scope_file_hashes.get(p)
+        }
         reasons.append({"reason": VsiDiffReason.WORKING_TREE_CHANGED,
                         "detail": f"{len(changed)} scoped file(s) changed"})
     return reasons

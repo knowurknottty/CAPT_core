@@ -327,12 +327,24 @@ def validate_release(
     if final:
         try:
             head = _git(root, "rev-parse", "HEAD")
-            expected_sha = candidate_sha or head
-            checks.append(_check(
-                "candidate.sha_match",
-                manifest_sha == expected_sha,
-                f"manifest={manifest_sha} expected={expected_sha} head={head}",
-            ))
+            # The candidate SHA is release provenance: it must identify the
+            # revision actually checked. A caller-supplied value is therefore
+            # an assertion to verify against HEAD, never a replacement for it.
+            # Comparing manifest against a caller value would make sha_match
+            # compare an attacker-chosen string with itself and always pass.
+            if candidate_sha is not None and candidate_sha != head:
+                checks.append(_check(
+                    "candidate.sha_match",
+                    False,
+                    f"supplied candidate_sha={candidate_sha} does not match "
+                    f"checkout head={head}",
+                ))
+            else:
+                checks.append(_check(
+                    "candidate.sha_match",
+                    manifest_sha == head,
+                    f"manifest={manifest_sha} expected={head} head={head}",
+                ))
             status = [
                 line
                 for line in _git(root, "status", "--short").splitlines()

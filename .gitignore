@@ -22,6 +22,11 @@ __pycache__/
 htmlcov/
 coverage.xml
 
+# Local virtual environments (developer-local; never committed)
+.venv/
+venv/
+env/
+
 # Temp / verification scratch
 capt-verify-*/
 hermes-verify-*

@@ -110,16 +110,22 @@ class VerificationEngine:
             compat = self._store.find_compatible(vsi)
             if compat is not None:
                 ev = VerificationEvidence(**compat["evidence"])
-                return VerifyResult(
-                    status=VerificationStatus.VERIFICATION_CURRENT,
-                    vsi=vsi,
-                    reused_record_id=compat["record_id"],
-                    reused_evidence=ev,
-                    confidence_note=("Prior verification remains valid. Re-running the "
-                                     "identical verification against an identical VSI does "
-                                     "NOT increase confidence."),
-                    evidence=ev,
-                )
+                # A prior record whose evidence reports failures must never be
+                # reused as current verification — that would relabel failed
+                # evidence as passing. Require a clean prior result to reuse.
+                if (ev.failed or 0) > 0:
+                    pass
+                else:
+                    return VerifyResult(
+                        status=VerificationStatus.VERIFICATION_CURRENT,
+                        vsi=vsi,
+                        reused_record_id=compat["record_id"],
+                        reused_evidence=ev,
+                        confidence_note=("Prior verification remains valid. Re-running the "
+                                         "identical verification against an identical VSI does "
+                                         "NOT increase confidence."),
+                        evidence=ev,
+                    )
 
         # 2. Not reusable -> identify why.
         latest = self._store.latest()
@@ -141,8 +147,15 @@ class VerificationEngine:
                 verification_scope=rvsi.get("verification_scope", ""),
             )
             diff_reasons = diff_vsi(old, vsi)
-            # changed scoped files -> affected scopes
-            changed = set(vsi.scope_file_hashes) ^ set(old.scope_file_hashes)
+            # Identify changed scoped files by CONTENT, not by path set. A
+            # same-path in-place edit changes file content but not the set of
+            # paths, so a symmetric-difference of path sets would be empty and
+            # route a real code change to docs-only verification. Compare the
+            # per-path content hashes instead.
+            changed = {
+                p for p in set(vsi.scope_file_hashes) | set(old.scope_file_hashes)
+                if vsi.scope_file_hashes.get(p) != old.scope_file_hashes.get(p)
+            }
             affected_scopes = map_paths_to_scopes(changed)
 
         if force:
@@ -162,15 +175,23 @@ class VerificationEngine:
 
         # 4. Run only the necessary verification.
         evidence = self._runner(run_scope)
+        # Failed evidence must not be recorded as a clean (re)verification.
+        # When the runner reports failures, mark the record as failed so it can
+        # never be reused as current verification downstream.
+        if (evidence.failed or 0) > 0:
+            status = VerificationStatus.VERIFICATION_INVALIDATED
+            confidence = 0.0
+        else:
+            status = VerificationStatus.VERIFICATION_REQUIRED
+            confidence = 1.0
         rec_id = f"vr-{uuid.uuid4().hex[:12]}"
         # On the run-path we always (re-)verified because the state changed or
         # this is the first verification. Reuse (CURRENT) is handled by the early
         # return above. Doc-only scopes still report REQUIRED when a change was
         # detected; they simply don't invoke the test suite (see runner).
-        status = VerificationStatus.VERIFICATION_REQUIRED
         rec = VerificationRecord(
             record_id=rec_id, vsi=vsi, status=status.value, evidence=evidence,
-            confidence=1.0)
+            confidence=confidence)
         self._store.add(rec)
         # Mark the prior same-scope record as superseded (not the global latest,
         # which may belong to a different scope and must remain reusable).

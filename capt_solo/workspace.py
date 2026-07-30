@@ -508,10 +508,21 @@ def generate_checkpoint(task_id: Optional[str] = None, next_command: str = "",
     try:
         r = subprocess.run(["python3", "-m", "pytest", "-q"], cwd=REPO_ROOT,
                            capture_output=True, text=True, timeout=120)
+        summary = ""
         for line in (r.stdout + r.stderr).splitlines():
             if "passed" in line or "failed" in line:
-                tests_status = line.strip()
+                summary = line.strip()
                 break
+        # Only a zero exit code means the suite actually passed. Recording a
+        # summary line from a nonzero run would let a failed suite be reported
+        # as passing evidence in CHECKPOINT.md.
+        if summary:
+            if r.returncode == 0:
+                tests_status = summary
+            else:
+                tests_status = f"FAILED (exit {r.returncode}): {summary}"
+        elif r.returncode != 0:
+            tests_status = f"FAILED (exit {r.returncode}); no summary line parsed"
     except Exception:
         pass
     active_files = files or (f"tasks/{task_id}.json" if task_id else "")

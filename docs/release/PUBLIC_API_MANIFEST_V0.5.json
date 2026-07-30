@@ -3,7 +3,7 @@
   "release_line": "0.5",
   "version": "0.5.0",
   "release_status": "hardening",
-  "candidate_sha": "UNFROZEN",
+  "candidate_sha": "a04b6fc3003ed7a01ee05117d92b715c1ec272a1",
   "public_architecture": "six-pillars",
   "packages": {
     "stable": [

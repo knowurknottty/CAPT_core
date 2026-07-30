@@ -453,7 +453,19 @@ def _cmd_release(args, as_json: bool) -> int:
 
 
 def _cmd_architecture(args, as_json) -> int:
-    from architecture.validate_registry import validate, load_registry, REGISTRY_PATH
+    # The architecture registry validator is a repository-development tool: it
+    # validates architecture/registry.yaml against docs/adr and the source tree
+    # layout. It is deliberately not shipped in the installed distribution, so
+    # this import fails for installed users. Fail with a clear, actionable
+    # message instead of an unhandled ModuleNotFoundError traceback.
+    try:
+        from architecture.validate_registry import validate, load_registry, REGISTRY_PATH
+    except ModuleNotFoundError:
+        return _fail(
+            "architecture commands require a repository checkout; the "
+            "'architecture' package is not part of the installed distribution. "
+            "Run this command from a source checkout of capt-solo."
+        )
     if args.action == "validate":
         try:
             reg = load_registry()

@@ -94,10 +94,10 @@ else
   emit "cli.available" "fail" "medium" "CLI not runnable" "cli error" "check capt_cli.py"
 fi
 
-if PYTHONPATH="$CAPT_SOLO_SRC" python3 -c "import json,sys; d=json.load(open('$HERMES_CONFIG_DIR/plugins/capt-solo/plugin.json')); sys.exit(0 if len(d.get('tools',[]))==46 else 1)" 2>/dev/null; then
+if PYTHONPATH="$CAPT_SOLO_SRC" python3 -c "import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if len(d.get('tools',[]))==46 else 1)" "$HERMES_CONFIG_DIR/plugins/capt-solo/plugin.json" 2>/dev/null; then
   emit "plugin.tools" "pass" "high" "Plugin tool count is 46" "46 tools" "n/a"
 elif [ -f "$CAPT_SOLO_SRC/capt_solo/plugin/plugin.json" ]; then
-  CNT=$(python3 -c "import json; print(len(json.load(open('$CAPT_SOLO_SRC/capt_solo/plugin/plugin.json')).get('tools',[])))")
+  CNT=$(python3 -c "import json,sys; print(len(json.load(open(sys.argv[1])).get('tools',[])))" "$CAPT_SOLO_SRC/capt_solo/plugin/plugin.json")
   emit "plugin.tools" "warn" "medium" "Plugin tools counted from source (not installed)" "source tools=$CNT" "run install.sh to deploy plugin"
 else
   emit "plugin.tools" "fail" "high" "Plugin tool count != 46" "no plugin.json" "restore plugin manifest"
