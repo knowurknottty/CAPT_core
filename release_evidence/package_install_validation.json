@@ -1,0 +1,14 @@
+{
+  "wheel": {
+    "path": "dist/capt_solo-0.5.0-py3-none-any.whl",
+    "sha256": "e9e316464916a5ae97a4306ba15ad87dc1b191ee49d4cb047e9a9950248a3ba9",
+    "install": "pass"
+  },
+  "sdist": {
+    "path": "dist/capt_solo-0.5.0.tar.gz",
+    "sha256": "92962c3b26687a61391593caba5ae0ea58a96c44374761616ba421d95189c480",
+    "install": "pass"
+  },
+  "license_in_wheel": true,
+  "version_consistency": "0.5.0 (pyproject + __init__ + manifest)"
+}

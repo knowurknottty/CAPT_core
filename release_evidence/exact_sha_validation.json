@@ -1,0 +1,32 @@
+{
+  "candidate_sha": "c4b954cc2d3168c3bc5345fab0c0e5d0eaa9ebea",
+  "branch": "integration/capt-v05-release-corrected",
+  "python": "3.12.13",
+  "tests": {
+    "command": "python -m pytest tests/ -q",
+    "result": "715 passed, 44 skipped",
+    "exit": 0
+  },
+  "build": {
+    "wheel": "e9e316464916a5ae97a4306ba15ad87dc1b191ee49d4cb047e9a9950248a3ba9",
+    "sdist": "92962c3b26687a61391593caba5ae0ea58a96c44374761616ba421d95189c480"
+  },
+  "verify_runtime": {
+    "result": "52 pass / 1 warn / 0 fail (53 checks)",
+    "exit": 0
+  },
+  "gitleaks": {
+    "result": "no leaks found",
+    "config": ".gitleaks.toml"
+  },
+  "release_validate_nonfinal": {
+    "candidate_sha": "UNFROZEN",
+    "exit": 0
+  },
+  "clean_install": {
+    "wheel": "pass (import capt_solo + components)",
+    "sdist": "pass (no-network import, all core pkgs)"
+  },
+  "no_hermes_imports": true,
+  "generated_at": "2026-07-30"
+}

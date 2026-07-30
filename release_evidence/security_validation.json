@@ -1,0 +1,7 @@
+{
+  "gitleaks": "no leaks",
+  "verify_runtime": "52 pass/1 warn/0 fail",
+  "ate_component": "optional, degradable, no creds in MCP args, network_enabled=false",
+  "doctor_sh": "restored integration version (no shell-var injection)",
+  "secret_patterns": "capt_solo/memory/secrets.screen present"
+}
