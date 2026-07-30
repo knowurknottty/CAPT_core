@@ -3,7 +3,7 @@
 > Read-only release semantics are enforced by `capt release validate`. Runtime
 > behavior remains independently checked by `./verify.sh`.
 
-- **branch**: `codex/capt-v0.5-p0-release-hardening`
+- **branch**: `integration/capt-v05-release-corrected` (converged to `integration/capt-v05-treasure-convergence` at OD-4)
 - **candidate_sha**: `UNFROZEN`
 - **version**: `0.5.0`
 - **release_status**: `HARDENING — NOT RELEASE READY`

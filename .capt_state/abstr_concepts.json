@@ -1,0 +1,129 @@
+{
+  "concepts": [
+    {
+      "name": "agent",
+      "properties": [
+        "autonomous",
+        "reasoning",
+        "acting"
+      ],
+      "parents": [],
+      "created_by": "seed",
+      "usage_count": 0,
+      "created_at": 1785267631.1586409
+    },
+    {
+      "name": "memory",
+      "properties": [
+        "persistent",
+        "retrievable",
+        "semantic"
+      ],
+      "parents": [],
+      "created_by": "seed",
+      "usage_count": 0,
+      "created_at": 1785267631.1586409
+    },
+    {
+      "name": "cognition",
+      "properties": [
+        "reasoning",
+        "learning",
+        "perceiving"
+      ],
+      "parents": [],
+      "created_by": "seed",
+      "usage_count": 0,
+      "created_at": 1785267631.1586418
+    },
+    {
+      "name": "intelligence",
+      "properties": [
+        "adaptive",
+        "goal_directed"
+      ],
+      "parents": [
+        "cognition"
+      ],
+      "created_by": "seed",
+      "usage_count": 0,
+      "created_at": 1785267631.1586418
+    },
+    {
+      "name": "swarm",
+      "properties": [
+        "distributed",
+        "coordinated",
+        "emergent"
+      ],
+      "parents": [
+        "agent"
+      ],
+      "created_by": "seed",
+      "usage_count": 0,
+      "created_at": 1785267631.1586418
+    },
+    {
+      "name": "language",
+      "properties": [
+        "symbolic",
+        "compositional",
+        "communicative"
+      ],
+      "parents": [],
+      "created_by": "seed",
+      "usage_count": 0,
+      "created_at": 1785267631.158643
+    },
+    {
+      "name": "concept",
+      "properties": [
+        "abstract",
+        "representational"
+      ],
+      "parents": [
+        "cognition"
+      ],
+      "created_by": "seed",
+      "usage_count": 0,
+      "created_at": 1785267631.158643
+    },
+    {
+      "name": "goal",
+      "properties": [
+        "intentional",
+        "future_directed"
+      ],
+      "parents": [],
+      "created_by": "seed",
+      "usage_count": 0,
+      "created_at": 1785267631.158644
+    },
+    {
+      "name": "perception",
+      "properties": [
+        "sensory",
+        "filtering",
+        "attention"
+      ],
+      "parents": [
+        "cognition"
+      ],
+      "created_by": "seed",
+      "usage_count": 0,
+      "created_at": 1785267631.158645
+    },
+    {
+      "name": "action",
+      "properties": [
+        "physical",
+        "intentional",
+        "causal"
+      ],
+      "parents": [],
+      "created_by": "seed",
+      "usage_count": 0,
+      "created_at": 1785267631.158645
+    }
+  ]
+}

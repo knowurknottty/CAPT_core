@@ -1,0 +1,87 @@
+name: Release Security
+
+on:
+  pull_request:
+  push:
+    branches: [main, integration/capt-v05-release-corrected, integration/capt-v05-treasure-convergence]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install test and audit tooling
+        run: python -m pip install --upgrade pip pytest pytest-cov build pip-audit
+      - name: Install CAPT Solo
+        run: python -m pip install -e .
+      - name: Test suite report
+        id: tests
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          python -m pytest -q --cov=capt_solo --cov-report=term-missing --cov-fail-under=80 2>&1 | tee pytest-${{ matrix.python-version }}.log
+      - name: Upload pytest diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-${{ matrix.python-version }}
+          path: pytest-${{ matrix.python-version }}.log
+      - name: Enforce test suite
+        if: steps.tests.outcome != 'success'
+        run: exit 1
+      - name: Runtime verification (v0.4 harness, optional ATE)
+        run: python verify_runtime.py
+      - name: Exact-SHA release validation
+        run: python capt_cli.py release validate --final
+      - name: Doctor
+        run: python capt_cli.py doctor
+      - name: Build distribution
+        run: python -m build
+      - name: Installed wheel import smoke test
+        run: |
+          python -m pip install --force-reinstall dist/*.whl
+          python - <<'PY'
+          import importlib.metadata as md
+          import capt_solo
+          print("capt_solo import: PASS")
+          print("distribution:", md.version("capt-solo"))
+          PY
+      - name: Audit shipped Python dependency closure
+        run: |
+          python -m pip freeze --exclude-editable > /tmp/runtime-requirements.txt
+          pip-audit -r /tmp/runtime-requirements.txt
+      - name: Compile all Python
+        run: python -m compileall -q capt_solo tests
+      - name: Security invariants
+        run: |
+          ! grep -R -n -E 'aws_access_key|github_token|slack_token|stripe_key' capt_solo
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          cfg = json.loads(Path("capt_solo/components/anti_token_extraction.mcp.json").read_text())
+          assert cfg["transport"] == "stdio"
+          assert cfg["mcp_server"]["credentials_in_args"] is False
+          assert cfg["mcp_server"]["network_enabled"] is False
+          PY
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
