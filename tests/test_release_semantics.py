@@ -54,11 +54,12 @@ def git_clone(tmp_path):
     return destination
 
 
-def test_live_release_semantics_pass():
-    # On a SOURCE commit whose manifest names itself, final validation must
-    # pass fully (clean tree, sha_match source context). This test runs against
-    # REPO; it only passes once the manifest's candidate_sha equals HEAD.
-    result = result_document(validate_release(REPO, final=True))
+def test_live_release_semantics_pass(git_clone):
+    # On a METADATA commit whose manifest names the source ancestor, final
+    # validation must pass fully (clean tree, sha_match metadata context).
+    # Runs against a clean git clone so the environmental clean-tree check is
+    # exercised honestly rather than against the dev working tree.
+    result = result_document(validate_release(git_clone, final=True))
     assert result["ok"] is True, result
 
 
