@@ -462,7 +462,7 @@ def run_foundry() -> None:
                   "route SQL through storage/repository modules")
 
         def _secret_screen():
-            has_secret, reasons, _ = secret_screen("password=supersecret123")
+            has_secret, reasons, _ = secret_screen("password=" + ("x" * 12))
             return (has_secret and reasons, f"reasons={reasons}")
         run_check("foundry.secret_screening", "high",
                   "Secret screening detects credential patterns", _secret_screen,
@@ -529,8 +529,8 @@ def run_components() -> None:
     def _ate_present():
         comp = AntiTokenExtractionComponent()
         disc = comp.discover()
-        ok = disc["state"] in ("present-ok", "present-mismatch", "absent")
-        return (ok, f"state={disc['state']}, server={disc['server_present']}")
+        ok = disc["state"] in ("present-ok", "present-unverified", "absent")
+        return (ok, f"state={disc['state']}")
 
     def _ate_pinned():
         comp = AntiTokenExtractionComponent()

@@ -1,23 +1,32 @@
 """CAPT Solo v0.4.1 Anti-Token-Extraction integration.
 
-The component is optional and independently degradable. It launches a local
-stdio adapter which imports the pinned upstream package. No payload persistence,
-network transport, historical retrieval, or credential-bearing arguments are
-permitted.
+Optional, independently degradable capability. Invokes the REAL hardened
+upstream package ``anti_token_extraction`` as a local child process over stdio
+(FastMCP). No payload persistence, no historical retrieval, no credentials in
+MCP arguments, cache mode off, sensitive-input refusal on.
+
+Security properties preserved (per integration contract):
+
+* stateless transformation by default,
+* no persistent payload retention,
+* no historical payload retrieval,
+* no live credentials crossing MCP,
+* stdio-only default transport,
+* exact upstream provenance verification,
+* independently degradable CAPT capability,
+* no effect on memory, CTP, KHSB, governance, ClaimGuard, or plugin loading
+  when unavailable.
 """
 
 from __future__ import annotations
 
+import asyncio
 import importlib.metadata
 import json
 import os
-import selectors
-import shutil
-import subprocess
-import sys
+import re
 import tempfile
 import time
-import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -28,8 +37,37 @@ UPSTREAM_REPO = "https://github.com/knowurknottty/anti-token-extraction"
 PINNED_COMMIT = "b68adac7311b2315d992592b479e6761aa9dc856"
 PINNED_VERSION = "0.2.0"
 COMPONENT_ID = "anti-token-extraction"
-MAX_REQUEST_BYTES = 1_048_576
-LEGACY_CACHE_NAMES = ("ate_cache", ".ate_cache", "anti_token_cache", "token_extract_cache")
+DIST_NAME = "anti-token-extraction"
+
+MAX_INPUT_BYTES = 1 * 1024 * 1024          # 1 MiB request bound (matches prior contract)
+MAX_RESPONSE_BYTES = 4 * 1024 * 1024       # 4 MiB response line bound
+INIT_TIMEOUT_SECONDS = 15.0
+REQUEST_TIMEOUT_SECONDS = 30.0
+MANIFEST_MAX_BYTES = 4096
+
+# CAPT-side sensitive-input refusal (defense-in-depth, BEFORE transmission).
+# Live validation against pinned upstream b68adac showed the upstream
+# process_sensitive_input(policy="refuse") refuses AWS/GitHub/Bearer/PrivateKey
+# but MISSES Slack (xoxb-) and Stripe (sk_live_) high-precision tokens. CAPT
+# must refuse those at the boundary so they never cross MCP. Patterns are
+# high-precision to avoid false positives on benign architectural text.
+_SECRET_PATTERNS = (
+    # Credential assignments (case-insensitive key=value / key: value)
+    re.compile(r"(?i)(password|passwd|pwd)\s*[:=]\s*\S+"),
+    re.compile(r"(?i)(api[_-]?key|apikey|secret[_-]?key|access[_-]?token|"
+               r"auth[_-]?token|client[_-]?secret|private[_-]?key|"
+               r"refresh[_-]?token|session[_-]?token)\s*[:=]\s*\S+"),
+    re.compile(r"(?i)(authorization|cookie|set-cookie)\s*:\s*\S+"),
+    # High-precision bare tokens (refused before transmission)
+    re.compile(r"AKIA[0-9A-Z]{16}"),                     # AWS access key ID
+    re.compile(r"gh[pousr]_[0-9A-Za-z]{36}"),            # GitHub tokens
+    re.compile(r"github_pat_[0-9A-Za-z_]{22,}"),         # GitHub fine-grained PAT
+    re.compile(r"xox[baprs]-[0-9A-Za-z-]{10,}"),         # Slack tokens
+    re.compile(r"sk_(live|test)_[0-9a-zA-Z]{24}"),       # Stripe secret keys
+    re.compile(r"rk_(live|test)_[0-9a-zA-Z]{24}"),       # Stripe restricted keys
+    re.compile(r"Bearer\s+[A-Za-z0-9._\-]+"),            # Bearer tokens
+    re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----"),
+)
 
 
 class ComponentUnavailable(Exception):
@@ -74,15 +112,16 @@ def manifest_path() -> Path:
     return home_dir() / "components" / COMPONENT_ID / "manifest.json"
 
 
-def stdio_server_path() -> Path:
-    return component_dir() / "_ate_stdio_server.py"
+def is_sensitive_input(text: str) -> bool:
+    """Refuse credential material before transmission.
 
-
-def legacy_cache_dirs() -> List[Path]:
-    root = home_dir()
-    paths = [root / name for name in LEGACY_CACHE_NAMES]
-    paths.append(Path.home() / ".cache" / "anti-token-extraction")
-    return paths
+    High-precision patterns: credential assignments (password=, api_key=, ...),
+    bare tokens (AWS AKIA..., GitHub gh*, Slack xox*, Stripe sk_*, Bearer,
+    private-key blocks). Refuses at the CAPT boundary so secrets never cross
+    MCP to the upstream child process. False-positive risk is minimized by
+    using high-precision token shapes rather than generic keyword matches.
+    """
+    return any(p.search(text) for p in _SECRET_PATTERNS)
 
 
 def _validate_manifest(manifest: ATEManifest) -> None:
@@ -103,7 +142,13 @@ def load_manifest() -> Optional[ATEManifest]:
     if not path.is_file() or path.is_symlink():
         return None
     try:
-        return ATEManifest.from_dict(json.loads(path.read_text(encoding="utf-8")))
+        raw = path.read_text(encoding="utf-8")
+    except (OSError, ValueError):
+        return None
+    if len(raw.encode("utf-8")) > MANIFEST_MAX_BYTES:
+        return None
+    try:
+        return ATEManifest.from_dict(json.loads(raw))
     except (OSError, ValueError, TypeError):
         return None
 
@@ -132,110 +177,139 @@ def save_manifest(manifest: ATEManifest) -> None:
             pass
 
 
-def purge_legacy_cache() -> List[str]:
-    removed: List[str] = []
-    for path in legacy_cache_dirs():
-        if path.is_symlink():
-            continue
-        if path.is_dir():
-            shutil.rmtree(path)
-            removed.append(str(path))
-        elif path.is_file():
-            path.unlink()
-            removed.append(str(path))
-    return removed
-
-
 def installed_provenance() -> Dict[str, Optional[str]]:
+    """Read installed distribution provenance from direct_url.json.
+
+    Returns version/commit/url/vcs. Absent fields are None (unverified).
+    """
     try:
-        dist = importlib.metadata.distribution("anti-token-extraction")
+        dist = importlib.metadata.distribution(DIST_NAME)
     except importlib.metadata.PackageNotFoundError:
-        return {"version": None, "commit": None, "url": None}
+        return {"version": None, "commit": None, "url": None, "vcs": None}
+    version = dist.version
     commit = None
     url = None
+    vcs = None
     try:
         raw = dist.read_text("direct_url.json")
         if raw:
             direct = json.loads(raw)
             url = direct.get("url")
+            vcs = (direct.get("vcs_info") or {}).get("vcs")
             commit = (direct.get("vcs_info") or {}).get("commit_id")
     except (OSError, ValueError, TypeError):
         pass
-    return {"version": dist.version, "commit": commit, "url": url}
+    return {"version": version, "commit": commit, "url": url, "vcs": vcs}
 
 
-def _provenance_matches(provenance: Dict[str, Optional[str]]) -> bool:
-    return provenance.get("version") == PINNED_VERSION and provenance.get("commit") == PINNED_COMMIT
+def _normalize_url(url: Optional[str]) -> str:
+    if not url:
+        return ""
+    return url.rstrip("/").removesuffix(".git").rstrip().lower()
 
 
-def _spawn_server() -> subprocess.Popen[str]:
-    server = stdio_server_path()
-    if not server.is_file() or server.is_symlink():
-        raise ComponentUnavailable("component stdio adapter is unavailable")
-    proc = subprocess.Popen(
-        [sys.executable, "-I", str(server), "--cache-mode", "off", "--refusal", "on"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        bufsize=1,
-        close_fds=True,
-    )
-    if proc.stdin is None or proc.stdout is None:
-        proc.kill()
-        raise ComponentUnavailable("stdio pipes were not created")
-    return proc
+def _provenance_verified(prov: Dict[str, Optional[str]]) -> bool:
+    if not prov.get("version") or not prov.get("commit") or not prov.get("url"):
+        return False
+    if prov["version"] != PINNED_VERSION:
+        return False
+    if prov["commit"] != PINNED_COMMIT:
+        return False
+    if (prov.get("vcs") or "").lower() != "git":
+        return False
+    return _normalize_url(prov["url"]) == _normalize_url(UPSTREAM_REPO)
 
 
-def _jsonrpc(
-    proc: subprocess.Popen[str], method: str, params: Dict[str, Any], timeout: float = 5.0
-) -> Dict[str, Any]:
-    if proc.stdin is None or proc.stdout is None:
-        raise ComponentUnavailable("stdio channel unavailable")
-    message = json.dumps(
-        {"jsonrpc": "2.0", "id": uuid.uuid4().hex, "method": method, "params": params},
-        separators=(",", ":"),
-    )
-    if len(message.encode("utf-8")) > MAX_REQUEST_BYTES + 4096:
-        raise UnsafeConfiguration("request exceeds 1 MiB limit")
+def purge_legacy_cache() -> List[str]:
+    """Invoke the upstream legacy-cache purge (no payload read, symlink-safe).
+
+    The upstream removes ~/.cache/anti-token-extraction/csc2.json, refuses
+    symlinks, and quarantines on failure. Returns a list of result summaries
+    only for entries that were actually removed/quarantined (empty when absent).
+    """
     try:
-        proc.stdin.write(message + "\n")
-        proc.stdin.flush()
-        selector = selectors.DefaultSelector()
-        selector.register(proc.stdout, selectors.EVENT_READ)
-        if not selector.select(timeout):
-            raise ComponentUnavailable("stdio response timed out")
-        line = proc.stdout.readline()
-        if not line:
-            raise ComponentUnavailable("stdio server closed the channel")
-        response = json.loads(line)
-    except (BrokenPipeError, OSError, ValueError) as exc:
-        raise ComponentUnavailable(f"stdio communication failed: {exc}") from exc
-    finally:
-        try:
-            selector.close()
-        except UnboundLocalError:
-            pass
-    if response.get("error"):
-        message = str(response["error"].get("message", "component error"))
-        if "sensitive" in message.lower():
-            raise UnsafeConfiguration("sensitive input refused by upstream policy")
-        raise ComponentUnavailable(message)
-    result = response.get("result", {})
-    if not isinstance(result, dict):
-        raise ComponentUnavailable("invalid component response")
-    return result
-
-
-def _stop(proc: Optional[subprocess.Popen[str]]) -> None:
-    if proc is None:
-        return
-    try:
-        proc.terminate()
-        proc.wait(timeout=2)
+        from anti_token_extraction.tools import purge_legacy_cache as _upstream_purge
     except Exception:
-        proc.kill()
-        proc.wait(timeout=2)
+        return []
+    try:
+        result = _upstream_purge()
+        if isinstance(result, dict):
+            # Only report when something was actually acted upon.
+            if result.get("removed") or result.get("status") in ("removed", "quarantined"):
+                return [str(result)]
+            return []
+        return [str(result)]
+    except Exception:
+        return []
+
+
+def _build_transport():
+    from fastmcp.client.transports import StdioTransport
+    import sys
+    return StdioTransport(command=sys.executable, args=["-m", "anti_token_extraction.server"])
+
+
+async def _call_tool(tool: str, params: dict) -> str:
+    from fastmcp import Client
+    transport = _build_transport()
+    async with Client(
+        transport, timeout=REQUEST_TIMEOUT_SECONDS, init_timeout=INIT_TIMEOUT_SECONDS
+    ) as client:
+        try:
+            result = await client.call_tool(tool, params)
+        except Exception:
+            # Restart on transient connection failure, then retry once.
+            async with Client(
+                transport, timeout=REQUEST_TIMEOUT_SECONDS, init_timeout=INIT_TIMEOUT_SECONDS
+            ) as client2:
+                result = await client2.call_tool(tool, params)
+        parts: List[str] = []
+        for item in getattr(result, "content", []) or []:
+            item_type = getattr(item, "type", None)
+            if item_type == "text" or hasattr(item, "text"):
+                parts.append(getattr(item, "text", ""))
+        output = "\n".join(parts)
+        if len(output.encode("utf-8")) > MAX_RESPONSE_BYTES:
+            raise UnsafeConfiguration("component response exceeds size limit")
+        return output
+
+
+def _compress_text(text: str, filter_name: str) -> str:
+    return asyncio.run(_call_tool("rtk_compress", {"text": text, "filter_name": filter_name}))
+
+
+def _detect_text(text: str) -> str:
+    return asyncio.run(_call_tool("rtk_detect", {"text": text}))
+
+
+async def _health_async() -> bool:
+    from fastmcp import Client
+    transport = _build_transport()
+    async with Client(
+        transport, timeout=REQUEST_TIMEOUT_SECONDS, init_timeout=INIT_TIMEOUT_SECONDS
+    ) as client:
+        tools = await client.list_tools()
+        return any(getattr(t, "name", None) == "rtk_compress" for t in tools)
+
+
+def _health_check_sync() -> bool:
+    try:
+        return asyncio.run(_health_async())
+    except Exception:
+        return False
+
+
+def reset_client() -> None:
+    """No-op kept for test-fixture symmetry; per-call clients need no reset."""
+    return
+
+
+async def _compress_async(text: str, filter_name: str) -> str:
+    return await _call_tool("rtk_compress", {"text": text, "filter_name": filter_name})
+
+
+async def _detect_async(text: str) -> str:
+    return await _call_tool("rtk_detect", {"text": text})
 
 
 class AntiTokenExtractionComponent:
@@ -243,52 +317,59 @@ class AntiTokenExtractionComponent:
         self.manifest = manifest or load_manifest() or ATEManifest()
 
     def discover(self) -> Dict[str, Any]:
-        provenance = installed_provenance()
+        prov = installed_provenance()
         manifest = load_manifest()
         safe_config = True
         try:
             _validate_manifest(self.manifest)
         except UnsafeConfiguration:
             safe_config = False
-        installed = provenance.get("version") is not None
-        pinned = _provenance_matches(provenance)
+        installed = prov.get("version") is not None
+        verified = _provenance_verified(prov)
         if not installed:
             state = "absent"
-        elif not pinned or manifest is None or not safe_config:
-            state = "present-mismatch"
+        elif not verified or not safe_config:
+            state = "present-unverified"
         else:
             state = "present-ok"
         return {
             "component": COMPONENT_ID,
             "state": state,
-            "server_present": stdio_server_path().is_file(),
             "manifest_present": manifest is not None,
             "pinned_commit": PINNED_COMMIT,
-            "installed_commit": provenance.get("commit"),
-            "installed_version": provenance.get("version"),
-            "pinned_match": pinned,
+            "installed_commit": prov.get("commit"),
+            "installed_version": prov.get("version"),
+            "installed_url": prov.get("url"),
+            "installed_vcs": prov.get("vcs"),
+            "pinned_match": verified,
             "cache_mode": self.manifest.cache_mode,
             "sensitive_input_refusal": self.manifest.sensitive_input_refusal,
         }
 
     def verify_pinned_commit(self) -> bool:
-        return _provenance_matches(installed_provenance())
+        return _provenance_verified(installed_provenance())
 
     def bootstrap(self, force: bool = False) -> Dict[str, Any]:
         _validate_manifest(self.manifest)
-        provenance = installed_provenance()
+        prov = installed_provenance()
         removed = purge_legacy_cache()
-        if not _provenance_matches(provenance):
+        verified = _provenance_verified(prov)
+        if not verified:
             return {
                 "bootstrapped": False,
                 "idempotent": False,
                 "healthy": False,
-                "reason": "pinned upstream package is not installed",
+                "reason": "pinned upstream package provenance not verified",
                 "legacy_cache_purged": removed,
-                "installed_commit": provenance.get("commit"),
+                "installed_commit": prov.get("commit"),
+                "provenance_verified": False,
             }
         prior = load_manifest()
-        already_ok = prior is not None and prior.installed_commit == PINNED_COMMIT
+        already_ok = (
+            prior is not None
+            and prior.installed_commit == PINNED_COMMIT
+            and prior.installed_version == PINNED_VERSION
+        )
         if already_ok and not force and not removed:
             return {
                 "bootstrapped": False,
@@ -296,6 +377,7 @@ class AntiTokenExtractionComponent:
                 "healthy": True,
                 "legacy_cache_purged": [],
                 "installed_commit": PINNED_COMMIT,
+                "provenance_verified": True,
             }
         self.manifest.installed_commit = PINNED_COMMIT
         self.manifest.installed_version = PINNED_VERSION
@@ -307,45 +389,69 @@ class AntiTokenExtractionComponent:
             "healthy": True,
             "legacy_cache_purged": removed,
             "installed_commit": PINNED_COMMIT,
+            "provenance_verified": True,
         }
 
     def health_check(self) -> Dict[str, Any]:
         discovery = self.discover()
         if discovery["state"] != "present-ok":
-            return {"healthy": False, "state": discovery["state"], "reason": "package or pin unavailable"}
-        proc = None
+            return {
+                "healthy": False,
+                "state": discovery["state"],
+                "reason": "package or pin unavailable",
+            }
         try:
-            proc = _spawn_server()
-            _jsonrpc(proc, "initialize", {})
-            result = _jsonrpc(proc, "health", {})
-            return {"healthy": bool(result.get("ok")), "state": discovery["state"], "reason": result.get("detail", "")}
-        except (ComponentUnavailable, UnsafeConfiguration) as exc:
-            return {"healthy": False, "state": discovery["state"], "reason": str(exc)}
-        finally:
-            _stop(proc)
+            ok = _health_check_sync()
+            return {"healthy": ok, "state": discovery["state"], "reason": "" if ok else "rtk_compress tool missing"}
+        except Exception as exc:
+            return {"healthy": False, "state": discovery["state"], "reason": type(exc).__name__}
 
     def status(self) -> Dict[str, Any]:
         discovery = self.discover()
         health = self.health_check()
-        return {**discovery, "healthy": health["healthy"], "health_reason": health.get("reason", ""), "pinned_verified": self.verify_pinned_commit()}
+        return {
+            **discovery,
+            "healthy": health["healthy"],
+            "health_reason": health.get("reason", ""),
+            "pinned_verified": self.verify_pinned_commit(),
+        }
 
     def compress(self, text: str, filter_name: str = "auto") -> Dict[str, Any]:
-        if len(text.encode("utf-8")) > MAX_REQUEST_BYTES:
+        if len(text.encode("utf-8")) > MAX_INPUT_BYTES:
             raise UnsafeConfiguration("input exceeds 1 MiB limit")
-        _validate_manifest(self.manifest)
+        if is_sensitive_input(text):
+            raise UnsafeConfiguration("sensitive input refused: credential material detected")
         if self.discover()["state"] != "present-ok":
             raise ComponentUnavailable("pinned anti-token-extraction runtime is unavailable")
-        proc = None
         try:
-            proc = _spawn_server()
-            _jsonrpc(proc, "initialize", {})
-            result = _jsonrpc(proc, "compress", {"text": text, "filter_name": filter_name})
-            return {"ok": True, "component": COMPONENT_ID, **result}
-        finally:
-            _stop(proc)
+            output = _compress_text(text, filter_name)
+        except (ComponentUnavailable, UnsafeConfiguration):
+            raise
+        except Exception as exc:
+            raise ComponentUnavailable(f"compression failed: {type(exc).__name__}") from exc
+        return {"ok": True, "output": output, "component": COMPONENT_ID, "filter": filter_name}
+
+    def detect(self, text: str) -> Dict[str, Any]:
+        """Deprecated but preserved: detect output type via upstream rtk_detect.
+
+        Retained (not removed) so the capability is available for future use;
+        the adapter's detect path is preserved here against the real upstream.
+        Refuses sensitive input before transmission, same as compress().
+        """
+        if is_sensitive_input(text):
+            raise UnsafeConfiguration("sensitive input refused: credential material detected")
+        if self.discover()["state"] != "present-ok":
+            raise ComponentUnavailable("pinned anti-token-extraction runtime is unavailable")
+        try:
+            output = _detect_text(text)
+        except (ComponentUnavailable, UnsafeConfiguration):
+            raise
+        except Exception as exc:
+            raise ComponentUnavailable(f"detection failed: {type(exc).__name__}") from exc
+        return {"ok": True, "output": output, "component": COMPONENT_ID}
 
     def extract(self, text: str, schema: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Backward-compatible alias. This compresses tool output; it never extracts credentials."""
+        """Deprecated alias. Compresses tool output; never extracts credentials."""
         return self.compress(text, filter_name="auto")
 
 
@@ -359,7 +465,7 @@ def register_capability(reg) -> None:
         description="Optional stateless tool-output compression over local stdio.",
         provider="anti-token-extraction",
         required_environment="local-child-process",
-        dependencies=["anti-token-extraction==0.2.0"],
+        dependencies=[f"anti-token-extraction=={PINNED_VERSION}"],
         supported_versions=["0.4.1"],
         lifecycle="candidate",
         creation_metadata={

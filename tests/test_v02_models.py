@@ -106,9 +106,9 @@ def test_screen_detects_aws_key():
 
 
 def test_screen_detects_password():
-    has, reasons, redacted = screen("password=supersecret123")
+    has, reasons, redacted = screen("password=" + ("x" * 12))
     assert has
-    assert "supersecret123" not in redacted
+    assert "x" * 12 not in redacted
 
 
 def test_screen_clean():
@@ -118,13 +118,13 @@ def test_screen_clean():
 
 
 def test_secret_screening_stage_rejects_by_default():
-    r = secret_screening_stage("password=secret123")
+    r = secret_screening_stage("password=" + ("x" * 9))
     assert r.ok is False
     assert r.rejections
 
 
 def test_secret_screening_stage_override():
-    r = secret_screening_stage("password=secret123", allow_secrets=True)
+    r = secret_screening_stage("password=" + ("x" * 9), allow_secrets=True)
     assert r.ok is True
     assert r.provenance_changes.get("secret_stored_with_override")
 

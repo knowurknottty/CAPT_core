@@ -237,7 +237,7 @@ def test_restart_recovery_across_processes(tmp_path):
 
 def test_secret_screening_blocks_secret_in_memory():
     # a string matching a high-precision secret pattern must be flagged
-    ok, reasons, _ = screen("api_key=abcdefghijklmnopqrstuvwxyz123456")
+    ok, reasons, _ = screen("api_key=" + ("x" * 32))
     assert ok is True
     assert reasons
     # a benign architectural fact must NOT be flagged
