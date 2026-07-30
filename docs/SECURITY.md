@@ -1,74 +1,146 @@
-# CAPT Solo v0.1 — Security
+# CAPT Core Security Boundaries
 
-CAPT Solo is **local-first by design**. This document states what that means for
-security and where the boundaries are.
+CAPT Core is local-first by design. This document describes the protections
+implemented by the current CAPT Solo reference runtime, the trust assumptions it
+makes, and the controls it does **not** yet provide.
 
-## What is protected by architecture
+## Security goals
 
-- **No network egress.** The runtime makes zero outbound connections. KHSB is
-  in-process only. There is no telemetry, no update check, no remote call.
-- **No external database.** All state is a local SQLite file under
-  `~/.capt-solo`. No credentials, no connection strings.
-- **No Docker / container.** Nothing runs in a privileged container.
-- **No secrets required.** The runtime needs no API keys to operate.
+The current runtime is designed to:
+
+- avoid mandatory cloud services and network egress
+- minimize secret handling
+- keep persistent state local and inspectable
+- preserve transaction integrity and crash recovery
+- prevent unsupported capability claims
+- quarantine imported governed packages before approval
+- attribute consequential actions to named actors
+- fail closed on unsafe migrations and validation failures
+
+## Trust model
+
+CAPT Solo currently assumes a single trusted local user and operating-system
+account. It is not a multi-user authorization service.
+
+The host operating system, filesystem permissions, Python runtime, and local
+account are part of the trusted computing base.
+
+## Architectural protections
+
+- **No required network egress.** The base runtime performs no telemetry, update
+  check, or remote database call.
+- **No external database.** Persistent state is stored in local SQLite files under
+  `~/.capt-solo`.
+- **No Docker requirement.** The runtime does not depend on a privileged container.
+- **No required API secrets.** Core operation does not require model-provider keys.
+- **Stable public boundary.** Public callers use `capt_solo.api`; raw SQL is kept
+  out of the public API and CLI surfaces.
 
 ## Data at rest
 
-- Memory is stored in plaintext SQLite. **Do not store secrets, tokens, PII, or
-  credentials in memory content or metadata.** Export files (`export_json`) and
-  backups are also plaintext.
-- File permissions follow the user's umask. On multi-user machines, restrict
-  `~/.capt-solo` with `chmod 700` if sensitive project memory is stored.
+Memory, exports, backups, and transaction journals are plaintext unless protected
+by external filesystem or disk encryption.
 
-## Integrity
+Do not store credentials, access tokens, private keys, or unnecessary sensitive
+personal data in CAPT memory content or metadata.
 
-- Memory integrity is verified via SQLite `PRAGMA integrity_check` plus a
-  tag-referential-integrity cross-check (`MemoryEngine.integrity_check()`).
-- CTP journals are append-only and flushed on every write. A crash cannot
-  corrupt committed history; `recover()` replays and reports pending txns.
-- `idempotency_key` in CTP prevents double-application of an operation. Reusing
-  a finalized key raises `IdempotencyError`.
+On multi-user systems, restrict the runtime directory appropriately, for example:
 
-## v0.4 — Additional security boundaries
+```bash
+chmod 700 ~/.capt-solo
+```
 
-- **Migration safety gate.** Forward migrations are backup-gated. Before any
-  schema bump, a verified `sqlite3.backup()` + `integrity_check` is taken.
-  Failure aborts the migration (no partial apply). `ALLOW_MIGRATION_WITHOUT_BACKUP`
-  is `False` by default; enabling it is a dev-only override that emits a severe
-  warning.
-- **ClaimGuard downgrade.** No capability/skill is reported verified without a
-  satisfied proof aggregate. Degraded/revoked capabilities are always downgraded.
-  Scoped degradation language prevents a platform-specific issue (e.g. macOS)
-  from being misreported as a global revoke.
-- **Bubble quarantine.** Imported bubbles are never trusted, executed, or
-  auto-installed. Validation runs 12 checks (manifest before payload) before
-  approval. Secret patterns and unsafe permissions block validation.
-- **Skill validation.** The 12-stage harness rejects unsafe command patterns
-  (`rm -rf`, `sudo`, `format`), secret patterns, and disallowed permissions.
-  A skill without a rollback strategy (>=10 chars) cannot be validated.
-- **Governance audit.** All consequential actions (publish, deprecate, revoke,
-  approve, install) run inside a CTP transaction with a named actor and an
-  append-only audit trail. Anonymous governance is rejected.
-- **Public surface is SQL-free.** `api.py` and `capt_cli.py` contain no raw SQL;
-  the plugin exposes only stable public tools (`public_only: true`).
+## Integrity and recovery
 
-## What is NOT a security feature (v0.4)
+- SQLite integrity is checked with `PRAGMA integrity_check` and referential checks.
+- CTP journals are append-only and flushed per write.
+- `recover()` identifies transactions without a final commit or abort event.
+- Reusing a finalized idempotency key raises an error instead of applying the same
+  operation twice.
+- Forward migrations require a verified backup, integrity check, and receipt.
+- Failed backup or integrity validation aborts the migration before partial apply.
 
-- **No encryption at rest.** (unchanged from v0.1)
-- **No authentication/authorization.** (unchanged; local single-user trust)
-- **Bubble signatures are placeholder.** `signature_metadata` exists but no
-  cryptographic verification is performed in v0.4.
-- **No audit signing.** CTP audit trails are append-only, not cryptographically
-  signed (reserved for v1.0).
+## Proof and claim controls
 
-## Reporting
+- A capability, skill, or workflow is not reported verified without sufficient
+  evidence for its declared requirements.
+- ClaimGuard downgrades unsupported or stale claims.
+- Degradation is scope-aware so a platform-specific failure is not represented as
+  a global revoke.
+- Capability lifecycle transitions and degradation records preserve provenance and
+  remediation context.
 
-CAPT Solo is intended for open-source release. Report security issues privately
-to the maintainer before public disclosure. Do not open public issues containing
-real data from your local store.
+## Skill and package validation
 
-## Future (reserved, not implemented)
+- Skill validation uses a 12-stage harness.
+- Unsafe command patterns, secret patterns, and disallowed permissions fail
+  validation.
+- A rollback strategy is required before a skill can be validated.
+- Imported Knowledge Bubbles are quarantined by default.
+- Bubble validation is manifest-first and blocks unsafe permissions and secret
+  patterns before approval.
+- Imported bubbles are not automatically trusted, executed, or installed.
 
-- Encrypted backup/export (`--encrypt`).
-- Optional GPG-signed CTP receipts.
-- Remote memory stores with auth (behind the same public API).
+## Governance audit
+
+Consequential actions such as approval, publication, installation, deprecation,
+and revocation are:
+
+- executed inside CTP transaction boundaries
+- attributed to a named actor
+- linked to append-only audit records
+- rejected when anonymous governance is attempted
+
+## Component isolation and secret minimization
+
+Optional components are expected to degrade independently rather than becoming a
+mandatory failure point for the core runtime.
+
+The hardened Anti-Token-Extraction integration is designed to run locally over a
+bounded stdio JSON-RPC boundary with cache mode disabled, sensitive-input refusal,
+and no credentials passed through MCP arguments.
+
+## Known limitations
+
+The current runtime does **not** claim:
+
+- encryption at rest
+- multi-user authentication or authorization
+- cryptographic verification of Knowledge Bubble signatures
+- cryptographically signed CTP audit trails
+- protection from a compromised host operating system or local account
+- universal isolation for every optional external model or tool runtime
+
+These limitations are intentional documentation, not implied future functionality.
+Consumers requiring a higher-trust environment must add appropriate host,
+filesystem, identity, isolation, and cryptographic controls.
+
+## Security validation
+
+The repository includes automated tests, runtime verification, diagnostics, and
+release validation. Security-related changes should include a reproducer or
+regression test whenever practical.
+
+Run:
+
+```bash
+./verify.sh
+./doctor.sh
+python verify_runtime.py
+python -m pytest tests/ -q
+```
+
+## Reporting vulnerabilities
+
+Report security issues privately to the maintainer before public disclosure. Do
+not open public issues containing real secrets or data from a local CAPT store.
+
+## Planned higher-trust work
+
+Reserved future work includes:
+
+- encrypted backup and export
+- cryptographic Knowledge Bubble verification
+- signed CTP receipts and audit records
+- optional authenticated remote stores behind the stable API
+- stronger process isolation for optional components
