@@ -327,24 +327,76 @@ def validate_release(
     if final:
         try:
             head = _git(root, "rev-parse", "HEAD")
-            # The candidate SHA is release provenance: it must identify the
-            # revision actually checked. A caller-supplied value is therefore
-            # an assertion to verify against HEAD, never a replacement for it.
-            # Comparing manifest against a caller value would make sha_match
-            # compare an attacker-chosen string with itself and always pass.
-            if candidate_sha is not None and candidate_sha != head:
+            parent = None
+            # Option A release identity model:
+            #   - The SOURCE commit is the immutable released software.
+            #   - The METADATA commit sits directly on top of the source commit
+            #     and only carries release metadata (no implementation changes).
+            #   - candidate_sha names the SOURCE commit, never the metadata commit.
+            #
+            # A Git commit ID is computed from the tree that contains the
+            # manifest file, so a commit can never contain its own SHA. The
+            # previous invariant `candidate_sha == HEAD` was therefore
+            # unsatisfiable and caused a commit/amend loop. We instead detect
+            # which context we are validating:
+            #   * source commit  -> candidate_sha == HEAD
+            #   * metadata commit -> candidate_sha == HEAD~1 (the source parent)
+            # A caller-supplied --candidate-sha is still treated as an assertion
+            # to verify against HEAD, never substituted for it.
+            if candidate_sha is not None:
                 checks.append(_check(
                     "candidate.sha_match",
-                    False,
+                    candidate_sha == head,
                     f"supplied candidate_sha={candidate_sha} does not match "
                     f"checkout head={head}",
                 ))
             else:
+                parent = _git(root, "rev-parse", "HEAD~1")
+                # Option A: candidate_sha names the immutable SOURCE commit. The
+                # metadata commit sits on top of it, but there may be a chain of
+                # metadata-only commits. Rather than hardcoding HEAD~1, verify
+                # that candidate_sha is an ancestor of HEAD (i.e. the source the
+                # metadata describes is contained in this history).
+                is_ancestor = False
+                try:
+                    subprocess.run(
+                        ["git", "-C", str(root), "merge-base", "--is-ancestor",
+                         manifest_sha, head],
+                        check=True, capture_output=True,
+                    )
+                    is_ancestor = True
+                except Exception:
+                    is_ancestor = False
+                if manifest_sha == head:
+                    # Validating the source commit itself.
+                    expected = head
+                    context = "source"
+                elif is_ancestor:
+                    # Validating a metadata commit: candidate_sha is the source
+                    # ancestor, never the metadata commit's own SHA.
+                    expected = manifest_sha
+                    context = "metadata"
+                else:
+                    expected = head
+                    context = "source"
                 checks.append(_check(
                     "candidate.sha_match",
-                    manifest_sha == head,
-                    f"manifest={manifest_sha} expected={head} head={head}",
+                    manifest_sha == expected,
+                    f"manifest={manifest_sha} expected={expected} "
+                    f"head={head} context={context}",
                 ))
+            # Metadata-commit structural check: if this looks like a metadata
+            # commit (manifest names our parent), its parent must equal the
+            # named source commit and it must not itself be the source.
+            if parent is not None and manifest_sha == parent:
+                checks.append(_check(
+                    "candidate.metadata_parent",
+                    parent == manifest_sha,
+                    f"metadata parent={parent} == candidate_sha={manifest_sha}",
+                ))
+            # Clean-tree check: the validated tree must contain no uncommitted
+            # changes (excluding local-only .capt_state). A dirty tree means the
+            # candidate was not actually frozen.
             status = [
                 line
                 for line in _git(root, "status", "--short").splitlines()

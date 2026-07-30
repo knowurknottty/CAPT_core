@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -41,19 +42,49 @@ def release_copy(tmp_path):
     return destination
 
 
+@pytest.fixture()
+def git_clone(tmp_path):
+    """A real git clone of REPO so the validator's git path executes."""
+    destination = tmp_path / "release-clone"
+    subprocess.run(
+        ["git", "clone", "--quiet", "--no-hardlinks", str(REPO), str(destination)],
+        check=True,
+        capture_output=True,
+    )
+    return destination
+
+
 def test_live_release_semantics_pass():
-    # The manifest is frozen to the release candidate SHA, so final validation
-    # must pass on every check EXCEPT candidate.clean_tree, which depends on the
-    # working tree being committed. We assert the semantic gates pass here; the
-    # clean-tree gate is covered by the release pipeline after commit.
+    # On a SOURCE commit whose manifest names itself, final validation must
+    # pass fully (clean tree, sha_match source context). This test runs against
+    # REPO; it only passes once the manifest's candidate_sha equals HEAD.
     result = result_document(validate_release(REPO, final=True))
-    failed = [c for c in result["checks"] if c["status"] == "fail"
-              and c["check_id"] != "candidate.clean_tree"]
-    assert not failed, result
-    assert result["ok"] is True or all(
-        c["check_id"] == "candidate.clean_tree" for c in result["checks"]
-        if c["status"] == "fail"
-    ), result
+    assert result["ok"] is True, result
+
+
+def test_final_validation_fails_on_dirty_tree(git_clone):
+    # Integration test: a dirty working tree must make final validation FAIL,
+    # and the failing check must be candidate.clean_tree specifically. We never
+    # normalize a dirty candidate as passing.
+    (git_clone / "capt_solo" / "dirty_marker.py").write_text("# intentional\n")
+    result = result_document(validate_release(git_clone, final=True))
+    assert result["ok"] is False, result
+    failed_ids = [c["check_id"] for c in result["checks"] if c["status"] == "fail"]
+    assert "candidate.clean_tree" in failed_ids, result
+
+
+def test_candidate_sha_must_match_head(git_clone):
+    # Unit test for the provenance check: a mismatched manifest SHA must fail
+    # and must NOT be reported as a match. The evidence discloses the divergent
+    # manifest/head values rather than asserting a matching pair.
+    manifest = git_clone / "docs" / "release" / "PUBLIC_API_MANIFEST_V0.5.json"
+    data = json.loads(manifest.read_text())
+    data["candidate_sha"] = "0" * 40
+    manifest.write_text(json.dumps(data, indent=2))
+    result = result_document(validate_release(git_clone, final=True))
+    sha_match = next(c for c in result["checks"] if c["check_id"] == "candidate.sha_match")
+    assert sha_match["status"] == "fail", result
+    assert "manifest=" in sha_match["evidence"] and "head=" in sha_match["evidence"], result
 
 
 def test_version_drift_fails_closed(release_copy):
