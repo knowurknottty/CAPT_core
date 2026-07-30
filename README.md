@@ -145,6 +145,7 @@ verify_runtime.py   structured runtime verification harness
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md)
+- [Design Rationale](docs/DESIGN.md)
 - [Security Boundaries](docs/SECURITY.md)
 - [Data Model](docs/DATA_MODEL.md)
 - [API](docs/API.md)
