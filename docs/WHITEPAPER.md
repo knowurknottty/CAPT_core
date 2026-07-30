@@ -5,7 +5,7 @@
 **Author:** Kirk Brown, Inversion Labs  
 **Repository:** `knowurknottty/CAPT_core`  
 **Status:** Public architecture and reference implementation whitepaper  
-**Version:** Draft 1.0
+**Version:** Draft 1.1
 
 ---
 
@@ -104,6 +104,20 @@ capt_solo.api                     stable public surface
 The sanctioned integration surface is `capt_solo.api`. Internal modules may evolve while consumers continue to depend on a stable public boundary.
 
 This separation is important. It prevents downstream users from coupling to implementation details and allows future capabilities to be added without breaking existing integrations.
+
+### 4.1 Durable versus transient responsibilities
+
+| Transient inference responsibilities | Durable CAPT responsibilities |
+|---|---|
+| generation | persistent memory |
+| classification | provenance and confidence |
+| planning | transactional state |
+| summarization | capability lifecycle |
+| tool selection | authority and governance |
+| reasoning proposals | evidence and verification |
+| temporary context | recovery and audit history |
+
+The distinction is not absolute: models can assist with durable work, but they do not own the durable system of record.
 
 ---
 
@@ -211,6 +225,12 @@ Unsupported claims are downgraded rather than presented as verified. A platform-
 
 ClaimGuard exists because language models are optimized to produce plausible answers, not to maintain release authority. CAPT Core therefore makes claim status a governed system function.
 
+### 8.4 Verification integrity
+
+Verification evidence is only useful when the evidence pipeline itself preserves failure truthfully. A nonzero test process, failed validation stage, or degraded capability must not be transformed into passing or current verification merely because a summary line appears successful.
+
+Accordingly, CAPT Core treats verification status as an integrity-sensitive subsystem. Evidence must preserve process outcome, scope, freshness, and failure state. Reused evidence cannot silently discard recorded failures.
+
 ---
 
 ## 9. Skill Foundry
@@ -317,6 +337,12 @@ The current public runtime does **not** provide:
 - cryptographically signed audit trails
 
 Local-first reduces mandatory dependence on remote services, but it does not automatically make all data safe. Users must still apply appropriate filesystem permissions and avoid storing secrets in plaintext memory.
+
+### 13.1 Threat boundaries
+
+The current public runtime assumes a single trusted local user and does not defend against a hostile operating-system administrator, compromised user account, or malicious process with equivalent filesystem access.
+
+It does defend against selected classes of application-level failure, including accidental duplicate actions, interrupted transactions, unsupported verification claims, unsafe imported packages, and partial migrations.
 
 ---
 
@@ -442,7 +468,30 @@ The repository is under active public-release hardening. It is suitable for loca
 
 ---
 
-## 20. Future Direction
+## 20. Evaluation Principles
+
+CAPT Core should be evaluated on system properties rather than model eloquence.
+
+Relevant evaluation dimensions include:
+
+- memory integrity
+- provenance preservation
+- transaction recoverability
+- idempotency
+- capability-state correctness
+- evidence sufficiency
+- claim downgrade correctness
+- workflow proof independence
+- migration rollback safety
+- imported-package quarantine
+- authority attribution
+- audit completeness
+
+A convincing output is not equivalent to a verified system state.
+
+---
+
+## 21. Future Direction
 
 The architecture reserves seams for future work including:
 
@@ -460,7 +509,7 @@ These are future directions, not current implementation claims.
 
 ---
 
-## 21. Conclusion
+## 22. Conclusion
 
 The model-centric architecture of contemporary AI systems places too much durable responsibility inside a transient inference component.
 
