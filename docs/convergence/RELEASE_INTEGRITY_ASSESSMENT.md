@@ -8,8 +8,9 @@ release evidence · security campaign.
 v0.5.1: Spaces · runtime adapters · expanded standards work.
 
 ## 1. Internally consistent?
-YES. The v0.5.0 set is exactly the functionality already implemented, tested
-(715), packaged, and validator-clean today. The v0.5.1 set is exactly the
+YES. The v0.5.0 functional set has previously passed the recorded test,
+packaging, and validator gates; final clearance remains pending repository
+convergence (OD-4) and exact-SHA revalidation. The v0.5.1 set is exactly the
 functionality proven ABSENT or partial in SPACE_TRACEABILITY_MATRIX /
 RUNTIME_CAPABILITY_MATRIX. No item sits ambiguously across the boundary that
 would create a half-shipped feature. The one coupling (adapter policy selection

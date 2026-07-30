@@ -81,6 +81,8 @@ becomes false?" — answered with evidence:
 OD-1 and OD-2 are SUPPORTED by the evidence. The deferrals are genuine scope
 management (consolidation of existing primitives + 4 new Space primitives +
 operational adapter contract), NOT removal of contract-required functionality.
-Both are recommended for ratification as written, with the single documentation
-caveat: tighten A16 "search adapters" to "search adapter seam" to avoid any
-reader inferring a shipped adapter.
+Both were RATIFIED by the owner on 2026-07-30 as written, with one documentation
+caveat: tighten A16 "search adapters" to "search adapter seam" (enforced in
+Package F / whitepaper recovery) to avoid any reader inferring a shipped
+adapter. OD-4a (integration absorbs main) is now the actual release gate per
+owner direction.

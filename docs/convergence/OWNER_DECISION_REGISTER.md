@@ -10,9 +10,12 @@ Generated: 2026-07-30. Each item: options, risk, evidence, recommendation.
 - Risk: (a) delays truthful release, raises stability risk on memory/CTP/
   foundry; (b) public positioning cannot mention Spaces as present (already
   handled by claim ledger — no current claim asserts Spaces).
-- Evidence: SPACE_READINESS_REVIEW (genuinely absent; seams only; ~comparable
+- Evidence: SPACE_TRACEABILITY_MATRIX (genuinely absent; seams only; ~comparable
   to evidence subsystem size; MEDIUM-HIGH risk; migration must be backup-gated).
-- Recommendation: (b) v0.5.1. Current public claims do not require Spaces.
+- **STATUS: RATIFIED (2026-07-30) as (b) v0.5.1.** Owner decision: treat Spaces
+  as an architectural consolidation plus four new primitives (identity,
+  ownership, CTP scope, policy inheritance), NOT a missing v0.5 release
+  capability.
 
 ## OD-2 — Is a provider-neutral runtime adapter (doc 15 Workstream E) in v0.5.0?
 - Options:
@@ -22,10 +25,12 @@ Generated: 2026-07-30. Each item: options, risk, evidence, recommendation.
 - Risk: (a) two-path proof needs Spaces (policy selection) → couples D+E;
   unprovable neutrality without Spaces; risk of second overlapping abstraction.
   (b) "model-agnostic" stays an architecture claim, not a shipped feature claim.
-- Evidence: RUNTIME_ADAPTER_READINESS_REVIEW (zero hermes imports proven;
+- Evidence: RUNTIME_CAPABILITY_READINESS_REVIEW (zero hermes imports proven;
   research/adapter.py registry precedent; no model-runtime contract exists).
-- Recommendation: (b) v0.5.1. The evidenced claim today is architecture-level
-  and true; adapters become operational proof in v0.5.1 with Spaces.
+- **STATUS: RATIFIED (2026-07-30) as (b) v0.5.1.** Owner-approved v0.5.0 claim
+  wording: "CAPT is model-agnostic at the architecture level and does not require
+  Hermes or another runtime provider to operate." Do NOT claim a general
+  provider/model adapter framework ships in v0.5.0.
 
 ## OD-3 — Standards mappings scope for v0.5.0
 - Options:
@@ -70,8 +75,33 @@ Generated: 2026-07-30. Each item: options, risk, evidence, recommendation.
 - Recommendation: defer to owner authorization step; default (a) until told.
 
 ## Summary of recommendations
-OD-1 (b) · OD-2 (b) · OD-3 (a) · OD-4 (a) · OD-5 (fold into OD-4a) · OD-6 (a).
-These yield a truthful, evidenced v0.5.0 (verification substrate + security
-campaign + doc/claim truth + release evidence) with Spaces/adapters/mappings
-as a clearly-scoped v0.5.1, and a single coherent release branch.
-No implementation starts until OD-1, OD-2, OD-4 are ratified by the owner.
+- OD-1: **RATIFIED** → v0.5.1 (consolidation + 4 primitives).
+- OD-2: **RATIFIED** → v0.5.1 (operational adapter contract; v0.5.0 keeps
+  architecture-level neutrality claim only).
+- OD-3: (a) — SSDF/AI-RMF/OWASP in v0.5.0; ISO 27001/SOC 2 in v0.5.1.
+- OD-4: (a) — integration absorbs main, becomes release branch. **NOW THE
+  ACTUAL RELEASE GATE** (per owner, post-ratification).
+- OD-5: fold into OD-4a.
+- OD-6: (a) — GitHub-only until owner authorization.
+
+## Documentation caveat (ratified with OD-2)
+- A16 wording fix: in `docs/WHITEPAPER.md` (currently on main only; recovered in
+  Package C), change "semantic and vector search adapters" (L498) to
+  "semantic and vector search adapter seam" (or equivalent). Enforce during
+  Package F (Documentation Truth). Prevents presenting a reserved extension
+  point as an operational adapter. Recorded in PUBLIC_CLAIM_LEDGER §D and
+  IMPLEMENTATION_WORK_PACKAGES Package F.
+
+## Execution order (owner-approved, 2026-07-30)
+1. Ratify OD-1 and OD-2. ✅ DONE this turn.
+2. Approve OD-4a: integration absorbs main.
+3. Recover `verify_runtime.py` + verified security-hygiene delta (Package C).
+4. Run full exact-SHA validation suite (Package A rerun at converged SHA).
+5. Fix documentation truth items (Package F: LICENSE, version reconcile, A16
+   seam wording, UNFROZEN contradiction).
+6. Freeze the v0.5 candidate (doc 07 procedure).
+7. Begin Spaces (Package D), then runtime adapters (Package E), on the
+   converged lineage for v0.5.1.
+
+No implementation starts until OD-4a is approved and the convergence branch is
+created from the verified base `716ecc9`.

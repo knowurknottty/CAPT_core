@@ -66,7 +66,9 @@ Dependency order: A → B → C → (D/E deferred per OD-1/OD-2) → F → G →
 - Scope: add LICENSE (MIT, Copyright 2026 Inversion Labs) to integration;
   reconcile main __version__ (replace main with integration at release, or fix
   main); refresh whitepaper to v0.5.0 language (post OD-1/OD-2 — do NOT describe
-  Spaces/adapters as present); fix terminology discipline docs.
+  Spaces/adapters as present); **A16 wording fix** (ratified with OD-2): change
+  "semantic and vector search adapters" → "semantic and vector search adapter
+  seam" in recovered WHITEPAPER.md (L498); fix terminology discipline docs.
 - Files: LICENSE (new), README.md, docs/WHITEPAPER.md, docs/PUBLIC_ARCHITECTURE.md.
 - Tests: packaging test asserts LICENSE shipped in wheel/sdist; version-consistency test.
 - Risk: LOW.
