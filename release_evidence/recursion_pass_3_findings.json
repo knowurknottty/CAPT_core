@@ -1,0 +1,39 @@
+{
+  "pass": "RECURSION_PASS_3_EVIDENCE_CHAIN",
+  "candidate_sha": "7b9bcf422c69d3afbbe600d64239c6dd8c3cea71",
+  "findings": [
+    {
+      "id": "F1",
+      "title": "release validate FAILS: public_api.package_inventory (manifest omits capt_solo.components)",
+      "severity": "HIGH",
+      "disposition": "BLOCKER_PRE_FREEZE",
+      "evidence": "capt_cli release validate -> public_api.package_inventory: fail; declared 18 pkgs vs source 19 (missing components)",
+      "action": "add capt_solo.components to PUBLIC_API_MANIFEST_V0.5.json declared stable list",
+      "prior_reports_wrong": "BASELINE_REVALIDATION + EXACT_SHA claimed PASS"
+    },
+    {
+      "id": "F2",
+      "title": "public API complexity vs simplified README claims",
+      "severity": "MEDIUM",
+      "disposition": "DOC_CLARITY",
+      "evidence": "EvidenceRecord/ContextPack/build_vsi require structured objects; 12+14 tests cover them",
+      "action": "Pass 4 add construction snippets"
+    },
+    {
+      "id": "F3",
+      "title": "VSI/ContextPack/Evidence missing (audit script error)",
+      "severity": "FALSE_POSITIVE",
+      "disposition": "NONE",
+      "evidence": "all exist + tested from wheel"
+    },
+    {
+      "id": "F4",
+      "title": "docs not in wheel",
+      "severity": "LOW",
+      "disposition": "ACCEPTED",
+      "evidence": "standard packaging; sdist has docs"
+    }
+  ],
+  "verdict": "F1 is a real release-gate failure (doc 07 machine-enforced). Prior validator-PASS claims RETRACTED. All capability chains otherwise intact via code/tests/wheel.",
+  "reconstruct_without_prior_reports": "YES except 'validator passes' claim (false); F1 must be fixed first."
+}
