@@ -2,8 +2,8 @@
 
 - **package**: `capt-solo`
 - **version**: `0.5.0`
-- **candidate_sha**: `UNFROZEN`
-- **release_status**: `HARDENING — NOT RELEASE READY`
+- **candidate_sha**: `1cba134749ffc6bf3cb7eeb261e27b8e876ede41` (frozen via PUBLIC_API_MANIFEST_V0.5.json)
+- **release_status**: `HARDENING — CANDIDATE FROZEN — NOT RELEASED`
 - **publication_status**: `NOT PUBLISHED`
 - **license**: MIT; `LICENSE` is included in source distributions.
 - **release boundary**: public CAPT Core runtime and documented package data;
