@@ -11,7 +11,7 @@ permissions:
 jobs:
   independent-audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     steps:
       - name: Checkout immutable audit target
         uses: actions/checkout@v4
@@ -28,41 +28,58 @@ jobs:
       - name: Install independent audit tooling
         run: |
           python -m pip install --upgrade pip
-          python -m pip install build pytest pyyaml
+          python -m pip install build pytest pyyaml setuptools wheel
+          git config --global user.name "Independent Audit Runner"
+          git config --global user.email "audit@example.invalid"
+          echo "AUDIT_OUT=$RUNNER_TEMP/independent_audit_v2" >> "$GITHUB_ENV"
 
       - name: Record immutable preflight
         run: |
-          mkdir -p independent_audit
-          git rev-parse HEAD | tee independent_audit/source_sha.txt
-          git status --short | tee independent_audit/preflight_git_status.txt
-          python --version | tee independent_audit/python_version.txt
-          python -m pip freeze | sort > independent_audit/pip_freeze.txt
+          rm -rf "$AUDIT_OUT"
+          mkdir -p "$AUDIT_OUT"
+          git rev-parse HEAD | tee "$AUDIT_OUT/source_sha.txt"
+          git status --short | tee "$AUDIT_OUT/preflight_git_status.txt"
+          python --version | tee "$AUDIT_OUT/python_version.txt"
+          python -m pip freeze | sort > "$AUDIT_OUT/pip_freeze.txt"
+          test "$(git rev-parse HEAD)" = "602dc5a205c581c67cec55c3ff609f2cde65b0a4"
+          test ! -s "$AUDIT_OUT/preflight_git_status.txt"
+
+      - name: Run final validator on pristine target
+        id: final_validator
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          python capt_cli.py release validate --final 2>&1 | tee "$AUDIT_OUT/final_validator.log"
+          rc=${PIPESTATUS[0]}
+          echo "$rc" > "$AUDIT_OUT/final_validator.rc"
+          exit "$rc"
 
       - name: Build wheel and sdist from exact checkout
         id: build
         continue-on-error: true
         run: |
           set -o pipefail
-          python -m build --outdir independent_audit/build 2>&1 | tee independent_audit/build.log
-          build_rc=${PIPESTATUS[0]}
-          echo "$build_rc" > independent_audit/build_rc.txt
-          if compgen -G "independent_audit/build/*" > /dev/null; then
-            sha256sum independent_audit/build/* | tee independent_audit/build_sha256.txt
+          mkdir -p "$AUDIT_OUT/build"
+          python -m build --outdir "$AUDIT_OUT/build" 2>&1 | tee "$AUDIT_OUT/build.log"
+          rc=${PIPESTATUS[0]}
+          echo "$rc" > "$AUDIT_OUT/build.rc"
+          if compgen -G "$AUDIT_OUT/build/*" > /dev/null; then
+            sha256sum "$AUDIT_OUT"/build/* | tee "$AUDIT_OUT/build_sha256.txt"
           fi
-          exit "$build_rc"
+          exit "$rc"
 
       - name: Install built wheel outside repository
         id: wheel_install
         continue-on-error: true
         run: |
-          set -o pipefail
-          WHEEL=$(find "$GITHUB_WORKSPACE/independent_audit/build" -maxdepth 1 -name '*.whl' -print -quit)
-          rm -rf "$RUNNER_TEMP/capt-wheel-venv"
-          python -m venv "$RUNNER_TEMP/capt-wheel-venv"
-          "$RUNNER_TEMP/capt-wheel-venv/bin/python" -m pip install --upgrade pip
-          "$RUNNER_TEMP/capt-wheel-venv/bin/python" -m pip install "$WHEEL"
+          WHEEL=$(find "$AUDIT_OUT/build" -maxdepth 1 -name '*.whl' -print -quit)
+          VENV="$RUNNER_TEMP/capt-wheel-venv-v2"
+          rm -rf "$VENV"
+          python -m venv "$VENV"
+          "$VENV/bin/python" -m pip install --upgrade pip
+          "$VENV/bin/python" -m pip install "$WHEEL"
           cd "$RUNNER_TEMP"
-          env -u PYTHONPATH "$RUNNER_TEMP/capt-wheel-venv/bin/python" - <<'PY' 2>&1 | tee "$GITHUB_WORKSPACE/independent_audit/wheel_smoke.log"
+          env -u PYTHONPATH "$VENV/bin/python" - <<'PY' > "$AUDIT_OUT/wheel_smoke.log" 2>&1
           import importlib.metadata as md
           import json
           import pathlib
@@ -80,10 +97,8 @@ jobs:
               "loaded_from_venv": venv_root in package_file.parents,
           }
           print(json.dumps(result, indent=2))
-          if not result["loaded_from_venv"]:
-              raise SystemExit("capt_solo was not imported from the clean wheel venv")
-          if result["distribution_version"] != "0.5.0":
-              raise SystemExit("unexpected installed distribution version")
+          assert result["loaded_from_venv"]
+          assert result["distribution_version"] == "0.5.0"
           doctor = subprocess.run(
               [sys.executable, "-m", "capt_cli", "doctor"],
               cwd="/tmp",
@@ -92,166 +107,266 @@ jobs:
           )
           print("doctor_rc=", doctor.returncode)
           print((doctor.stdout or doctor.stderr)[:4000])
-          if doctor.returncode != 0:
-              raise SystemExit("installed wheel doctor failed")
+          assert doctor.returncode == 0
           PY
-          smoke_rc=${PIPESTATUS[0]}
-          echo "$smoke_rc" > "$GITHUB_WORKSPACE/independent_audit/wheel_smoke_rc.txt"
-          exit "$smoke_rc"
+          echo "$?" > "$AUDIT_OUT/wheel_smoke.rc"
 
-      - name: Run repository test suite
+      - name: Run repository test suite with portable Git identity
         id: tests
         continue-on-error: true
         run: |
           set -o pipefail
-          python -m pytest -q 2>&1 | tee independent_audit/pytest.log
-          test_rc=${PIPESTATUS[0]}
-          echo "$test_rc" > independent_audit/pytest_rc.txt
-          exit "$test_rc"
+          python -m pytest -q 2>&1 | tee "$AUDIT_OUT/pytest.log"
+          rc=${PIPESTATUS[0]}
+          echo "$rc" > "$AUDIT_OUT/pytest.rc"
+          exit "$rc"
 
-      - name: Run governed audit four times in one isolated home
+      - name: Reproduce accumulated and fresh governed-audit counts
         id: governed
         continue-on-error: true
         run: |
-          rm -rf "$RUNNER_TEMP/capt-governed-audit"
-          mkdir -p "$RUNNER_TEMP/capt-governed-audit"
+          SHARED="$RUNNER_TEMP/capt-governed-shared"
+          rm -rf "$SHARED"
+          mkdir -p "$SHARED"
           for run in 1 2 3 4; do
             set +e
-            CAPT_SOLO_HOME="$RUNNER_TEMP/capt-governed-audit" \
-              python tools/audit/governed_audit.py \
-              > "independent_audit/governed_run_${run}.json" \
-              2> "independent_audit/governed_run_${run}.stderr"
+            CAPT_SOLO_HOME="$SHARED" python tools/audit/governed_audit.py \
+              > "$AUDIT_OUT/governed_shared_${run}.json" \
+              2> "$AUDIT_OUT/governed_shared_${run}.stderr"
             rc=$?
             set -e
-            echo "$rc" > "independent_audit/governed_run_${run}.rc"
+            echo "$rc" > "$AUDIT_OUT/governed_shared_${run}.rc"
           done
-          cp -a "$RUNNER_TEMP/capt-governed-audit/audit" independent_audit/governed_artifacts
+          cp -a "$SHARED/audit" "$AUDIT_OUT/governed_shared_artifacts"
+
+          for run in 1 2 3 4; do
+            FRESH="$RUNNER_TEMP/capt-governed-fresh-$run"
+            rm -rf "$FRESH"
+            mkdir -p "$FRESH"
+            set +e
+            CAPT_SOLO_HOME="$FRESH" python tools/audit/governed_audit.py \
+              > "$AUDIT_OUT/governed_fresh_${run}.json" \
+              2> "$AUDIT_OUT/governed_fresh_${run}.stderr"
+            rc=$?
+            set -e
+            echo "$rc" > "$AUDIT_OUT/governed_fresh_${run}.rc"
+          done
 
       - name: Inspect and falsify governed evidence chain
         run: |
           python - <<'PY'
           from __future__ import annotations
           import json
+          import os
           from pathlib import Path
 
-          root = Path("independent_audit")
-          runs = [json.loads((root / f"governed_run_{i}.json").read_text()) for i in range(1, 5)]
-          totals = [r["receipts_total"] for r in runs]
-          expected_accumulation = [8, 17, 26, 35]
+          root = Path(os.environ["AUDIT_OUT"])
+          shared = [json.loads((root / f"governed_shared_{i}.json").read_text()) for i in range(1, 5)]
+          fresh = [json.loads((root / f"governed_fresh_{i}.json").read_text()) for i in range(1, 5)]
+          shared_totals = [r["receipts_total"] for r in shared]
+          fresh_totals = [r["receipts_total"] for r in fresh]
 
-          journal_path = root / "governed_artifacts" / "ctp_journal.jsonl"
-          receipts = [json.loads(line) for line in journal_path.read_text().splitlines() if line.strip()]
-          evidence_pkg = json.loads((root / "governed_artifacts" / "evidence_package.json").read_text())
-          bubble = json.loads((root / "governed_artifacts" / "knowledge_bubble.json").read_text())
-          result = json.loads((root / "governed_artifacts" / "audit_result.json").read_text())
-          report = (root / "governed_artifacts" / "audit_report.md").read_text()
-
-          run1_receipts = runs[0]["receipts_total"]
-          verifier_receipts = [r for r in receipts if r.get("step") == "independent-verification"]
-          verifier_observed_totals = [r.get("evidence", {}).get("receipts_total") for r in verifier_receipts]
+          artifacts = root / "governed_shared_artifacts"
+          receipts = [json.loads(line) for line in (artifacts / "ctp_journal.jsonl").read_text().splitlines() if line.strip()]
+          evidence_pkg = json.loads((artifacts / "evidence_package.json").read_text())
+          bubble = json.loads((artifacts / "knowledge_bubble.json").read_text())
+          result = json.loads((artifacts / "audit_result.json").read_text())
+          report = (artifacts / "audit_report.md").read_text()
+          verifier = [r for r in receipts if r.get("step") == "independent-verification"]
 
           inspection = {
-              "receipt_totals_by_run": totals,
-              "expected_append_only_pattern": expected_accumulation,
-              "matches_append_only_pattern": totals == expected_accumulation,
-              "run1_clean_receipt_total": run1_receipts,
+              "shared_receipt_totals": shared_totals,
+              "fresh_receipt_totals": fresh_totals,
+              "shared_expected_accumulation": [8, 17, 26, 35],
+              "fresh_expected": [8, 8, 8, 8],
               "final_journal_receipts": len(receipts),
-              "independent_verifier_receipt_count": len(verifier_receipts),
-              "independent_verifier_observed_package_totals": verifier_observed_totals,
               "evidence_package_receipts": len(evidence_pkg.get("receipts", [])),
               "knowledge_bubble_receipts": len(bubble.get("receipts", [])),
               "audit_result_receipts": result.get("receipts_total"),
+              "human_report_declared_receipts": 34 if "**Receipt count:** 34" in report else None,
               "human_report_source_sha_unfrozen": "**Source SHA:** UNFROZEN" in report,
+              "independent_verifier_count": len(verifier),
+              "independent_verifier_observed_prior_totals": [r.get("evidence", {}).get("receipts_total") for r in verifier],
               "finding_count": result.get("findings_total"),
-              "claim_guard_receipts": [
-                  r for r in receipts
-                  if r.get("step") == "claim-guard"
-              ],
+              "claim_guard_classifications": [r.get("evidence", {}).get("classification") for r in receipts if r.get("step") == "claim-guard"],
           }
           (root / "governed_inspection.json").write_text(json.dumps(inspection, indent=2))
 
-          if totals != expected_accumulation:
-              raise SystemExit(f"unexpected receipt accumulation pattern: {totals}")
-          if run1_receipts != 8:
-              raise SystemExit(f"clean run should contain 8 receipts, observed {run1_receipts}")
-          if len(verifier_receipts) != 3:
-              raise SystemExit(f"expected verifier only on runs 2-4, observed {len(verifier_receipts)}")
-          if verifier_observed_totals != [8, 17, 26]:
-              raise SystemExit(f"verifier did not inspect prior-run packages as expected: {verifier_observed_totals}")
+          assert shared_totals == [8, 17, 26, 35], shared_totals
+          assert fresh_totals == [8, 8, 8, 8], fresh_totals
+          assert inspection["independent_verifier_observed_prior_totals"] == [8, 17, 26]
+          assert inspection["human_report_source_sha_unfrozen"] is True
+          assert inspection["human_report_declared_receipts"] == 34
+          assert inspection["audit_result_receipts"] == 35
           PY
 
-      - name: Test frozen-candidate identity against a post-freeze code change
+      - name: Adversarially test ClaimGuard with missing evidence
         run: |
-          git config user.name "Independent Audit Runner"
-          git config user.email "audit@example.invalid"
-          git switch -c local-falsification
-          printf '\n# independent-audit post-freeze implementation mutation\n' >> capt_solo/pulse.py
-          git add capt_solo/pulse.py
-          git commit -m "audit: post-freeze implementation mutation"
+          ADV="$RUNNER_TEMP/capt-claim-adversarial"
+          HOME_DIR="$RUNNER_TEMP/capt-claim-adversarial-home"
+          rm -rf "$ADV" "$HOME_DIR"
+          git clone --quiet --no-local "$GITHUB_WORKSPACE" "$ADV"
+          git -C "$ADV" checkout --quiet 602dc5a205c581c67cec55c3ff609f2cde65b0a4
+          rm -f "$ADV/README.md" "$ADV/docs/PUBLIC_ARCHITECTURE.md" "$ADV/release_artifacts/SHA256SUMS.txt"
+          mkdir -p "$HOME_DIR"
+          set +e
+          (cd "$ADV" && CAPT_SOLO_HOME="$HOME_DIR" python tools/audit/governed_audit.py) \
+            > "$AUDIT_OUT/claim_adversarial_result.json" \
+            2> "$AUDIT_OUT/claim_adversarial.stderr"
+          rc=$?
+          set -e
+          echo "$rc" > "$AUDIT_OUT/claim_adversarial.rc"
           python - <<'PY'
           import json
+          import os
+          from pathlib import Path
+
+          out = Path(os.environ["AUDIT_OUT"])
+          home = Path(os.environ["RUNNER_TEMP"]) / "capt-claim-adversarial-home" / "audit"
+          receipts = [json.loads(line) for line in (home / "ctp_journal.jsonl").read_text().splitlines() if line.strip()]
+          doc = next(r for r in receipts if r.get("step") == "documentation-locator")
+          claim = next(r for r in receipts if r.get("step") == "claim-guard")
+          result = {
+              "documentation_locator_success": doc["success"],
+              "documentation_missing": doc.get("evidence", {}).get("missing"),
+              "claim_guard_success": claim["success"],
+              "claim_guard_classification": claim.get("evidence", {}).get("classification"),
+              "claim_guard_uncertainty": claim.get("uncertainty"),
+          }
+          (out / "claim_guard_adversarial_inspection.json").write_text(json.dumps(result, indent=2))
+          assert result["documentation_locator_success"] is False
+          assert result["claim_guard_success"] is True
+          assert result["claim_guard_classification"] == "PROVEN"
+          PY
+
+      - name: Falsify frozen identity with committed post-freeze code
+        run: |
+          CLONE="$RUNNER_TEMP/capt-identity-falsification"
+          rm -rf "$CLONE"
+          git clone --quiet --no-local "$GITHUB_WORKSPACE" "$CLONE"
+          git -C "$CLONE" checkout --quiet 602dc5a205c581c67cec55c3ff609f2cde65b0a4
+          git -C "$CLONE" switch --quiet -c local-falsification
+          printf '\n# independent-audit committed post-freeze implementation mutation\n' >> "$CLONE/capt_solo/pulse.py"
+          git -C "$CLONE" add capt_solo/pulse.py
+          git -C "$CLONE" commit --quiet -m "audit: committed post-freeze implementation mutation"
+          CLONE="$CLONE" python - <<'PY'
+          import json
+          import os
           from dataclasses import asdict
           from pathlib import Path
+          import sys
+
+          clone = Path(os.environ["CLONE"])
+          sys.path.insert(0, str(clone))
           from capt_solo.release_validation import validate_release
 
-          checks = validate_release(Path.cwd(), final=True)
-          rows = [asdict(check) for check in checks]
-          candidate_rows = [row for row in rows if row["check_id"].startswith("candidate.")]
-          Path("independent_audit/candidate_identity_after_code_mutation.json").write_text(
-              json.dumps(candidate_rows, indent=2)
-          )
-          sha_match = next(row for row in candidate_rows if row["check_id"] == "candidate.sha_match")
-          clean_tree = next(row for row in candidate_rows if row["check_id"] == "candidate.clean_tree")
-          if sha_match["status"] != "pass" or clean_tree["status"] != "pass":
-              raise SystemExit("candidate checks did not demonstrate ancestor-based acceptance")
+          rows = [asdict(c) for c in validate_release(clone, final=True)]
+          candidate = [r for r in rows if r["check_id"].startswith("candidate.")]
+          out = Path(os.environ["AUDIT_OUT"])
+          (out / "candidate_identity_after_committed_code_mutation.json").write_text(json.dumps(candidate, indent=2))
+          sha_match = next(r for r in candidate if r["check_id"] == "candidate.sha_match")
+          clean_tree = next(r for r in candidate if r["check_id"] == "candidate.clean_tree")
+          assert sha_match["status"] == "pass", sha_match
+          assert clean_tree["status"] == "pass", clean_tree
           PY
 
-      - name: Check manifest identity convergence and checksum usability
+      - name: Check identity convergence, checksums, and rebuilt archives
         run: |
-          python - <<'PY'
+          CLEAN="$RUNNER_TEMP/capt-checksum-inspection"
+          rm -rf "$CLEAN"
+          git clone --quiet --no-local "$GITHUB_WORKSPACE" "$CLEAN"
+          git -C "$CLEAN" checkout --quiet 602dc5a205c581c67cec55c3ff609f2cde65b0a4
+          CLEAN="$CLEAN" python - <<'PY'
+          import hashlib
           import json
+          import os
+          import tarfile
+          import zipfile
           from pathlib import Path
 
-          public_api = json.loads(Path("docs/release/PUBLIC_API_MANIFEST_V0.5.json").read_text())
-          release_artifacts = json.loads(Path("release_artifacts/RELEASE_ARTIFACT_MANIFEST_V0.5.json").read_text())
+          repo = Path(os.environ["CLEAN"])
+          out = Path(os.environ["AUDIT_OUT"])
+          public_api = json.loads((repo / "docs/release/PUBLIC_API_MANIFEST_V0.5.json").read_text())
+          artifact_manifest = json.loads((repo / "release_artifacts/RELEASE_ARTIFACT_MANIFEST_V0.5.json").read_text())
+
+          committed_wheel = repo / "release_artifacts/capt_solo-0.5.0-py3-none-any.whl"
+          rebuilt_wheel = next((out / "build").glob("*.whl"))
+          committed_sdist = repo / "release_artifacts/capt_solo-0.5.0.tar.gz"
+          rebuilt_sdist = next((out / "build").glob("*.tar.gz"))
+
+          def sha(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          def wheel_map(path):
+              with zipfile.ZipFile(path) as z:
+                  return {n: z.read(n) for n in z.namelist()}
+
+          def sdist_map(path):
+              with tarfile.open(path, "r:gz") as t:
+                  result = {}
+                  for member in t.getmembers():
+                      if not member.isfile():
+                          continue
+                      f = t.extractfile(member)
+                      name = "/".join(Path(member.name).parts[1:])
+                      result[name] = f.read() if f else b""
+                  return result
+
+          cw, rw = wheel_map(committed_wheel), wheel_map(rebuilt_wheel)
+          cs, rs = sdist_map(committed_sdist), sdist_map(rebuilt_sdist)
+          wheel_diff = sorted(n for n in set(cw) | set(rw) if cw.get(n) != rw.get(n))
+          sdist_diff = sorted(n for n in set(cs) | set(rs) if cs.get(n) != rs.get(n))
+
           result = {
               "public_api_candidate_sha": public_api.get("candidate_sha"),
-              "artifact_manifest_candidate_sha": release_artifacts.get("candidate_sha"),
-              "candidate_sha_match": public_api.get("candidate_sha") == release_artifacts.get("candidate_sha"),
+              "artifact_manifest_candidate_sha": artifact_manifest.get("candidate_sha"),
+              "candidate_sha_match": public_api.get("candidate_sha") == artifact_manifest.get("candidate_sha"),
+              "committed_wheel_sha256": sha(committed_wheel),
+              "rebuilt_wheel_sha256": sha(rebuilt_wheel),
+              "committed_sdist_sha256": sha(committed_sdist),
+              "rebuilt_sdist_sha256": sha(rebuilt_sdist),
+              "wheel_differing_files": wheel_diff,
+              "sdist_differing_files": sdist_diff,
           }
-          Path("independent_audit/manifest_identity_comparison.json").write_text(json.dumps(result, indent=2))
+          (out / "identity_and_archive_comparison.json").write_text(json.dumps(result, indent=2))
           PY
+
           set +e
-          (cd release_artifacts && sha256sum -c SHA256SUMS.txt) \
-            > independent_audit/sha256sums_check.log 2>&1
-          sums_rc=$?
+          (cd "$CLEAN/release_artifacts" && sha256sum -c SHA256SUMS.txt) \
+            > "$AUDIT_OUT/sha256sums_check.log" 2>&1
+          rc=$?
           set -e
-          echo "$sums_rc" > independent_audit/sha256sums_check.rc
+          echo "$rc" > "$AUDIT_OUT/sha256sums_check.rc"
 
       - name: Write independent audit summary
         if: always()
         run: |
           python - <<'PY'
           import json
+          import os
           from pathlib import Path
 
-          root = Path("independent_audit")
+          root = Path(os.environ["AUDIT_OUT"])
           def read(name, default="missing"):
               p = root / name
               return p.read_text().strip() if p.exists() else default
 
           summary = {
               "target_sha": read("source_sha.txt"),
-              "build_rc": read("build_rc.txt"),
-              "wheel_smoke_rc": read("wheel_smoke_rc.txt"),
-              "pytest_rc": read("pytest_rc.txt"),
-              "governed_run_rcs": [read(f"governed_run_{i}.rc") for i in range(1, 5)],
+              "final_validator_rc": read("final_validator.rc"),
+              "build_rc": read("build.rc"),
+              "wheel_smoke_rc": read("wheel_smoke.rc"),
+              "pytest_rc": read("pytest.rc"),
+              "shared_governed_rcs": [read(f"governed_shared_{i}.rc") for i in range(1, 5)],
+              "fresh_governed_rcs": [read(f"governed_fresh_{i}.rc") for i in range(1, 5)],
+              "claim_adversarial_rc": read("claim_adversarial.rc"),
               "sha256sums_check_rc": read("sha256sums_check.rc"),
           }
           for name in (
               "governed_inspection.json",
-              "candidate_identity_after_code_mutation.json",
-              "manifest_identity_comparison.json",
+              "claim_guard_adversarial_inspection.json",
+              "candidate_identity_after_committed_code_mutation.json",
+              "identity_and_archive_comparison.json",
           ):
               p = root / name
               if p.exists():
@@ -263,6 +378,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: independent-capt-audit-602dc5a
-          path: independent_audit/
+          name: independent-capt-audit-602dc5a-v2
+          path: ${{ env.AUDIT_OUT }}/
           if-no-files-found: error
