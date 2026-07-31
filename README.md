@@ -23,6 +23,23 @@ python verify_runtime.py
 python -m pytest tests/ -q
 ```
 
+## Why this matters
+
+Most AI systems bind memory, state, governance, and execution history to a particular model session or vendor runtime. CAPT Core separates **persistent cognition from transient inference**.
+
+That changes the role of the model. Instead of making a model the system of record, CAPT treats it as a replaceable reasoning component inside a larger governed architecture. Models, providers, and runtimes can change without taking durable memory, provenance, recovery state, policy, or human authority with them.
+
+The practical consequences are straightforward:
+
+- **Less vendor lock-in** — durable state remains outside the inference provider.
+- **Less context-window waste** — persistent knowledge does not need to be repeatedly reconstructed inside prompts.
+- **More inspectable execution** — consequential actions are bounded by transactions and preserved as receipts.
+- **Stronger claim discipline** — unsupported completion claims are downgraded instead of accepted at face value.
+- **Local control** — the base runtime requires no cloud service, API keys, external database, or Docker deployment.
+- **Model portability** — expensive frontier models and smaller local models can operate behind the same stable boundary.
+
+CAPT Core is not an attempt to make inference irrelevant. It is an attempt to put inference in the correct architectural position: powerful, useful, replaceable, and subject to evidence-backed governance.
+
 ## Why CAPT Core exists
 
 | Common AI system | CAPT Core |
@@ -147,6 +164,16 @@ The implementation package retains the `capt_solo` namespace for compatibility.
 ## Project status
 
 CAPT Core is under active public-release hardening. The repository is suitable for local evaluation and development, but consumers should review the documented limitations and verify the runtime in their own environment.
+
+## Support CAPT
+
+CAPT Core and CAPT Solo are being developed independently and released as open-source infrastructure. GitHub Sponsors will be enabled soon. Direct contributions are also welcome:
+
+- Solana: `7kgPboqCUY9vUaTSFs1opvfEv86UD1e31ckAPHqgdQuV`
+- Bitcoin: `bc1q82dsstmrh9qzpp8gsa8hwzr8t5caj6n0w2w94j`
+- Ethereum / EVM: `0xB4E04b51191fB52C5Bae5C2dC4D6457a431d6825`
+
+Please verify the destination address before sending. Cryptocurrency contributions are generally irreversible.
 
 ## License
 
