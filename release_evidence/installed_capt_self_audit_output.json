@@ -1,0 +1,83 @@
+{
+  "candidate_sha_known": "be2863508e47c3cb9ea4b4320ebab29bdcf64d94",
+  "items": [
+    {
+      "question": "Q1 installed version",
+      "answer": "0.5.0",
+      "classification": "INSTALLED_ARTIFACT_EVIDENCE",
+      "evidence": "importlib.metadata.version('capt-solo')"
+    },
+    {
+      "question": "Q2 artifact identity",
+      "answer": "capt-solo 0.5.0 wheel installed",
+      "classification": "INSTALLED_ARTIFACT_EVIDENCE",
+      "evidence": "217 files in RECORD"
+    },
+    {
+      "question": "Q3 installed packages",
+      "answer": "capt_solo + ['__init__.py', '__pycache__', 'api.py', 'capt_facade.py', 'components', 'contextpack', 'continuity', 'core', 'ctp', 'engines', 'evidence', 'execution', 'foundry', 'khsb', 'knowledge', 'learning', 'lifecycle', 'memory', 'ontology', 'plugin', 'pulse.py', 'release_validation.py', 'research', 'skills', 'verification', 'workspace.py']",
+      "classification": "INSTALLED_ARTIFACT_EVIDENCE",
+      "evidence": "dist RECORD top-level subdirs"
+    },
+    {
+      "question": "Q4 optional capabilities",
+      "answer": "ATE component present in wheel=True; external anti-token-extraction pkg optional/degradable",
+      "classification": "INSTALLED_ARTIFACT_EVIDENCE",
+      "evidence": "RECORD contains components/anti_token_extraction.py"
+    },
+    {
+      "question": "Q5 manifest match",
+      "answer": "manifest shipped in wheel=False",
+      "classification": "UNPROVEN",
+      "evidence": "RECORD search for PUBLIC_API_MANIFEST"
+    },
+    {
+      "question": "Q6 CLI entry points",
+      "answer": "capt=present",
+      "classification": "INSTALLED_ARTIFACT_EVIDENCE",
+      "evidence": "entry_points console_scripts"
+    },
+    {
+      "question": "Q7 doctor",
+      "answer": "rc=0",
+      "classification": "RUNTIME_EVIDENCE",
+      "evidence": "ok: True\nchecks:\n  id: package.version\n  status: pass\n  evidence: 0.5.0\n  id: profile.evidence\n  status: pass\n  evidence: capt_solo.evidence\n  id: pro"
+    },
+    {
+      "question": "Q8 validator from installed",
+      "answer": "rc=1 (fails without repo docs)",
+      "classification": "REPOSITORY_ONLY_EVIDENCE",
+      "evidence": "needs docs/release/PUBLIC_API_MANIFEST_V0.5.json from cwd"
+    },
+    {
+      "question": "Q9 package resources",
+      "answer": "LICENSE in wheel=True",
+      "classification": "INSTALLED_ARTIFACT_EVIDENCE",
+      "evidence": "RECORD dist-info/licenses/LICENSE"
+    },
+    {
+      "question": "Q10 repo dependence",
+      "answer": "installed artifact is self-contained; import + doctor succeed without repo on PATH",
+      "classification": "INSTALLED_ARTIFACT_EVIDENCE",
+      "evidence": "ran from /tmp, no PYTHONPATH, import+doctor OK"
+    },
+    {
+      "question": "Q11 public claims",
+      "answer": "local-first/no-network/zero-Hermes verifiable from installed artifact",
+      "classification": "RUNTIME_EVIDENCE",
+      "evidence": "socket-deny import + grep zero hermes in installed pkg"
+    },
+    {
+      "question": "Q12 repo-only conclusions",
+      "answer": "release validator result, exact-SHA reports, convergence docs require repo; NOT derivable from installed artifact alone",
+      "classification": "REPOSITORY_ONLY_EVIDENCE",
+      "evidence": "those files are not in wheel"
+    }
+  ],
+  "classification_counts": {
+    "INSTALLED_ARTIFACT_EVIDENCE": 7,
+    "UNPROVEN": 1,
+    "RUNTIME_EVIDENCE": 2,
+    "REPOSITORY_ONLY_EVIDENCE": 2
+  }
+}

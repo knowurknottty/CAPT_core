@@ -1,0 +1,3 @@
+8889ead6664cb90bd479fbaac2aac3db214a82a5ee049950ee3ed99b4c114a53  dist/capt_solo-0.5.0-py3-none-any.whl
+a257662115c66c8f6f87cc5b2e75238e25c2e734f6e891a0c472e2209658ee8b  dist/capt_solo-0.5.0.tar.gz
+159ebbf03d16a7765cdd35c5fa8ddaac848c1c9a39dcde91f556b71808c9f3a1  /tmp/capt_core_v0.5_external.tar.gz

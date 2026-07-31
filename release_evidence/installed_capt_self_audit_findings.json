@@ -1,0 +1,21 @@
+{
+  "phase": "E",
+  "candidate_sha": "be2863508e47c3cb9ea4b4320ebab29bdcf64d94",
+  "wheel_hash": "8889ead6664cb90bd479fbaac2aac3db214a82a5ee049950ee3ed99b4c114a53",
+  "isolation": "fresh venv /tmp/selfaudit_env py3.12.13; repo not on PYTHONPATH; cwd=/tmp",
+  "decision": "PASS",
+  "classification_counts": {
+    "INSTALLED_ARTIFACT_EVIDENCE": 7,
+    "RUNTIME_EVIDENCE": 2,
+    "REPOSITORY_ONLY_EVIDENCE": 2,
+    "UNPROVEN": 1
+  },
+  "unproven_items": [
+    "Q5 manifest agreement (manifest not shipped in wheel; governance doc, verified separately in Phase B)"
+  ],
+  "repo_only_items": [
+    "Q8 release validator result",
+    "Q12 exact-SHA reports + convergence docs"
+  ],
+  "note": "Self-audit does not claim installed behavior supports repo-only conclusions."
+}

@@ -1,0 +1,50 @@
+{
+  "phase": "B",
+  "candidate_sha": "be2863508e47c3cb9ea4b4320ebab29bdcf64d94",
+  "decision": "PASS",
+  "checks": {
+    "B1_validator_passes": {
+      "status": "PASS",
+      "exit": 0,
+      "pass": 10,
+      "fail": 0
+    },
+    "B2_manifest_matches_inventories": {
+      "status": "PASS",
+      "source": 19,
+      "wheel": 19,
+      "manifest": 19,
+      "installed_has_components": true
+    },
+    "B3_readme_links_resolve": {
+      "status": "PASS"
+    },
+    "B4_reports_exist": {
+      "status": "PASS"
+    },
+    "B5_reports_from_evidence": {
+      "status": "PASS"
+    },
+    "B6_no_new_claims": {
+      "status": "PASS"
+    },
+    "B7_false_pass_corrected": {
+      "status": "PASS"
+    },
+    "B8_no_unrelated_changes": {
+      "status": "PASS",
+      "files_changed": 5
+    },
+    "B9_sha_in_reports": {
+      "status": "PASS"
+    },
+    "B10_clean_tree": {
+      "status": "PASS"
+    }
+  },
+  "artifact_hashes": {
+    "wheel": "e9e316464916a5ae97a4306ba15ad87dc1b191ee49d4cb047e9a9950248a3ba9",
+    "sdist": "92962c3b26687a61391593caba5ae0ea58a96c44374761616ba421d95189c480"
+  },
+  "residual": "4 freeze-gate tests fail in UNFROZEN state by design; not a micro-audit failure."
+}

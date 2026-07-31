@@ -1,0 +1,73 @@
+{
+  "schema_version": "1.0",
+  "release": "CAPT Core v0.5.0",
+  "candidate_sha": "be2863508e47c3cb9ea4b4320ebab29bdcf64d94",
+  "generated_at": "2026-07-30",
+  "build_environment": {
+    "python": "3.12.13",
+    "setuptools": "83.0.0",
+    "build_backend": "setuptools.build_meta",
+    "os": "macOS-26.4.1-arm64",
+    "build_tool": "build 1.5.0"
+  },
+  "artifacts": {
+    "wheel": {
+      "filename": "capt_solo-0.5.0-py3-none-any.whl",
+      "sha256": "8889ead6664cb90bd479fbaac2aac3db214a82a5ee049950ee3ed99b4c114a53",
+      "build": 1,
+      "python_tag": "py3-none-any"
+    },
+    "sdist": {
+      "filename": "capt_solo-0.5.0.tar.gz",
+      "sha256": "a257662115c66c8f6f87cc5b2e75238e25c2e734f6e891a0c472e2209658ee8b",
+      "build": 1
+    },
+    "external_source_archive": {
+      "filename": "capt_core_v0.5_external.tar.gz",
+      "sha256": "159ebbf03d16a7765cdd35c5fa8ddaac848c1c9a39dcde91f556b71808c9f3a1",
+      "method": "git archive HEAD",
+      "note": "intended for external (Jenn) validation; excludes dev-only files"
+    }
+  },
+  "reproducibility": {
+    "builds_compared": 2,
+    "build1": {
+      "wheel_sha256": "8889ead6664cb90bd479fbaac2aac3db214a82a5ee049950ee3ed99b4c114a53",
+      "sdist_sha256": "a257662115c66c8f6f87cc5b2e75238e25c2e734f6e891a0c472e2209658ee8b",
+      "setuptools": "83.0.0",
+      "platform_tag": "macosx-26.0-arm64"
+    },
+    "build2": {
+      "wheel_sha256": "91e62769702bf9f82cc548f825fb838f4263138e68a73304bd9257c8b545fcf5",
+      "sdist_sha256": "e8be69c9fa769459023a94cdcdd59503620751ddfae24c5f7939c68969bee136",
+      "setuptools": "82.0.1",
+      "platform_tag": "macosx-10.9-universal2"
+    },
+    "hash_difference_explained": true,
+    "semantic_content_identical": true,
+    "differing_fields": [
+      "dist-info/WHEEL: Generator setuptools version string (83.0.0 vs 82.0.1)",
+      "dist-info/RECORD: SHA256 of WHEEL file (derived from above)",
+      "archive-level timestamps / file ordering (tar/zip metadata)"
+    ],
+    "verification": "unzip both wheels; identical file set (111 files); recursive diff of all non-dist-info content is EMPTY; sdist recursive diff of all non-egg-info content is EMPTY. No executable or semantic content differs."
+  },
+  "package_inventory": {
+    "top_level": ["capt_cli", "capt_solo"],
+    "subpackages": [
+      "capt_solo.components", "capt_solo.contextpack", "capt_solo.continuity",
+      "capt_solo.core", "capt_solo.ctp", "capt_solo.engines", "capt_solo.evidence",
+      "capt_solo.execution", "capt_solo.foundry", "capt_solo.khsb", "capt_solo.knowledge",
+      "capt_solo.learning", "capt_solo.lifecycle", "capt_solo.memory", "capt_solo.ontology",
+      "capt_solo.plugin", "capt_solo.research", "capt_solo.verification"
+    ]
+  },
+  "entry_points": {
+    "console_scripts": {"capt": "capt_cli:main"},
+    "hermes_plugins": {"capt-solo": "capt_solo.plugin:get_plugin"}
+  },
+  "dependencies": {
+    "runtime": ["pyyaml>=5.4"],
+    "resolution_evidence": "pip install dist/*.whl in clean venv succeeds; only pyyaml resolved"
+  }
+}
