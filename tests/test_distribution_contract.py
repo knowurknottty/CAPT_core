@@ -16,6 +16,7 @@ import pytest
 REPO = Path(__file__).resolve().parents[1]
 REQUIRED_PACKAGES = {
     "capt_solo",
+    "capt_solo.agent",
     "capt_solo.components",
     "capt_solo.contextpack",
     "capt_solo.continuity",

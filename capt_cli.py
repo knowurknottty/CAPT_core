@@ -31,6 +31,7 @@ sys.path.insert(0, str(_SRC))
 # still run. Runtime commands report a clear error instead of crashing import.
 try:  # noqa: E402
     from capt_solo.api import (  # noqa: E402
+        CAPTRuntime,
         LifecycleManager,
         MemoryEngine,
     )
@@ -49,7 +50,7 @@ except Exception as _runtime_err:  # noqa: E402, BLE001
     # Runtime commands check _RUNTIME_OK and fail with a clear message.
     class CaptSoloError(Exception):  # type: ignore
         pass
-    LifecycleManager = MemoryEngine = None  # type: ignore
+    LifecycleManager = MemoryEngine = CAPTRuntime = None  # type: ignore
     ProofEngine = ProofRequirement = CapabilityRegistry = None  # type: ignore
     ClaimGuard = SkillFoundry = ValidationHarness = None  # type: ignore
     KnowledgeBubbleRuntime = Governance = SkillCurator = None  # type: ignore
@@ -317,6 +318,25 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("record_id")
     p.add_argument("--mission-id", default="cli")
 
+    # agent (ADR-0001, Outcome C — canonical standalone CAPT Agent Runner)
+    ag = sub.add_parser("agent", help="canonical CAPT Agent Runner (boot/turn/resume)")
+    ags = ag.add_subparsers(dest="action")
+    for _name, _help in (
+        ("start", "boot a mission and run one governed no-tool turn"),
+        ("resume", "fresh-process resume: reconstruct next action from CAPT state"),
+        ("status", "boot-only: report recovered mission/session/checkpoint state"),
+        ("checkpoint", "boot + write a mission checkpoint boundary"),
+        ("doctor", "inspect agent-runner wiring without persistent turns"),
+    ):
+        _p = ags.add_parser(_name, help=_help)
+        _p.add_argument("--workspace", default=".", help="workspace path (repo root)")
+        _p.add_argument("--mission", default=None, help="explicit mission id")
+        _p.add_argument("--output-mode", default="cave",
+                        choices=["cave", "normal", "verbose", "silent", "audit"])
+        if _name == "start":
+            _p.add_argument("--input", default="Resume the active mission. Report the next justified action.")
+            _p.add_argument("--capability", default=None)
+
     args = parser.parse_args(argv)
     if not args.group:
         parser.print_help()
@@ -350,9 +370,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.group == "canon":
         return _cmd_canon(args, as_json)
 
+    if args.group == "agent":
+        return _cmd_agent(args, as_json)
+
     try:
-        eng = MemoryEngine()
-        mgr = LifecycleManager(eng)
+        # Canonical composition root (Outcome B): the single production
+        # construction site. All runtime groups execute through it.
+        runtime = CAPTRuntime.load()
+        mgr = runtime.lifecycle
         if args.group == "memory":
             return _cmd_memory(mgr, args, as_json)
         if args.group == "session":
@@ -364,7 +389,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.group == "retrieval":
             return _cmd_retrieval(mgr, args, as_json)
         if args.group == "foundry":
-            return _cmd_foundry(mgr, args, as_json)
+            return _cmd_foundry(runtime, args, as_json)
         if args.group == "workspace":
             return _cmd_workspace(args, as_json)
     except CaptSoloError as e:
@@ -373,10 +398,129 @@ def main(argv: Optional[List[str]] = None) -> int:
         return _fail(f"{type(e).__name__}: {e}")
     finally:
         try:
-            eng.close()
+            runtime.close()
         except Exception:
             pass
     return 1
+
+
+def _agent_provider_from_env():
+    """Build the configured local OpenAI-compatible provider from SECURE env.
+
+    Credentials are NEVER accepted as CLI args and NEVER printed. Only the
+    presence of the approved token env var is used; the token value flows
+    directly into the provider and is redacted from all artifacts. Returns
+    (provider, note) or (None, reason) when no provider is configured.
+    """
+    import os
+
+    endpoint = os.environ.get("CAPT_MODEL_ENDPOINT") or os.environ.get("LM_STUDIO_ENDPOINT")
+    model_id = os.environ.get("CAPT_MODEL_ID") or os.environ.get("LM_STUDIO_MODEL")
+    if not endpoint or not model_id:
+        return None, "no provider configured (set CAPT_MODEL_ENDPOINT and CAPT_MODEL_ID)"
+    from capt_solo.model_task import OpenAICompatibleLocalProvider
+
+    token = os.environ.get("LM_STUDIO_API_KEY")  # presence only; value not logged
+    provider = OpenAICompatibleLocalProvider(
+        endpoint=endpoint, model_id=model_id, api_token=token, local=True
+    )
+    return provider, f"provider=openai-compatible-local model={model_id} auth={'yes' if token else 'none'}"
+
+
+def _cmd_agent(args, as_json: bool) -> int:
+    """Canonical CAPT Agent Runner CLI (ADR-0001, Outcome C)."""
+    from capt_solo.agent import AgentBootRequest, AgentTurnRequest, IntentRecord
+    from capt_solo.agent.runner import AgentRunner, resume_report
+
+    action = getattr(args, "action", None)
+    if not action:
+        return _fail("agent: specify an action (start|resume|status|checkpoint|doctor)")
+
+    workspace = args.workspace
+    mission = args.mission
+    output_mode = args.output_mode
+
+    if action == "doctor":
+        runner = AgentRunner.load()
+        try:
+            _provider, note = _agent_provider_from_env()
+            data = {
+                "ok": True,
+                "runtime_id": runner.rt.runtime_id,
+                "single_composition_root": runner.rt.gate._eng is runner.rt.engine,
+                "provider": note,
+                "modes": ["cave", "normal", "verbose", "silent", "audit"],
+            }
+            return _ok(data, as_json)
+        finally:
+            runner.close()
+
+    if action == "resume":
+        if not mission:
+            return _fail("agent resume: --mission is required for fresh-process resume")
+        report = resume_report(workspace_path=workspace, mission_id=mission)
+        return _ok(report, as_json)
+
+    runner = AgentRunner.load()
+    try:
+        boot_result = runner.boot(
+            AgentBootRequest(workspace_path=workspace, mission_id=mission, output_mode=output_mode)
+        )
+        base = {
+            "execution_mode": boot_result.execution_mode,
+            "mission_id": boot_result.mission_id,
+            "session_id": boot_result.session_id,
+            "checkpoint_id": boot_result.checkpoint_id,
+            "active_directive_ids": list(boot_result.active_directive_ids),
+            "gate_result": boot_result.gate_result,
+            "block_reason": boot_result.block_reason,
+            "block_codes": list(boot_result.block_codes),
+        }
+        if boot_result.boot_trace:
+            base["intent_id"] = boot_result.boot_trace.intent_id
+            base["contextpack_digest"] = boot_result.boot_trace.contextpack_digest
+            base["next_justified_action"] = boot_result.boot_trace.next_justified_action
+
+        if action in ("status", "checkpoint"):
+            return _ok(base, as_json)
+
+        # start: run one governed no-tool turn IF a provider is configured
+        if boot_result.execution_mode == "BLOCKED":
+            return _ok({**base, "turn": "skipped: boot BLOCKED"}, as_json)
+        provider, note = _agent_provider_from_env()
+        if provider is None:
+            return _ok({**base, "turn": f"skipped: {note}", "provider": note}, as_json)
+        state = runner.run_state(boot_result)
+        intent = IntentRecord.mint(
+            mission_id=state.mission_id, session_id=state.session_id,
+            turn_id=state.next_turn_id(), requested_goal=args.input,
+            current_goal=(base.get("next_justified_action") or args.input),
+            output_policy=state.output_policy,
+        )
+        turn = runner.run_turn(
+            state,
+            AgentTurnRequest(intent=intent, user_input=args.input, capability_id=args.capability),
+            provider=provider,
+        )
+        result = {
+            **base,
+            "provider": note,
+            "turn_ok": turn.ok,
+            "tx_id": turn.tx_id,
+            "turn_checkpoint_id": turn.checkpoint_id,
+            "claim_supported": turn.claim_supported,
+        }
+        if as_json:
+            return _ok(result, True)
+        # human: render bounded CaveCAPT output
+        print(turn.visible_output)
+        return 0
+    except CaptSoloError as e:
+        return _fail(str(e))
+    except Exception as e:
+        return _fail(f"{type(e).__name__}: {e}")
+    finally:
+        runner.close()
 
 
 def _cmd_doctor(as_json: bool) -> int:
