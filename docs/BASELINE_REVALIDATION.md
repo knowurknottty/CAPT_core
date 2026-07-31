@@ -15,21 +15,25 @@ prior "715 passed" evidence — it is the post-convergence rerun.
 |---|---|---|
 | Version | `python --version` | 3.12.13 |
 | Pip | `python -m pip --version` | 25.x |
-| Full suite | `python -m pytest tests/ -q` | **715 passed, 44 skipped** (26.34s) |
+| Full suite | `python -m pytest tests/ -q` | **711 passed, 4 failed, 44 skipped** (regenerated 2026-07-30 at `7b9bcf4`) |
 | Build | `python -m build` | wheel + sdist built |
 | Wheel install | fresh venv `pip install dist/*.whl` | import OK, version 0.5.0 |
 | Sdist install | separate venv `pip install dist/*.tar.gz` | no-network import OK (all core pkgs) |
 | verify_runtime | `python verify_runtime.py` | 52 pass / 1 warn / 0 fail (53 checks) |
 | gitleaks | `gitleaks detect --source . --config .gitleaks.toml` | no leaks found |
-| release validate | `capt release validate` (non-final) | PASS (candidate_sha=UNFROZEN) |
+| release validate (pre-correction) | `capt release validate` | **FAIL** (`public_api.package_inventory` — manifest omitted `capt_solo.components`); corrected in Phase A |
+| release validate (post-correction) | `capt release validate` | PASS (10/10) |
 | doctor | `capt doctor` | OK |
 | no-Hermes import | socket-deny import in clean venv | all core packages import, zero hermes |
 | ATE component | import `capt_solo.components` | OK (degrades without external pkg) |
 
-## Focused regressions
-- Release-identity tests: included in 715 (pass).
-- Security tests: ATE provenance-gate suite (skippable) + doctor injection suite (pass).
-- Provenance tests: part of suite (pass).
+## Note on the 4 failures
+The 4 failing tests are Option A freeze-gate regression tests
+(`test_release_identity_option_a.py`, `test_release_semantics.py`). They clone
+the repo, set `candidate_sha` to a real commit, and run `validate_release(
+final=True)`. They fail in the UNFROZEN state (dirty tree from untracked audit
+evidence + `candidate_sha=UNFROZEN`). They are EXPECTED failures pre-freeze, not
+implementation defects. They pass only after the candidate is frozen.
 
 ## Artifact hashes
 - wheel: `e9e316464916a5ae97a4306ba15ad87dc1b191ee49d4cb047e9a9950248a3ba9`
