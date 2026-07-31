@@ -27,6 +27,15 @@ from capt_solo.core.errors import (
     TransactionError,
 )
 from capt_solo.ctp.journal import CTPRuntime, Receipt
+from capt_solo.deployment import (
+    DeploymentAdapter,
+    DeploymentEvidence,
+    DeploymentPlan,
+    DeploymentRequest,
+    DeploymentResult,
+    GovernedDeploymentExecutor,
+    LocalScriptDeploymentAdapter,
+)
 from capt_solo.khsb.bus import KHSB, Message
 from capt_solo.lifecycle import (
     LifecycleEngine,
@@ -67,6 +76,10 @@ __all__ = [
     "register_adapter", "LifecycleManager",
     # ctp
     "CTPRuntime", "Receipt",
+    # deployment
+    "DeploymentAdapter", "DeploymentEvidence", "DeploymentPlan",
+    "DeploymentRequest", "DeploymentResult", "GovernedDeploymentExecutor",
+    "LocalScriptDeploymentAdapter",
     # khsb
     "KHSB", "Message",
 ]
