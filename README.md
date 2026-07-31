@@ -1,63 +1,50 @@
 # CAPT Core
 
-**Secure, auditable, model-agnostic cognitive infrastructure.**
+**Local-first, verifiable cognitive infrastructure for AI agents.**
 
-CAPT Core separates persistent cognition from transient inference. Models, vendors,
-and runtimes can change without taking memory, governance, provenance, recovery,
-or human authority with them.
+CAPT Core keeps durable memory, governed state, execution receipts, and human authority outside any single model or vendor. The reference runtime, **CAPT Solo**, runs locally and remains inspectable, self-hostable, and model-agnostic.
 
-This repository contains **CAPT Solo**, the local-first reference implementation of
-CAPT Core for individual developers. It integrates with Hermes while keeping the
-runtime self-hostable and inspectable.
+## Quick start
+
+Clone the repository, install the local runtime, and run the verification harness:
+
+```bash
+git clone https://github.com/knowurknottty/CAPT_core.git capt-core
+cd capt-core
+./install.sh
+./verify.sh
+```
+
+For deeper diagnostics:
+
+```bash
+./doctor.sh
+python verify_runtime.py
+python -m pytest tests/ -q
+```
 
 ## Why CAPT Core exists
 
-Most AI products are built around a model. CAPT Core treats the model as one
-replaceable component inside a larger governed system.
+| Common AI system | CAPT Core |
+|---|---|
+| Memory and state live inside one model session. | Durable memory and governed state live outside the model. |
+| Outputs are accepted because a model says they are complete. | ClaimGuard downgrades unsupported claims and preserves uncertainty. |
+| Execution history is difficult to inspect or replay. | CTP journals record append-only transactions, receipts, and recovery state. |
+| Switching models or vendors risks losing system continuity. | Models are replaceable components behind a stable local boundary. |
 
-The durable parts of the system are kept outside the model:
+## Three things CAPT Core provides
 
-- persistent memory
-- context and state management
-- transactional execution
-- capability lifecycles
-- evidence and proof
-- claim verification
-- tool governance
-- recovery and audit history
-- human authority and revocation
+### 1. Memory and context
 
-## Current public release
+CAPT Solo stores persistent knowledge locally with namespaces, tags, provenance, confidence, metadata, export/import, backups, and integrity checks.
 
-The public runtime currently includes the v0.4 proof-governed architecture plus
-v0.4.1 hardening work.
+### 2. Security and governance
 
-Core capabilities include:
+Consequential actions are attributed to named actors, bounded by transactions, and recorded in append-only audit history. Unsafe migrations and validation failures stop rather than silently proceeding.
 
-- **Memory Engine** — local SQLite storage with namespaces, tags, provenance,
-  confidence, metadata, export/import, backups, and an adapter seam for semantic
-  search.
-- **CTP Runtime** — append-only transaction journals with receipts, idempotency,
-  correlation IDs, audit history, and crash recovery.
-- **KHSB** — in-process publish/subscribe and request/reply messaging with timeout
-  and acknowledgement behavior.
-- **Skill Foundry** — procedure-to-skill lifecycle with a 12-stage validation
-  harness, review, approval, publication, deprecation, and revocation states.
-- **Proof Engine** — evidence objects and requirement-based aggregation. A
-  capability is not reported verified without sufficient proof.
-- **Capability Registry** — explicit candidate, validated, proven, verified,
-  degraded, deprecated, revoked, and experimental states.
-- **ClaimGuard** — prevents unsupported completion claims and applies scoped
-  degradation language.
-- **Knowledge Bubble Runtime** — portable governed packages with quarantine-first
-  import and manifest-before-payload validation.
-- **Workflow Proof Engine** — composed workflows carry independent proof rather
-  than inheriting trust from their components.
-- **Governance Layer** — consequential actions are CTP-bounded, attributed to a
-  named actor, and recorded in an append-only audit trail.
-- **Hermes Integration** — stable public tools and beginner-friendly skills.
-- **Verification Tooling** — installer, diagnostics, health checks, runtime
-  validation, and automated tests.
+### 3. Verification and receipts
+
+The runtime produces evidence, receipts, lifecycle records, and replayable transaction journals. Capabilities, skills, and workflows are not reported verified without sufficient evidence.
 
 ## Architecture at a glance
 
@@ -68,14 +55,42 @@ Hermes or local caller
 capt_solo.api                  stable public boundary
         |
         +--> Memory Engine     persistent local knowledge
-        +--> CTP Runtime       deterministic transactions and recovery
+        +--> CTP Runtime       transactions, receipts, recovery
         +--> KHSB              in-process coordination
-        +--> Foundry           proof, registry, ClaimGuard, skills, bubbles
+        +--> Foundry           proof, ClaimGuard, skills, bubbles
         +--> Governance        audited consequential actions
 ```
 
-The sanctioned integration surface is `capt_solo.api`. Internal implementations
-may evolve without forcing callers to depend on unstable module paths.
+The supported integration surface is `capt_solo.api`. Internal modules may evolve without forcing callers to depend on unstable paths.
+
+## What is included today
+
+- **Memory Engine** — local SQLite storage with provenance, confidence, metadata, backups, import/export, and integrity checks.
+- **CTP Runtime** — append-only journals with receipts, idempotency, correlation IDs, audit history, and crash recovery.
+- **KHSB** — in-process publish/subscribe and request/reply messaging.
+- **Skill Foundry** — explicit validation, review, approval, publication, deprecation, and revocation states.
+- **Proof Engine** — evidence objects and requirement-based aggregation.
+- **Capability Registry** — candidate, validated, proven, verified, degraded, deprecated, revoked, and experimental states.
+- **ClaimGuard** — prevents unsupported completion claims and applies scoped degradation language.
+- **Knowledge Bubble Runtime** — portable governed packages with quarantine-first import and manifest-before-payload validation.
+- **Workflow Proof Engine** — composed workflows carry independent proof rather than inheriting trust from their components.
+- **Governance Layer** — consequential actions are transaction-bounded, attributed, and recorded.
+- **Verification Tooling** — installer, diagnostics, health checks, runtime validation, and automated tests.
+
+## Security posture
+
+The base runtime requires no API keys and performs no required network egress. State is stored locally in SQLite files and append-only CTP journals.
+
+Important boundaries:
+
+- local plaintext storage is **not** encryption at rest
+- the current runtime is **not** a multi-user authorization service
+- append-only audit history is **not yet cryptographically signed**
+- imported Knowledge Bubbles are quarantined and validated before approval
+- migrations are backup-gated and abort on failed integrity checks
+- unsafe command patterns, secret patterns, and disallowed permissions block skill validation
+
+Read [docs/SECURITY.md](docs/SECURITY.md) before storing sensitive data or integrating CAPT Core into a higher-trust environment.
 
 ## Design principles
 
@@ -86,44 +101,10 @@ may evolve without forcing callers to depend on unstable module paths.
 - No required external database
 - No Docker requirement
 - Deterministic and recoverable execution
-- Human-readable portable state
 - Evidence before verification
 - Explicit authority and lifecycle boundaries
+- Human-readable portable state
 - Backward-compatible migrations
-
-## Security posture
-
-The base runtime requires no API keys and performs no network egress. State is
-stored locally in SQLite and append-only CTP journals.
-
-Important boundaries:
-
-- local plaintext storage is **not** encryption at rest
-- the current single-user runtime is **not** a multi-user authorization system
-- append-only audit history is **not yet cryptographically signed**
-- imported Knowledge Bubbles are quarantined and validated before approval
-- migrations are backup-gated and abort on failed integrity checks
-- unsafe command patterns, secret patterns, and disallowed permissions block skill
-  validation
-
-Read [docs/SECURITY.md](docs/SECURITY.md) before storing sensitive data or
-integrating CAPT Core into a higher-trust environment.
-
-## Quick start
-
-```bash
-git clone https://github.com/knowurknottty/CAPT_core.git capt-core
-cd capt-core
-./install.sh
-./verify.sh
-```
-
-Additional diagnostics:
-
-```bash
-./doctor.sh
-python verify_runtime.py
-```
 
 ## Repository layout
 
@@ -142,7 +123,7 @@ verify.sh           one-command health check
 verify_runtime.py   structured runtime verification harness
 ```
 
-## Documentation
+## Deep-dive documentation
 
 - [Whitepaper](docs/WHITEPAPER.md)
 - [Architecture](docs/ARCHITECTURE.md)
@@ -159,16 +140,13 @@ verify_runtime.py   structured runtime verification harness
 ## Naming
 
 - **CAPT Core** is the cognitive infrastructure architecture.
-- **CAPT Solo** is the local-first reference implementation contained in this
-  repository.
+- **CAPT Solo** is the local-first reference implementation in this repository.
 
 The implementation package retains the `capt_solo` namespace for compatibility.
 
 ## Project status
 
-CAPT Core is under active public-release hardening. The repository is usable for
-local evaluation and development, but consumers should review the documented
-security limitations and verify the runtime in their own environment.
+CAPT Core is under active public-release hardening. The repository is suitable for local evaluation and development, but consumers should review the documented limitations and verify the runtime in their own environment.
 
 ## License
 
