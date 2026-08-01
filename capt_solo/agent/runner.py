@@ -279,6 +279,22 @@ def resume_report(
         store = CheckpointStore(str(Path(workspace_path).resolve()), create=False)
         cp = store.load(mission_id)
         next_action = cp.next_safe_action if cp else ""
+        # Continuity-aware recovery: evaluate recovered CAPT state via the
+        # proven capt_solo.continuity machinery. Degrades safely (never blocks
+        # boot on a continuity-tool error).
+        from capt_solo.agent.recovery import (
+            append_recovery_receipt,
+            evaluate_resume,
+        )
+
+        continuity_report, continuity_err = evaluate_resume(
+            workspace_path, mission_id
+        )
+        receipt_id = None
+        if continuity_report is not None:
+            receipt_id = append_recovery_receipt(
+                workspace_path, mission_id, continuity_report
+            )
         report = {
             "reconstructed_in": "fresh-process",
             "mission_id": boot_result.mission_id,
@@ -294,6 +310,30 @@ def resume_report(
             "next_justified_action": next_action,
             "block_reason": boot_result.block_reason,
             "source": "CAPT state (no transcript, no copied summary)",
+            "continuity": {
+                "status": (
+                    continuity_report.continuity_status
+                    if continuity_report is not None
+                    else "UNAVAILABLE"
+                ),
+                "divergence": (
+                    continuity_report.divergence
+                    if continuity_report is not None
+                    else {}
+                ),
+                "resume_plan": (
+                    continuity_report.resume_plan
+                    if continuity_report is not None
+                    else {}
+                ),
+                "receipt_verified": (
+                    continuity_report.receipt_verified
+                    if continuity_report is not None
+                    else False
+                ),
+                "receipt_id": receipt_id,
+                "error": continuity_err,
+            },
         }
         _persist_resume_report(runner.rt, mission_id, report)
         return report

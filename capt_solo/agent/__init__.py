@@ -52,14 +52,18 @@ __all__ = [
     "boot",
     "AgentRunner",
     "resume_report",
+    "recovery",
 ]
 
 
 def __getattr__(name):  # lazy to avoid importing runtime at package import time
+    import importlib
+
     if name in ("boot",):
-        from capt_solo.agent.boot import boot as _boot
-        return _boot
+        return importlib.import_module("capt_solo.agent.boot").boot
     if name in ("AgentRunner", "resume_report"):
-        from capt_solo.agent import runner as _runner
+        _runner = importlib.import_module("capt_solo.agent.runner")
         return getattr(_runner, name)
+    if name in ("recovery",):
+        return importlib.import_module("capt_solo.agent.recovery")
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
