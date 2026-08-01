@@ -1,0 +1,81 @@
+{
+  "manifest": "capt-external-replay-input",
+  "mission_id": "mission-external-replay",
+  "origin_head": "cbac78cb8ffaef6fbd4b515e0813b04c53cae557",
+  "replay_root": "/Users/knowurknot/capt-core-external-replay-final-20260801T034003Z",
+  "transferred": {
+    "workspace": "fresh git clone (history only)",
+    "capt_workspace_state": "<workspace>/.capt (checkpoints, evidence)",
+    "capt_home_state": "home (memory, ctp, evidence)",
+    "skill": "skill/ (copied skill package)"
+  },
+  "explicitly_not_transferred": [
+    "transcript / conversation history",
+    "originating shell or process state",
+    "original temp directory",
+    "environment variables not listed in replay-environment.json"
+  ],
+  "artifact_count": 12,
+  "artifacts": [
+    {
+      "path": "home/backups/capt_solo.v1.20260731-224004.db",
+      "bytes": 45056,
+      "sha256": "ad5f191fe67f215168c6cc84a2b6b684ec79cb844ca881ca88a9c4d2277e4dba"
+    },
+    {
+      "path": "home/data/ctp/journal.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "home/data/evidence/agent-boot/agentrun-20de63a7d0e849c3.json",
+      "bytes": 1599,
+      "sha256": "7544b92ff537ff33e2482986ff11a5f94520136587cff5d8e30d4d2a47b276e3"
+    },
+    {
+      "path": "home/data/evidence/agent-boot/agentrun-20de63a7d0e849c3.json.sha256",
+      "bytes": 104,
+      "sha256": "26451ca85acdfea97e527bd59ad2c447ac06c0bd56e9b4b16e2637305d57e64d"
+    },
+    {
+      "path": "home/data/evidence/agent-boot/agentrun-5ce79882187b41bd.json",
+      "bytes": 1799,
+      "sha256": "ed49f776c128de468ca0ad69def384ba7f64485a192b553c25b31ad4da79e9ea"
+    },
+    {
+      "path": "home/data/evidence/agent-boot/agentrun-5ce79882187b41bd.json.sha256",
+      "bytes": 104,
+      "sha256": "2c3e296917301ef583df66f7485fe519c464446ddaf07fd44e008cf135c63ec2"
+    },
+    {
+      "path": "home/data/evidence/agent-boot/agentrun-dcccbb83aa434dc7.json",
+      "bytes": 1399,
+      "sha256": "829627c81479d23cf917d8f76b8c46cbe35a8a0e51a1d3c82ebb0f3bc9b4867d"
+    },
+    {
+      "path": "home/data/evidence/agent-boot/agentrun-dcccbb83aa434dc7.json.sha256",
+      "bytes": 104,
+      "sha256": "1a5104bf00b0632fb1d6587ec7adc8b880e6ec89139459cb2dc7bfd843c563e9"
+    },
+    {
+      "path": "home/data/khsb/events.jsonl",
+      "bytes": 4849,
+      "sha256": "54fd28b85d9b525d95a6f453f952f0fb625ba8572a07c717368e95aaa5f7dca2"
+    },
+    {
+      "path": "home/data/memory.db",
+      "bytes": 393216,
+      "sha256": "7237772f0d9e7c15cee9dfcb5143ff8c41de5d259eea6635d29d0b01470b1d09"
+    },
+    {
+      "path": "ws/.capt/checkpoints/events.jsonl",
+      "bytes": 362,
+      "sha256": "bab5d947902f34bc75a993ddf2f208e50d3def3819adc40f946faeaa6d40ea37"
+    },
+    {
+      "path": "ws/.capt/checkpoints/mission-external-replay.json",
+      "bytes": 750,
+      "sha256": "baaecabb61943eaff40ff7accaefb50b635f660edd1113a7946c6c626c658051"
+    }
+  ]
+}

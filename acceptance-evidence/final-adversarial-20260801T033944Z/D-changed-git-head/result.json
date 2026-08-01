@@ -1,0 +1,9 @@
+{
+  "scenario": "D",
+  "name": "changed-git-head",
+  "mutation": "new commit after checkpoint (HEAD moves away from latest_verified_state)",
+  "command": "capt-resume-check.sh /tmp/capt-adv-D.jYEXKZ/ws mission-skill-real-acceptance",
+  "expected": "HEAD divergence surfaced, not silently identical",
+  "actual": "exit=0 divergence='checkpoint.latest_verified_state=c687f3834139 vs repo HEAD=d8e7e86085e2|worktree dirty'",
+  "verdict": "PASS"
+}

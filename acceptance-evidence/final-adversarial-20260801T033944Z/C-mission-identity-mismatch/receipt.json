@@ -1,0 +1,81 @@
+{
+  "receipt": "capt-recovery-receipt",
+  "generated_at": "2026-08-01T03:39:45Z",
+  "workspace": "/tmp/capt-adv-C.agYOtA/ws",
+  "mission_id": "mission-some-other-identity",
+  "session_id": "",
+  "checkpoint_id": "",
+  "source": "CAPT state (no transcript, no copied summary)",
+  "reconstructed_in": "fresh-process",
+  "transcript_inheritance": "none",
+  "post_resume": {
+    "execution_mode": "BLOCKED",
+    "gate_result": "BLOCKED",
+    "contextpack_digest": "",
+    "intent_id": "",
+    "active_directive_ids": []
+  },
+  "repository_evidence": {
+    "branch": "main",
+    "head": "c687f383413955ce25f7e0885356eb687fe03843",
+    "dirty": true,
+    "checkpoint_latest_verified_state": ""
+  },
+  "divergence": [
+    "worktree dirty"
+  ],
+  "resume_artifact": "/tmp/capt-adv-C.agYOtA/home/data/evidence/agent-resume/mission-some-other-identity.json",
+  "resume_artifact_sha256_sidecar": true,
+  "next_justified_action": "",
+  "checks": [
+    {
+      "check": "fresh_process",
+      "verdict": "PASS",
+      "detail": "reconstructed_in=fresh-process"
+    },
+    {
+      "check": "mission_recovered",
+      "verdict": "PASS",
+      "detail": "recovered=mission-some-other-identity expected=mission-some-other-identity"
+    },
+    {
+      "check": "session_recovered",
+      "verdict": "FAIL",
+      "detail": "session_id=<empty>"
+    },
+    {
+      "check": "checkpoint_recovered",
+      "verdict": "FAIL",
+      "detail": "checkpoint_id=<empty>"
+    },
+    {
+      "check": "gate_pass",
+      "verdict": "FAIL",
+      "detail": "gate_result=BLOCKED block=mission not found in store: mission-some-other-identity"
+    },
+    {
+      "check": "contextpack_built",
+      "verdict": "FAIL",
+      "detail": "digest=<empty>"
+    },
+    {
+      "check": "intent_reconstructed",
+      "verdict": "FAIL",
+      "detail": "intent_id=<empty>"
+    },
+    {
+      "check": "not_blocked",
+      "verdict": "FAIL",
+      "detail": "execution_mode=BLOCKED"
+    },
+    {
+      "check": "next_action_present",
+      "verdict": "FAIL",
+      "detail": "absent"
+    }
+  ],
+  "continuity_verdict": "NOT_PROVEN",
+  "capt_execution_mode": "BLOCKED",
+  "hermes_session_mode": "BOOTSTRAP_DEGRADED",
+  "hermes_session_mode_reason": "Hermes tool hooks are observational; model-facing context equality with the ContextPack is unverified"
+}

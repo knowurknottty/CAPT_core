@@ -1,0 +1,25 @@
+== 1. write checkpoint ==
+{
+  "execution_mode": "GOVERNED",
+  "mission_id": "mission-external-replay",
+  "session_id": "570ff9c636fa472fa311e5213d4e4b86",
+  "checkpoint_id": "mission-external-replay@PHASE_EXTERNAL_REPLAY",
+  "active_directive_ids": [],
+  "gate_result": "PASS",
+  "block_reason": "",
+  "block_codes": [],
+  "intent_id": "intent-5374d51a4feccbd6",
+  "contextpack_digest": "sha256:1feb9ecf77b4b47b2f536be38a185bff7c29903581f04c09ec0e0b3416bc6c2a",
+  "next_justified_action": "verify replay continuity"
+}
+
+== 2. verify it reloads (independent boot) ==
+checkpoint_id:        mission-external-replay@PHASE_EXTERNAL_REPLAY
+reload checkpoint_id: mission-external-replay@PHASE_EXTERNAL_REPLAY
+gate  write/reload:   PASS / PASS
+mode  write/reload:   GOVERNED / GOVERNED
+digest write:         sha256:1feb9ecf77b4b47b2f536be38a185bff7c29903581f04c09ec0e0b3416bc6c2a
+digest reload:        sha256:6dff0bdf7a42213c64139317985a872e5a9a5a6e545dc81c5e579d5a5e54763a
+note: digests differ by design — a new ContextPack is built per boot.
+verdict: PASS
+receipt written: /Users/knowurknot/capt-core-skill-worktree/acceptance-evidence/final-replay-20260801T034003Z/origin-checkpoint-receipt.json

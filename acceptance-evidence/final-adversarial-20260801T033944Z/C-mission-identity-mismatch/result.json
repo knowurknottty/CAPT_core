@@ -1,0 +1,9 @@
+{
+  "scenario": "C",
+  "name": "mission-identity-mismatch",
+  "mutation": "request a different, non-existent mission id",
+  "command": "capt-resume-check.sh /tmp/capt-adv-C.agYOtA/ws mission-some-other-identity",
+  "expected": "mismatch detected, resume refused",
+  "actual": "exit=4 continuity_verdict='NOT_PROVEN'",
+  "verdict": "PASS"
+}

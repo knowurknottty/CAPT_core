@@ -1,0 +1,9 @@
+{
+  "scenario": "E",
+  "name": "dirty-workspace",
+  "mutation": "modify a tracked file after checkpoint",
+  "command": "capt-resume-check.sh /tmp/capt-adv-E.jnzBz7/ws mission-skill-real-acceptance",
+  "expected": "dirty state recorded, no hidden cleanup",
+  "actual": "exit=0 divergence='worktree dirty'",
+  "verdict": "PASS"
+}

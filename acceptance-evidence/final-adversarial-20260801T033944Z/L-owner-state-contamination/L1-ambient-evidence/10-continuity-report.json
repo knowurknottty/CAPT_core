@@ -1,0 +1,61 @@
+{
+  "report": "capt-continuity-cross-check",
+  "checks": [
+    {
+      "check": "checkpoint_id_stable_boot_to_resume",
+      "verdict": "PASS",
+      "detail": "boot=mission-skill-real-acceptance@PHASE_ACCEPTANCE resume=mission-skill-real-acceptance@PHASE_ACCEPTANCE"
+    },
+    {
+      "check": "checkpoint_id_stable_write_to_reload",
+      "verdict": "PASS",
+      "detail": "write=mission-skill-real-acceptance@PHASE_ACCEPTANCE reload=mission-skill-real-acceptance@PHASE_ACCEPTANCE"
+    },
+    {
+      "check": "mission_id_stable",
+      "verdict": "PASS",
+      "detail": "mission-skill-real-acceptance"
+    },
+    {
+      "check": "session_id_regenerated_per_process",
+      "verdict": "PASS",
+      "detail": "boot=0774bd1e758e4cb6ba7ba206d7349cb3 resume=effe86f32f854a41932dc4bb2bc97d35 (expected DIFFERENT: separate processes)"
+    },
+    {
+      "check": "contextpack_rebuilt_per_boot",
+      "verdict": "PASS",
+      "detail": "expected DIFFERENT: a new ContextPack is built per boot"
+    },
+    {
+      "check": "contextpack_present_both",
+      "verdict": "PASS",
+      "detail": "both non-empty"
+    },
+    {
+      "check": "gate_pass_both",
+      "verdict": "PASS",
+      "detail": "PASS/PASS"
+    },
+    {
+      "check": "transcript_inheritance_none",
+      "verdict": "PASS",
+      "detail": "none"
+    },
+    {
+      "check": "resume_in_fresh_process",
+      "verdict": "PASS",
+      "detail": "fresh-process"
+    },
+    {
+      "check": "hermes_mode_not_overclaimed",
+      "verdict": "PASS",
+      "detail": "Hermes hooks observational; not relabelled GOVERNED"
+    },
+    {
+      "check": "continuity_verdict_proven",
+      "verdict": "PASS",
+      "detail": "PROVEN"
+    }
+  ],
+  "verdict": "PASS"
+}

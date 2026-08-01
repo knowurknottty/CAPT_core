@@ -1,0 +1,30 @@
+capt-doctor  workspace=/tmp/capt-skill-acceptance.McHDHl/ws  mission=mission-skill-real-acceptance
+-------------------------------------------------------------------------------
+interpreter: /Users/knowurknot/capt-solo/.venv/bin/python (source=explicit:CAPT_ACCEPT_PY, version=Python 3.12.13)
+-------------------------------------------------------------------------------
+PASS        python                     Python 3.12.13 (/Users/knowurknot/capt-solo/.venv/bin/python) [via explicit:CAPT_ACCEPT_PY]
+PASS        virtualenv                 /Users/knowurknot/capt-solo/.venv
+PASS        capt.executable            /Users/knowurknot/capt-solo/.venv/bin/capt
+PASS        package.source             /Users/knowurknot/capt-solo/capt_solo/__init__.py v0.5.0 (editable: /Users/knowurknot/capt-solo)
+WARN        package.cwd_shadow         CWD import would resolve /Users/knowurknot/capt-core-skill-worktree/capt_solo/__init__.py (CLI uses /Users/knowurknot/capt-solo/capt_solo/__init__.py) [CWD_MODULE_SHADOW]
+PASS        checkout.identity          CLI import resolves under /Users/knowurknot/capt-solo
+PASS        runtime.doctor             ok=True; 10 checks pass
+WARN        capt.home                  /tmp/capt-skill-acceptance.McHDHl/home does not exist yet
+PASS        mission.store              1 checkpoint(s) in /tmp/capt-skill-acceptance.McHDHl/ws/.capt/checkpoints
+PASS        mission.schema             all checkpoints carry project_id+objective
+PASS        checkpoint.digest          no placeholder digests
+WARN        memory.store               readable but empty [EMPTY_MEMORY_STORE]
+PASS        session.store              0 session(s)
+PASS        composition.root           single_composition_root=true
+PASS        plugin.installed           installed copy matches source (sha256)
+PASS        contextpack                digest sha256:799584f453eacbbb…
+PASS        memoryusegate              gate_result=PASS (runtime-enforced pre-provider)
+PASS        boot.recovery              execution_mode=GOVERNED
+PASS        ctp.journal                /tmp/capt-skill-acceptance.McHDHl/home/data/ctp present
+NOT_PROVEN  khsb.events                CAPT_KHSB_ENABLE=0 — bus deliberately disabled
+NOT_PROVEN  claimguard                 importable from capt_solo.foundry = AVAILABLE_NOT_WIRED; a real verdict is required to prove operation
+WARN        session.risk               running inside Hermes session 20260731_221131_b7ac00; transcript is NOT authoritative — recover from CAPT state
+NOT_PROVEN  hermes.tool_auth           plugin pre/post_tool_call are OBSERVATIONAL — tool authorization is NOT runtime-enforced in Hermes
+-------------------------------------------------------------------------------
+FAIL count: 0
+hermes_session_mode: BOOTSTRAP_DEGRADED (default; tool authorization not runtime-enforced)

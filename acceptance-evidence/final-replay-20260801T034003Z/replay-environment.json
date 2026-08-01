@@ -1,0 +1,13 @@
+{
+  "report": "capt-external-replay-environment",
+  "generated_at": "2026-08-01T03:40:04Z",
+  "replay_root": "/Users/knowurknot/capt-core-external-replay-final-20260801T034003Z",
+  "workspace": "/Users/knowurknot/capt-core-external-replay-final-20260801T034003Z/ws",
+  "capt_solo_home": "/Users/knowurknot/capt-core-external-replay-final-20260801T034003Z/home",
+  "python": "/Users/knowurknot/capt-solo/.venv/bin/python",
+  "hostname": "Kirks-MacBook-Pro.local",
+  "declared_env": ["CAPT_SOLO_HOME", "PATH", "HOME"],
+  "transcript_inherited": false,
+  "shares_temp_root_with_origin": false,
+  "origin_temp_root": "/tmp/capt-replay-origin.9GZiRq"
+}

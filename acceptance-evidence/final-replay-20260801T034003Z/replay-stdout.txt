@@ -1,0 +1,96 @@
+{
+  "reconstructed_in": "fresh-process",
+  "mission_id": "mission-external-replay",
+  "session_id": "0c1d9ffdf8b143e0a096193e45890299",
+  "checkpoint_id": "mission-external-replay@PHASE_EXTERNAL_REPLAY",
+  "execution_mode": "GOVERNED",
+  "gate_result": "PASS",
+  "active_directive_ids": [],
+  "contextpack_digest": "sha256:30a32e4d374e5b471228c70b0872f57090f7dcef5fe9d4e291d84b8b0b4acffd",
+  "intent_id": "intent-453cb6bf6bc11f02",
+  "next_justified_action": "verify replay continuity",
+  "block_reason": "",
+  "source": "CAPT state (no transcript, no copied summary)"
+}
+
+{
+  "receipt": "capt-recovery-receipt",
+  "generated_at": "2026-08-01T03:40:05Z",
+  "workspace": "/Users/knowurknot/capt-core-external-replay-final-20260801T034003Z/ws",
+  "mission_id": "mission-external-replay",
+  "session_id": "0c1d9ffdf8b143e0a096193e45890299",
+  "checkpoint_id": "mission-external-replay@PHASE_EXTERNAL_REPLAY",
+  "source": "CAPT state (no transcript, no copied summary)",
+  "reconstructed_in": "fresh-process",
+  "transcript_inheritance": "none",
+  "post_resume": {
+    "execution_mode": "GOVERNED",
+    "gate_result": "PASS",
+    "contextpack_digest": "sha256:30a32e4d374e5b471228c70b0872f57090f7dcef5fe9d4e291d84b8b0b4acffd",
+    "intent_id": "intent-453cb6bf6bc11f02",
+    "active_directive_ids": []
+  },
+  "repository_evidence": {
+    "branch": "main",
+    "head": "cbac78cb8ffaef6fbd4b515e0813b04c53cae557",
+    "dirty": true,
+    "checkpoint_latest_verified_state": "cbac78cb8ffaef6fbd4b515e0813b04c53cae557"
+  },
+  "divergence": [
+    "worktree dirty"
+  ],
+  "resume_artifact": "/Users/knowurknot/capt-core-external-replay-final-20260801T034003Z/home/data/evidence/agent-resume/mission-external-replay.json",
+  "resume_artifact_sha256_sidecar": true,
+  "next_justified_action": "verify replay continuity",
+  "checks": [
+    {
+      "check": "fresh_process",
+      "verdict": "PASS",
+      "detail": "reconstructed_in=fresh-process"
+    },
+    {
+      "check": "mission_recovered",
+      "verdict": "PASS",
+      "detail": "recovered=mission-external-replay expected=mission-external-replay"
+    },
+    {
+      "check": "session_recovered",
+      "verdict": "PASS",
+      "detail": "session_id=0c1d9ffdf8b143e0a096193e45890299"
+    },
+    {
+      "check": "checkpoint_recovered",
+      "verdict": "PASS",
+      "detail": "checkpoint_id=mission-external-replay@PHASE_EXTERNAL_REPLAY"
+    },
+    {
+      "check": "gate_pass",
+      "verdict": "PASS",
+      "detail": "gate_result=PASS block=none"
+    },
+    {
+      "check": "contextpack_built",
+      "verdict": "PASS",
+      "detail": "digest=sha256:30a32e4d374e5b471228c70b0872f57090f7dcef5fe9d4e291d84b8b0b4acffd"
+    },
+    {
+      "check": "intent_reconstructed",
+      "verdict": "PASS",
+      "detail": "intent_id=intent-453cb6bf6bc11f02"
+    },
+    {
+      "check": "not_blocked",
+      "verdict": "PASS",
+      "detail": "execution_mode=GOVERNED"
+    },
+    {
+      "check": "next_action_present",
+      "verdict": "PASS",
+      "detail": "present"
+    }
+  ],
+  "continuity_verdict": "PROVEN",
+  "capt_execution_mode": "GOVERNED",
+  "hermes_session_mode": "BOOTSTRAP_DEGRADED",
+  "hermes_session_mode_reason": "Hermes tool hooks are observational; model-facing context equality with the ContextPack is unverified"
+}

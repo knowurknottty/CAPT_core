@@ -1,0 +1,2 @@
+saved: mission-external-replay
+path: /tmp/capt-replay-origin.9GZiRq/ws/.capt/checkpoints/mission-external-replay.json

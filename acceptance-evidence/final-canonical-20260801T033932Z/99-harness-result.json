@@ -1,0 +1,11 @@
+{
+  "result": "PASS",
+  "exit_code": 0,
+  "failing_line": "",
+  "failing_exit_code": "",
+  "failing_command": "",
+  "step_failures": [],
+  "finished_at": "2026-08-01T03:39:44Z",
+  "isolated_root": "/tmp/capt-skill-acceptance.McHDHl",
+  "evidence_dir": "/Users/knowurknot/capt-core-skill-worktree/acceptance-evidence/final-canonical-20260801T033932Z"
+}

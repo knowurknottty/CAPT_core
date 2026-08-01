@@ -1,0 +1,113 @@
+{
+  "report": "capt-external-replay-comparison",
+  "standard": "semantic identity \u2014 byte-identical receipts are NOT expected",
+  "fields_expected_identical": [
+    {
+      "field": "mission_id",
+      "origin": "mission-external-replay",
+      "replay": "mission-external-replay",
+      "match": true
+    },
+    {
+      "field": "checkpoint_id",
+      "origin": "mission-external-replay@PHASE_EXTERNAL_REPLAY",
+      "replay": "mission-external-replay@PHASE_EXTERNAL_REPLAY",
+      "match": true
+    },
+    {
+      "field": "next_justified_action",
+      "origin": "verify replay continuity",
+      "replay": "verify replay continuity",
+      "match": true
+    }
+  ],
+  "fields_expected_to_differ": [
+    {
+      "field": "session_id",
+      "origin": "8ae3dd35616b428dbb15060850975d85",
+      "replay": "0c1d9ffdf8b143e0a096193e45890299",
+      "expected_to_differ": true,
+      "differs": true,
+      "reason": "a session is per-process by design"
+    },
+    {
+      "field": "contextpack_digest",
+      "origin": "sha256:2ce006b1fe6a990d1f95e96b6246b36f3a24bfeb1fa1df5b76223520e57e387d",
+      "replay": "sha256:30a32e4d374e5b471228c70b0872f57090f7dcef5fe9d4e291d84b8b0b4acffd",
+      "expected_to_differ": true,
+      "differs": true,
+      "reason": "a new ContextPack is built on every boot"
+    },
+    {
+      "field": "workspace_root",
+      "origin": "/tmp/capt-replay-origin.9GZiRq/ws",
+      "replay": "/Users/knowurknot/capt-core-external-replay-final-20260801T034003Z/ws",
+      "expected_to_differ": true,
+      "differs": true,
+      "reason": "replay runs from a different filesystem root"
+    }
+  ],
+  "checks": [
+    {
+      "check": "identical:mission_id",
+      "verdict": "PASS",
+      "detail": "origin=mission-external-replay replay=mission-external-replay"
+    },
+    {
+      "check": "identical:checkpoint_id",
+      "verdict": "PASS",
+      "detail": "origin=mission-external-replay@PHASE_EXTERNAL_REPLAY replay=mission-external-replay@PHASE_EXTERNAL_REPLAY"
+    },
+    {
+      "check": "identical:next_justified_action",
+      "verdict": "PASS",
+      "detail": "origin=verify replay continuity replay=verify replay continuity"
+    },
+    {
+      "check": "differs:session_id",
+      "verdict": "PASS",
+      "detail": "origin=8ae3dd35616b428dbb15060850975d85 replay=0c1d9ffdf8b143e0a096193e45890299 (a session is per-process by design)"
+    },
+    {
+      "check": "differs:contextpack_digest",
+      "verdict": "PASS",
+      "detail": "origin=sha256:2ce006b1fe6a990d1f95e96b6246b36f3a24bfeb1fa1df5b76223520e57e387d replay=sha256:30a32e4d374e5b471228c70b0872f57090f7dcef5fe9d4e291d84b8b0b4acffd (a new ContextPack is built on every boot)"
+    },
+    {
+      "check": "differs:workspace_root",
+      "verdict": "PASS",
+      "detail": "origin=/tmp/capt-replay-origin.9GZiRq/ws replay=/Users/knowurknot/capt-core-external-replay-final-20260801T034003Z/ws (replay runs from a different filesystem root)"
+    },
+    {
+      "check": "continuity_proven",
+      "verdict": "PASS",
+      "detail": "PROVEN"
+    },
+    {
+      "check": "no_transcript_inheritance",
+      "verdict": "PASS",
+      "detail": "none"
+    },
+    {
+      "check": "fresh_process",
+      "verdict": "PASS",
+      "detail": "fresh-process"
+    },
+    {
+      "check": "gate_pass",
+      "verdict": "PASS",
+      "detail": "PASS"
+    },
+    {
+      "check": "recovered_from_capt_state",
+      "verdict": "PASS",
+      "detail": "CAPT state (no transcript, no copied summary)"
+    },
+    {
+      "check": "hermes_mode_not_overclaimed",
+      "verdict": "PASS",
+      "detail": "BOOTSTRAP_DEGRADED"
+    }
+  ],
+  "verdict": "PASS"
+}

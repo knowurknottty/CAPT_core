@@ -1,0 +1,1 @@
+CAPT_NOT_FOUND: capt not on PATH (set CAPT_ACCEPT_PY or activate the venv)

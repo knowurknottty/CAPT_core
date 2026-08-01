@@ -1,0 +1,59 @@
+{
+  "report": "capt-boot-report",
+  "schema": "capt-core-runtime/boot-report/v1",
+  "generated_at": "2026-08-01T03:39:53Z",
+  "workspace_root": "/tmp/capt-skill-acceptance.KNuuep/ws",
+  "branch": "main",
+  "head": "e45dd1c1aaddc38eba0d7f7018d1f456cc4e9903",
+  "dirty": true,
+  "python": {
+    "version": "3.12.13",
+    "executable": "/Users/knowurknot/capt-solo/.venv/bin/python"
+  },
+  "capt": {
+    "module_file": "/Users/knowurknot/capt-solo/capt_solo/__init__.py",
+    "version": "0.5.0",
+    "cwd_shadowing_module": "/Users/knowurknot/capt-core-skill-worktree/capt_solo/__init__.py",
+    "home": "/tmp/capt-skill-acceptance.KNuuep/home"
+  },
+  "mission_id": "mission-skill-real-acceptance",
+  "session_id": "0774bd1e758e4cb6ba7ba206d7349cb3",
+  "checkpoint_id": "mission-skill-real-acceptance@PHASE_ACCEPTANCE",
+  "active_directive_ids": [],
+  "superseded_directive_ids": [],
+  "selected_memory_ids": [
+    "3cfd391f835c4e1cbec489bb58469622",
+    "90a6fe62234c4e7ab58bf10f786503f5"
+  ],
+  "rejected_memory_ids": [
+    "2e3a8a92b95344bcb9b228998bcf3f01",
+    "db009a676acc458f9a34b42ae7f47b44"
+  ],
+  "missing_memory_ids": [
+    "c63d2c8bf0b84cf196cfd985e530ca1b",
+    "1c881a68de164bdf811f50b94d44636b"
+  ],
+  "conflict_ids": [
+    "2d9d5b4ce3b14137b8684ab30c5529bb",
+    "36abc15e60d54688a128334258c13f33"
+  ],
+  "stale_memory_ids": [
+    "f6d2dbdb953041199f9053f825e0f1c6",
+    "bd9b9717ff444b6a90752b497ae5ba47"
+  ],
+  "intent_id": "intent-c64258a820f003e8",
+  "contextpack_digest": "sha256:8d84d5185126d3176d2e6653cc889dd1718249d607be3f60babb5d68631282d9",
+  "memory_use_decision_id": "babb5d68631282d9",
+  "gate_result": "PASS",
+  "capt_execution_mode": "GOVERNED",
+  "hermes_session_mode": "BOOTSTRAP_DEGRADED",
+  "hermes_session_mode_reason": "Hermes tool hooks are observational; model-facing context equality with the ContextPack is unverified",
+  "block_reason": "",
+  "block_codes": [],
+  "next_justified_action": "verify boot report",
+  "latest_verified_milestone": "NOT_ASSERTED (read from checkpoint phase / repository evidence)",
+  "boot_trace_artifact": "/tmp/capt-skill-acceptance.KNuuep/home/data/evidence/agent-boot/agentrun-1462d0a213134d37.json",
+  "boot_trace_artifact_hash": "sha256:4aa454f90a385d1dfa6d7383fb21bca113faf41e39edfbc83383c87cbe7b1e23",
+  "boot_trace_match": "contextpack_digest",
+  "agent_run_id": "agentrun-1462d0a213134d37"
+}

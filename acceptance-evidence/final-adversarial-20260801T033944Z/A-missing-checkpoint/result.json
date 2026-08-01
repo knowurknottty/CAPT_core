@@ -1,0 +1,9 @@
+{
+  "scenario": "A",
+  "name": "missing-checkpoint",
+  "mutation": "delete /tmp/capt-adv-A.qOk2KH/ws/.capt/checkpoints/mission-skill-real-acceptance.json",
+  "command": "capt-resume-check.sh /tmp/capt-adv-A.qOk2KH/ws mission-skill-real-acceptance",
+  "expected": "nonzero exit, no PROVEN, no silent reconstruction",
+  "actual": "exit=4 continuity_verdict='NOT_PROVEN'",
+  "verdict": "PASS"
+}

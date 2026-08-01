@@ -1,0 +1,17 @@
+evidence_path   /Users/knowurknot/capt-core-skill-worktree/acceptance-evidence/final-canonical-20260801T033932Z
+timestamp_utc   2026-08-01T03:39:32Z
+worktree        /Users/knowurknot/capt-core-skill-worktree
+branch          feature/hermes-capt-core-runtime-skill
+head_sha        65c22559b95be66037a6a795705587c230f0b865
+hostname        Kirks-MacBook-Pro.local
+shell_pid       53878
+uname           Darwin 25.4.0 arm64
+CAPT_SOLO_HOME  /tmp/capt-skill-acceptance.McHDHl/home
+home_source     harness-allocated-temp
+inherited_home  <unset> (ignored unless CAPT_ACCEPT_HOME is set)
+workspace       /tmp/capt-skill-acceptance.McHDHl/ws
+mission         mission-skill-real-acceptance
+skill_dir       /Users/knowurknot/capt-core-skill-worktree/skills/hermes/capt-core-runtime
+harness         /Users/knowurknot/capt-core-skill-worktree/skills/hermes/capt-core-runtime/tests-acceptance/run-acceptance.sh
+python          /Users/knowurknot/capt-solo/.venv/bin/python
+canonical_repo  /Users/knowurknot/capt-solo

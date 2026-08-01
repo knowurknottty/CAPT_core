@@ -1,0 +1,9 @@
+{
+  "scenario": "G",
+  "name": "corrupted-trace-hash",
+  "mutation": "flip a byte inside the persisted boot-trace artifact",
+  "command": "shasum -a 256 <boot_trace_artifact> vs .sha256 sidecar",
+  "expected": "digest mismatch detected via sidecar",
+  "actual": "sidecar=sha256:0913fd635ac17eaf0ea92bfff92000cae26436f37bb4e5872ca7bae4c739a69b recomputed=8fd3bf934434d109f5e5d2253314a6e6932dcb338ac3b913c1d1da32db37d708 -> MISMATCH DETECTED",
+  "verdict": "PASS"
+}
