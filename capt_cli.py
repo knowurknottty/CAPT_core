@@ -389,7 +389,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         if args.group == "retrieval":
             return _cmd_retrieval(mgr, args, as_json)
         if args.group == "foundry":
-            return _cmd_foundry(runtime, args, as_json)
+            return _cmd_foundry(mgr, args, as_json)
         if args.group == "workspace":
             return _cmd_workspace(args, as_json)
     except CaptSoloError as e:

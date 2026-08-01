@@ -118,7 +118,22 @@ class ClaimGuard:
                 lifecycle=cap.lifecycle, reason="capability deprecated")
 
         if cap.lifecycle == "verified":
-            # verified: claim supported
+            # Even verified capabilities must satisfy proof aggregate.
+            # A capability with declared requirements but zero supporting
+            # evidence has an unsatisfied aggregate — the claim is NOT supported.
+            if self._proof is not None:
+                agg = self._proof.aggregate(cap.identifier)
+                if agg.unsatisfied_requirements:
+                    missing = [CLAIM_TRIGGERS[word]]
+                    for ur in agg.unsatisfied_requirements:
+                        missing.append(
+                            f"{ur['type']} ({ur['have']}/{ur['min_count']})")
+                    return ClaimVerdict(
+                        claim=text, supported=False,
+                        language=f"{text} — but proof aggregate unsatisfied.",
+                        missing=missing, capability_id=cap.identifier,
+                        lifecycle=cap.lifecycle, evidence_count=len(cap.evidence),
+                        reason="proof aggregate unsatisfied")
             return ClaimVerdict(
                 claim=text, supported=True, language=text,
                 capability_id=cap.identifier, lifecycle=cap.lifecycle,

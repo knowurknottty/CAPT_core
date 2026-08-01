@@ -48,6 +48,24 @@ from capt_solo.lifecycle import (
 from capt_solo.memory.engine import Memory, MemoryEngine
 from capt_solo.memory.search import SearchAdapter, SearchHit
 from capt_solo.memory import csg, antitoken, context, pipeline, trust, models
+from capt_solo.model_task import (
+    ModelIdentity,
+    ModelProvider,
+    ModelTaskRequest,
+    ModelTaskResult,
+    ProviderError,
+    PulseModelProvider,
+    OpenAICompatibleLocalProvider,
+)
+from capt_solo.runtime import (
+    CAPTRuntime,
+    GateDecision,
+    GateDeniedError,
+    MemoryUseGate,
+    PreparedModelTurn,
+    RuntimeConfiguration,
+    normalize_selection_ids,
+)
 
 __all__ = [
     # config
@@ -69,6 +87,13 @@ __all__ = [
     "CTPRuntime", "Receipt",
     # khsb
     "KHSB", "Message",
+    # runtime / composition root (v0.5)
+    "CAPTRuntime", "GateDecision", "GateDeniedError",
+    "MemoryUseGate", "PreparedModelTurn", "RuntimeConfiguration",
+    "normalize_selection_ids",
+    # model task / provider boundary (v0.5)
+    "ModelIdentity", "ModelProvider", "ModelTaskRequest", "ModelTaskResult",
+    "ProviderError", "PulseModelProvider", "OpenAICompatibleLocalProvider",
 ]
 
 

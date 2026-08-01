@@ -8,6 +8,7 @@
   "packages": {
     "stable": [
       "capt_solo",
+      "capt_solo.agent",
       "capt_solo.components",
       "capt_solo.contextpack",
       "capt_solo.core",
