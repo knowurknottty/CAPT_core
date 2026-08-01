@@ -3,9 +3,9 @@
 > Live checkpoint. Regenerate with `capt workspace checkpoint`. Archive prior
 > copies to `checkpoints/` with `capt workspace archive-checkpoint`.
 
-- **checkpoint_id**: CKPT-2026-07-31-stewardship-36b6f5f
-- **branch**: `integration/capt-v05-final-audit`
-- **commit**: `36b6f5f`
+- **checkpoint_id**: CKPT-2026-08-01-stewardship-78c8e12
+- **branch**: `feature/capt-bootstrap-bridge`
+- **commit**: `78c8e12`
 - **completed**: (fill from prior checkpoint / git log)
 - **in_progress**: see TASK_QUEUE.md
 - **active_files**: 
@@ -14,4 +14,4 @@
 - **next_command**: capt workspace next
 - **next_commit_boundary**: coherent milestone commit once current task verifies
 - **owner_gate**: none (or specify)
-- **generated_at**: 2026-07-31T02:41:46Z
+- **generated_at**: 2026-08-01T06:21:25Z
