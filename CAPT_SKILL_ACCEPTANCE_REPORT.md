@@ -9,6 +9,12 @@ Selection source: `explicit:CAPT_ACCEPT_PY` (deterministic; see interpreter-hard
 
 ---
 
+## Final Status
+
+`CAPT runtime skill release-ready for bootstrap-governed use; Hermes tool-loop enforcement remains observational and unverified.`
+
+---
+
 ## Verdict
 
 | Check | Result | Evidence |

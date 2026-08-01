@@ -12,6 +12,10 @@ It locates the canonical installation and drives the canonical `capt` CLI.
 Boundary: `Hermes → this skill → capt CLI → CAPTRuntime → governed path`.
 Never `Hermes → prompt → reconstructed CAPT behaviour`.
 
+## Final Status
+
+`CAPT runtime skill release-ready for bootstrap-governed use; Hermes tool-loop enforcement remains observational and unverified.`
+
 ## 0. Applicability gate — check this FIRST
 
 Applies when the user says or implies: use/load/boot CAPT, CAPT Core, CAPT
