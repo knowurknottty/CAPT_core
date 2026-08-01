@@ -48,6 +48,20 @@ from capt_solo.lifecycle import (
 from capt_solo.memory.engine import Memory, MemoryEngine
 from capt_solo.memory.search import SearchAdapter, SearchHit
 from capt_solo.memory import csg, antitoken, context, pipeline, trust, models
+from capt_solo.model_task import (
+    ModelIdentity,
+    ModelTaskRequest,
+    ModelTaskResult,
+    OpenAICompatibleLocalProvider,
+    ProviderError,
+    PulseModelProvider,
+)
+from capt_solo.pulse import PulseConfig, PulseGateway
+from capt_solo.runtime import (
+    CAPTRuntime,
+    GateDeniedError,
+    RuntimeConfiguration,
+)
 
 __all__ = [
     # config
@@ -69,6 +83,12 @@ __all__ = [
     "CTPRuntime", "Receipt",
     # khsb
     "KHSB", "Message",
+    # model-task execution boundary
+    "ModelIdentity", "ModelTaskRequest", "ModelTaskResult",
+    "OpenAICompatibleLocalProvider", "ProviderError", "PulseModelProvider",
+    "PulseConfig", "PulseGateway",
+    # canonical v0.5 runtime composition root
+    "CAPTRuntime", "RuntimeConfiguration", "GateDeniedError",
 ]
 
 
