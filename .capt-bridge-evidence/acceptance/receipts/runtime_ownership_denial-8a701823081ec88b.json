@@ -1,0 +1,11 @@
+{
+  "approved_roots": [
+    "/Users/knowurknot/capt-bootstrap-bridge"
+  ],
+  "code": "RUNTIME_OWNERSHIP_DENIAL",
+  "operation": "write",
+  "path": "/Users/knowurknot/.hermes/skills/capt-core-runtime/SKILL.md",
+  "reason": "path is a protected external Hermes location (.hermes/skills)",
+  "receipt_digest": "sha256:03d87f4b46f22b1541b53cb8c7da85aca6a5a6ec27cb5550d3c955fcee1613dc",
+  "timestamp": 1785570951.7434208
+}

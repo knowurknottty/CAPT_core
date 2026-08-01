@@ -10,10 +10,13 @@ authenticated READY event.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 from pathlib import Path
 from typing import Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 from capt_solo.bridge.contracts import (
     BLOCK_CAPT_INCOMPLETE,
@@ -45,19 +48,18 @@ def _recover_session_id(workspace: Path, mission_id: str) -> str:
     Continuity authority is CAPT's, not Hermes'. When a prior governed run
     checkpointed a session, a fresh bridge process must resume that exact session
     rather than minting a new one — otherwise the "second fresh process resumes
-    from CAPT state" acceptance criterion is hollow. The id is read from a
-    sidecar written by the runner (never from the integrity-digested checkpoint
-    body).
+    from CAPT state" acceptance criterion is hollow. The id is read from the
+    integrity-bound continuity metadata written by the runner (never from the
+    integrity-digested checkpoint body).
     """
     try:
-        from capt_solo.bridge.runner_process import _session_sidecar_path
+        from capt_solo.bridge.continuity import load_continuity
 
-        p = _session_sidecar_path(workspace, mission_id)
-        if p.is_file():
-            return p.read_text(encoding="utf-8").strip()
-    except Exception:
-        pass
-    return ""
+        meta = load_continuity(workspace, mission_id)
+        return meta.session_id
+    except Exception as exc:
+        logger.warning("CONTINUITY_RECOVERY_FAILED mission=%s: %s", mission_id, exc)
+        return ""
 
 
 def run_doctor(source: CaptSource) -> Tuple[bool, dict, str]:
@@ -211,16 +213,8 @@ def boot_bridge(
 
     ev = handle.ready_event
     assert ev is not None
-    # Persist the durable session id to the sidecar so a future fresh bridge
-    # process resumes the SAME session (continuity authority lives in CAPT).
-    try:
-        from capt_solo.bridge.runner_process import _session_sidecar_path
-
-        _session_sidecar_path(workspace, mission_id).write_text(
-            ev.session_id, encoding="utf-8"
-        )
-    except Exception:
-        pass
+    # The runner already persisted integrity-bound continuity metadata (which
+    # carries the session id) during serve; the bridge does not re-write it.
     return (
         BridgeResult(
             boot_state=BOOT_STATE_FULL,

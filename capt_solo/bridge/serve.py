@@ -23,10 +23,17 @@ import signal
 import socket
 import sys
 import threading
+import hmac
 from pathlib import Path
 from typing import Any, Optional
 
 from capt_solo.bridge.contracts import BridgeReadyEvent
+from capt_solo.bridge.protocol import (
+    BridgeProtocolError,
+    OP_SHUTDOWN,
+    TurnEnvelope,
+    compute_receipt_digest,
+)
 from capt_solo.bridge.runner_process import emit_ready_event
 
 _MAX_REQUEST_BYTES = 256 * 1024
@@ -38,6 +45,9 @@ class _ServeState:
         self.runner: Any = None
         self.state: Any = None
         self.boot_result: Any = None
+        self.runtime_id: str = ""
+        self.runtime_generation: int = 1
+        self.turn_auth: str = ""
 
 
 def _ctp_tx_id(runner: Any) -> str:
@@ -77,13 +87,22 @@ def serve(
     from capt_solo.agent.runner import AgentRunner
 
     turn_socket = os.environ.get("CAPT_BRIDGE_TURN_SOCKET", "")
+    turn_auth = os.environ.get("CAPT_BRIDGE_TURN_AUTH", "")
+    runtime_id = os.environ.get("CAPT_BRIDGE_RUNTIME_ID", "")
+    runtime_generation = int(os.environ.get("CAPT_BRIDGE_RUNTIME_GENERATION", "1") or "1")
     if not turn_socket:
         # Deterministic fallback so an operator (or the acceptance harness) can
-        # reach the turn channel without the launcher's env injection.
+        # reach the turn channel without the launcher's env injection. In that
+        # case the channel is unauthenticated and must only be used for local
+        # debugging, never for production handoff.
         base = Path(workspace) / ".capt" / "bridge" / "sock"
         base.mkdir(parents=True, exist_ok=True, mode=0o700)
         turn_socket = str(base / f"turn-{secrets.token_hex(8)}.sock")
+        turn_auth = ""
     st = _ServeState()
+    st.runtime_id = runtime_id
+    st.runtime_generation = runtime_generation
+    st.turn_auth = turn_auth
 
     runner = AgentRunner.load()
     st.runner = runner
@@ -150,19 +169,31 @@ def serve(
             )
             return 4
 
-        # Persist the durable session id back to the mission checkpoint so a
-        # future fresh bridge process resumes the SAME session (continuity
-        # authority lives in CAPT, not Hermes). Stored in a SIDECAR, not the
-        # checkpoint body, because the checkpoint body is integrity-digested and
-        # mutating it would fail the digest check on the next boot.
+        # Persist integrity-bound continuity metadata (replaces plaintext .sid).
+        # Authority stays in CAPT's checkpoint; this metadata references and
+        # validates it. Failures are structured, never silently ignored.
         try:
-            from capt_solo.bridge.runner_process import _session_sidecar_path
+            from capt_solo.bridge.continuity import save_continuity
 
-            _session_sidecar_path(Path(workspace), mission_id).write_text(
-                boot_result.session_id, encoding="utf-8"
+            save_continuity(
+                Path(workspace),
+                mission_id=boot_result.mission_id,
+                session_id=boot_result.session_id,
+                checkpoint_id=boot_result.checkpoint_id,
+                runtime_id=runtime_id,
+                runtime_generation=runtime_generation,
+                previous_generation=max(0, runtime_generation - 1),
+                checkpoint_digest=boot_result.checkpoint_id,
+                fencing_token=secrets.token_hex(16),
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            sys.stderr.write(
+                json.dumps(
+                    {"bridge_serve": "CONTINUITY_WRITE_FAILED", "reason": f"{type(exc).__name__}: {exc}"}
+                )
+                + "\n"
+            )
+            return 6
 
         st.state = runner.run_state(boot_result)
 
@@ -180,9 +211,11 @@ def serve(
     finally:
         _checkpoint_on_exit(st)
         try:
-            from capt_solo.bridge.runner_process import release_runner_lock
+            from capt_solo.bridge.lease import release_runner_lease
 
-            release_runner_lock(Path(workspace), mission_id)
+            release_runner_lease(
+                Path(workspace), mission_id, lease=None
+            )
         except Exception:
             pass
         try:
@@ -192,7 +225,7 @@ def serve(
 
 
 def _serve_turns(st: _ServeState, turn_socket: str) -> None:
-    """Accept turn requests until shutdown."""
+    """Accept authenticated turn requests until shutdown."""
     path = Path(turn_socket)
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     if path.exists():
@@ -202,6 +235,8 @@ def _serve_turns(st: _ServeState, turn_socket: str) -> None:
     os.chmod(str(path), 0o600)
     srv.listen(4)
     srv.settimeout(0.5)
+    # Bounded replay protection: remember recent request_ids for this process.
+    seen: "set[str]" = set()
     try:
         while not st.shutdown.is_set():
             try:
@@ -211,7 +246,7 @@ def _serve_turns(st: _ServeState, turn_socket: str) -> None:
             except Exception:
                 break
             try:
-                _handle_turn(st, conn)
+                _handle_turn(st, conn, seen)
             finally:
                 try:
                     conn.close()
@@ -228,42 +263,94 @@ def _serve_turns(st: _ServeState, turn_socket: str) -> None:
             pass
 
 
-def _handle_turn(st: _ServeState, conn: socket.socket) -> None:
+def _handle_turn(st: _ServeState, conn: socket.socket, seen: "set[str]") -> None:
     conn.settimeout(600.0)
     chunks = []
     total = 0
-    while total < _MAX_REQUEST_BYTES:
+    oversized = False
+    # Read until EOF so the client's sendall always completes (no deadlock).
+    # Track oversized against the bound; respond after the full body is drained.
+    while True:
         data = conn.recv(8192)
         if not data:
             break
-        chunks.append(data)
+        if total < _MAX_REQUEST_BYTES:
+            chunks.append(data)
         total += len(data)
-        if data.endswith(b"\n"):
-            break
-    raw = b"".join(chunks).decode("utf-8", errors="replace").strip()
+        if total >= _MAX_REQUEST_BYTES:
+            oversized = True
+    if oversized:
+        conn.sendall(
+            json.dumps({"ok": False, "error": "TURN_OVERSIZED", "message": "request too large"}).encode()
+        )
+        return
+    raw = b"".join(chunks)
     try:
-        req = json.loads(raw) if raw else {}
+        req = json.loads(raw.decode("utf-8", errors="replace")) if raw else {}
     except Exception:
-        conn.sendall(json.dumps({"ok": False, "error": "malformed turn request"}).encode())
+        conn.sendall(
+            json.dumps({"ok": False, "error": "TURN_MALFORMED", "message": "invalid JSON"}).encode()
+        )
         return
 
-    if req.get("op") == "shutdown":
+    # Authenticate + validate the envelope.
+    try:
+        env = TurnEnvelope.from_mapping(req)
+    except BridgeProtocolError as exc:
+        conn.sendall(json.dumps(exc.to_dict()).encode())
+        return
+
+    # Auth token (bound to runtime identity + generation).
+    if not env.auth:
+        conn.sendall(
+            json.dumps(
+                {"ok": False, "error": "TURN_UNAUTHENTICATED", "message": "no auth token presented"}
+            ).encode()
+        )
+        return
+    if not st.turn_auth:
+        conn.sendall(
+            json.dumps(
+                {"ok": False, "error": "TURN_UNAUTHENTICATED", "message": "channel not authenticated"}
+            ).encode()
+        )
+        return
+    if not hmac.compare_digest(env.auth, st.turn_auth):
+        conn.sendall(
+            json.dumps({"ok": False, "error": "TURN_INVALID_AUTH", "message": "bad auth token"}).encode()
+        )
+        return
+    if env.runtime_id != st.runtime_id or env.runtime_generation != st.runtime_generation:
+        conn.sendall(
+            json.dumps(
+                {"ok": False, "error": "TURN_STALE_GENERATION", "message": "runtime identity/generation mismatch"}
+            ).encode()
+        )
+        return
+    if env.request_id in seen:
+        conn.sendall(
+            json.dumps({"ok": False, "error": "TURN_REPLAYED", "message": "request_id already seen"}).encode()
+        )
+        return
+    seen.add(env.request_id)
+
+    if env.op == OP_SHUTDOWN:
         st.shutdown.set()
         conn.sendall(json.dumps({"ok": True, "shutdown": True}).encode())
         return
 
-    intent_text = str(req.get("intent") or "")
-    resp = _run_governed_turn(st, intent_text)
+    intent_text = str(env.payload.get("intent") or "")
+    resp = _run_governed_turn(st, env, intent_text)
     conn.sendall(json.dumps(resp, default=str).encode("utf-8"))
 
 
-def _run_governed_turn(st: _ServeState, intent_text: str) -> dict:
-    """Execute one governed turn through canonical CAPT."""
+def _run_governed_turn(st: _ServeState, env: "TurnEnvelope", intent_text: str) -> dict:
+    """Execute one governed turn through canonical CAPT; return a TurnReceipt."""
     from capt_solo.agent import AgentTurnRequest, IntentRecord
 
     runner, state = st.runner, st.state
     if runner is None or state is None:
-        return {"ok": False, "error": "runner state unavailable"}
+        return {"ok": False, "error": "runner state unavailable", "provider_owner": "CAPT_AGENT_RUNNER"}
 
     provider, note = _provider_from_env()
     if provider is None:
@@ -275,6 +362,7 @@ def _run_governed_turn(st: _ServeState, intent_text: str) -> dict:
         }
 
     try:
+        ckpt_before = state.checkpoint_id or ""
         intent = IntentRecord.mint(
             mission_id=state.mission_id,
             session_id=state.session_id,
@@ -288,6 +376,22 @@ def _run_governed_turn(st: _ServeState, intent_text: str) -> dict:
             AgentTurnRequest(intent=intent, user_input=intent_text),
             provider=provider,
         )
+        ckpt_after = turn.checkpoint_id or ckpt_before
+        receipt = {
+            "request_id": env.request_id,
+            "turn_id": intent.intent_id,
+            "mission_id": state.mission_id,
+            "session_id": state.session_id,
+            "runtime_id": st.runtime_id,
+            "runtime_generation": st.runtime_generation,
+            "provider_owner": "CAPT_AGENT_RUNNER",
+            "execution_mode": "GOVERNED",
+            "ctp_transaction_id": turn.tx_id or "",
+            "checkpoint_before": ckpt_before,
+            "checkpoint_after": ckpt_after,
+            "claim_supported": bool(turn.claim_supported),
+        }
+        receipt["receipt_digest"] = compute_receipt_digest(receipt)
         return {
             "ok": bool(turn.ok),
             "output": turn.visible_output,
@@ -298,6 +402,7 @@ def _run_governed_turn(st: _ServeState, intent_text: str) -> dict:
             "provider": note,
             "provider_owner": "CAPT_AGENT_RUNNER",
             "execution_mode": "GOVERNED",
+            "receipt": receipt,
         }
     except Exception as exc:
         return {

@@ -37,14 +37,21 @@ from capt_solo.bridge.contracts import (
     BLOCK_RUNNER_TIMEOUT,
     BridgeReadyEvent,
 )
+from capt_solo.bridge.lease import (
+    DuplicateRunnerError,
+    acquire_runner_lease,
+    read_held_lease,
+    refresh_lease,
+    release_runner_lease,
+)
+from capt_solo.bridge.protocol import (
+    BridgeConnectionDescriptor,
+    make_auth_token,
+)
 from capt_solo.bridge.resolver import CaptSource, redact_argv, runner_env
 
 DEFAULT_STARTUP_TIMEOUT_S = 90.0
 _MAX_CAPTURED_BYTES = 64 * 1024  # bounded stdout/stderr
-
-
-class DuplicateRunnerError(RuntimeError):
-    """A runner is already live for this workspace+mission."""
 
 
 @dataclass
@@ -56,6 +63,9 @@ class RunnerHandle:
     pgid: int = 0
     socket_path: str = ""
     turn_socket_path: str = ""
+    runtime_id: str = ""
+    runtime_generation: int = 0
+    turn_auth: str = ""
     ready_event: Optional[BridgeReadyEvent] = None
     stdout_tail: str = ""
     stderr_tail: str = ""
@@ -158,7 +168,27 @@ class _ReadyListener:
 
 def _lock_path(workspace: Path, mission_id: str) -> Path:
     safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in mission_id)
-    return workspace / ".capt" / "bridge" / f"runner-{safe}.lock"
+    return workspace / ".capt" / "bridge" / f"runner-{safe}.lease"
+
+
+def _lock_path_local(workspace: Path, mission_id: str) -> Path:
+    return _lock_path(workspace, mission_id)
+
+
+def _rewrite_lease(lock: Path, lease) -> None:
+    """Atomically rewrite the lease with updated pid/pgid (rename over)."""
+    import json as _json
+
+    data = _json.dumps(lease.to_dict(), sort_keys=True).encode("utf-8")
+    tmp = lock.with_name(f"{lock.name}.upd.tmp")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.write(fd, data)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    os.rename(str(tmp), str(lock))
+    os.chmod(lock, 0o600)
 
 
 def _live_pid(pid: int) -> bool:
@@ -173,21 +203,28 @@ def _live_pid(pid: int) -> bool:
     return True
 
 
-def acquire_runner_lock(workspace: Path, mission_id: str) -> Path:
-    """Prevent a duplicate runner for the same workspace+mission."""
-    lock = _lock_path(workspace, mission_id)
-    lock.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    if lock.exists():
-        try:
-            existing = int(json.loads(lock.read_text(encoding="utf-8")).get("pid", 0))
-        except Exception:
-            existing = 0
-        if _live_pid(existing):
-            raise DuplicateRunnerError(
-                f"runner already live for mission {mission_id!r} (pid {existing})"
-            )
-        lock.unlink(missing_ok=True)  # stale
-    return lock
+def _make_connection_descriptor(
+    *,
+    runtime_id: str,
+    runtime_generation: int,
+    mission_id: str,
+    session_id: str,
+    turn_socket: str,
+    auth_token: str,
+    ttl_s: float = 3600.0,
+) -> BridgeConnectionDescriptor:
+    now = time.time()
+    return BridgeConnectionDescriptor(
+        protocol_version=1,
+        runtime_id=runtime_id,
+        runtime_generation=runtime_generation,
+        mission_id=mission_id,
+        session_id=session_id,
+        socket_path=turn_socket,
+        auth_token=auth_token,
+        issued_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
+        expires_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now + ttl_s)),
+    )
 
 
 def _tail(path: Path, limit: int = _MAX_CAPTURED_BYTES) -> str:
@@ -235,8 +272,23 @@ def launch_runner(
     if session_id:
         argv += ["--session", session_id]
 
+    # The bridge assigns the runtime identity + generation up front so the lease,
+    # the connection descriptor, and the runner all agree on authority. The
+    # runner reads these from the environment and adopts them (it does not mint
+    # its own conflicting identity).
+    runtime_id = secrets.token_hex(16)
+    runtime_generation = 1
+
     try:
-        lock = acquire_runner_lock(workspace, mission_id)
+        lease = acquire_runner_lease(
+            workspace,
+            mission_id,
+            runtime_id=runtime_id,
+            runtime_generation=runtime_generation,
+            pid=0,  # filled after Popen; lease re-written below
+            pgid=0,
+            session_id=session_id,
+        )
     except DuplicateRunnerError as exc:
         return RunnerHandle(
             argv=redact_argv(argv),
@@ -248,6 +300,7 @@ def launch_runner(
     listener = _ReadyListener(base / "sock")
     if not listener.secure():
         listener.close()
+        release_runner_lease(workspace, mission_id, lease=lease)
         return RunnerHandle(
             argv=redact_argv(argv),
             block_codes=(BLOCK_RUNNER_START_FAILED,),
@@ -258,7 +311,25 @@ def launch_runner(
     # Same AF_UNIX length constraint as the READY socket: co-locate the turn
     # socket with the (possibly relocated) listener directory.
     turn_socket = str(Path(listener.path).parent / f"turn-{secrets.token_hex(8)}.sock")
-    env = runner_env(nonce, listener.path, extra={"CAPT_BRIDGE_TURN_SOCKET": turn_socket})
+    turn_auth = make_auth_token()
+    descriptor = _make_connection_descriptor(
+        runtime_id=runtime_id,
+        runtime_generation=runtime_generation,
+        mission_id=mission_id,
+        session_id=session_id,
+        turn_socket=turn_socket,
+        auth_token=turn_auth,
+    )
+    env = runner_env(
+        nonce,
+        listener.path,
+        extra={
+            "CAPT_BRIDGE_TURN_SOCKET": turn_socket,
+            "CAPT_BRIDGE_TURN_AUTH": turn_auth,
+            "CAPT_BRIDGE_RUNTIME_ID": runtime_id,
+            "CAPT_BRIDGE_RUNTIME_GENERATION": str(runtime_generation),
+        },
+    )
 
     out_f = tempfile.NamedTemporaryFile(
         prefix="capt-runner-out-", suffix=".log", delete=False
@@ -295,11 +366,13 @@ def launch_runner(
     except Exception:
         pgid = proc.pid
 
-    lock.write_text(
-        json.dumps({"pid": proc.pid, "pgid": pgid, "mission_id": mission_id}),
-        encoding="utf-8",
-    )
-    os.chmod(lock, 0o600)
+    # Re-write the lease with the real pid/pgid (atomic rename inside lease).
+    lease.pid = proc.pid
+    lease.pgid = pgid
+    from capt_solo.bridge.lease import _read_lease  # local import to avoid cycle
+
+    lock = _lock_path_local(workspace, mission_id)
+    _rewrite_lease(lock, lease)
 
     handle = RunnerHandle(
         argv=redact_argv(argv),
@@ -307,6 +380,9 @@ def launch_runner(
         pgid=pgid,
         socket_path=listener.path,
         turn_socket_path=turn_socket,
+        runtime_id=runtime_id,
+        runtime_generation=runtime_generation,
+        turn_auth=turn_auth,
     )
 
     def _finish(codes: Tuple[str, ...], reason: str) -> RunnerHandle:
@@ -330,7 +406,7 @@ def launch_runner(
                 pass
         if codes:
             terminate_runner(handle)
-            lock.unlink(missing_ok=True)
+            release_runner_lease(workspace, mission_id, lease=lease)
         return handle
 
     deadline = time.monotonic() + timeout_s
@@ -371,24 +447,6 @@ def launch_runner(
         (BLOCK_RUNNER_TIMEOUT,),
         f"runner did not emit a validated READY event within {timeout_s:g}s",
     )
-
-
-def _session_sidecar_path(workspace: Path, mission_id: str) -> Path:
-    """Sidecar holding the durable CAPT session id for a mission.
-
-    Kept OUTSIDE the integrity-digested checkpoint body so that recording the
-    session does not invalidate the checkpoint digest.
-    """
-    safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in mission_id)
-    return workspace / ".capt" / "bridge" / f"session-{safe}.sid"
-
-
-def release_runner_lock(workspace: Path, mission_id: str) -> None:
-    """Remove the duplicate-runner lock (call on clean shutdown)."""
-    try:
-        _lock_path(workspace, mission_id).unlink(missing_ok=True)
-    except OSError:
-        pass
 
 
 def terminate_runner(handle: RunnerHandle, *, grace_s: float = 5.0) -> None:

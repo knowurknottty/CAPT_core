@@ -334,21 +334,34 @@ def test_runner_death_before_ready_blocks(tmp_path):
 
 
 def test_duplicate_runner_prevented(tmp_path):
-    from capt_solo.bridge.runner_process import DuplicateRunnerError, acquire_runner_lock
+    from capt_solo.bridge.lease import (
+        DuplicateRunnerError,
+        acquire_runner_lease,
+        read_held_lease,
+    )
 
-    lock = acquire_runner_lock(tmp_path, "m1")
-    lock.write_text(json.dumps({"pid": os.getpid(), "pgid": os.getpid(), "mission_id": "m1"}))
+    lease = acquire_runner_lease(
+        tmp_path, "m1", runtime_id="r1", runtime_generation=1, pid=os.getpid(), pgid=os.getpid()
+    )
+    assert read_held_lease(tmp_path, "m1") is not None
     with pytest.raises(DuplicateRunnerError):
-        acquire_runner_lock(tmp_path, "m1")
+        acquire_runner_lease(
+            tmp_path, "m1", runtime_id="r2", runtime_generation=1, pid=os.getpid(), pgid=os.getpid()
+        )
 
 
 def test_stale_runner_lock_is_reclaimed(tmp_path):
-    from capt_solo.bridge.runner_process import acquire_runner_lock
+    from capt_solo.bridge.lease import acquire_runner_lease, read_held_lease
 
-    lock = acquire_runner_lock(tmp_path, "m1")
-    lock.write_text(json.dumps({"pid": 999_999_999, "mission_id": "m1"}))
-    reclaimed = acquire_runner_lock(tmp_path, "m1")  # must not raise
-    assert reclaimed == lock
+    # Simulate a stale lease from a dead PID on this host.
+    lease = acquire_runner_lease(
+        tmp_path, "m1", runtime_id="r1", runtime_generation=1, pid=999_999_999, pgid=999_999_999
+    )
+    reclaimed = acquire_runner_lease(
+        tmp_path, "m1", runtime_id="r2", runtime_generation=1, pid=os.getpid(), pgid=os.getpid()
+    )
+    assert reclaimed is not None
+    assert read_held_lease(tmp_path, "m1").runtime_id == "r2"
 
 
 def test_no_secrets_in_runner_argv(monkeypatch):

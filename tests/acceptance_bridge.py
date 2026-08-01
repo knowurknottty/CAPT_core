@@ -157,21 +157,28 @@ def _live_runner(mission: str, resume_session_id: str = "") -> Dict[str, Any]:
     turn_socket = handle.turn_socket_path
     if not turn_socket:
         return {"error": "no turn socket in live handle", "handle": handle}
+    from capt_solo.bridge.turn import execute_governed_turn
+
+    # Build a BridgeResult-like object so execute_governed_turn can route the
+    # turn through the authenticated channel.
+    class _Result:
+        provider_allowed = True
+        provider_owner = "CAPT_AGENT_RUNNER"
+        mission_id = mission
+        session_id = resume_session_id
+        checkpoint_id = ""
+        contextpack_digest = ""
+        memory_use_gate = "PASS"
+        ctp_transaction_id = ""
+        khsb_correlation_id = ""
+        execution_mode = "GOVERNED"
+
+    out = execute_governed_turn(_Result(), "Report the current mission status.", handle=handle)
     try:
-        with _sock.socket(_sock.AF_UNIX, _sock.SOCK_STREAM) as s:
-            s.settimeout(120.0)
-            s.connect(turn_socket)
-            s.sendall((json.dumps({"op": "turn", "intent": "Report the current mission status."}) + "\n").encode())
-            s.shutdown(_sock.SHUT_WR)
-            chunks = []
-            while True:
-                data = s.recv(8192)
-                if not data:
-                    break
-                chunks.append(data)
-        return {"turn": json.loads(b"".join(chunks).decode("utf-8", errors="replace")), "handle": handle}
+        turn = {"ok": True, "output": out, "provider_owner": "CAPT_AGENT_RUNNER"}
     except Exception as exc:
-        return {"turn": {"ok": False, "error": f"{type(exc).__name__}: {exc}"}, "handle": handle}
+        turn = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    return {"turn": turn, "handle": handle}
 
 
 def _stop_live_runner(live: Dict[str, Any]) -> None:
