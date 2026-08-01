@@ -1,0 +1,9 @@
+{
+  "scenario": "I",
+  "name": "cwd-module-shadowing",
+  "mutation": "plant a fake capt_solo package in the invoking CWD",
+  "command": "cd /tmp/capt-adv-I.ALNLAx/ws && capt-doctor.sh (fake capt_solo in CWD)",
+  "expected": "shadow named, canonical identity preserved",
+  "actual": "shadow_reported=1 fake_version_adopted=0 exit=0",
+  "verdict": "PASS"
+}

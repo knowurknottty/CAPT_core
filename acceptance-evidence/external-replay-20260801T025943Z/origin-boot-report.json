@@ -1,0 +1,46 @@
+{
+  "report": "capt-boot-report",
+  "schema": "capt-core-runtime/boot-report/v1",
+  "generated_at": "2026-08-01T02:59:43Z",
+  "workspace_root": "/tmp/capt-replay-origin.m016Bu/ws",
+  "branch": "main",
+  "head": "433a654433777d82de0c21188edbb8b11f0c0b80",
+  "dirty": true,
+  "python": {
+    "version": "3.12.13",
+    "executable": "/Users/knowurknot/capt-solo/.venv/bin/python"
+  },
+  "capt": {
+    "module_file": "/Users/knowurknot/capt-solo/capt_solo/__init__.py",
+    "version": "0.5.0",
+    "cwd_shadowing_module": "/Users/knowurknot/capt-core-skill-worktree/capt_solo/__init__.py",
+    "home": "/tmp/capt-replay-origin.m016Bu/home"
+  },
+  "mission_id": "mission-external-replay",
+  "session_id": "",
+  "checkpoint_id": "",
+  "active_directive_ids": [],
+  "superseded_directive_ids": "UNPROVEN",
+  "selected_memory_ids": "UNPROVEN",
+  "rejected_memory_ids": "UNPROVEN",
+  "missing_memory_ids": "UNPROVEN",
+  "conflict_ids": "UNPROVEN",
+  "stale_memory_ids": "UNPROVEN",
+  "intent_id": "",
+  "contextpack_digest": "",
+  "memory_use_decision_id": "UNPROVEN",
+  "gate_result": "BLOCKED",
+  "capt_execution_mode": "BLOCKED",
+  "hermes_session_mode": "BOOTSTRAP_DEGRADED",
+  "hermes_session_mode_reason": "Hermes tool hooks are observational; model-facing context equality with the ContextPack is unverified",
+  "block_reason": "checkpoint project_id 'replay' != workspace 'ws'",
+  "block_codes": [
+    "FOREIGN_WORKSPACE"
+  ],
+  "next_justified_action": "",
+  "latest_verified_milestone": "NOT_ASSERTED (read from checkpoint phase / repository evidence)",
+  "boot_trace_artifact": "UNPROVEN",
+  "boot_trace_artifact_hash": "UNPROVEN",
+  "boot_trace_match": "none",
+  "agent_run_id": "UNPROVEN"
+}

@@ -1,0 +1,25 @@
+== 1. write checkpoint ==
+{
+  "execution_mode": "GOVERNED",
+  "mission_id": "mission-skill-real-acceptance",
+  "session_id": "f9f3c4a63df1425c9fa5ab1cdbaa16b2",
+  "checkpoint_id": "mission-skill-real-acceptance@PHASE_ACCEPTANCE",
+  "active_directive_ids": [],
+  "gate_result": "PASS",
+  "block_reason": "",
+  "block_codes": [],
+  "intent_id": "intent-6326a96858d44693",
+  "contextpack_digest": "sha256:d68baf9bb4edd2526069faa13216ad649c596e2622823d38d20504bfaf71098a",
+  "next_justified_action": "verify boot report"
+}
+
+== 2. verify it reloads (independent boot) ==
+checkpoint_id:        mission-skill-real-acceptance@PHASE_ACCEPTANCE
+reload checkpoint_id: mission-skill-real-acceptance@PHASE_ACCEPTANCE
+gate  write/reload:   PASS / PASS
+mode  write/reload:   GOVERNED / GOVERNED
+digest write:         sha256:d68baf9bb4edd2526069faa13216ad649c596e2622823d38d20504bfaf71098a
+digest reload:        sha256:c91243ee8a43ed29a2d6806102c0eb01a8c1bf5c89485801e69a0990e193bac9
+note: digests differ by design — a new ContextPack is built per boot.
+verdict: PASS
+receipt written: /Users/knowurknot/capt-core-skill-worktree/acceptance-evidence/adversarial-20260801T025737Z/L-owner-state-contamination/L1-ambient-evidence/05-checkpoint-receipt.json

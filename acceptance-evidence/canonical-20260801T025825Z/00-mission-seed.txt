@@ -1,0 +1,2 @@
+saved: mission-skill-real-acceptance
+path: /tmp/capt-skill-acceptance.4WxbGA/ws/.capt/checkpoints/mission-skill-real-acceptance.json

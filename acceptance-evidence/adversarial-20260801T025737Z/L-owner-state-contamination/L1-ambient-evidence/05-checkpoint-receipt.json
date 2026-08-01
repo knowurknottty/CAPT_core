@@ -1,0 +1,13 @@
+{
+  "receipt": "capt-checkpoint",
+  "generated_at": "2026-08-01T02:57:44Z",
+  "workspace": "/tmp/capt-skill-acceptance.HAtDnv/ws",
+  "mission_id": "mission-skill-real-acceptance",
+  "checkpoint_id": "mission-skill-real-acceptance@PHASE_ACCEPTANCE",
+  "reload_checkpoint_id": "mission-skill-real-acceptance@PHASE_ACCEPTANCE",
+  "git": {"branch": "main", "head": "87c06d0c058f0ca782f6422f56bb30224546550e", "dirty": true},
+  "write":  {"execution_mode": "GOVERNED", "gate_result": "PASS", "contextpack_digest": "sha256:d68baf9bb4edd2526069faa13216ad649c596e2622823d38d20504bfaf71098a"},
+  "reload": {"execution_mode": "GOVERNED", "gate_result": "PASS", "contextpack_digest": "sha256:c91243ee8a43ed29a2d6806102c0eb01a8c1bf5c89485801e69a0990e193bac9"},
+  "reload_verified": true,
+  "hermes_session_mode": "BOOTSTRAP_DEGRADED"
+}

@@ -1,0 +1,1 @@
+report written: /Users/knowurknot/capt-core-skill-worktree/acceptance-evidence/adversarial-20260801T025737Z/G-corrupted-trace-hash/report.json

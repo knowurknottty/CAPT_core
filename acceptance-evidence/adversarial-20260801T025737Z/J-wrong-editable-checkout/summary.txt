@@ -1,0 +1,6 @@
+scenario:    J — wrong-editable-checkout
+mutation:    point CAPT_SOLO_REPO at an unrelated checkout
+command:     CAPT_SOLO_REPO=/tmp/capt-adv-J.A6u87V/ws/../foreign capt-environment-report.sh /tmp/capt-adv-J.A6u87V/ws
+expected:    foreign checkout not adopted
+actual:      source_resolved_via=installed-distribution(editable) module_version=0.5.0 (installed distribution must win over CAPT_SOLO_REPO)
+verdict:     PASS

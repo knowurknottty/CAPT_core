@@ -1,0 +1,11 @@
+{
+  "result": "FAIL",
+  "exit_code": 1,
+  "failing_line": "",
+  "failing_exit_code": "",
+  "failing_command": "",
+  "step_failures": ["02-doctor: exit=1 with FAIL rows present"],
+  "finished_at": "2026-08-01T02:43:31Z",
+  "isolated_root": "/tmp/capt-skill-acceptance.GhUuhj",
+  "evidence_dir": "/Users/knowurknot/capt-core-skill-worktree/acceptance-evidence/negative-control-20260801T024329Z"
+}

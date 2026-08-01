@@ -1,0 +1,120 @@
+{
+  "report": "capt-adversarial-matrix",
+  "scenarios": [
+    {
+      "scenario": "A",
+      "name": "missing-checkpoint",
+      "mutation": "delete /tmp/capt-adv-A.mMj0Du/ws/.capt/checkpoints/mission-skill-real-acceptance.json",
+      "command": "capt-resume-check.sh /tmp/capt-adv-A.mMj0Du/ws mission-skill-real-acceptance",
+      "expected": "nonzero exit, no PROVEN, no silent reconstruction",
+      "actual": "exit=4 continuity_verdict='NOT_PROVEN'",
+      "verdict": "PASS"
+    },
+    {
+      "scenario": "B",
+      "name": "malformed-mission-json",
+      "mutation": "truncate mission JSON to invalid syntax",
+      "command": "capt-resume-check.sh /tmp/capt-adv-B.02Dv0P/ws mission-skill-real-acceptance",
+      "expected": "parse failure surfaced, no fallback mission",
+      "actual": "exit=5 continuity_verdict='NOT_PROVEN' stderr_has_reason=yes",
+      "verdict": "PASS"
+    },
+    {
+      "scenario": "C",
+      "name": "mission-identity-mismatch",
+      "mutation": "request a different, non-existent mission id",
+      "command": "capt-resume-check.sh /tmp/capt-adv-C.rrYDPA/ws mission-some-other-identity",
+      "expected": "mismatch detected, resume refused",
+      "actual": "exit=4 continuity_verdict='NOT_PROVEN'",
+      "verdict": "PASS"
+    },
+    {
+      "scenario": "D",
+      "name": "changed-git-head",
+      "mutation": "new commit after checkpoint (HEAD moves away from latest_verified_state)",
+      "command": "capt-resume-check.sh /tmp/capt-adv-D.faIwML/ws mission-skill-real-acceptance",
+      "expected": "HEAD divergence surfaced, not silently identical",
+      "actual": "exit=0 divergence='checkpoint.latest_verified_state=5ed4dd721aab vs repo HEAD=0251c458c10d|worktree dirty'",
+      "verdict": "PASS"
+    },
+    {
+      "scenario": "E",
+      "name": "dirty-workspace",
+      "mutation": "modify a tracked file after checkpoint",
+      "command": "capt-resume-check.sh /tmp/capt-adv-E.TPqxqg/ws mission-skill-real-acceptance",
+      "expected": "dirty state recorded, no hidden cleanup",
+      "actual": "exit=0 divergence='worktree dirty'",
+      "verdict": "PASS"
+    },
+    {
+      "scenario": "F",
+      "name": "missing-memory-object",
+      "mutation": "remove the memory store directory referenced by the boot",
+      "command": "capt-fresh-boot.sh /tmp/capt-adv-F.VVFwq6/ws mission-skill-real-acceptance",
+      "expected": "missing memory enumerated or boot refused",
+      "actual": "exit=0 missing=['ee04c1047de14e519cca896117f73b98'] selected=['5620492812234936a4713681c9aa1355'] gate=PASS",
+      "verdict": "PASS"
+    },
+    {
+      "scenario": "G",
+      "name": "corrupted-trace-hash",
+      "mutation": "flip a byte inside the persisted boot-trace artifact",
+      "command": "shasum -a 256 <boot_trace_artifact> vs .sha256 sidecar",
+      "expected": "digest mismatch detected via sidecar",
+      "actual": "sidecar=sha256:5fedd82a8135f390cb4ec8503dad89e9a1c12b611dc103dd2c0a33e3e6763d3e recomputed=9ca41f9dd46595caa320a89fb0f826a005a4b7072d2f3000b8bda935757aee8a -> MISMATCH DETECTED",
+      "verdict": "PASS"
+    },
+    {
+      "scenario": "H",
+      "name": "legacy-checkpoint-schema",
+      "mutation": "replace checkpoint with pre-project_id legacy shape",
+      "command": "capt-resume-check.sh /tmp/capt-adv-H.c23Lym/ws mission-skill-real-acceptance",
+      "expected": "legacy recognised or refused, never silent",
+      "actual": "exit=5 continuity_verdict='NOT_PROVEN' legacy_classified=yes",
+      "verdict": "PASS"
+    },
+    {
+      "scenario": "I",
+      "name": "cwd-module-shadowing",
+      "mutation": "plant a fake capt_solo package in the invoking CWD",
+      "command": "cd /tmp/capt-adv-I.ALNLAx/ws && capt-doctor.sh (fake capt_solo in CWD)",
+      "expected": "shadow named, canonical identity preserved",
+      "actual": "shadow_reported=1 fake_version_adopted=0 exit=0",
+      "verdict": "PASS"
+    },
+    {
+      "scenario": "J",
+      "name": "wrong-editable-checkout",
+      "mutation": "point CAPT_SOLO_REPO at an unrelated checkout",
+      "command": "CAPT_SOLO_REPO=/tmp/capt-adv-J.Y21OL5/ws/../foreign capt-environment-report.sh /tmp/capt-adv-J.Y21OL5/ws",
+      "expected": "foreign checkout not adopted",
+      "actual": "source_resolved_via=installed-distribution(editable) module_version=0.5.0 (installed distribution must win over CAPT_SOLO_REPO)",
+      "verdict": "PASS"
+    },
+    {
+      "scenario": "K",
+      "name": "missing-capt-executable",
+      "mutation": "PATH keeps /bin:/usr/bin but excludes the venv, so 'capt' is unresolvable",
+      "command": "env -i PATH=/usr/bin:/bin capt-fresh-boot.sh /tmp/capt-adv-K.OA5vvR/ws mission-skill-real-acceptance",
+      "expected": "explicit CAPT_NOT_FOUND from a shell that really ran",
+      "actual": "exit=2 shell_launched=yes declared=CAPT_NOT_FOUND",
+      "verdict": "PASS"
+    },
+    {
+      "scenario": "L",
+      "name": "owner-state-contamination",
+      "mutation": "L1: ambient CAPT_SOLO_HOME=<owner home>; L2: explicit CAPT_ACCEPT_HOME=<owner home>",
+      "command": "L1: CAPT_SOLO_HOME=<owner> run-acceptance.sh | L2: CAPT_ACCEPT_HOME=<owner> run-acceptance.sh",
+      "expected": "ambient owner home ignored; forced owner home refused pre-write; zero owner mutation",
+      "actual": "L1(ambient) exit=0 owner_home_ignored=yes used='/tmp/capt-skill-acceptance.Ad9q6I/home' | L2(forced) exit=2 refused=yes | owner_fingerprint before=21:6 after=21:6",
+      "verdict": "PASS"
+    }
+  ],
+  "passed": 12,
+  "failed": 0,
+  "total": 12,
+  "owner_fingerprint_before": "21:6",
+  "owner_fingerprint_after": "21:6",
+  "owner_state_unchanged": true,
+  "verdict": "PASS"
+}

@@ -1,0 +1,86 @@
+{
+  "receipt": "capt-recovery-receipt",
+  "generated_at": "2026-08-01T02:26:39Z",
+  "workspace": "/tmp/capt-skill-acceptance.Fsp3xv/ws",
+  "mission_id": "mission-skill-real-acceptance",
+  "session_id": "895fae54bdf24761a8231586e4ff4e11",
+  "checkpoint_id": "mission-skill-real-acceptance@PHASE_ACCEPTANCE",
+  "source": "CAPT state (no transcript, no copied summary)",
+  "reconstructed_in": "fresh-process",
+  "transcript_inheritance": "none",
+  "post_resume": {
+    "execution_mode": "GOVERNED",
+    "gate_result": "PASS",
+    "contextpack_digest": "sha256:a58208d39dcf003092511ad45ca96b475391d407f7a13086760b5811e20b7045",
+    "intent_id": "intent-9dcc3a525151d1a0",
+    "active_directive_ids": []
+  },
+  "repository_evidence": {
+    "branch": "main",
+    "head": "f2eb81ee3286c5d5369ca85155f2984ffa7bd68d",
+    "dirty": true,
+    "checkpoint_latest_verified_state": "f2eb81ee3286c5d5369ca85155f2984ffa7bd68d"
+  },
+  "divergence": [
+    "worktree dirty"
+  ],
+  "resume_artifact": "/tmp/capt-skill-acceptance.Fsp3xv/home/data/evidence/agent-resume/mission-skill-real-acceptance.json",
+  "resume_artifact_sha256_sidecar": true,
+  "next_justified_action": "verify boot report",
+  "checks": [
+    {
+      "check": "fresh_process",
+      "verdict": "PASS",
+      "detail": "reconstructed_in=fresh-process"
+    },
+    {
+      "check": "mission_recovered",
+      "verdict": "PASS",
+      "detail": "recovered=mission-skill-real-acceptance expected=mission-skill-real-acceptance"
+    },
+    {
+      "check": "session_recovered",
+      "verdict": "PASS",
+      "detail": "session_id=895fae54bdf24761a8231586e4ff4e11"
+    },
+    {
+      "check": "checkpoint_recovered",
+      "verdict": "PASS",
+      "detail": "checkpoint_id=mission-skill-real-acceptance@PHASE_ACCEPTANCE"
+    },
+    {
+      "check": "checkpoint_matches_pre_exit",
+      "verdict": "PASS",
+      "detail": "recovered=mission-skill-real-acceptance@PHASE_ACCEPTANCE expected=mission-skill-real-acceptance@PHASE_ACCEPTANCE"
+    },
+    {
+      "check": "gate_pass",
+      "verdict": "PASS",
+      "detail": "gate_result=PASS block=none"
+    },
+    {
+      "check": "contextpack_built",
+      "verdict": "PASS",
+      "detail": "digest=sha256:a58208d39dcf003092511ad45ca96b475391d407f7a13086760b5811e20b7045"
+    },
+    {
+      "check": "intent_reconstructed",
+      "verdict": "PASS",
+      "detail": "intent_id=intent-9dcc3a525151d1a0"
+    },
+    {
+      "check": "not_blocked",
+      "verdict": "PASS",
+      "detail": "execution_mode=GOVERNED"
+    },
+    {
+      "check": "next_action_present",
+      "verdict": "PASS",
+      "detail": "present"
+    }
+  ],
+  "continuity_verdict": "PROVEN",
+  "capt_execution_mode": "GOVERNED",
+  "hermes_session_mode": "BOOTSTRAP_DEGRADED",
+  "hermes_session_mode_reason": "Hermes tool hooks are observational; model-facing context equality with the ContextPack is unverified"
+}

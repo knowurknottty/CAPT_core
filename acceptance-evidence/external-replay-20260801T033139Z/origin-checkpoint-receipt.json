@@ -1,0 +1,13 @@
+{
+  "receipt": "capt-checkpoint",
+  "generated_at": "2026-08-01T03:31:47Z",
+  "workspace": "/tmp/capt-replay-origin.27awKu/ws",
+  "mission_id": "mission-external-replay",
+  "checkpoint_id": "mission-external-replay@PHASE_EXTERNAL_REPLAY",
+  "reload_checkpoint_id": "mission-external-replay@PHASE_EXTERNAL_REPLAY",
+  "git": {"branch": "main", "head": "bbc1b97617cf1e2c0a6c63c4a78940cb5d036d3f", "dirty": true},
+  "write":  {"execution_mode": "GOVERNED", "gate_result": "PASS", "contextpack_digest": "sha256:535ae5193e37ebfdbce5eeade8dbee6c112d36d671be8e42f02fb4136bf94c00"},
+  "reload": {"execution_mode": "GOVERNED", "gate_result": "PASS", "contextpack_digest": "sha256:b50513b1479ae4393194f7a02f2ecc0037894472aea7c07900d7c2e46755a6b3"},
+  "reload_verified": true,
+  "hermes_session_mode": "BOOTSTRAP_DEGRADED"
+}

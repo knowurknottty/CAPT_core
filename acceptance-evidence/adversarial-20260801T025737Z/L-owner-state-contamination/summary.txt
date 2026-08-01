@@ -1,0 +1,6 @@
+scenario:    L — owner-state-contamination
+mutation:    L1: ambient CAPT_SOLO_HOME=<owner home>; L2: explicit CAPT_ACCEPT_HOME=<owner home>
+command:     L1: CAPT_SOLO_HOME=<owner> run-acceptance.sh | L2: CAPT_ACCEPT_HOME=<owner> run-acceptance.sh
+expected:    ambient owner home ignored; forced owner home refused pre-write; zero owner mutation
+actual:      L1(ambient) exit=0 owner_home_ignored=yes used='/tmp/capt-skill-acceptance.HAtDnv/home' | L2(forced) exit=2 refused=yes | owner_fingerprint before=21:6 after=21:6
+verdict:     PASS

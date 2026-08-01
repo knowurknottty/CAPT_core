@@ -1,0 +1,28 @@
+{
+  "report": "capt-runtime-identities",
+  "capt_module_file": "/Users/knowurknot/capt-solo/capt_solo/__init__.py",
+  "capt_version": "0.5.0",
+  "capt_home": "/tmp/capt-skill-acceptance.4WxbGA/home",
+  "source_resolved_via": "installed-distribution(editable)",
+  "checkout_verdict": "PASS",
+  "boot": {
+    "session_id": "8753e046848a4bd1a5fe71c7b3d0c46a",
+    "checkpoint_id": "mission-skill-real-acceptance@PHASE_ACCEPTANCE",
+    "contextpack_digest": "sha256:b4b7772e6749901f47ab8d20bf3c9c4d6087ff5fdd30dddc51f93265c411d5ae",
+    "agent_run_id": "agentrun-19e9cc7c255f46d8",
+    "gate_result": "PASS",
+    "execution_mode": "GOVERNED"
+  },
+  "checkpoint": {
+    "checkpoint_id": "mission-skill-real-acceptance@PHASE_ACCEPTANCE",
+    "reload_checkpoint_id": "mission-skill-real-acceptance@PHASE_ACCEPTANCE",
+    "reload_verified": true
+  },
+  "resume": {
+    "session_id": "fd8756c056274982afec5bd10a38a9b7",
+    "checkpoint_id": "mission-skill-real-acceptance@PHASE_ACCEPTANCE",
+    "contextpack_digest": "sha256:232714cd2ff3724565db689d60b9bae69ed7a1d4bc767c9279f28fde80651bc3",
+    "gate_result": "PASS",
+    "execution_mode": "GOVERNED"
+  }
+}

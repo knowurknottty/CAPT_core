@@ -1,0 +1,19 @@
+{
+  "report": "capt-acceptance-isolation",
+  "mission": "mission-skill-real-acceptance",
+  "capt_solo_home_used": "/tmp/capt-skill-acceptance.ArUwz2/home",
+  "owner_capt_solo_home": "/Users/knowurknot/.capt-solo",
+  "owner_home_file_count": 21,
+  "owner_repo_checkpoint_dir": "/Users/knowurknot/capt-solo/.capt/checkpoints",
+  "owner_repo_checkpoint_count": 6,
+  "owner_repo_checkpoint_digests": {
+    "checkpoint-governed-agent-boot-proven.json": "0b30a9f50bbbe31ec56f7c97c17872dc4950f4de22ca81c822872391f33e7610",
+    "cli-test.json": "b3c588c77f4fce6f35aaa7dc0748c942f2796b2aa43c71b323f1fd1058577863",
+    "mission-governed-model-execution.json": "2e137fbe58b72458a822d180d8a8d5cffc8bd2ce7ab3a2e1e421197e192fa354",
+    "mission-outer-agent-memory-continuity.json": "48f8276f75839d567a599db7548c9d7cbeed53e0934b80cc7615562d55162275",
+    "phase0-outer-agent-memory-trace.json": "289650945fb19698133eb0798ea0a5dbe2cc176636ca5df283dca3ad722db9ae",
+    "phase2-outcome-c-contracts.json": "866d10bdfdf88a9d8356a356a33b52034ffc429627e3ba4c811f6a11bad6fed9"
+  },
+  "leaks": [],
+  "verdict": "PASS"
+}

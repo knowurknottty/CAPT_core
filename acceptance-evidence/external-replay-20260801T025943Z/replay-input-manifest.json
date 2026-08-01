@@ -1,0 +1,51 @@
+{
+  "manifest": "capt-external-replay-input",
+  "mission_id": "mission-external-replay",
+  "origin_head": "433a654433777d82de0c21188edbb8b11f0c0b80",
+  "replay_root": "/Users/knowurknot/capt-core-external-replay",
+  "transferred": {
+    "workspace": "fresh git clone (history only)",
+    "capt_workspace_state": "ws-clone/.capt (checkpoints, evidence)",
+    "capt_home_state": "home (memory, ctp, evidence)",
+    "skill": "skill/ (copied skill package)"
+  },
+  "explicitly_not_transferred": [
+    "transcript / conversation history",
+    "originating shell or process state",
+    "original temp directory",
+    "environment variables not listed in replay-environment.json"
+  ],
+  "artifact_count": 6,
+  "artifacts": [
+    {
+      "path": "home/backups/capt_solo.v1.20260731-215943.db",
+      "bytes": 45056,
+      "sha256": "ad5f191fe67f215168c6cc84a2b6b684ec79cb844ca881ca88a9c4d2277e4dba"
+    },
+    {
+      "path": "home/data/ctp/journal.jsonl",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "home/data/khsb/events.jsonl",
+      "bytes": 1412,
+      "sha256": "0fe31158e7e2129d786b3979338fd745917ad10794fed8c5f30ea2f4bef1c4ea"
+    },
+    {
+      "path": "home/data/memory.db",
+      "bytes": 393216,
+      "sha256": "ed1a0d769bf4f947406d34b74978b22c4a463cc25ed44563e291a52fabb41984"
+    },
+    {
+      "path": "ws-clone/.capt/checkpoints/events.jsonl",
+      "bytes": 366,
+      "sha256": "9f8a7cbda033a6f5d469729d19b4b61d4e267f48f2d60eebac58091a113479d2"
+    },
+    {
+      "path": "ws-clone/.capt/checkpoints/mission-external-replay.json",
+      "bytes": 754,
+      "sha256": "bcb33d6cb891475f408dfcbd7da38535b625470834ff9948385d3fc667311436"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "artifact": "CAPT_SKILL_MEMORY_TRACE",
+  "generated_at": "2026-08-01T03:35:19Z",
+  "skill": "capt-core-runtime",
+  "boot_report_selected_memory_ids": [
+    "987b61da2d254f559bc2ab7025ed2cab",
+    "7a512194471a4d98a79ee31e04b44017"
+  ],
+  "boot_report_rejected_memory_ids": [
+    "fbbbf566847542e0bd93240ea5d0b8fd",
+    "0baf84778f544958bb8ee2ebc22520ea"
+  ],
+  "boot_report_missing_memory_ids": [
+    "ff2013ab4fe3434ea4d634f98ce82b61",
+    "c662cf5e1bda4fd491684fc4ee77f16e"
+  ],
+  "boot_report_conflict_ids": [
+    "da97a349560b40f5b0ca1dac3e1ef069",
+    "391a3e66283041dca435694d4a282fc7"
+  ],
+  "boot_report_stale_memory_ids": [
+    "9e1c08486d044ef9a21331e994399f11",
+    "b7c403cc7b3442cca49aa709ea933e26"
+  ],
+  "boot_report_memory_use_decision_id": "9bff21902fa57c3c",
+  "note": "Memory selection is read from the persisted CAPT boot trace, not reconstructed by the skill. UNPROVEN means the trace did not enumerate that field for this mission.",
+  "owner_state_isolation": {
+    "owner_home_files": 21,
+    "owner_checkpoints": 6,
+    "leaked_owner_mission_ids": [],
+    "verdict": "PASS (owner state untouched)"
+  }
+}

@@ -1,0 +1,128 @@
+evidence root: /Users/knowurknot/capt-core-skill-worktree/acceptance-evidence/adversarial-20260801T033113Z/L-owner-state-contamination/L1-ambient-evidence
+evidence_path   /Users/knowurknot/capt-core-skill-worktree/acceptance-evidence/adversarial-20260801T033113Z/L-owner-state-contamination/L1-ambient-evidence
+timestamp_utc   2026-08-01T03:31:20Z
+worktree        /Users/knowurknot/capt-core-skill-worktree
+branch          feature/hermes-capt-core-runtime-skill
+head_sha        9ef91438f4a1291064938d8c5ed69cbbd0144a01
+hostname        Kirks-MacBook-Pro.local
+shell_pid       49651
+uname           Darwin 25.4.0 arm64
+CAPT_SOLO_HOME  /tmp/capt-skill-acceptance.Ad9q6I/home
+home_source     harness-allocated-temp
+inherited_home  /Users/knowurknot/.capt-solo (ignored unless CAPT_ACCEPT_HOME is set)
+workspace       /tmp/capt-skill-acceptance.Ad9q6I/ws
+mission         mission-skill-real-acceptance
+skill_dir       /Users/knowurknot/capt-core-skill-worktree/skills/hermes/capt-core-runtime
+harness         /Users/knowurknot/capt-core-skill-worktree/skills/hermes/capt-core-runtime/tests-acceptance/run-acceptance.sh
+python          /Users/knowurknot/capt-solo/.venv/bin/python
+canonical_repo  /Users/knowurknot/capt-solo
+
+=== step 0: seed mission (owner action, not the skill) ===
+isolated store confirmed: /tmp/capt-skill-acceptance.Ad9q6I/ws/.capt/checkpoints/mission-skill-real-acceptance.json
+
+=== step 1: environment report (fresh process) ===
+exit=0
+source_via: installed-distribution(editable)
+version:    0.5.0
+checkout:   PASS
+home:       /tmp/capt-skill-acceptance.Ad9q6I/home
+secrets:    absent
+
+=== step 2: doctor (fresh process) ===
+exit=0
+   1 FAIL
+   3 NOT_PROVEN
+  16 PASS
+   4 WARN
+FAIL count: 0
+
+=== step 3: boot + recover mission (fresh process) ===
+exit=0
+mission_id               mission-skill-real-acceptance
+session_id               9b8060cbb0ed4edc9606a6aba3630b4c
+checkpoint_id            mission-skill-real-acceptance@PHASE_ACCEPTANCE
+gate_result              PASS
+capt_execution_mode      GOVERNED
+hermes_session_mode      BOOTSTRAP_DEGRADED
+contextpack_digest       sha256:7817c3b7110c783b66ad60b380180e6db156336d49a715bc413a604fe0a7fbab
+memory_use_decision_id   413a604fe0a7fbab
+boot_trace_match         contextpack_digest
+agent_run_id             agentrun-92653e5719844e8f
+next_justified_action    verify boot report
+active_directives        0
+selected_memory_ids      2
+rejected_memory_ids      2
+missing_memory_ids       2
+conflict_ids             2
+stale_memory_ids         2
+
+=== step 4: validate boot report against schema (fresh process) ===
+schema: VALID
+report errors: 0
+
+=== step 5: write checkpoint + verify reload (fresh process) ===
+exit=0
+mode  write/reload:   GOVERNED / GOVERNED
+digest write:         sha256:114dbe665ffc71f8d668a7c187294f3ccd335700357b7aa8a10bddb568407570
+digest reload:        sha256:8dbf76b7895e37c3683206e9ff1d10a2a78a04c20f1644f1c28734f873b5b9f4
+note: digests differ by design — a new ContextPack is built per boot.
+verdict: PASS
+receipt written: /Users/knowurknot/capt-core-skill-worktree/acceptance-evidence/adversarial-20260801T033113Z/L-owner-state-contamination/L1-ambient-evidence/05-checkpoint-receipt.json
+reload_verified: True
+checkpoint_id:   mission-skill-real-acceptance@PHASE_ACCEPTANCE
+
+=== step 6: EXIT. fresh process. resume solely through CAPT ===
+exit=0
+continuity_verdict       PROVEN
+reconstructed_in         fresh-process
+transcript_inheritance   none
+mission_id               mission-skill-real-acceptance
+session_id               c236d0cb87d24d35b8123af225472d17
+checkpoint_id            mission-skill-real-acceptance@PHASE_ACCEPTANCE
+source                   CAPT state (no transcript, no copied summary)
+gate_result              PASS
+contextpack_digest       sha256:4531c35f062399c8dc1075cba6f462b72620a4c473c100d940d017c6b6ce16cd
+divergence               ['worktree dirty']
+  PASS  fresh_process                    reconstructed_in=fresh-process
+  PASS  mission_recovered                recovered=mission-skill-real-acceptance expected=mission-skill-real-acceptance
+  PASS  session_recovered                session_id=c236d0cb87d24d35b8123af225472d17
+  PASS  checkpoint_recovered             checkpoint_id=mission-skill-real-acceptance@PHASE_ACCEPTANCE
+  PASS  checkpoint_matches_pre_exit      recovered=mission-skill-real-acceptance@PHASE_ACCEPTANCE expected=mission-skill-real-acceptance@PHASE_ACCEPTANCE
+  PASS  gate_pass                        gate_result=PASS block=none
+  PASS  contextpack_built                digest=sha256:4531c35f062399c8dc1075cba6f462b72620a4c473c100d940d017c6b6ce16cd
+  PASS  intent_reconstructed             intent_id=intent-2fe1eed5c59e753b
+  PASS  not_blocked                      execution_mode=GOVERNED
+  PASS  next_action_present              present
+
+=== step 7: distinct-PID proof (boot vs resume ran in different processes) ===
+isolation verdict: PASS
+owner home files:  21
+owner checkpoints: 6
+leaks:             none
+
+=== step 8: runtime identities + continuity cross-check ===
+  PASS  checkpoint_id_stable_boot_to_resume    boot=mission-skill-real-acceptance@PHASE_ACCEPTANCE resume=mission-skill-real-acceptance@PHASE_ACCEPTANCE
+  PASS  checkpoint_id_stable_write_to_reload   write=mission-skill-real-acceptance@PHASE_ACCEPTANCE reload=mission-skill-real-acceptance@PHASE_ACCEPTANCE
+  PASS  mission_id_stable                      mission-skill-real-acceptance
+  PASS  session_id_regenerated_per_process     boot=9b8060cbb0ed4edc9606a6aba3630b4c resume=c236d0cb87d24d35b8123af225472d17 (expected DIFFERENT: separate processes)
+  PASS  contextpack_rebuilt_per_boot           expected DIFFERENT: a new ContextPack is built per boot
+  PASS  contextpack_present_both               both non-empty
+  PASS  gate_pass_both                         PASS/PASS
+  PASS  transcript_inheritance_none            none
+  PASS  resume_in_fresh_process                fresh-process
+  PASS  hermes_mode_not_overclaimed            Hermes hooks observational; not relabelled GOVERNED
+  PASS  continuity_verdict_proven              PROVEN
+continuity cross-check: PASS
+
+=== step 9: unit suite (recorded, not re-asserted from memory) ===
+exit=0
+............................                                             [100%]
+28 passed in 8.29s
+
+=== step 10: artifact inventory + manifest ===
+inventory: 28 artifacts
+manifest lines: 29
+
+ACCEPTANCE PASSED
+isolated root retained for inspection: /tmp/capt-skill-acceptance.Ad9q6I
+harness result: PASS (exit=0) -> /Users/knowurknot/capt-core-skill-worktree/acceptance-evidence/adversarial-20260801T033113Z/L-owner-state-contamination/L1-ambient-evidence/99-harness-result.json

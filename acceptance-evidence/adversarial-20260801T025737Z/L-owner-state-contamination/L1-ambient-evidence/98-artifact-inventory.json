@@ -1,0 +1,147 @@
+{
+  "report": "capt-acceptance-artifact-inventory",
+  "evidence_dir": "/Users/knowurknot/capt-core-skill-worktree/acceptance-evidence/adversarial-20260801T025737Z/L-owner-state-contamination/L1-ambient-evidence",
+  "count": 28,
+  "artifacts": [
+    {
+      "file": "00-evidence-root.txt",
+      "bytes": 1063,
+      "sha256": "4d320a8030fdfb1c006e5d57e39490d640293221887a96b6ed5fe0d3a2df03ac"
+    },
+    {
+      "file": "00-mission-seed.txt",
+      "bytes": 133,
+      "sha256": "5b694d5bb9319d0661613bb81d43342b0cb28231dcff5ec305e48f7f02639d33"
+    },
+    {
+      "file": "01-environment-report.exit-code",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "file": "01-environment-report.json",
+      "bytes": 1936,
+      "sha256": "c8503e0a7a69542e63033d77df472a01e2ca928ce772a104e799a32a3f9d1851"
+    },
+    {
+      "file": "01-environment-report.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "02-doctor.exit-code",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "file": "02-doctor.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "02-doctor.txt",
+      "bytes": 2595,
+      "sha256": "f76f94db59f3127cc4fe79274c3269f8bf0d7a229653e3e2f6856b4725b20e43"
+    },
+    {
+      "file": "03-boot-report.exit-code",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "file": "03-boot-report.json",
+      "bytes": 2370,
+      "sha256": "147e927fa25677bd84e81748f9fdfe743618e4b3fb17ec6163e06fe434b7c6a2"
+    },
+    {
+      "file": "03-boot-report.stderr.txt",
+      "bytes": 176,
+      "sha256": "cbd8e7aa664332a385b2c38add23aa3ccaca0eca487d62dca303aabb6cea9baf"
+    },
+    {
+      "file": "03-boot-report.stdout.txt",
+      "bytes": 2370,
+      "sha256": "147e927fa25677bd84e81748f9fdfe743618e4b3fb17ec6163e06fe434b7c6a2"
+    },
+    {
+      "file": "04-schema-validation.exit-code",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "file": "04-schema-validation.txt",
+      "bytes": 31,
+      "sha256": "c275d277e8d2de62c315e1c5b90736164a722b7008dff9453811d5dc0aff0302"
+    },
+    {
+      "file": "05-checkpoint-receipt.json",
+      "bytes": 824,
+      "sha256": "b1f7302523644d32bb9cef2ccac93b46c2108ec62f48c9c050c40e1830f725de"
+    },
+    {
+      "file": "05-checkpoint.exit-code",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "file": "05-checkpoint.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "05-checkpoint.txt",
+      "bytes": 1238,
+      "sha256": "bbf6aa8ed2915d0b49b24d60b49739f9ddab672ca80f20d36b2450f280cecdc2"
+    },
+    {
+      "file": "06-recovery-receipt.json",
+      "bytes": 2871,
+      "sha256": "a8fea14a7ab87d677abbdd9acfac8623f053b2f6cff468171431aff23f5920ab"
+    },
+    {
+      "file": "06-recovery.exit-code",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "file": "06-recovery.stderr.txt",
+      "bytes": 182,
+      "sha256": "3f2d6106b23b1649469f722e9acc766b1e9072c17651a1338f8d618650d5b317"
+    },
+    {
+      "file": "06-recovery.stdout.txt",
+      "bytes": 3444,
+      "sha256": "31c824dd72356040617efbd8a2f3b689813bfc435b970114dc1b79ac6f2b4f77"
+    },
+    {
+      "file": "07-isolation-report.json",
+      "bytes": 1096,
+      "sha256": "529035a9ee41dcd72f85f6c2b7b90c4f6bd80ec5e1c5cb2458aeacd753cf2fa8"
+    },
+    {
+      "file": "08-test-results.exit-code",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "file": "08-test-results.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "08-test-results.txt",
+      "bytes": 99,
+      "sha256": "7643e9e48aad2211409bb5a759d1cffa4fcf5a3798a1c83639c47a9636866636"
+    },
+    {
+      "file": "09-runtime-identities.json",
+      "bytes": 1149,
+      "sha256": "d5dbbe39632f377cfcd25f86674b58cc021dc7f055da54c4a909bfacab323532"
+    },
+    {
+      "file": "10-continuity-report.json",
+      "bytes": 1721,
+      "sha256": "d9c7f46d5175230c733950a75a0e76272420e94361d8edcaf9fa7509ed3be75f"
+    }
+  ]
+}

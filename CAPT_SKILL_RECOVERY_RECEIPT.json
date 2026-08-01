@@ -1,0 +1,17 @@
+{
+  "artifact": "CAPT_SKILL_RECOVERY_RECEIPT",
+  "generated_at": "2026-08-01T03:35:19Z",
+  "skill": "capt-core-runtime",
+  "mission_id": "mission-skill-real-acceptance",
+  "checkpoint_id": "mission-skill-real-acceptance@PHASE_ACCEPTANCE",
+  "continuity_verdict": "PROVEN",
+  "transcript_inheritance": "none",
+  "reconstructed_in": "fresh-process",
+  "source": "CAPT state (no transcript, no copied summary)",
+  "capt_execution_mode": "GOVERNED",
+  "hermes_session_mode": "BOOTSTRAP_DEGRADED",
+  "hermes_session_mode_reason": "Hermes tool hooks are observational; model-facing context equality with the ContextPack is unverified",
+  "external_replay_verdict": "PASS",
+  "external_replay_owner_state_unchanged": true,
+  "note": "GOVERNED describes the CAPT execution path only when the CAPT gate authorized execution. It does NOT imply Hermes tool-loop enforcement (hermes_session_mode is BOOTSTRAP_DEGRADED)."
+}

@@ -1,0 +1,12 @@
+{
+  "artifact": "CAPT_SKILL_CONTEXTPACK_MANIFEST",
+  "generated_at": "2026-08-01T03:35:19Z",
+  "skill": "capt-core-runtime",
+  "boot_contextpack_digest": "sha256:3e4ba9da04009aff2903ab8f4fa32c6ad9340182a94232cd9bff21902fa57c3c",
+  "resume_contextpack_digest": "sha256:560fe0546c3a41b32f9770186d05b6d715ccf020eb962fc6fd5a7f3a7132e849",
+  "contextpack_rebuilt_per_boot": true,
+  "gate_result": "PASS",
+  "memory_use_decision_id": "9bff21902fa57c3c",
+  "note": "A fresh ContextPack is built on every boot; digests legitimately differ between boot and resume. Continuity is proven by checkpoint/mission/session recovery, not by digest equality.",
+  "schema": "capt-core-runtime/boot-report/v1"
+}

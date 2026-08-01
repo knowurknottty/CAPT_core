@@ -1,0 +1,54 @@
+{
+  "report": "capt-boot-report",
+  "schema": "capt-core-runtime/boot-report/v1",
+  "generated_at": "2026-08-01T03:31:47Z",
+  "workspace_root": "/tmp/capt-replay-origin.27awKu/ws",
+  "branch": "main",
+  "head": "bbc1b97617cf1e2c0a6c63c4a78940cb5d036d3f",
+  "dirty": true,
+  "python": {
+    "version": "3.12.13",
+    "executable": "/Users/knowurknot/capt-solo/.venv/bin/python"
+  },
+  "capt": {
+    "module_file": "/Users/knowurknot/capt-solo/capt_solo/__init__.py",
+    "version": "0.5.0",
+    "cwd_shadowing_module": "/Users/knowurknot/capt-core-skill-worktree/capt_solo/__init__.py",
+    "home": "/tmp/capt-replay-origin.27awKu/home"
+  },
+  "mission_id": "mission-external-replay",
+  "session_id": "e4a30ce806cc4b9988cd4d24924d3817",
+  "checkpoint_id": "mission-external-replay@PHASE_EXTERNAL_REPLAY",
+  "active_directive_ids": [],
+  "superseded_directive_ids": [],
+  "selected_memory_ids": [
+    "9be6a6f71c6c4d319c9fdfc3d5234c9c"
+  ],
+  "rejected_memory_ids": [
+    "4949459ad3bc4ca88f9dde4c432fa0d0"
+  ],
+  "missing_memory_ids": [
+    "9364a043f1df43bd99a1314362e49440"
+  ],
+  "conflict_ids": [
+    "c021ad9fbe554dce9eb6da7e381416d2"
+  ],
+  "stale_memory_ids": [
+    "b9f5913c35ac4e06bc5c42d29a31b998"
+  ],
+  "intent_id": "intent-7066f16c6eb95f9f",
+  "contextpack_digest": "sha256:14c370faf136cb195607798fd2b365e3103aeca051af2c75a758f7014919c1c9",
+  "memory_use_decision_id": "a758f7014919c1c9",
+  "gate_result": "PASS",
+  "capt_execution_mode": "GOVERNED",
+  "hermes_session_mode": "BOOTSTRAP_DEGRADED",
+  "hermes_session_mode_reason": "Hermes tool hooks are observational; model-facing context equality with the ContextPack is unverified",
+  "block_reason": "",
+  "block_codes": [],
+  "next_justified_action": "verify replay continuity",
+  "latest_verified_milestone": "NOT_ASSERTED (read from checkpoint phase / repository evidence)",
+  "boot_trace_artifact": "/tmp/capt-replay-origin.27awKu/home/data/evidence/agent-boot/agentrun-2711d7ee4bdd4906.json",
+  "boot_trace_artifact_hash": "sha256:4ed27431e33b0b9cbd568b215be182336e9823ab4198911b1586a24c96f85332",
+  "boot_trace_match": "contextpack_digest",
+  "agent_run_id": "agentrun-2711d7ee4bdd4906"
+}

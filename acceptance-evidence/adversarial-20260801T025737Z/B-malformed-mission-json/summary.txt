@@ -1,0 +1,6 @@
+scenario:    B — malformed-mission-json
+mutation:    truncate mission JSON to invalid syntax
+command:     capt-resume-check.sh /tmp/capt-adv-B.dzWRdP/ws mission-skill-real-acceptance
+expected:    parse failure surfaced, no fallback mission
+actual:      exit=5 continuity_verdict='NOT_PROVEN' stderr_has_reason=yes
+verdict:     PASS

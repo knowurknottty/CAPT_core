@@ -1,0 +1,50 @@
+{
+  "report": "capt-environment-report",
+  "generated_at": "2026-08-01T02:57:42Z",
+  "workspace": "/tmp/capt-skill-acceptance.HAtDnv/ws",
+  "git": {
+    "root": "/private/tmp/capt-skill-acceptance.HAtDnv/ws",
+    "branch": "main",
+    "head": "87c06d0c058f0ca782f6422f56bb30224546550e",
+    "state": "dirty",
+    "worktree_count": 1
+  },
+  "python": {
+    "executable": "/Users/knowurknot/capt-solo/.venv/bin/python",
+    "version": "Python 3.12.13",
+    "prefix": "/Users/knowurknot/capt-solo/.venv",
+    "venv_activated": "none"
+  },
+  "capt": {
+    "executable": "/Users/knowurknot/capt-solo/.venv/bin/capt",
+    "module_file": "/Users/knowurknot/capt-solo/capt_solo/__init__.py",
+    "module_version": "0.5.0",
+    "doctor_version": "0.5.0",
+    "site_packages": "/Users/knowurknot/capt-solo/.venv/lib/python3.12/site-packages",
+    "editable_location": "/Users/knowurknot/capt-solo",
+    "source_root": "/Users/knowurknot/capt-solo",
+    "source_resolved_via": "installed-distribution(editable)",
+    "checkout_verdict": "PASS",
+    "cwd_shadowing_module": "/Users/knowurknot/capt-core-skill-worktree/capt_solo/__init__.py",
+    "capt_solo_home": "/tmp/capt-skill-acceptance.HAtDnv/home",
+    "capt_solo_home_env_set": true,
+    "workspace_checkpoint_dir": "/tmp/capt-skill-acceptance.HAtDnv/ws/.capt/checkpoints",
+    "workspace_checkpoint_count": 1
+  },
+  "plugin": {
+    "installed_path": "/Users/knowurknot/.hermes/plugins/capt-solo/__init__.py",
+    "source_path": "/Users/knowurknot/capt-solo/capt_solo/plugin/__init__.py",
+    "parity": "PASS"
+  },
+  "skill": {
+    "installed_path": "/Users/knowurknot/.hermes/skills/capt/capt-core-runtime",
+    "installed": "absent",
+    "content_digest": ""
+  },
+  "credentials": {
+    "note": "presence and mechanism only; values are never read, printed, hashed, or persisted",
+    "LM_STUDIO_API_KEY": "absent",
+    "CAPT_MODEL_ENDPOINT_set": "no",
+    "CAPT_MODEL_ID_set": "no"
+  }
+}

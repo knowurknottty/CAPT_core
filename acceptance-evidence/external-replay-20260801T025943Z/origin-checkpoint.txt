@@ -1,0 +1,14 @@
+== 1. write checkpoint ==
+{
+  "execution_mode": "BLOCKED",
+  "mission_id": "mission-external-replay",
+  "session_id": "",
+  "checkpoint_id": "",
+  "active_directive_ids": [],
+  "gate_result": "BLOCKED",
+  "block_reason": "checkpoint project_id 'replay' != workspace 'ws'",
+  "block_codes": [
+    "FOREIGN_WORKSPACE"
+  ]
+}
+FAIL: no checkpoint_id returned

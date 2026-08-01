@@ -1,0 +1,96 @@
+{
+  "reconstructed_in": "fresh-process",
+  "mission_id": "mission-external-replay",
+  "session_id": "",
+  "checkpoint_id": "",
+  "execution_mode": "BLOCKED",
+  "gate_result": "BLOCKED",
+  "active_directive_ids": [],
+  "contextpack_digest": "",
+  "intent_id": "",
+  "next_justified_action": "verify replay continuity",
+  "block_reason": "checkpoint project_id 'replay' != workspace 'ws-clone'",
+  "source": "CAPT state (no transcript, no copied summary)"
+}
+
+{
+  "receipt": "capt-recovery-receipt",
+  "generated_at": "2026-08-01T02:59:44Z",
+  "workspace": "/Users/knowurknot/capt-core-external-replay/ws-clone",
+  "mission_id": "mission-external-replay",
+  "session_id": "",
+  "checkpoint_id": "",
+  "source": "CAPT state (no transcript, no copied summary)",
+  "reconstructed_in": "fresh-process",
+  "transcript_inheritance": "none",
+  "post_resume": {
+    "execution_mode": "BLOCKED",
+    "gate_result": "BLOCKED",
+    "contextpack_digest": "",
+    "intent_id": "",
+    "active_directive_ids": []
+  },
+  "repository_evidence": {
+    "branch": "main",
+    "head": "433a654433777d82de0c21188edbb8b11f0c0b80",
+    "dirty": true,
+    "checkpoint_latest_verified_state": "433a654433777d82de0c21188edbb8b11f0c0b80"
+  },
+  "divergence": [
+    "worktree dirty"
+  ],
+  "resume_artifact": "/Users/knowurknot/capt-core-external-replay/home/data/evidence/agent-resume/mission-external-replay.json",
+  "resume_artifact_sha256_sidecar": true,
+  "next_justified_action": "verify replay continuity",
+  "checks": [
+    {
+      "check": "fresh_process",
+      "verdict": "PASS",
+      "detail": "reconstructed_in=fresh-process"
+    },
+    {
+      "check": "mission_recovered",
+      "verdict": "PASS",
+      "detail": "recovered=mission-external-replay expected=mission-external-replay"
+    },
+    {
+      "check": "session_recovered",
+      "verdict": "FAIL",
+      "detail": "session_id=<empty>"
+    },
+    {
+      "check": "checkpoint_recovered",
+      "verdict": "FAIL",
+      "detail": "checkpoint_id=<empty>"
+    },
+    {
+      "check": "gate_pass",
+      "verdict": "FAIL",
+      "detail": "gate_result=BLOCKED block=checkpoint project_id 'replay' != workspace 'ws-clone'"
+    },
+    {
+      "check": "contextpack_built",
+      "verdict": "FAIL",
+      "detail": "digest=<empty>"
+    },
+    {
+      "check": "intent_reconstructed",
+      "verdict": "FAIL",
+      "detail": "intent_id=<empty>"
+    },
+    {
+      "check": "not_blocked",
+      "verdict": "FAIL",
+      "detail": "execution_mode=BLOCKED"
+    },
+    {
+      "check": "next_action_present",
+      "verdict": "PASS",
+      "detail": "present"
+    }
+  ],
+  "continuity_verdict": "NOT_PROVEN",
+  "capt_execution_mode": "BLOCKED",
+  "hermes_session_mode": "BOOTSTRAP_DEGRADED",
+  "hermes_session_mode_reason": "Hermes tool hooks are observational; model-facing context equality with the ContextPack is unverified"
+}

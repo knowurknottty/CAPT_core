@@ -1,0 +1,10 @@
+{
+  "report": "capt-external-replay-verdict",
+  "replay_exit_code": 4,
+  "comparison_verdict": "FAIL",
+  "owner_fingerprint_before": "21:6",
+  "owner_fingerprint_after": "21:6",
+  "owner_state_unchanged": true,
+  "continuity_from_persisted_artifacts_only": false,
+  "verdict": "FAIL"
+}

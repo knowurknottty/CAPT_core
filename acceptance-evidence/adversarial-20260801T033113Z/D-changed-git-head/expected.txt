@@ -1,0 +1,1 @@
+HEAD divergence surfaced, not silently identical

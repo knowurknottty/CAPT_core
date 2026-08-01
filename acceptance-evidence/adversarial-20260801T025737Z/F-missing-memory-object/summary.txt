@@ -1,0 +1,6 @@
+scenario:    F — missing-memory-object
+mutation:    remove the memory store directory referenced by the boot
+command:     capt-fresh-boot.sh /tmp/capt-adv-F.dTaT4L/ws mission-skill-real-acceptance
+expected:    missing memory enumerated or boot refused
+actual:      exit=0 missing=['624c6d95fca14afd932048a6df15ca3c'] selected=['4b5597bf4a9d4731bfd3814ae8cf6e39'] gate=PASS
+verdict:     PASS

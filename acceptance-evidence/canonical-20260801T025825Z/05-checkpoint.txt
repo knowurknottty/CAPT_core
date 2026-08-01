@@ -1,0 +1,25 @@
+== 1. write checkpoint ==
+{
+  "execution_mode": "GOVERNED",
+  "mission_id": "mission-skill-real-acceptance",
+  "session_id": "2db2d25c4b9842cdb2dfd7b0e3e096d1",
+  "checkpoint_id": "mission-skill-real-acceptance@PHASE_ACCEPTANCE",
+  "active_directive_ids": [],
+  "gate_result": "PASS",
+  "block_reason": "",
+  "block_codes": [],
+  "intent_id": "intent-6d229a70b99aa6e7",
+  "contextpack_digest": "sha256:29ee7e8d2d06cf92c9a5ee90d98ba5736ba02139627a186807da634202744442",
+  "next_justified_action": "verify boot report"
+}
+
+== 2. verify it reloads (independent boot) ==
+checkpoint_id:        mission-skill-real-acceptance@PHASE_ACCEPTANCE
+reload checkpoint_id: mission-skill-real-acceptance@PHASE_ACCEPTANCE
+gate  write/reload:   PASS / PASS
+mode  write/reload:   GOVERNED / GOVERNED
+digest write:         sha256:29ee7e8d2d06cf92c9a5ee90d98ba5736ba02139627a186807da634202744442
+digest reload:        sha256:8fafc20ab6d544dca84761083f121bcc2eca383f44b483e8d55e0bd2f22a1c5f
+note: digests differ by design — a new ContextPack is built per boot.
+verdict: PASS
+receipt written: /Users/knowurknot/capt-core-skill-worktree/acceptance-evidence/canonical-20260801T025825Z/05-checkpoint-receipt.json

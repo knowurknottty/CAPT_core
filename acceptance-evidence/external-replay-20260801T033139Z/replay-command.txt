@@ -1,0 +1,1 @@
+capt-resume-check.sh /Users/knowurknot/capt-core-external-replay-20260801T033139Z/ws mission-external-replay  (fresh process, CAPT_SOLO_HOME=/Users/knowurknot/capt-core-external-replay-20260801T033139Z/home)

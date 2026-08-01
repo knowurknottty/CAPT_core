@@ -1,0 +1,9 @@
+{
+  "scenario": "H",
+  "name": "legacy-checkpoint-schema",
+  "mutation": "replace checkpoint with pre-project_id legacy shape",
+  "command": "capt-resume-check.sh /tmp/capt-adv-H.sSTCBG/ws mission-skill-real-acceptance",
+  "expected": "legacy recognised or refused, never silent",
+  "actual": "exit=5 continuity_verdict='NOT_PROVEN' legacy_classified=yes",
+  "verdict": "PASS"
+}

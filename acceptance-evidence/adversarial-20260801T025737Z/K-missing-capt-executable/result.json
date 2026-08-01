@@ -1,0 +1,9 @@
+{
+  "scenario": "K",
+  "name": "missing-capt-executable",
+  "mutation": "PATH keeps /bin:/usr/bin but excludes the venv, so 'capt' is unresolvable",
+  "command": "env -i PATH=/usr/bin:/bin capt-fresh-boot.sh /tmp/capt-adv-K.5GF1we/ws mission-skill-real-acceptance",
+  "expected": "explicit CAPT_NOT_FOUND from a shell that really ran",
+  "actual": "exit=2 shell_launched=yes declared=CAPT_NOT_FOUND",
+  "verdict": "PASS"
+}

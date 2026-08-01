@@ -1,0 +1,1 @@
+receipt written: /Users/knowurknot/capt-core-skill-worktree/acceptance-evidence/adversarial-20260801T033113Z/H-legacy-checkpoint-schema/receipt.json

@@ -1,0 +1,54 @@
+{
+  "report": "capt-boot-report",
+  "schema": "capt-core-runtime/boot-report/v1",
+  "generated_at": "2026-08-01T02:57:39Z",
+  "workspace_root": "/tmp/capt-adv-G.XiLBty/ws",
+  "branch": "main",
+  "head": "bebee6d0114924ab598f5aaa8d7ddeee5496bed3",
+  "dirty": true,
+  "python": {
+    "version": "3.12.13",
+    "executable": "/Users/knowurknot/capt-solo/.venv/bin/python"
+  },
+  "capt": {
+    "module_file": "/Users/knowurknot/capt-solo/capt_solo/__init__.py",
+    "version": "0.5.0",
+    "cwd_shadowing_module": "/Users/knowurknot/capt-core-skill-worktree/capt_solo/__init__.py",
+    "home": "/tmp/capt-adv-G.XiLBty/home"
+  },
+  "mission_id": "mission-skill-real-acceptance",
+  "session_id": "6539b5b3df4640caa6c41449f0c4af3c",
+  "checkpoint_id": "mission-skill-real-acceptance@PHASE_ACCEPTANCE",
+  "active_directive_ids": [],
+  "superseded_directive_ids": [],
+  "selected_memory_ids": [
+    "74dabb25a5df445da0d1843d60e3d8f2"
+  ],
+  "rejected_memory_ids": [
+    "8ca49bb703cc4c59879e84910b4c220f"
+  ],
+  "missing_memory_ids": [
+    "45ac08b248ad43d59ec0c65e3bed46ce"
+  ],
+  "conflict_ids": [
+    "40b5c8a6461f45929321dae600a37e81"
+  ],
+  "stale_memory_ids": [
+    "30d0dc1c1def4fbf9243794af8e3a37a"
+  ],
+  "intent_id": "intent-9af62fbb434a3e4d",
+  "contextpack_digest": "sha256:364a9470fd15891b1b118777c75fcc56b1150932c3fd3a96c215cd9ac47ac110",
+  "memory_use_decision_id": "c215cd9ac47ac110",
+  "gate_result": "PASS",
+  "capt_execution_mode": "GOVERNED",
+  "hermes_session_mode": "BOOTSTRAP_DEGRADED",
+  "hermes_session_mode_reason": "Hermes tool hooks are observational; model-facing context equality with the ContextPack is unverified",
+  "block_reason": "",
+  "block_codes": [],
+  "next_justified_action": "verify",
+  "latest_verified_milestone": "NOT_ASSERTED (read from checkpoint phase / repository evidence)",
+  "boot_trace_artifact": "/tmp/capt-adv-G.XiLBty/home/data/evidence/agent-boot/agentrun-25ef0288e83f4ea4.json",
+  "boot_trace_artifact_hash": "sha256:8befb715564e62607dc29de79b2022c7bf842224a0e2cdefe2a4420697813793",
+  "boot_trace_match": "contextpack_digest",
+  "agent_run_id": "agentrun-25ef0288e83f4ea4"
+}
