@@ -22,9 +22,14 @@ done
 [ -d "$WS" ] || { echo "workspace not found: $WS" >&2; exit 2; }
 WS="$(cd "$WS" && pwd)"
 
-[ -x "$WS/.venv/bin/capt" ] && . "$WS/.venv/bin/activate"
+# ── deterministic interpreter selection (single source of truth) ────────────
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck disable=SC1091
+. "$HERE/capt-select-python.sh" "$WS" || { echo "REFUSED: interpreter selection failed" >&2; exit 2; }
+PY="$CAPT_PY"
+
+[ -x "$WS/.venv/bin/capt" ] && echo "note: workspace venv present at $WS/.venv (observed, not activated as fallback)" >&2
 command -v capt >/dev/null || { echo "CAPT_NOT_FOUND" >&2; exit 2; }
-PY="$(command -v python || command -v python3)"
 
 jget() { "$PY" -c 'import json,sys
 try: d=json.load(sys.stdin)

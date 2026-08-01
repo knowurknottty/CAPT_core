@@ -12,15 +12,13 @@ WS="${1:-$PWD}"
 [ -d "$WS" ] || { echo "{\"error\":\"workspace not found\",\"workspace\":\"$WS\"}"; exit 2; }
 WS="$(cd "$WS" && pwd)"
 
-j() { printf '%s' "$1" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'; }
+# ── deterministic interpreter selection (single source of truth) ────────────
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck disable=SC1091
+. "$HERE/capt-select-python.sh" "$WS" || { echo "{\"error\":\"interpreter selection failed\"}"; exit 2; }
+PY_BIN="$CAPT_PY"
 
-# --- environment activation (precedence 1 relies on the right interpreter) ---
-ACTIVATED="none"
-if [ -x "$WS/.venv/bin/capt" ]; then
-  # shellcheck disable=SC1091
-  . "$WS/.venv/bin/activate"
-  ACTIVATED="$WS/.venv"
-fi
+j() { printf '%s' "$1" | "$PY_BIN" -c 'import json,sys; print(json.dumps(sys.stdin.read()))'; }
 
 # --- git identity ---
 GIT_ROOT="$(git -C "$WS" rev-parse --show-toplevel 2>/dev/null || echo "")"
@@ -32,30 +30,19 @@ if [ -n "$GIT_ROOT" ]; then
 fi
 WORKTREES="$(git -C "$WS" worktree list 2>/dev/null | wc -l | tr -d ' ')"
 
-# --- interpreter ---
-PY_BIN="$(command -v python || command -v python3 || echo "")"
-PY_VER="$($PY_BIN --version 2>&1 || echo "")"
-PY_PREFIX="$($PY_BIN -c 'import sys;print(sys.prefix)' 2>/dev/null || echo "")"
-
 # --- capt executable ---
 CAPT_BIN="$(command -v capt || echo "")"
 
 # --- package identity (import for identity only; constructs nothing) ---
-# Probe from inside $WS: Python puts the CWD first on sys.path, so probing from
-# an unrelated directory (e.g. another worktree) would resolve a shadowing
-# capt_solo and misreport the checkout. Report on the workspace we were asked about.
-PKG_FILE=""; PKG_VER=""
-if [ -n "$PY_BIN" ]; then
-  read -r PKG_FILE PKG_VER <<<"$(cd "$WS" && "$PY_BIN" -c 'import capt_solo;print(capt_solo.__file__, getattr(capt_solo,"__version__","unknown"))' 2>/dev/null || echo " ")"
-fi
-# Shadow warning: does the invoking CWD resolve a different capt_solo?
+PKG_FILE="$CAPT_PKG_FILE"
+PKG_VER="$CAPT_PKG_VERSION"
 SHADOW=""
-if [ -n "$PY_BIN" ] && [ "$PWD" != "$WS" ]; then
-  CWD_FILE="$("$PY_BIN" -c 'import capt_solo;print(capt_solo.__file__)' 2>/dev/null || echo "")"
+if [ "$PWD" != "$WS" ]; then
+  CWD_FILE="$($PY_BIN -c 'import capt_solo;print(capt_solo.__file__)' 2>/dev/null || echo "")"
   [ -n "$CWD_FILE" ] && [ "$CWD_FILE" != "$PKG_FILE" ] && SHADOW="$CWD_FILE"
 fi
-PKG_LOCATION="$(pip show capt-solo 2>/dev/null | awk -F': ' '/^Location:/{print $2}' || echo "")"
-PKG_EDITABLE="$(pip show capt-solo 2>/dev/null | awk -F': ' '/^Editable project location:/{print $2}' || echo "")"
+PKG_LOCATION="$($PY_BIN -m pip show capt-solo 2>/dev/null | awk -F': ' '/^Location:/{print $2}' || echo "")"
+PKG_EDITABLE="$CAPT_PKG_EDITABLE"
 DOCTOR_VER="$(capt doctor 2>/dev/null | awk '/package.version/{getline;getline;print $2}' || echo "")"
 
 # --- source precedence resolution ---
@@ -104,7 +91,7 @@ SKILL_PROV="$SKILL_DIR/.install-provenance.json"
 SKILL_INSTALLED="absent"
 [ -f "$SKILL_DIR/SKILL.md" ] && SKILL_INSTALLED="present"
 SKILL_SHA=""
-[ -f "$SKILL_PROV" ] && SKILL_SHA="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("content_digest",""))' "$SKILL_PROV" 2>/dev/null || echo "")"
+[ -f "$SKILL_PROV" ] && SKILL_SHA="$($PY_BIN -c 'import json,sys;print(json.load(open(sys.argv[1])).get("content_digest",""))' "$SKILL_PROV" 2>/dev/null || echo "")"
 
 # --- secrets: presence + mechanism ONLY, never values ---
 secret_presence() { if [ -n "${!1:-}" ]; then echo "present (env)"; else echo "absent"; fi; }
@@ -117,6 +104,16 @@ cat <<EOF
   "report": "capt-environment-report",
   "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "workspace": $(j "$WS"),
+  "interpreter": {
+    "executable": $(j "$CAPT_PY"),
+    "selection_source": $(j "$CAPT_PY_SOURCE"),
+    "version": $(j "$CAPT_PY_VERSION"),
+    "prefix": $(j "$CAPT_PY_PREFIX"),
+    "disagrees_with_capt_console_script": $(j "$CAPT_PY_DISAGREES"),
+    "capt_solo_module": $(j "$PKG_FILE"),
+    "capt_solo_version": $(j "$PKG_VER"),
+    "editable_location": $(j "$PKG_EDITABLE")
+  },
   "git": {
     "root": $(j "$GIT_ROOT"),
     "branch": $(j "$GIT_BRANCH"),
@@ -126,9 +123,9 @@ cat <<EOF
   },
   "python": {
     "executable": $(j "$PY_BIN"),
-    "version": $(j "$PY_VER"),
-    "prefix": $(j "$PY_PREFIX"),
-    "venv_activated": $(j "$ACTIVATED")
+    "version": $(j "$CAPT_PY_VERSION"),
+    "prefix": $(j "$CAPT_PY_PREFIX"),
+    "venv_activated": "none (selection is explicit, not via shell activation)"
   },
   "capt": {
     "executable": $(j "$CAPT_BIN"),

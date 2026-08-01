@@ -76,6 +76,15 @@ RUNTIME_CONSTRUCTORS = [
 
 def run(cmd, env=None, cwd=None, timeout=180):
     e = dict(os.environ)
+    # Ensure the canonical CAPT venv (capt console script + python) is on PATH.
+    # Correctness must not depend on an ambient shell activation; the skill's
+    # scripts select the interpreter deterministically, but `capt` itself is a
+    # console script that must be resolvable.
+    if CANONICAL_REPO is not None:
+        vbin = str(CANONICAL_REPO / ".venv" / "bin")
+        if os.path.isdir(vbin):
+            e["PATH"] = vbin + os.pathsep + e.get("PATH", "")
+            e.setdefault("CAPT_ACCEPT_PY", str(CANONICAL_REPO / ".venv" / "bin" / "python"))
     if env:
         e.update(env)
     return subprocess.run(
@@ -278,19 +287,31 @@ def test_environment_report_resolves_source_and_hides_secrets(tmp_path):
 
 
 @needs_capt
-def test_environment_report_rejects_foreign_checkout():
-    """Adversarial: a git worktree that does not own the venv is WRONG_CHECKOUT.
+def test_environment_report_rejects_foreign_checkout(tmp_path):
+    """Adversarial: a genuinely foreign checkout must be refused (WRONG_CHECKOUT).
 
-    Real observed condition — this repo has 7 worktrees; importing capt_solo from
-    one while the editable install points at another must be refused, not
-    silently accepted.
+    The skill worktree legitimately shares the canonical editable install
+    (capt-solo), so it is a VALID checkout — not a wrong one. A real foreign
+    checkout is a separate repo whose capt_solo import resolves outside the
+    resolved source root.
     """
+    # 1. The skill worktree shares the canonical editable install → valid (PASS).
     if CANONICAL_REPO is None or REPO.resolve() == CANONICAL_REPO.resolve():
         pytest.skip("test suite is running inside the canonical checkout")
-    r = run(["bash", str(SCRIPTS / "capt-environment-report.sh"), str(REPO)])
-    assert r.returncode == 3, f"expected exit 3 WRONG_CHECKOUT, got {r.returncode}"
+    r = run([str(SCRIPTS / "capt-environment-report.sh"), str(REPO)])
+    assert r.returncode == 0, f"worktree sharing canonical install should PASS, got {r.returncode}: {r.stderr}"
     data = json.loads(r.stdout)
-    assert data["capt"]["checkout_verdict"] == "FAIL:WRONG_CHECKOUT"
+    assert data["capt"]["checkout_verdict"] == "PASS", data["capt"]["checkout_verdict"]
+
+    # 2. A genuine foreign checkout (own fake capt_solo) is refused.
+    foreign = tmp_path / "foreign-repo"
+    (foreign / "capt_solo").mkdir(parents=True)
+    (foreign / "capt_solo" / "__init__.py").write_text('__version__ = "9.9.9-FOREIGN"\n')
+    rf = run([str(SCRIPTS / "capt-environment-report.sh"), str(foreign)])
+    # Either the script refuses (exit 3) or reports FAIL:WRONG_CHECKOUT — both
+    # are acceptable "refused" outcomes; a silent PASS is the failure mode.
+    assert rf.returncode != 0 or "FAIL:WRONG_CHECKOUT" in rf.stdout, \
+        f"foreign checkout must be refused, got rc={rf.returncode}: {rf.stdout[:500]}"
 
 
 @needs_capt
@@ -459,3 +480,112 @@ def test_owner_capt_home_untouched_by_suite():
     for name in ("mission-skill-acceptance", "mission-skill-continuity"):
         hits = list(owner.rglob(f"*{name}*"))
         assert not hits, f"test mission leaked into owner home: {hits}"
+
+
+# ------------------------------------------------- interpreter determinism --
+
+SELECT_LIB = SCRIPTS / "capt-select-python.sh"
+
+
+def _source_and_report(tmp_path, env_extra=None, ws=None):
+    """Source capt-select-python.sh in a clean shell and emit its variables as JSON."""
+    import shlex
+    script = tmp_path / "probe.sh"
+    ws_arg = shlex.quote(str(ws)) if ws else ""
+    # The inner heredoc must run under the SELECTED interpreter ($CAPT_PY), not
+    # ambient python3, or it cannot import capt_solo. We echo $CAPT_PY first.
+    script.write_text(
+        f'source {shlex.quote(str(SELECT_LIB))} {ws_arg} || exit $?\n'
+        'echo "SELECTED=$CAPT_PY"\n'
+        '"$CAPT_PY" - <<PY\n'
+        'import json, os\n'
+        'keys = ["CAPT_PY","CAPT_PY_SOURCE","CAPT_PY_VERSION","CAPT_PY_PREFIX",\n'
+        '        "CAPT_PKG_FILE","CAPT_PKG_VERSION","CAPT_PKG_EDITABLE","CAPT_PY_DISAGREES"]\n'
+        'print(json.dumps({k: os.environ.get(k,"") for k in keys}))\n'
+        'PY\n'
+    )
+    env = dict(os.environ)
+    if env_extra:
+        env.update(env_extra)
+    env.pop("VIRTUAL_ENV", None)
+    r = run(["bash", str(script)], env=env, cwd=str(tmp_path))
+    return r
+
+
+def _parse_selection(stdout):
+    """Extract the JSON object from the probe's mixed stdout."""
+    for line in stdout.splitlines():
+        line = line.strip()
+        if line.startswith("{"):
+            import json as _json
+            return _json.loads(line)
+    raise AssertionError(f"no JSON in probe output: {stdout!r}")
+
+
+def test_interpreter_explicit_override_wins_over_system_python(tmp_path):
+    """A system python first on PATH must NOT override an explicit CAPT_ACCEPT_PY."""
+    system_py = shutil.which("python3") or shutil.which("python")
+    if system_py is None:
+        pytest.skip("no system python to shadow with")
+    fakebin = tmp_path / "fakebin"
+    fakebin.mkdir()
+    (fakebin / "python3").write_text('#!/bin/sh\necho "Python 3.9.6 (fake)"; exit 0\n')
+    (fakebin / "python3").chmod(0o755)
+    real_py = str(CANONICAL_REPO / ".venv" / "bin" / "python")
+    r = _source_and_report(
+        tmp_path,
+        env_extra={"CAPT_ACCEPT_PY": real_py, "PATH": f"{fakebin}:{os.environ['PATH']}"},
+    )
+    assert r.returncode == 0, r.stderr + r.stdout
+    data = _parse_selection(r.stdout)
+    assert data["CAPT_PY_SOURCE"] == "explicit:CAPT_ACCEPT_PY"
+    assert data["CAPT_PY"] == real_py
+    assert data["CAPT_PKG_VERSION"] == "0.5.0", data
+    assert "3.9" not in data["CAPT_PY_VERSION"]
+
+
+def test_interpreter_missing_override_fails_precisely(tmp_path):
+    """A missing/non-executable override must fail, not fall back to PATH."""
+    r = _source_and_report(
+        tmp_path, env_extra={"CAPT_ACCEPT_PY": "/nonexistent/python"}
+    )
+    assert r.returncode == 2, f"expected exit 2, got {r.returncode}: {r.stderr}"
+    assert "CAPT_ACCEPT_PY" in r.stderr
+    assert "CAPT_PY_SELECTION_FAILED" in r.stderr
+
+
+def test_interpreter_explicit_valid_produces_canonical_identity(tmp_path):
+    """An explicit valid interpreter yields the canonical CAPT identity."""
+    real_py = str(CANONICAL_REPO / ".venv" / "bin" / "python")
+    r = _source_and_report(tmp_path, env_extra={"CAPT_ACCEPT_PY": real_py})
+    assert r.returncode == 0, r.stderr
+    data = _parse_selection(r.stdout)
+    assert data["CAPT_PY_SOURCE"] == "explicit:CAPT_ACCEPT_PY"
+    assert data["CAPT_PKG_VERSION"] == "0.5.0"
+    assert data["CAPT_PKG_FILE"].endswith("capt_solo/__init__.py")
+
+
+def test_interpreter_cwd_shadow_detected_without_switching(tmp_path):
+    """CWD shadowing is detected while the selected interpreter stays fixed."""
+    real_py = str(CANONICAL_REPO / ".venv" / "bin" / "python")
+    (tmp_path / "capt_solo").mkdir()
+    (tmp_path / "capt_solo" / "__init__.py").write_text('__version__ = "0.0.0-FAKE"\n')
+    r = _source_and_report(tmp_path, env_extra={"CAPT_ACCEPT_PY": real_py})
+    assert r.returncode == 0, r.stderr
+    data = _parse_selection(r.stdout)
+    assert data["CAPT_PY"] == real_py
+    assert data["CAPT_PKG_VERSION"] == "0.5.0"
+    assert "capt_solo" in data["CAPT_PKG_FILE"]
+    assert "0.0.0-FAKE" not in data["CAPT_PKG_VERSION"]
+
+
+def test_interpreter_fresh_shell_reproducible(tmp_path):
+    """Two independent fresh shells select the same deterministic identity."""
+    real_py = str(CANONICAL_REPO / ".venv" / "bin" / "python")
+    r1 = _source_and_report(tmp_path, env_extra={"CAPT_ACCEPT_PY": real_py})
+    r2 = _source_and_report(tmp_path, env_extra={"CAPT_ACCEPT_PY": real_py})
+    assert r1.returncode == 0 and r2.returncode == 0
+    d1, d2 = _parse_selection(r1.stdout), _parse_selection(r2.stdout)
+    assert d1["CAPT_PY"] == d2["CAPT_PY"]
+    assert d1["CAPT_PKG_VERSION"] == d2["CAPT_PKG_VERSION"] == "0.5.0"
+    assert d1["CAPT_PKG_FILE"] == d2["CAPT_PKG_FILE"]

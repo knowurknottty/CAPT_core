@@ -14,6 +14,15 @@ MISSION="${2:-}"
 [ -d "$WS" ] || { echo "FAIL  invocation            workspace not found: $WS"; exit 2; }
 WS="$(cd "$WS" && pwd)"
 
+# ── deterministic interpreter selection (single source of truth) ────────────
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck disable=SC1091
+. "$HERE/capt-select-python.sh" "$WS" || {
+  echo "REFUSED: interpreter selection failed"; exit 2
+}
+PY_BIN="$CAPT_PY"
+PY_SOURCE="$CAPT_PY_SOURCE"
+
 FAILS=0
 row() { # verdict, check, detail
   printf '%-11s %-26s %s\n' "$1" "$2" "$3"
@@ -23,25 +32,25 @@ row() { # verdict, check, detail
 
 echo "capt-doctor  workspace=$WS  mission=${MISSION:-<none supplied>}"
 echo "-------------------------------------------------------------------------------"
+echo "interpreter: $PY_BIN (source=$PY_SOURCE, version=$CAPT_PY_VERSION)"
+echo "-------------------------------------------------------------------------------"
 
-# 0. environment activation
+# 0. environment activation — NOTE: we do NOT activate an ambient venv. The
+#    selected interpreter ($CAPT_PY) is authoritative; correctness must not
+#    depend on shell activation. We still surface a workspace venv if present,
+#    but only as a recorded observation, never as a fallback.
 if [ -x "$WS/.venv/bin/capt" ]; then
-  # shellcheck disable=SC1091
-  . "$WS/.venv/bin/activate"
+  echo "note: workspace venv present at $WS/.venv (observed, not activated as fallback)"
 fi
 
 # 1. python
-PY_BIN="$(command -v python || command -v python3 || echo "")"
-PY_VER="$($PY_BIN --version 2>&1 || echo unknown)"
-case "$PY_VER" in
-  "Python 3.1"[0-9]*|"Python 3.9"*) : ;;
-esac
 if [ -z "$PY_BIN" ]; then row FAIL "python" "no interpreter"
-elif [ "${PY_VER#Python 3.9}" != "$PY_VER" ]; then row FAIL "python" "$PY_VER ($PY_BIN) — system python, capt-solo needs >=3.10 [WRONG_PYTHON]"
-else row PASS "python" "$PY_VER ($PY_BIN)"; fi
+elif [ "${CAPT_PY_VERSION#Python 3.9}" != "$CAPT_PY_VERSION" ]; then
+  row FAIL "python" "$CAPT_PY_VERSION ($PY_BIN) — system python, capt-solo needs >=3.10 [WRONG_PYTHON]"
+else row PASS "python" "$CAPT_PY_VERSION ($PY_BIN) [via $PY_SOURCE]"; fi
 
 # 2. virtualenv
-PY_PREFIX="$($PY_BIN -c 'import sys;print(sys.prefix)' 2>/dev/null || echo "")"
+PY_PREFIX="$CAPT_PY_PREFIX"
 if [ -d "$WS/.venv" ] && [ "$PY_PREFIX" != "$WS/.venv" ]; then
   row FAIL "virtualenv" "sys.prefix=$PY_PREFIX but $WS/.venv exists [WRONG_VENV]"
 elif [ -n "$PY_PREFIX" ]; then row PASS "virtualenv" "$PY_PREFIX"
@@ -53,21 +62,31 @@ if [ -z "$CAPT_BIN" ]; then row FAIL "capt.executable" "not on PATH [CAPT_NOT_FO
 else row PASS "capt.executable" "$CAPT_BIN"; fi
 
 # 4. installed package source
-PKG_FILE="$($PY_BIN -c 'import capt_solo;print(capt_solo.__file__)' 2>/dev/null || echo "")"
-PKG_VER="$($PY_BIN -c 'import capt_solo;print(getattr(capt_solo,"__version__","unknown"))' 2>/dev/null || echo "")"
-EDITABLE="$(pip show capt-solo 2>/dev/null | awk -F': ' '/^Editable project location:/{print $2}')"
-if [ -z "$PKG_FILE" ]; then row FAIL "package.source" "capt_solo not importable"
+PKG_FILE="$CAPT_PKG_FILE"
+PKG_VER="$CAPT_PKG_VERSION"
+EDITABLE="$CAPT_PKG_EDITABLE"
+CWD_FILE="$($PY_BIN -c 'import capt_solo;print(capt_solo.__file__)' 2>/dev/null || echo "")"
+if [ -z "$PKG_FILE" ]; then row FAIL "package.source" "capt_solo not importable [CAPT_PACKAGE_MISSING]"
 else row PASS "package.source" "$PKG_FILE v$PKG_VER${EDITABLE:+ (editable: $EDITABLE)}"; fi
+
+# 4b. CWD module shadowing
+if [ -n "$PKG_FILE" ] && [ -n "$CWD_FILE" ] && [ "$CWD_FILE" != "$PKG_FILE" ]; then
+  row WARN "package.cwd_shadow" "CWD import would resolve $CWD_FILE (CLI uses $PKG_FILE) [CWD_MODULE_SHADOW]"
+elif [ -n "$PKG_FILE" ]; then
+  row PASS "package.cwd_shadow" "no CWD shadowing of capt_solo"
+fi
 
 # 5. checkout identity
 SRC_ROOT="${EDITABLE:-${CAPT_SOLO_REPO:-$WS}}"
 if [ -z "$PKG_FILE" ]; then row NOT_PROVEN "checkout.identity" "package not importable"
 else
   case "$PKG_FILE" in
-    "$SRC_ROOT"/*) row PASS "checkout.identity" "import resolves under $SRC_ROOT" ;;
-    *)             row FAIL "checkout.identity" "import $PKG_FILE outside $SRC_ROOT [WRONG_CHECKOUT]" ;;
+    "$SRC_ROOT"/*) row PASS "checkout.identity" "CLI import resolves under $SRC_ROOT" ;;
+    *)             row FAIL "checkout.identity" "CLI import $PKG_FILE outside $SRC_ROOT [WRONG_CHECKOUT]" ;;
   esac
 fi
+[ "$CAPT_PY_DISAGREES" = "yes" ] && row WARN "interpreter.disagreement" "selected $CAPT_PY differs from the python used by $CAPT_BIN [INTERPRETER_DISAGREEMENT]"
+
 WT="$(git -C "$WS" worktree list 2>/dev/null | wc -l | tr -d ' ')"
 [ "${WT:-0}" -gt 1 ] && row WARN "checkout.worktrees" "$WT worktrees — verify which venv is active"
 

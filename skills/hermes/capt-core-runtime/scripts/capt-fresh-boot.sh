@@ -24,9 +24,14 @@ fi
 [ -d "$WS" ] || { echo "workspace not found: $WS" >&2; exit 2; }
 WS="$(cd "$WS" && pwd)"
 
-[ -x "$WS/.venv/bin/capt" ] && . "$WS/.venv/bin/activate"
-command -v capt >/dev/null || { echo "CAPT_NOT_FOUND: capt not on PATH (activate the venv)" >&2; exit 2; }
-PY="$(command -v python || command -v python3)"
+# ── deterministic interpreter selection (single source of truth) ────────────
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck disable=SC1091
+. "$HERE/capt-select-python.sh" "$WS" || { echo "REFUSED: interpreter selection failed" >&2; exit 2; }
+PY="$CAPT_PY"
+
+[ -x "$WS/.venv/bin/capt" ] && echo "note: workspace venv present at $WS/.venv (observed, not activated as fallback)" >&2
+command -v capt >/dev/null || { echo "CAPT_NOT_FOUND: capt not on PATH (set CAPT_ACCEPT_PY or activate the venv)" >&2; exit 2; }
 
 BOOT_JSON="$(capt --json agent status --workspace "$WS" --mission "$MISSION" 2>&1)"
 
@@ -90,11 +95,29 @@ tr = find_trace(boot.get("contextpack_digest", ""))
 def pyver():
     return "%d.%d.%d" % sys.version_info[:3]
 
+# Report the module the canonical CLI actually loads, not whatever the invoking
+# CWD shadows. The `capt` console script sets sys.path[0] to the venv bin dir,
+# so it is never CWD-shadowed; a plain "import capt_solo" here would be, and
+# would misreport the runtime identity whenever the boot runs from a directory
+# containing a capt_solo/ tree. Probe in isolated mode (-P) to match the CLI.
+capt_file = ""; capt_ver = "unknown"; capt_shadow = ""
 try:
-    import capt_solo
-    capt_file = capt_solo.__file__; capt_ver = getattr(capt_solo,"__version__","unknown")
+    _r = subprocess.run(
+        [sys.executable, "-P", "-c",
+         "import capt_solo;print(capt_solo.__file__);print(getattr(capt_solo,\"__version__\",\"unknown\"))"],
+        capture_output=True, text=True, timeout=30)
+    if _r.returncode == 0:
+        _lines = _r.stdout.strip().splitlines()
+        capt_file = _lines[0] if _lines else ""
+        capt_ver = _lines[1] if len(_lines) > 1 else "unknown"
 except Exception:
-    capt_file = ""; capt_ver = "unknown"
+    pass
+try:
+    import capt_solo as _cwd_mod
+    if _cwd_mod.__file__ != capt_file:
+        capt_shadow = _cwd_mod.__file__
+except Exception:
+    pass
 
 report = {
   "report": "capt-boot-report",
@@ -106,6 +129,7 @@ report = {
   "dirty": bool(git("status","--porcelain")),
   "python": {"version": pyver(), "executable": sys.executable},
   "capt": {"module_file": capt_file, "version": capt_ver,
+           "cwd_shadowing_module": capt_shadow,
            "home": os.environ.get("CAPT_SOLO_HOME", os.path.expanduser("~/.capt-solo"))},
   "mission_id": boot.get("mission_id",""),
   "session_id": boot.get("session_id",""),
