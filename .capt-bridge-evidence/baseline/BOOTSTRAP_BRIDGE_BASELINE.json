@@ -1,0 +1,75 @@
+{
+  "schema_version": "1",
+  "artifact": "BOOTSTRAP_BRIDGE_BASELINE",
+  "artifact_class": "bootstrap evidence (NOT a CAPT checkpoint)",
+  "captured_at_utc": "2026-08-01T05:32:00Z",
+  "classification": "SKILL_LOADED_CAPT_RUNNER_NOT_ACTIVE",
+  "acceptance": {
+    "fresh_process": true,
+    "transcript_inherited": false,
+    "hermes_home": "/tmp/capt-bridge-baseline-home",
+    "instruction": "Load CAPT Core.\nResume bootstrap-bridge-acceptance.",
+    "command": "hermes chat --yolo -q '<instruction>'",
+    "exit_code": 0,
+    "duration_s": 47,
+    "messages": 12,
+    "user_messages": 2,
+    "tool_calls": 9,
+    "session_id": "20260801_003204_8a4fe4"
+  },
+  "skill_discovery": {
+    "installed_skill_path": "/tmp/capt-bridge-baseline-home/skills/capt-core-runtime",
+    "installed_skill_tree_digest": "sha256:759d58a9c524c3646b5ee6dda9f73a3fe5130f487354852e01435266a56b64b1",
+    "installed_file_count": 18,
+    "tracked_source_path": "skills/hermes/capt-core-runtime",
+    "tracked_source_tree_digest": "sha256:759d58a9c524c3646b5ee6dda9f73a3fe5130f487354852e01435266a56b64b1",
+    "digests_match": true,
+    "skill_loaded_by_hermes": true,
+    "loaded_via": "skill_view(name='capt-core-runtime') tool call observed in transcript"
+  },
+  "capt_source": {
+    "importable": true,
+    "import_path_resolved_by_hermes_session": "/Users/knowurknot/Library/Python/3.9/lib/python/site-packages/capt_solo",
+    "installed_version": "0.5.0",
+    "installed_copy_contains_agent_package": false,
+    "installed_copy_missing": [
+      "capt_solo/agent/",
+      "capt_solo/agent/runner.py",
+      "capt_solo/agent/boot.py",
+      "capt_solo/model_task.py"
+    ],
+    "console_entrypoint_on_PATH": false,
+    "console_entrypoint_actual": "/Users/knowurknot/Library/Python/3.9/bin/capt (not on PATH)",
+    "mixed_checkout": true,
+    "mixed_checkout_note": "site-packages copy is STALE relative to the canonical worktree: it lacks the entire Agent Runner package. Any 'capt' resolved by ambient import would silently run a runner-less CAPT."
+  },
+  "missing_runtime_chain": {
+    "capt_agent_runner_process": {
+      "present": false,
+      "evidence": "0 occurrences of 'capt agent' / AgentRunner in the full 129-line transcript; no runner process observed"
+    },
+    "mission_recovery": {"present": false},
+    "session_recovery": {"present": false},
+    "checkpoint_recovery": {"present": false},
+    "directives_recovered": {"present": false},
+    "memory_selection_ids": {"present": false},
+    "contextpack": {"present": false},
+    "memory_use_gate": {"present": false},
+    "ctp_transaction": {"present": false},
+    "khsb_correlation": {"present": false},
+    "claimguard_verdict": {"present": false},
+    "canonical_checkpoint_written": {"present": false}
+  },
+  "provider_ownership": {
+    "owner_observed": "HERMES",
+    "capt_owned_invocations": 0,
+    "hermes_native_invocations": 4,
+    "evidence": "Hermes ran its own native provider loop for 4 iterations (iteration budget 4/4 exhausted), emitting reasoning blocks and tool calls under Hermes provider dispatch. No CAPT-owned provider invocation occurred at any point."
+  },
+  "substitute_artifacts_created": {
+    "count": 0,
+    "note": "No substitute CAPT artifacts were created for this baseline. Absence is recorded as absence."
+  },
+  "model_behavior_note": "The model followed the skill's instructions as prose: it ran diagnostic shell scripts, searched for the capt binary, and then narrated 'next steps' it never executed. This is exactly the defect: skill text is advisory, not a runtime handoff.",
+  "verdict": "SKILL_LOADED_CAPT_RUNNER_NOT_ACTIVE reproduced with live runtime evidence in a fresh Hermes process."
+}

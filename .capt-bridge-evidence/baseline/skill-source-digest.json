@@ -1,0 +1,97 @@
+{
+  "file_count": 18,
+  "files": [
+    {
+      "bytes": 11588,
+      "path": "SKILL.md",
+      "sha256": "44dcae704929625d0c820bf506b81a65e8acdaa8c2d21b443368ac3cd348a2ee"
+    },
+    {
+      "bytes": 6834,
+      "path": "references/boot-protocol.md",
+      "sha256": "e30716e3d1d90133f8ce5d535af201f5ec9e5d7e16ba6251e8e19ab8267aea37"
+    },
+    {
+      "bytes": 6583,
+      "path": "references/checkpoint-resume.md",
+      "sha256": "3c033948fcd31e9d285a2f3d064cd16ae54cbbe216626aef801c7d7010c8b5e8"
+    },
+    {
+      "bytes": 6556,
+      "path": "references/compatibility.md",
+      "sha256": "dc61e37815611dd2492411751aa63d4cc4a7d5fd661f5c68965b366b08478e4c"
+    },
+    {
+      "bytes": 9121,
+      "path": "references/diagnostics.md",
+      "sha256": "f62bfbfaafa2717fd3343ee1d5a45f761b26292d166ec54707aefef5a17e314a"
+    },
+    {
+      "bytes": 5272,
+      "path": "references/milestone-language.md",
+      "sha256": "b2b40d4ee7e548ee2e52880c94c8990d70cbf1bef903f2523b96c371fcbaedda"
+    },
+    {
+      "bytes": 8709,
+      "path": "references/runtime-components.md",
+      "sha256": "9f91a4c88e5d58d53c836dbb17cc2a12d4935fad11b4c346d7bb55f99adc00c0"
+    },
+    {
+      "bytes": 6381,
+      "path": "references/security-boundaries.md",
+      "sha256": "0d0933e439a4a3f5d27e87907832a04a47653c3a2cb3d2ef444619578e496f64"
+    },
+    {
+      "bytes": 5683,
+      "path": "schemas/boot-report.schema.json",
+      "sha256": "aa356646f83c834045e497b42b08af8226857ee155565f7a2a1f8e572855aa8e"
+    },
+    {
+      "bytes": 4472,
+      "path": "scripts/capt-checkpoint.sh",
+      "sha256": "798526b93bdec8b2fbd23d4903543690beaa0efbb9b30919a8572bce3b99477b"
+    },
+    {
+      "bytes": 12067,
+      "path": "scripts/capt-doctor.sh",
+      "sha256": "9a9b344320b17911b474b80f7089b5c9e2fa4c74333f1f127d677b1dc269fa8a"
+    },
+    {
+      "bytes": 6797,
+      "path": "scripts/capt-environment-report.sh",
+      "sha256": "97eaa4dc7c9fa89eb40786d2f49b84fd82f64a451d2429b9a1d4e3062bd2d747"
+    },
+    {
+      "bytes": 7486,
+      "path": "scripts/capt-fresh-boot.sh",
+      "sha256": "eba8b51652fa5630115df32c6b11481a8ad6552c8544055e575d9c5436f328e5"
+    },
+    {
+      "bytes": 7228,
+      "path": "scripts/capt-resume-check.sh",
+      "sha256": "2c49da7010d28979084a2a5d4bfa7fb93b04b0450b726254aa95b6897b41815b"
+    },
+    {
+      "bytes": 4837,
+      "path": "scripts/capt-select-python.sh",
+      "sha256": "743639ca4a773b10ffdebb6b6b4d486c2d025a1f5f889f58f8fe253466d628be"
+    },
+    {
+      "bytes": 21179,
+      "path": "tests-acceptance/run-acceptance.sh",
+      "sha256": "a4b16871b8832933cff5c98e7e5a4239c291329e9243e9a85d1785195fdf8769"
+    },
+    {
+      "bytes": 17953,
+      "path": "tests-acceptance/run-adversarial.sh",
+      "sha256": "8b699c1f057248f826328da6cc19b762a43d057ea77cda0a9571f5c65ab6718f"
+    },
+    {
+      "bytes": 11944,
+      "path": "tests-acceptance/run-external-replay.sh",
+      "sha256": "3e7505dbe956e3544fb536099d5389e78366d99f9720cf1e8c579c8744b4bddd"
+    }
+  ],
+  "root": "/Users/knowurknot/capt-bootstrap-bridge/skills/hermes/capt-core-runtime",
+  "tree_digest": "sha256:759d58a9c524c3646b5ee6dda9f73a3fe5130f487354852e01435266a56b64b1"
+}

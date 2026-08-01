@@ -1,0 +1,302 @@
+{
+  "all_passed": true,
+  "generated_at_utc": "2026-08-01T06:25:03Z",
+  "mission": "bootstrap-bridge-acceptance",
+  "scenarios": [
+    {
+      "checks": [
+        {
+          "check": "correct_skill_discovered",
+          "detail": "/Users/knowurknot/capt-bootstrap-bridge",
+          "ok": true
+        },
+        {
+          "check": "agent_runner_active",
+          "detail": "FULL_CAPT_AGENT_RUNNER_ACTIVE",
+          "ok": true
+        },
+        {
+          "check": "mission_recovered",
+          "detail": "bootstrap-bridge-acceptance",
+          "ok": true
+        },
+        {
+          "check": "session_recovered",
+          "detail": "9e3d34e94aaf4c5e99e13f59cc349cd6",
+          "ok": true
+        },
+        {
+          "check": "checkpoint_recovered",
+          "detail": "bootstrap-bridge-acceptance@10-acceptance",
+          "ok": true
+        },
+        {
+          "check": "contextpack_built",
+          "detail": "sha256:c4aa8aeafe723b3023d4cd959e16a7db9866261e99130824bd21718cdffddc80",
+          "ok": true
+        },
+        {
+          "check": "memory_use_gate_pass",
+          "detail": "PASS",
+          "ok": true
+        },
+        {
+          "check": "ctp_active",
+          "detail": "4a9983b3fc9e46a4881f5647d46d257b",
+          "ok": true
+        },
+        {
+          "check": "khsb_active",
+          "detail": "khsb-bridge-agentrun-3fb519b069f64ad4",
+          "ok": true
+        },
+        {
+          "check": "provider_owner_capt",
+          "detail": "CAPT_AGENT_RUNNER_AFTER_READY",
+          "ok": true
+        },
+        {
+          "check": "ready_event_validated",
+          "detail": "",
+          "ok": true
+        },
+        {
+          "check": "nonce_redacted",
+          "detail": "",
+          "ok": true
+        },
+        {
+          "check": "turn_routed_to_capt",
+          "detail": "CAPT_AGENT_RUNNER",
+          "ok": true
+        },
+        {
+          "check": "turn_returned_through_bridge",
+          "detail": "ProviderError: openai-compatible-local request failed: HTTP Error 404: Not Found",
+          "ok": true
+        },
+        {
+          "check": "hermes_native_loop_suppressed",
+          "detail": "",
+          "ok": true
+        },
+        {
+          "check": "checkpoint_written",
+          "detail": "{\n  \"execution_mode\": \"GOVERNED\",\n  \"mission_id\": \"bootstrap-bridge-acceptance\",\n  \"session_id\": \"01bd9f94bcf6443fbb896f2d96cc8d8e\",\n  \"checkpoint_id\": \"bootstrap-bridge-acceptance@10-acceptance\",\n  \"",
+          "ok": true
+        },
+        {
+          "check": "second_fresh_process_resumes",
+          "detail": "FULL_CAPT_AGENT_RUNNER_ACTIVE",
+          "ok": true
+        },
+        {
+          "check": "resume_matches_prior_session",
+          "detail": "9e3d34e94aaf4c5e99e13f59cc349cd6 vs 9e3d34e94aaf4c5e99e13f59cc349cd6",
+          "ok": true
+        }
+      ],
+      "evidence": {
+        "boot": {
+          "block_codes": [],
+          "block_reason": "",
+          "boot_state": "FULL_CAPT_AGENT_RUNNER_ACTIVE",
+          "capt_source_path": "/Users/knowurknot/capt-bootstrap-bridge",
+          "checkpoint_id": "bootstrap-bridge-acceptance@10-acceptance",
+          "contextpack_digest": "sha256:c4aa8aeafe723b3023d4cd959e16a7db9866261e99130824bd21718cdffddc80",
+          "ctp_transaction_id": "4a9983b3fc9e46a4881f5647d46d257b",
+          "degraded_controls": [],
+          "doctor_ok": true,
+          "execution_mode": "GOVERNED",
+          "intent_id": "intent-dcf257d5b6221996",
+          "khsb_correlation_id": "khsb-bridge-agentrun-3fb519b069f64ad4",
+          "memory_use_decision_id": "bd21718cdffddc80",
+          "memory_use_gate": "PASS",
+          "mission_id": "bootstrap-bridge-acceptance",
+          "notes": [],
+          "provider_allowed": true,
+          "provider_owner": "CAPT_AGENT_RUNNER_AFTER_READY",
+          "ready_event": {
+            "bridge_nonce": "<redacted>",
+            "checkpoint_id": "bootstrap-bridge-acceptance@10-acceptance",
+            "contextpack_digest": "sha256:c4aa8aeafe723b3023d4cd959e16a7db9866261e99130824bd21718cdffddc80",
+            "ctp_transaction_id": "4a9983b3fc9e46a4881f5647d46d257b",
+            "event_digest": "sha256:3acd48d472555238a81368166bde4076bfdfa3d2851874f29a6a07c972330bd2",
+            "execution_mode": "GOVERNED",
+            "intent_id": "intent-dcf257d5b6221996",
+            "khsb_correlation_id": "khsb-bridge-agentrun-3fb519b069f64ad4",
+            "memory_use_decision_id": "bd21718cdffddc80",
+            "memory_use_gate": "PASS",
+            "mission_id": "bootstrap-bridge-acceptance",
+            "provider_owner": "CAPT_AGENT_RUNNER",
+            "run_id": "agentrun-3fb519b069f64ad4",
+            "runner_pid": 1036,
+            "session_id": "9e3d34e94aaf4c5e99e13f59cc349cd6"
+          },
+          "runner_command": [
+            "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+            "/Users/knowurknot/capt-bootstrap-bridge/capt_cli.py",
+            "--json",
+            "bridge",
+            "serve",
+            "--workspace",
+            "/Users/knowurknot/capt-bootstrap-bridge",
+            "--mission",
+            "bootstrap-bridge-acceptance",
+            "--mode",
+            "resume"
+          ],
+          "runner_pid": 1036,
+          "session_id": "9e3d34e94aaf4c5e99e13f59cc349cd6",
+          "workspace_path": "/Users/knowurknot/capt-bootstrap-bridge"
+        },
+        "live": {
+          "handle": "RunnerHandle(argv=('/Applications/Xcode.app/Contents/Developer/usr/bin/python3', '/Users/knowurknot/capt-bootstrap-bridge/capt_cli.py', '--json', 'bridge', 'serve', '--workspace', '/Users/knowurknot/capt-bootstrap-bridge', '--mission', 'bootstrap-bridge-acceptance', '--mode', 'resume', '--session', '9e3d34e94aaf4c5e99e13f59cc349cd6'), pid=1054, pgid=1054, socket_path='/Users/knowurknot/capt-bootstrap-bridge/.capt/bridge/sock/ready-356ad3e5e1496b4e.sock', turn_socket_path='/Users/knowurknot/capt-bootstrap-bridge/.capt/bridge/sock/turn-c3dcb54cac2777f5.sock', ready_event=BridgeReadyEvent(run_id='agentrun-c3a6d6b7c7354fa5', mission_id='bootstrap-bridge-acceptance', session_id='9e3d34e94aaf4c5e99e13f59cc349cd6', intent_id='intent-7445c5da05cc702c', checkpoint_id='bootstrap-bridge-acceptance@10-acceptance', contextpack_digest='sha256:77bab1615e4ad4e62fff3989a5f2b6ac2d49da289843bfdc896fd5743ad6c15e', memory_use_decision_id='896fd5743ad6c15e', memory_use_gate='PASS', ctp_transaction_id='392ca77c5e9743c9ad49e2fa68e5f9d7', khsb_correlation_id='khsb-bridge-agentrun-c3a6d6b7c7354fa5', provider_owner='CAPT_AGENT_RUNNER', execution_mode='GOVERNED', runner_pid=1054, bridge_nonce='b14e426c3ba7e3126386b03f3373b65065b083e8fd5a455b92483abdc361ed15', event_digest='sha256:21c05e69d4989f3ecc7c908e385dceb926c89bfa5eb506540a6347f0a42fb71f'), stdout_tail='', stderr_tail='', exit_code=None, block_codes=(), block_reason='', notes=())",
+          "turn": {
+            "error": "ProviderError: openai-compatible-local request failed: HTTP Error 404: Not Found",
+            "execution_mode": "GOVERNED",
+            "ok": false,
+            "provider_owner": "CAPT_AGENT_RUNNER"
+          }
+        },
+        "mission": "bootstrap-bridge-acceptance",
+        "resume_boot": {
+          "block_codes": [],
+          "block_reason": "",
+          "boot_state": "FULL_CAPT_AGENT_RUNNER_ACTIVE",
+          "capt_source_path": "/Users/knowurknot/capt-bootstrap-bridge",
+          "checkpoint_id": "bootstrap-bridge-acceptance@10-acceptance",
+          "contextpack_digest": "sha256:de8f637a5dfcb84e460881757ee02164b88f8ebd05a2ad8cbdabdb0781ffd54c",
+          "ctp_transaction_id": "72d21fa6ae14405caf120f4509efc984",
+          "degraded_controls": [],
+          "doctor_ok": true,
+          "execution_mode": "GOVERNED",
+          "intent_id": "intent-0670ecfe12a724db",
+          "khsb_correlation_id": "khsb-bridge-agentrun-c0359b894dde4490",
+          "memory_use_decision_id": "bdabdb0781ffd54c",
+          "memory_use_gate": "PASS",
+          "mission_id": "bootstrap-bridge-acceptance",
+          "notes": [],
+          "provider_allowed": true,
+          "provider_owner": "CAPT_AGENT_RUNNER_AFTER_READY",
+          "ready_event": {
+            "bridge_nonce": "<redacted>",
+            "checkpoint_id": "bootstrap-bridge-acceptance@10-acceptance",
+            "contextpack_digest": "sha256:de8f637a5dfcb84e460881757ee02164b88f8ebd05a2ad8cbdabdb0781ffd54c",
+            "ctp_transaction_id": "72d21fa6ae14405caf120f4509efc984",
+            "event_digest": "sha256:9c340f280b5e11d6221f427666c907b43bb45e4cdd357e67a6c993e37f9db626",
+            "execution_mode": "GOVERNED",
+            "intent_id": "intent-0670ecfe12a724db",
+            "khsb_correlation_id": "khsb-bridge-agentrun-c0359b894dde4490",
+            "memory_use_decision_id": "bdabdb0781ffd54c",
+            "memory_use_gate": "PASS",
+            "mission_id": "bootstrap-bridge-acceptance",
+            "provider_owner": "CAPT_AGENT_RUNNER",
+            "run_id": "agentrun-c0359b894dde4490",
+            "runner_pid": 1078,
+            "session_id": "9e3d34e94aaf4c5e99e13f59cc349cd6"
+          },
+          "runner_command": [
+            "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+            "/Users/knowurknot/capt-bootstrap-bridge/capt_cli.py",
+            "--json",
+            "bridge",
+            "serve",
+            "--workspace",
+            "/Users/knowurknot/capt-bootstrap-bridge",
+            "--mission",
+            "bootstrap-bridge-acceptance",
+            "--mode",
+            "resume",
+            "--session",
+            "9e3d34e94aaf4c5e99e13f59cc349cd6"
+          ],
+          "runner_pid": 1078,
+          "session_id": "9e3d34e94aaf4c5e99e13f59cc349cd6",
+          "workspace_path": "/Users/knowurknot/capt-bootstrap-bridge"
+        }
+      },
+      "passed": true,
+      "scenario": "success"
+    },
+    {
+      "checks": [
+        {
+          "check": "no_provider_call",
+          "detail": "False",
+          "ok": true
+        },
+        {
+          "check": "no_hermes_fallback",
+          "detail": "NONE_WHEN_BLOCKED",
+          "ok": true
+        },
+        {
+          "check": "exact_blocked_state",
+          "detail": "SKILL_LOADED_CAPT_RUNNER_NOT_ACTIVE",
+          "ok": true
+        },
+        {
+          "check": "block_codes_present",
+          "detail": "['CAPT_SOURCE_INCOMPLETE']",
+          "ok": true
+        },
+        {
+          "check": "broken_source_rejected",
+          "detail": "",
+          "ok": true
+        }
+      ],
+      "evidence": {
+        "boot": {
+          "block_codes": [
+            "CAPT_SOURCE_INCOMPLETE"
+          ],
+          "block_reason": "resolved CAPT source lacks the Agent Runner: capt_solo/agent/boot.py, capt_solo/agent/runner.py, capt_solo/agent/contracts.py, capt_solo/model_task.py (root=/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/broken-capt)",
+          "boot_state": "SKILL_LOADED_CAPT_RUNNER_NOT_ACTIVE",
+          "capt_source_path": "/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/broken-capt",
+          "checkpoint_id": "",
+          "contextpack_digest": "",
+          "ctp_transaction_id": "",
+          "degraded_controls": [],
+          "doctor_ok": false,
+          "execution_mode": "",
+          "intent_id": "",
+          "khsb_correlation_id": "",
+          "memory_use_decision_id": "",
+          "memory_use_gate": "",
+          "mission_id": "bootstrap-bridge-acceptance",
+          "notes": [
+            "override /Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/broken-capt lacks the Agent Runner package"
+          ],
+          "provider_allowed": false,
+          "provider_owner": "NONE_WHEN_BLOCKED",
+          "ready_event": null,
+          "runner_command": [],
+          "runner_pid": 0,
+          "session_id": "",
+          "workspace_path": "/Users/knowurknot/capt-bootstrap-bridge"
+        }
+      },
+      "passed": true,
+      "scenario": "failure"
+    },
+    {
+      "checks": [
+        {
+          "check": "external_skill_mutation_denied",
+          "detail": "RUNTIME_OWNERSHIP_DENIAL",
+          "ok": true
+        },
+        {
+          "check": "denial_receipt_emitted",
+          "detail": "[PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-8165edffd826d6a8.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-939cde5db62b2334.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-a56803f5160d8a41.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-d4bd2c39a26f7c9c.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-e7e583d27da67d36.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-ac0f0b541a1fbf92.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-128104f02fa3ea73.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-c8ee590cbb048499.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-e02c945db3f99b30.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-2a629258cf4f7d27.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-76b6af96b94ce6b9.json')]",
+          "ok": true
+        }
+      ],
+      "evidence": {},
+      "passed": true,
+      "scenario": "ownership"
+    }
+  ]
+}
