@@ -1,6 +1,6 @@
 {
   "all_passed": true,
-  "generated_at_utc": "2026-08-01T07:57:06Z",
+  "generated_at_utc": "2026-08-01T08:02:48Z",
   "mission": "bootstrap-bridge-acceptance",
   "scenarios": [
     {
@@ -32,7 +32,7 @@
         },
         {
           "check": "contextpack_built",
-          "detail": "sha256:0177ec400cb2a4f8d0ed24f8ab5d3e4e90f931832fb6f2a3ec9b336a721c096c",
+          "detail": "sha256:ad99eb8815c2bc6bc6e6e6f95c48a21555789a6544dffe44dbfe57eb62715747",
           "ok": true
         },
         {
@@ -42,12 +42,12 @@
         },
         {
           "check": "ctp_active",
-          "detail": "a94e8488a5d24463ad1b0776155a3e72",
+          "detail": "e981d67277ee4cec83b5af82d41c6ee5",
           "ok": true
         },
         {
           "check": "khsb_active",
-          "detail": "khsb-bridge-agentrun-13725d9975444514",
+          "detail": "khsb-bridge-agentrun-8b858f952c264e15",
           "ok": true
         },
         {
@@ -82,7 +82,7 @@
         },
         {
           "check": "checkpoint_written",
-          "detail": "{\n  \"execution_mode\": \"GOVERNED\",\n  \"mission_id\": \"bootstrap-bridge-acceptance\",\n  \"session_id\": \"194a8a1cdb1c48cb9407c1f77ef04947\",\n  \"checkpoint_id\": \"bootstrap-bridge-acceptance@10-acceptance\",\n  \"",
+          "detail": "{\n  \"execution_mode\": \"GOVERNED\",\n  \"mission_id\": \"bootstrap-bridge-acceptance\",\n  \"session_id\": \"77244db0a56a4ea2867512e587ecb7da\",\n  \"checkpoint_id\": \"bootstrap-bridge-acceptance@10-acceptance\",\n  \"",
           "ok": true
         },
         {
@@ -103,14 +103,14 @@
           "boot_state": "FULL_CAPT_AGENT_RUNNER_ACTIVE",
           "capt_source_path": "/Users/knowurknot/capt-bootstrap-bridge",
           "checkpoint_id": "bootstrap-bridge-acceptance@10-acceptance",
-          "contextpack_digest": "sha256:0177ec400cb2a4f8d0ed24f8ab5d3e4e90f931832fb6f2a3ec9b336a721c096c",
-          "ctp_transaction_id": "a94e8488a5d24463ad1b0776155a3e72",
+          "contextpack_digest": "sha256:ad99eb8815c2bc6bc6e6e6f95c48a21555789a6544dffe44dbfe57eb62715747",
+          "ctp_transaction_id": "e981d67277ee4cec83b5af82d41c6ee5",
           "degraded_controls": [],
           "doctor_ok": true,
           "execution_mode": "GOVERNED",
-          "intent_id": "intent-ae61b553415b4474",
-          "khsb_correlation_id": "khsb-bridge-agentrun-13725d9975444514",
-          "memory_use_decision_id": "ec9b336a721c096c",
+          "intent_id": "intent-0273b1939dbe6529",
+          "khsb_correlation_id": "khsb-bridge-agentrun-8b858f952c264e15",
+          "memory_use_decision_id": "dbfe57eb62715747",
           "memory_use_gate": "PASS",
           "mission_id": "bootstrap-bridge-acceptance",
           "notes": [],
@@ -119,18 +119,18 @@
           "ready_event": {
             "bridge_nonce": "<redacted>",
             "checkpoint_id": "bootstrap-bridge-acceptance@10-acceptance",
-            "contextpack_digest": "sha256:0177ec400cb2a4f8d0ed24f8ab5d3e4e90f931832fb6f2a3ec9b336a721c096c",
-            "ctp_transaction_id": "a94e8488a5d24463ad1b0776155a3e72",
-            "event_digest": "sha256:b5ce9bbb596b9ef83ea27c6065012005959421c35b06bbcc578c0f55b7d82aa2",
+            "contextpack_digest": "sha256:ad99eb8815c2bc6bc6e6e6f95c48a21555789a6544dffe44dbfe57eb62715747",
+            "ctp_transaction_id": "e981d67277ee4cec83b5af82d41c6ee5",
+            "event_digest": "sha256:8db499d69b8e8a4d0e16aecad4d2a0c364263f70d46a63458e0621e8e6aa4d9c",
             "execution_mode": "GOVERNED",
-            "intent_id": "intent-ae61b553415b4474",
-            "khsb_correlation_id": "khsb-bridge-agentrun-13725d9975444514",
-            "memory_use_decision_id": "ec9b336a721c096c",
+            "intent_id": "intent-0273b1939dbe6529",
+            "khsb_correlation_id": "khsb-bridge-agentrun-8b858f952c264e15",
+            "memory_use_decision_id": "dbfe57eb62715747",
             "memory_use_gate": "PASS",
             "mission_id": "bootstrap-bridge-acceptance",
             "provider_owner": "CAPT_AGENT_RUNNER",
-            "run_id": "agentrun-13725d9975444514",
-            "runner_pid": 12779,
+            "run_id": "agentrun-8b858f952c264e15",
+            "runner_pid": 14957,
             "session_id": "9f41e320d88d4a038b08ec83c305ce90"
           },
           "runner_command": [
@@ -148,12 +148,12 @@
             "--session",
             "9f41e320d88d4a038b08ec83c305ce90"
           ],
-          "runner_pid": 12779,
+          "runner_pid": 14957,
           "session_id": "9f41e320d88d4a038b08ec83c305ce90",
           "workspace_path": "/Users/knowurknot/capt-bootstrap-bridge"
         },
         "live": {
-          "handle": "RunnerHandle(argv=('/Applications/Xcode.app/Contents/Developer/usr/bin/python3', '/Users/knowurknot/capt-bootstrap-bridge/capt_cli.py', '--json', 'bridge', 'serve', '--workspace', '/Users/knowurknot/capt-bootstrap-bridge', '--mission', 'bootstrap-bridge-acceptance', '--mode', 'resume', '--session', '9f41e320d88d4a038b08ec83c305ce90'), pid=12796, pgid=12796, socket_path='/Users/knowurknot/capt-bootstrap-bridge/.capt/bridge/sock/ready-39cac520bb6abe0f.sock', turn_socket_path='/Users/knowurknot/capt-bootstrap-bridge/.capt/bridge/sock/turn-09a26c0752fc779f.sock', runtime_id='34bd3091aa1b7a0ab677cb28a48180bf', runtime_generation=1, turn_auth='b68c4f9719c32691ff62abb8a3f3e381d5d9072e74e24d734a27e59053a47ce3', ready_event=BridgeReadyEvent(run_id='agentrun-d071933a9e1d463d', mission_id='bootstrap-bridge-acceptance', session_id='9f41e320d88d4a038b08ec83c305ce90', intent_id='intent-64ea3f3e9ea30ecc', checkpoint_id='bootstrap-bridge-acceptance@10-acceptance', contextpack_digest='sha256:e158d5928f95077dea1e280167feea40308d775d1b662601228e4c7ad9aaaa1a', memory_use_decision_id='228e4c7ad9aaaa1a', memory_use_gate='PASS', ctp_transaction_id='2f680115e32e4501ac07bd12f94b150c', khsb_correlation_id='khsb-bridge-agentrun-d071933a9e1d463d', provider_owner='CAPT_AGENT_RUNNER', execution_mode='GOVERNED', runner_pid=12796, bridge_nonce='8a5ac4ef0642c5489e093e2ff06c856539bebb9281a0f861b59d9b2a55b7b795', event_digest='sha256:c02662fbea42f603fdbb0d5700a346b54fa495ed0237ebd1e0058bf9f49d4191'), stdout_tail='', stderr_tail='', exit_code=None, block_codes=(), block_reason='', notes=())",
+          "handle": "RunnerHandle(argv=('/Applications/Xcode.app/Contents/Developer/usr/bin/python3', '/Users/knowurknot/capt-bootstrap-bridge/capt_cli.py', '--json', 'bridge', 'serve', '--workspace', '/Users/knowurknot/capt-bootstrap-bridge', '--mission', 'bootstrap-bridge-acceptance', '--mode', 'resume', '--session', '9f41e320d88d4a038b08ec83c305ce90'), pid=14969, pgid=14969, socket_path='/Users/knowurknot/capt-bootstrap-bridge/.capt/bridge/sock/ready-3469c7d56795023f.sock', turn_socket_path='/Users/knowurknot/capt-bootstrap-bridge/.capt/bridge/sock/turn-2ea88e36545a6c5f.sock', runtime_id='d7fdae8a9b6c52327c22a7501270ebc9', runtime_generation=1, turn_auth='9fd2d9af172f2cfab4a1dd2fd7d50a71d5d130db221a33e4e5bf7dd1752be77b', ready_event=BridgeReadyEvent(run_id='agentrun-1839406c1e6d4c15', mission_id='bootstrap-bridge-acceptance', session_id='9f41e320d88d4a038b08ec83c305ce90', intent_id='intent-cea382609827888b', checkpoint_id='bootstrap-bridge-acceptance@10-acceptance', contextpack_digest='sha256:3600a0561334d1cdcfa545d0d9f21b181d2086879f3a720bf972b5a0a9c1df86', memory_use_decision_id='f972b5a0a9c1df86', memory_use_gate='PASS', ctp_transaction_id='db2fb85134694bb798d1ff4ec83e0e07', khsb_correlation_id='khsb-bridge-agentrun-1839406c1e6d4c15', provider_owner='CAPT_AGENT_RUNNER', execution_mode='GOVERNED', runner_pid=14969, bridge_nonce='248ffed0bf19e3f1836982452c94c6520ccf29357a2746d11ca6056bece50f9f', event_digest='sha256:38052f087ab578e641305af26ef87efbcffaba616e51e65cabbfca0dc74487c4'), stdout_tail='', stderr_tail='', exit_code=None, block_codes=(), block_reason='', notes=())",
           "turn": {
             "ok": true,
             "output": "CAPT BRIDGE TURN BLOCKED\n{\n  \"execution_mode\": \"GOVERNED\",\n  \"provider_owner\": \"CAPT_AGENT_RUNNER\",\n  \"reason\": \"AttributeError: 'AgentRunState' object has no attribute 'checkpoint_id'\"\n}",
@@ -167,14 +167,14 @@
           "boot_state": "FULL_CAPT_AGENT_RUNNER_ACTIVE",
           "capt_source_path": "/Users/knowurknot/capt-bootstrap-bridge",
           "checkpoint_id": "bootstrap-bridge-acceptance@10-acceptance",
-          "contextpack_digest": "sha256:9c6909cf423e5b93522c7dc601f12b5a13dda597ca2c4a0cfe7eaa3742745642",
-          "ctp_transaction_id": "62cc0d91e6664830a50279168402a597",
+          "contextpack_digest": "sha256:24a78c23f4fe3cadfd2bab48735d10a3c1597def0443db8a3543aa77b6b9e4a3",
+          "ctp_transaction_id": "1bc0527f48d0412c9f72012cbc16233b",
           "degraded_controls": [],
           "doctor_ok": true,
           "execution_mode": "GOVERNED",
-          "intent_id": "intent-1507d7954e95497e",
-          "khsb_correlation_id": "khsb-bridge-agentrun-7fda7094522a4e8e",
-          "memory_use_decision_id": "fe7eaa3742745642",
+          "intent_id": "intent-1083572249a1e01a",
+          "khsb_correlation_id": "khsb-bridge-agentrun-8ac8d1787133440e",
+          "memory_use_decision_id": "3543aa77b6b9e4a3",
           "memory_use_gate": "PASS",
           "mission_id": "bootstrap-bridge-acceptance",
           "notes": [],
@@ -183,18 +183,18 @@
           "ready_event": {
             "bridge_nonce": "<redacted>",
             "checkpoint_id": "bootstrap-bridge-acceptance@10-acceptance",
-            "contextpack_digest": "sha256:9c6909cf423e5b93522c7dc601f12b5a13dda597ca2c4a0cfe7eaa3742745642",
-            "ctp_transaction_id": "62cc0d91e6664830a50279168402a597",
-            "event_digest": "sha256:5d7d8185893422b54c9b9ddaf06744033af3c25624562fcc90ea7f8cb604a305",
+            "contextpack_digest": "sha256:24a78c23f4fe3cadfd2bab48735d10a3c1597def0443db8a3543aa77b6b9e4a3",
+            "ctp_transaction_id": "1bc0527f48d0412c9f72012cbc16233b",
+            "event_digest": "sha256:bbc4ab2097666bb0da77412f153dbcdf83b8518a33885be432fae5721233e087",
             "execution_mode": "GOVERNED",
-            "intent_id": "intent-1507d7954e95497e",
-            "khsb_correlation_id": "khsb-bridge-agentrun-7fda7094522a4e8e",
-            "memory_use_decision_id": "fe7eaa3742745642",
+            "intent_id": "intent-1083572249a1e01a",
+            "khsb_correlation_id": "khsb-bridge-agentrun-8ac8d1787133440e",
+            "memory_use_decision_id": "3543aa77b6b9e4a3",
             "memory_use_gate": "PASS",
             "mission_id": "bootstrap-bridge-acceptance",
             "provider_owner": "CAPT_AGENT_RUNNER",
-            "run_id": "agentrun-7fda7094522a4e8e",
-            "runner_pid": 12816,
+            "run_id": "agentrun-8ac8d1787133440e",
+            "runner_pid": 14987,
             "session_id": "9f41e320d88d4a038b08ec83c305ce90"
           },
           "runner_command": [
@@ -212,7 +212,7 @@
             "--session",
             "9f41e320d88d4a038b08ec83c305ce90"
           ],
-          "runner_pid": 12816,
+          "runner_pid": 14987,
           "session_id": "9f41e320d88d4a038b08ec83c305ce90",
           "workspace_path": "/Users/knowurknot/capt-bootstrap-bridge"
         }
@@ -291,7 +291,7 @@
         },
         {
           "check": "denial_receipt_emitted",
-          "detail": "[PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-8165edffd826d6a8.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-939cde5db62b2334.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-252a488234769409.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-a56803f5160d8a41.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-d4bd2c39a26f7c9c.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-8a701823081ec88b.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-e7e583d27da67d36.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-ac0f0b541a1fbf92.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-128104f02fa3ea73.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-c8ee590cbb048499.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-e02c945db3f99b30.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-2a629258cf4f7d27.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-76b6af96b94ce6b9.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-3f99afca262ac4df.json')]",
+          "detail": "[PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-8165edffd826d6a8.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-939cde5db62b2334.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-159796da1788335b.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-252a488234769409.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-a56803f5160d8a41.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-d4bd2c39a26f7c9c.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-8a701823081ec88b.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-e7e583d27da67d36.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-ac0f0b541a1fbf92.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-128104f02fa3ea73.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-c8ee590cbb048499.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-e02c945db3f99b30.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-2a629258cf4f7d27.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-76b6af96b94ce6b9.json'), PosixPath('/Users/knowurknot/capt-bootstrap-bridge/.capt-bridge-evidence/acceptance/receipts/runtime_ownership_denial-3f99afca262ac4df.json')]",
           "ok": true
         }
       ],

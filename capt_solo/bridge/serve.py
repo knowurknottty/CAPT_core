@@ -17,6 +17,7 @@ Nothing here reimplements governance; it calls canonical CAPT and reports IDs.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import secrets
 import signal
@@ -30,10 +31,20 @@ from typing import Any, Optional
 from capt_solo.bridge.contracts import BridgeReadyEvent
 from capt_solo.bridge.protocol import (
     BridgeProtocolError,
+    ERR_INVALID_AUTH,
+    ERR_MALFORMED,
+    ERR_MISSING_AUTH,
+    ERR_OVERSIZED,
+    ERR_REPLAYED,
+    ERR_STALE_GENERATION,
     OP_SHUTDOWN,
+    OP_TURN,
     TurnEnvelope,
     compute_receipt_digest,
+    make_auth_token,
 )
+
+logger = logging.getLogger(__name__)
 from capt_solo.bridge.runner_process import emit_ready_event
 
 _MAX_REQUEST_BYTES = 256 * 1024
@@ -91,14 +102,19 @@ def serve(
     runtime_id = os.environ.get("CAPT_BRIDGE_RUNTIME_ID", "")
     runtime_generation = int(os.environ.get("CAPT_BRIDGE_RUNTIME_GENERATION", "1") or "1")
     if not turn_socket:
-        # Deterministic fallback so an operator (or the acceptance harness) can
-        # reach the turn channel without the launcher's env injection. In that
-        # case the channel is unauthenticated and must only be used for local
-        # debugging, never for production handoff.
+        # Deterministic fallback so an operator can reach the turn channel
+        # without the launcher's env injection. The channel is STILL
+        # authenticated: we mint a fresh runtime-scoped token and log it. An
+        # unauthenticated turn channel is never acceptable, even for debugging.
         base = Path(workspace) / ".capt" / "bridge" / "sock"
         base.mkdir(parents=True, exist_ok=True, mode=0o700)
         turn_socket = str(base / f"turn-{secrets.token_hex(8)}.sock")
-        turn_auth = ""
+        turn_auth = make_auth_token()
+        logger.warning(
+            "TURN_CHANNEL_FALLBACK_AUTH turn_socket=%s auth_token=%s "
+            "(launcher env not injected; token required for any turn)",
+            turn_socket, turn_auth,
+        )
     st = _ServeState()
     st.runtime_id = runtime_id
     st.runtime_generation = runtime_generation

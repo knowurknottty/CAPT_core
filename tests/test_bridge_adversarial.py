@@ -19,6 +19,7 @@ import os
 import socket
 import tempfile
 import time
+import threading
 from pathlib import Path
 
 import pytest
@@ -38,7 +39,6 @@ from capt_solo.bridge.lease import (
 from capt_solo.bridge.protocol import (
     ERR_INVALID_AUTH,
     ERR_MALFORMED,
-    ERR_MISSING_AUTH,
     ERR_OVERSIZED,
     ERR_REPLAYED,
     ERR_STALE_GENERATION,
@@ -66,6 +66,8 @@ def _bind() -> socket.socket:
     os.chmod(str(sock), 0o600)
     srv.listen(1)
     return srv
+
+
 def _client(srv):
     """Return (server_conn, client_conn)."""
     client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -79,9 +81,6 @@ def _send(conn, obj):
         raise TypeError(f"request must be dict, got {type(obj).__name__}")
     conn.sendall(json.dumps(obj).encode("utf-8"))
     conn.shutdown(socket.SHUT_WR)
-
-
-import threading
 
 
 def _exchange(srv, state, request_dict, seen=None):
@@ -142,17 +141,46 @@ def _recv(conn) -> bytes:
     return b"".join(chunks)
 
 
+# ---------------------------------------------------------------------------
+# Protocol validation order (matching _handle_turn in serve.py):
+#
+# 1. Oversized body          → TURN_OVERSIZED
+# 2. Malformed JSON          → TURN_MALFORMED
+# 3. Structural (from_mapping) → TURN_MALFORMED / TURN_UNKNOWN_OP
+# 4. Empty auth in envelope  → TURN_UNAUTHENTICATED ("no auth token presented")
+# 5. Channel not authenticated → TURN_UNAUTHENTICATED ("channel not authenticated")
+# 6. Auth token mismatch     → TURN_INVALID_AUTH
+# 7. Stale generation        → TURN_STALE_GENERATION
+# 8. Replay (request_id seen) → TURN_REPLAYED
+# 9. Shutdown                → {ok: true, shutdown: true}
+# 10. Governed turn          → _run_governed_turn
+#
+# A structurally incomplete envelope is rejected before authentication.
+# A valid envelope with missing/invalid credentials fails auth, not structure.
+# ---------------------------------------------------------------------------
+
+
 def _env(*, runtime_id, generation, auth, op, intent, request_id="req"):
     return TurnEnvelope(
         protocol_version=1, runtime_id=runtime_id, runtime_generation=generation,
         request_id=request_id, nonce="n", auth=auth, op=op, payload={"intent": intent},
     ).__dict__
 
-# --- 1. unauthenticated turn request -----------------------------------------
+# --- 1. unauthenticated turn request (no auth token in envelope) ---------------
 def test_unauthenticated_turn_rejected(tmp_path):
     state = _make_state("r1", 1, "")
     srv = _bind()
     resp = _exchange(srv, state, _env(runtime_id="r1", generation=1, auth="", op=OP_TURN, intent="x"))
+    assert resp.get("error") == "TURN_UNAUTHENTICATED"
+    srv.close()
+
+
+# --- 1b. channel not authenticated (auth present but channel has no secret) ---
+def test_channel_not_authenticated(tmp_path):
+    """Envelope has auth token but the server channel has no turn_auth set."""
+    state = _make_state("r1", 1, "")  # turn_auth="" → channel not authenticated
+    srv = _bind()
+    resp = _exchange(srv, state, _env(runtime_id="r1", generation=1, auth="some-token", op=OP_TURN, intent="x"))
     assert resp.get("error") == "TURN_UNAUTHENTICATED"
     srv.close()
 
