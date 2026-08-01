@@ -337,6 +337,24 @@ def main(argv: Optional[List[str]] = None) -> int:
             _p.add_argument("--input", default="Resume the active mission. Report the next justified action.")
             _p.add_argument("--capability", default=None)
 
+    # bridge (Hermes ↔ CAPT bootstrap bridge)
+    br = sub.add_parser("bridge", help="CAPT bootstrap bridge (boot/serve/status)")
+    brs = br.add_subparsers(dest="action")
+    _b = brs.add_parser("boot", help="launch the canonical Agent Runner and prove READY")
+    _b.add_argument("--workspace", default=".", help="workspace path (repo root)")
+    _b.add_argument("--mission", default=None, help="explicit mission id (required)")
+    _b.add_argument("--mode", default="resume", choices=["resume", "start"])
+    _b.add_argument("--timeout", type=float, default=90.0)
+    _b.add_argument("--evidence-dir", default=None)
+    _b = brs.add_parser("serve", help="runner-side: boot, emit READY, serve governed turns")
+    _b.add_argument("--workspace", default=".")
+    _b.add_argument("--mission", default=None)
+    _b.add_argument("--mode", default="resume", choices=["resume", "start"])
+    _b.add_argument("--output-mode", default="cave",
+                    choices=["cave", "normal", "verbose", "silent", "audit"])
+    _b.add_argument("--session", default=None, help="explicit CAPT session id to resume")
+    _b = brs.add_parser("status", help="report bridge boot states and provider-owner values")
+
     args = parser.parse_args(argv)
     if not args.group:
         parser.print_help()
@@ -372,6 +390,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if args.group == "agent":
         return _cmd_agent(args, as_json)
+
+    if args.group == "bridge":
+        return _cmd_bridge(args, as_json)
 
     try:
         # Canonical composition root (Outcome B): the single production
@@ -521,6 +542,66 @@ def _cmd_agent(args, as_json: bool) -> int:
         return _fail(f"{type(e).__name__}: {e}")
     finally:
         runner.close()
+
+
+def _cmd_bridge(args, as_json: bool) -> int:
+    """CAPT Bootstrap Bridge CLI — launcher/operator surface only."""
+    action = getattr(args, "action", None)
+    if not action:
+        return _fail("bridge: specify an action (boot|serve|status)")
+
+    if action == "status":
+        from capt_solo.bridge.contracts import BOOT_STATES, PROVIDER_OWNERS
+
+        return _ok(
+            {"boot_states": list(BOOT_STATES), "provider_owners": list(PROVIDER_OWNERS)},
+            as_json,
+        )
+
+    if action == "serve":
+        from capt_solo.bridge.serve import serve
+
+        if not args.mission:
+            return _fail("bridge serve: --mission is required")
+        return serve(
+            workspace=args.workspace,
+            mission_id=args.mission,
+            output_mode=args.output_mode,
+            resume=(args.mode == "resume"),
+            session_id=getattr(args, "session", None) or "",
+        )
+
+    if action == "boot":
+        import json as _json
+        from pathlib import Path as _Path
+
+        from capt_solo.bridge.boot_bridge import boot_bridge, write_evidence
+
+        result, handle = boot_bridge(
+            workspace_path=args.workspace,
+            mission_id=args.mission or "",
+            resume=(args.mode == "resume"),
+            timeout_s=args.timeout,
+        )
+        # A CLI boot cannot hold a live runner past process exit; stop it so the
+        # duplicate-runner lock is not left dangling.
+        if handle is not None:
+            from capt_solo.bridge.runner_process import terminate_runner
+
+            terminate_runner(handle)
+        if args.evidence_dir:
+            write_evidence(result, _Path(args.evidence_dir), "bridge-boot")
+        payload = result.to_dict()
+        if as_json:
+            print(_json.dumps(payload, indent=2, sort_keys=True, default=str))
+        else:
+            print(f"boot_state={result.boot_state} provider_owner={result.provider_owner}")
+            if result.block_codes:
+                print("block_codes=" + ",".join(result.block_codes))
+                print("block_reason=" + result.block_reason)
+        return 0 if result.provider_allowed else 3
+
+    return _fail(f"bridge: unknown action {action!r}")
 
 
 def _cmd_doctor(as_json: bool) -> int:
