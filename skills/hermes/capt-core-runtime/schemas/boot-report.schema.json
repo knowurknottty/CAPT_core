@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "capt-core-runtime/boot-report/v1",
+  "title": "CAPT Core boot report",
+  "description": "The one artifact this skill composes. All field values are sourced from canonical capt CLI output or the persisted CAPT boot trace; unsourced fields must be the literal string UNPROVEN.",
+  "type": "object",
+  "required": [
+    "report", "schema", "generated_at", "workspace_root", "branch", "head", "dirty",
+    "python", "capt", "mission_id", "session_id", "checkpoint_id",
+    "active_directive_ids", "superseded_directive_ids",
+    "selected_memory_ids", "rejected_memory_ids", "missing_memory_ids", "conflict_ids",
+    "contextpack_digest", "memory_use_decision_id", "gate_result",
+    "capt_execution_mode", "hermes_session_mode", "next_justified_action"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "report": { "const": "capt-boot-report" },
+    "schema": { "const": "capt-core-runtime/boot-report/v1" },
+    "generated_at": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$" },
+
+    "workspace_root": { "type": "string", "minLength": 1 },
+    "branch": { "type": "string" },
+    "head": { "type": "string", "pattern": "^([0-9a-f]{40})?$" },
+    "dirty": { "type": "boolean" },
+
+    "python": {
+      "type": "object",
+      "required": ["version", "executable"],
+      "properties": {
+        "version": { "type": "string" },
+        "executable": { "type": "string" }
+      }
+    },
+
+    "capt": {
+      "type": "object",
+      "required": ["module_file", "version", "home"],
+      "properties": {
+        "module_file": { "type": "string" },
+        "version": { "type": "string" },
+        "home": { "type": "string", "description": "CAPT_SOLO_HOME (default ~/.capt-solo). Not CAPT_HOME." }
+      }
+    },
+
+    "mission_id": { "type": "string" },
+    "session_id": { "type": "string" },
+    "checkpoint_id": { "type": "string" },
+    "intent_id": { "type": "string" },
+
+    "active_directive_ids": { "type": "array", "items": { "type": "string" } },
+    "superseded_directive_ids": { "$ref": "#/$defs/idsOrUnproven" },
+
+    "selected_memory_ids": { "$ref": "#/$defs/idsOrUnproven" },
+    "rejected_memory_ids": { "$ref": "#/$defs/idsOrUnproven" },
+    "missing_memory_ids":  { "$ref": "#/$defs/idsOrUnproven" },
+    "conflict_ids":        { "$ref": "#/$defs/idsOrUnproven" },
+    "stale_memory_ids":    { "$ref": "#/$defs/idsOrUnproven" },
+
+    "contextpack_digest": {
+      "type": "string",
+      "pattern": "^(sha256:[0-9a-f]{64})?$",
+      "description": "Empty only when the boot was BLOCKED before pack construction."
+    },
+    "memory_use_decision_id": { "type": "string" },
+
+    "gate_result": { "enum": ["PASS", "DEGRADED", "BLOCKED", ""] },
+
+    "capt_execution_mode": {
+      "enum": ["GOVERNED", "BOOTSTRAP_DEGRADED", "BLOCKED", ""],
+      "description": "Returned by capt agent status/start for the CAPT-executed turn."
+    },
+    "hermes_session_mode": {
+      "enum": ["GOVERNED", "BOOTSTRAP_DEGRADED", "BLOCKED"],
+      "description": "This Hermes session. Defaults to BOOTSTRAP_DEGRADED: tool hooks are observational and model-facing context equality with the ContextPack is unverified. Never inherit GOVERNED from capt_execution_mode."
+    },
+    "hermes_session_mode_reason": { "type": "string" },
+
+    "block_reason": { "type": "string" },
+    "block_codes": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "MISSION_AMBIGUOUS", "MISSION_NOT_FOUND", "MISSION_MISSING", "MISSION_IDENTITY",
+          "CHECKPOINT_INTEGRITY", "CHECKPOINT_INCOMPLETE", "FOREIGN_WORKSPACE",
+          "WORKSPACE_MISSING", "GATE_BLOCKED", "CONTEXTPACK_INVALID"
+        ]
+      }
+    },
+
+    "next_justified_action": { "type": "string" },
+    "latest_verified_milestone": {
+      "type": "string",
+      "description": "Read from the checkpoint phase or repository evidence. Never asserted from documentation, imports, or class existence."
+    },
+
+    "boot_trace_artifact": { "type": "string" },
+    "boot_trace_artifact_hash": { "type": "string", "pattern": "^(sha256:[0-9a-f]{64}|UNPROVEN)$" },
+    "boot_trace_match": {
+      "enum": ["contextpack_digest", "mission+mtime (digest did not match; fields may be from another run)", "none"],
+      "description": "How the persisted boot trace was matched. Only contextpack_digest proves the trace belongs to this boot."
+    },
+    "agent_run_id": { "type": "string" }
+  },
+
+  "$defs": {
+    "idsOrUnproven": {
+      "description": "Either a real id list from the CAPT boot trace, or the literal UNPROVEN. Never a plausible-looking placeholder.",
+      "oneOf": [
+        { "type": "array", "items": { "type": "string" } },
+        { "const": "UNPROVEN" }
+      ]
+    }
+  },
+
+  "allOf": [
+    {
+      "if": { "properties": { "gate_result": { "const": "PASS" } }, "required": ["gate_result"] },
+      "then": {
+        "properties": { "contextpack_digest": { "pattern": "^sha256:[0-9a-f]{64}$" } },
+        "description": "A PASS gate must carry a real ContextPack digest."
+      }
+    },
+    {
+      "if": { "properties": { "capt_execution_mode": { "const": "GOVERNED" } }, "required": ["capt_execution_mode"] },
+      "then": {
+        "properties": { "gate_result": { "const": "PASS" } },
+        "description": "GOVERNED requires gate PASS."
+      }
+    },
+    {
+      "if": { "properties": { "capt_execution_mode": { "const": "BLOCKED" } }, "required": ["capt_execution_mode"] },
+      "then": {
+        "properties": { "block_codes": { "type": "array", "minItems": 1 } },
+        "required": ["block_codes"],
+        "description": "BLOCKED must name at least one block code."
+      }
+    }
+  ]
+}
