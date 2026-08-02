@@ -33,6 +33,18 @@ def _err(out: List[str], path: str, message: str) -> None:
     out.append("%s: %s" % (path or "$", message))
 
 
+def _repr(value: Any) -> str:
+    """JSON representation, so Python and TypeScript emit identical messages.
+
+    Python's %r would render strings with single quotes and None as 'None',
+    diverging from the TypeScript validator. Message text is part of the
+    cross-language contract and is asserted by the parity fixtures.
+    """
+    import json
+
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
 def _matches(pattern: str, value: str) -> bool:
     import re
 
@@ -57,7 +69,7 @@ def _check_rule(rule: Dict[str, Any], value: Any, path: str, out: List[str]) -> 
 
     if kind == "const":
         if value != rule["const"]:
-            _err(out, path, "must equal %r" % rule["const"])
+            _err(out, path, "must equal %s" % _repr(rule["const"]))
         return
 
     if kind == "enum":
@@ -154,7 +166,7 @@ def _check_type(type_name: str, value: Any, path: str, out: List[str]) -> None:
                 _check_type(variant["name"], value, path, out)
                 return
         allowed = ",".join(v["const"] for v in entry["variants"])
-        _err(out, path, "invalid discriminant %s=%r; expected one of %s" % (disc, actual, allowed))
+        _err(out, path, "invalid discriminant %s=%s; expected one of %s" % (disc, _repr(actual), allowed))
         return
 
     if not isinstance(value, dict):

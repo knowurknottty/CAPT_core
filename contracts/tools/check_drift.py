@@ -20,13 +20,22 @@ COMMITTED = CONTRACTS_DIR / "generated"
 
 
 def tree_digests(root: Path):
+    """Digest every generated SOURCE file under root.
+
+    `typescript/dist/` is excluded: it is tsc build output, is gitignored, and
+    is not produced by the generator. Including it would make the drift check
+    report failure purely because a developer had run a local build.
+    """
     result = {}
     if not root.exists():
         return result
     for path in sorted(root.rglob("*")):
-        if path.is_file():
-            rel = path.relative_to(root).as_posix()
-            result[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
+        if not path.is_file():
+            continue
+        rel = path.relative_to(root).as_posix()
+        if rel.startswith("typescript/dist/") or "__pycache__" in rel:
+            continue
+        result[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
     return result
 
 

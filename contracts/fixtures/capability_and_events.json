@@ -1,0 +1,202 @@
+{
+  "fixtureSetVersion": "1.0.0",
+  "description": "Capability authorization and event envelope fixtures.",
+  "cases": [
+    {
+      "id": "capability-grant-valid",
+      "type": "CapabilityGrant",
+      "expectValid": true,
+      "value": {
+        "schemaVersion": "1.0.0",
+        "grantId": "g-0001",
+        "subject": { "actorId": "exec-1", "kind": "execution_plane", "displayName": null },
+        "capabilityId": "cap.fs.write",
+        "operations": ["fs.write"],
+        "scope": { "kind": "filesystem", "rootPath": "/tmp/capt-m0a", "recursive": true },
+        "policyDecisionId": "pd-0001",
+        "policyBundleDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "conditions": [{ "kind": "isolated_worktree", "worktreeRoot": "/tmp/capt-m0a" }],
+        "maxUses": 2,
+        "validFrom": "2026-08-02T00:00:00Z",
+        "validUntil": "2026-08-02T01:00:00Z",
+        "issuedBy": { "actorId": "gk-1", "kind": "governance_kernel", "displayName": null },
+        "issuedAt": "2026-08-02T00:00:00Z"
+      }
+    },
+    {
+      "id": "capability-grant-without-policy-decision-rejected",
+      "type": "CapabilityGrant",
+      "expectValid": false,
+      "expectedErrors": ["policyBundleDigest: is required", "policyDecisionId: is required"],
+      "value": {
+        "schemaVersion": "1.0.0",
+        "grantId": "g-0002",
+        "subject": { "actorId": "exec-1", "kind": "execution_plane" },
+        "capabilityId": "cap.fs.write",
+        "operations": ["fs.write"],
+        "scope": { "kind": "none" },
+        "conditions": [],
+        "validFrom": "2026-08-02T00:00:00Z",
+        "validUntil": "2026-08-02T01:00:00Z",
+        "issuedBy": { "actorId": "gk-1", "kind": "governance_kernel" },
+        "issuedAt": "2026-08-02T00:00:00Z"
+      }
+    },
+    {
+      "id": "capability-lease-valid",
+      "type": "CapabilityLease",
+      "expectValid": true,
+      "value": {
+        "schemaVersion": "1.0.0",
+        "leaseId": "l-0001",
+        "grantId": "g-0001",
+        "missionId": "m-0001",
+        "taskId": "t-0001",
+        "executionContextId": "ec-0001",
+        "operations": ["fs.write"],
+        "scope": { "kind": "filesystem", "rootPath": "/tmp/capt-m0a/sub", "recursive": false },
+        "maxUses": 1,
+        "validFrom": "2026-08-02T00:10:00Z",
+        "validUntil": "2026-08-02T00:40:00Z",
+        "activatedAt": "2026-08-02T00:10:00Z"
+      }
+    },
+    {
+      "id": "event-envelope-valid",
+      "type": "EventEnvelope",
+      "expectValid": true,
+      "value": {
+        "schemaVersion": "1.0.0",
+        "eventId": "e-0001",
+        "streamId": "mission-m-0001",
+        "streamVersion": 1,
+        "globalSequence": 1,
+        "eventType": "TaskTransitioned",
+        "occurredAt": "2026-08-02T00:00:00Z",
+        "actor": { "actorId": "rt-1", "kind": "system", "displayName": null },
+        "missionId": "m-0001",
+        "taskId": "t-0001",
+        "claimId": null,
+        "correlationId": "corr-1",
+        "causationId": null,
+        "payload": {
+          "eventType": "TaskTransitioned",
+          "taskId": "t-0001",
+          "fromState": "ready",
+          "toState": "running",
+          "reason": "dispatch"
+        },
+        "payloadDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      }
+    },
+    {
+      "id": "event-envelope-type-payload-mismatch-rejected",
+      "type": "EventEnvelope",
+      "expectValid": false,
+      "expectedErrors": ["$: eventType must equal payload.eventType"],
+      "value": {
+        "schemaVersion": "1.0.0",
+        "eventId": "e-0002",
+        "streamId": "mission-m-0001",
+        "streamVersion": 2,
+        "globalSequence": 2,
+        "eventType": "MissionStateChanged",
+        "occurredAt": "2026-08-02T00:00:00Z",
+        "actor": { "actorId": "rt-1", "kind": "system" },
+        "correlationId": "corr-1",
+        "payload": {
+          "eventType": "TaskTransitioned",
+          "taskId": "t-0001",
+          "fromState": "ready",
+          "toState": "running",
+          "reason": "mismatch"
+        },
+        "payloadDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+      }
+    },
+    {
+      "id": "event-envelope-bad-stream-prefix-rejected",
+      "type": "EventEnvelope",
+      "expectValid": false,
+      "expectedErrors": [
+        "streamId: does not match pattern ^(mission|task|capability|driverrun|claim)-[A-Za-z0-9_.-]{1,96}$"
+      ],
+      "value": {
+        "schemaVersion": "1.0.0",
+        "eventId": "e-0003",
+        "streamId": "rogue-x1",
+        "streamVersion": 1,
+        "globalSequence": 3,
+        "eventType": "CheckpointCreated",
+        "occurredAt": "2026-08-02T00:00:00Z",
+        "actor": { "actorId": "rt-1", "kind": "system" },
+        "correlationId": "corr-1",
+        "payload": {
+          "eventType": "CheckpointCreated",
+          "checkpointId": "cp-1",
+          "integrityDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+        },
+        "payloadDigest": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+      }
+    },
+    {
+      "id": "event-envelope-zero-stream-version-rejected",
+      "type": "EventEnvelope",
+      "expectValid": false,
+      "expectedErrors": ["streamVersion: less than minimum 1"],
+      "value": {
+        "schemaVersion": "1.0.0",
+        "eventId": "e-0004",
+        "streamId": "task-t-0001",
+        "streamVersion": 0,
+        "globalSequence": 4,
+        "eventType": "CheckpointCreated",
+        "occurredAt": "2026-08-02T00:00:00Z",
+        "actor": { "actorId": "rt-1", "kind": "system" },
+        "correlationId": "corr-1",
+        "payload": {
+          "eventType": "CheckpointCreated",
+          "checkpointId": "cp-1",
+          "integrityDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+        },
+        "payloadDigest": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+      }
+    },
+    {
+      "id": "driver-observation-is-untrusted",
+      "type": "DriverObservation",
+      "expectValid": true,
+      "value": {
+        "schemaVersion": "1.0.0",
+        "observationId": "obs-1",
+        "observedBy": "driver-x",
+        "trust": "untrusted",
+        "workOrderId": "wo-1",
+        "summary": "claims two files were written",
+        "observedAt": "2026-08-02T00:20:00Z"
+      }
+    },
+    {
+      "id": "driver-observation-cannot-claim-authoritative-trust",
+      "type": "DriverObservation",
+      "expectValid": false,
+      "expectedErrors": ["trust: must equal \"untrusted\""],
+      "value": {
+        "schemaVersion": "1.0.0",
+        "observationId": "obs-2",
+        "observedBy": "driver-x",
+        "trust": "capt_authoritative",
+        "workOrderId": "wo-1",
+        "summary": "attempted trust escalation",
+        "observedAt": "2026-08-02T00:20:00Z"
+      }
+    },
+    {
+      "id": "verification-status-verified-requires-evidence",
+      "type": "VerificationStatus",
+      "expectValid": false,
+      "expectedErrors": ["supportingEvidenceIds: fewer than minItems 1"],
+      "value": { "kind": "verified", "supportingEvidenceIds": [] }
+    }
+  ]
+}

@@ -74,7 +74,7 @@ function checkRule(rule: RuleT, value: Json, path: string, out: string[]): void 
 
     case "const":
       if (value !== rule.const) {
-        err(out, path, `must equal ${JSON.stringify(rule.const)}`);
+        err(out, path, `must equal ${jsonRepr(rule.const as Json)}`);
       }
       return;
 
@@ -201,7 +201,7 @@ function checkType(typeName: string, value: Json, path: string, out: string[]): 
     err(
       out,
       path,
-      `invalid discriminant ${disc}=${pyRepr(actual)}; expected one of ${allowed}`,
+      `invalid discriminant ${disc}=${jsonRepr(actual)}; expected one of ${allowed}`,
     );
     return;
   }
@@ -241,12 +241,13 @@ function checkType(typeName: string, value: Json, path: string, out: string[]): 
   }
 }
 
-/** Render a value the way Python's %r does, so error strings match byte-for-byte. */
-function pyRepr(value: Json): string {
-  if (value === null || value === undefined) return "None";
-  if (typeof value === "string") return `'${value.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
-  if (typeof value === "boolean") return value ? "True" : "False";
-  return String(value);
+/**
+ * Canonical JSON representation, matching the Python validator byte-for-byte.
+ * Message text is part of the cross-language contract and is asserted by the
+ * parity fixtures, so both sides must render values identically.
+ */
+function jsonRepr(value: Json): string {
+  return JSON.stringify(value ?? null);
 }
 
 /** Return a sorted list of "path: message" errors. Empty means valid. */
