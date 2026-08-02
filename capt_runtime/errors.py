@@ -94,3 +94,11 @@ class ReconciliationRequired(CaptRuntimeError):
     """An indeterminate operation must be resolved before proceeding."""
 
     category = "reconciliation_required"
+
+
+class ConcurrencyError(RuntimeError):
+    """Optimistic-concurrency failure: expected aggregate version != actual."""
+
+
+class IdempotencyError(RuntimeError):
+    """A command was replayed with a conflicting fingerprint."""

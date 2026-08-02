@@ -23,7 +23,7 @@ from ..errors import IllegalTransition
 MISSION_TERMINAL: FrozenSet[str] = frozenset({"completed", "failed", "cancelled"})
 
 MISSION_TRANSITIONS: Dict[str, FrozenSet[str]] = {
-    "draft": frozenset({"authorized", "cancelled"}),
+    "draft": frozenset({"authorized", "cancelled", "failed"}),
     "authorized": frozenset({"executing", "cancelled", "failed"}),
     "executing": frozenset({"suspended", "completed", "failed", "cancelled"}),
     "suspended": frozenset({"executing", "cancelled", "failed"}),

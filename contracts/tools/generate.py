@@ -112,6 +112,14 @@ def generate(out_root: Path) -> int:
         + "\nexport * from \"./types.js\";\nexport * from \"./validate.js\";\nexport { SPEC, SPEC_JSON } from \"./spec.js\";\n",
     )
     changed += write(
+        ts_dir / "version.ts",
+        ts_header
+        + '\nexport const CONTRACT_SCHEMA_VERSION = "%s";\n'
+        'export const RUNTIME_VERSION = "%s";\n'
+        'export const SOURCE_DIGEST = "%s";\n'
+        % (model.contract_schema_version, model.runtime_version, model.source_digest),
+    )
+    changed += write(
         out_root / "typescript" / "tsconfig.json",
         json.dumps(
             {

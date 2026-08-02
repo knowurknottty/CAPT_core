@@ -15,9 +15,26 @@ import { dirname, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const contractsDir = join(here, "..");
-const distIndex = join(contractsDir, "generated", "typescript", "dist", "index.js");
+const srcIndex = join(contractsDir, "generated", "typescript", "src", "index.ts");
 
-const { validate, CONTRACT_SCHEMA_VERSION, knownTypes } = await import(distIndex);
+// Import the TypeScript source directly via a tiny on-the-fly transpile is not
+// possible in plain node, so we require the built dist. The CI build step
+// produces it; for local parity we build if missing.
+import { existsSync } from "node:fs";
+let indexModule;
+const distIndex = join(contractsDir, "generated", "typescript", "dist", "index.js");
+if (existsSync(distIndex)) {
+  indexModule = distIndex;
+} else {
+  // Fall back to importing the source through tsx-like behaviour is unavailable;
+  // instead require the test to build first. We surface a clear error.
+  console.error(
+    "dist/index.js not found. Run: npm --prefix contracts/generated/typescript run build",
+  );
+  process.exit(2);
+}
+
+const { validate, CONTRACT_SCHEMA_VERSION, knownTypes } = await import(indexModule);
 
 const fixtureFiles = ["core_contracts.json", "capability_and_events.json"];
 
@@ -60,7 +77,22 @@ if (failed > 0) {
   for (const failure of failures) {
     console.error(`FAIL ${failure}`);
   }
+  console.log(
+    JSON.stringify({ failures: failed, cases: [] }),
+  );
   process.exit(1);
 }
 
-console.log("TS PARITY: OK");
+// Machine-readable summary for the Python conformance test.
+console.log(
+  JSON.stringify({
+    failures: 0,
+    cases: fixtureFiles.flatMap((file) => {
+      const data = JSON.parse(readFileSync(join(contractsDir, "fixtures", file), "utf-8"));
+      return data.cases.map((c) => ({
+        id: c.id,
+        errors: validate(c.type, c.value),
+      }));
+    }),
+  }),
+);

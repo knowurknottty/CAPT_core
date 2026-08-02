@@ -236,7 +236,10 @@ class EventStore(object):
                             operation_fingerprint,
                         )
                     )
-                return json.loads(prior["result_json"])
+                replayed = json.loads(prior["result_json"])
+                replayed["status"] = "idempotent"
+                replayed["replayed"] = True
+                return replayed
 
             with self.transaction() as conn:
                 # Re-check inside the write lock: another process may have
@@ -251,7 +254,10 @@ class EventStore(object):
                             "idempotency key %r reused with a different operation "
                             "fingerprint" % idempotency_key
                         )
-                    return json.loads(again["result_json"])
+                    replayed = json.loads(again["result_json"])
+                    replayed["status"] = "idempotent"
+                    replayed["replayed"] = True
+                    return replayed
 
                 chain = self.head_chain()
                 written: List[Dict[str, Any]] = []
@@ -330,6 +336,7 @@ class EventStore(object):
 
                 result = {
                     "commandId": command_id,
+                    "status": "applied",
                     "eventIds": [e["eventId"] for e in written],
                     "globalSequences": [e["globalSequence"] for e in written],
                     "streamVersions": [

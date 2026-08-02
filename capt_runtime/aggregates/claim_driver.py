@@ -133,14 +133,9 @@ class ClaimAggregate(object):
             "escalate": "escalated",
         }[verdict]
 
-        current = state["promotionState"]
-        if current in CLAIM_TERMINAL:
-            raise IllegalTransition(
-                "claim %s is terminal" % state["claimId"], current, target
-            )
-        if target not in CLAIM_TRANSITIONS.get(current, frozenset()):
-            raise IllegalTransition("claim %s" % state["claimId"], current, target)
-
+        # Authority check FIRST: a completion claim without verified status must
+        # be refused as an authority violation, not merely as an illegal
+        # transition. This is the spec's central claim-integrity rule.
         if verdict == "accept" and state["kind"] == "completion":
             if state["verificationStatus"] != "verified":
                 raise AuthorityViolation(
@@ -158,6 +153,14 @@ class ClaimAggregate(object):
                     "ClaimGuard decision must reference the recorded "
                     "verification %r" % state["verificationId"]
                 )
+
+        current = state["promotionState"]
+        if current in CLAIM_TERMINAL:
+            raise IllegalTransition(
+                "claim %s is terminal" % state["claimId"], current, target
+            )
+        if target not in CLAIM_TRANSITIONS.get(current, frozenset()):
+            raise IllegalTransition("claim %s" % state["claimId"], current, target)
 
         nxt = dict(state)
         nxt["promotionState"] = target
