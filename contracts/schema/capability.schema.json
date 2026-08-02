@@ -1,0 +1,255 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.capt.dev/capability.schema.json",
+  "title": "CAPT capability authorization contracts",
+  "x-domain": "capability",
+  "x-note": "These types describe AUTHORIZATION TO ACT. They are disjoint from capt_solo.foundry.registry.Capability, which is a CATALOGUE of skills CAPT possesses. See CAPT_RUNTIME_BASELINE_MAP.md section 5.",
+  "$defs": {
+    "ResourceScope": {
+      "title": "ResourceScope",
+      "description": "Discriminated union. Ledger Finding C: an unconstrained object here would allow scope forgery.",
+      "x-discriminator": "kind",
+      "oneOf": [
+        {
+          "title": "FilesystemScope",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "rootPath", "recursive"],
+          "properties": {
+            "kind": { "type": "string", "const": "filesystem" },
+            "rootPath": {
+              "description": "Absolute, normalized POSIX path. Relative segments are rejected to prevent traversal-based scope widening.",
+              "type": "string",
+              "pattern": "^/[^\\u0000]*$",
+              "maxLength": 4096
+            },
+            "recursive": { "type": "boolean" }
+          }
+        },
+        {
+          "title": "RepositoryScope",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "repositoryId", "refPattern"],
+          "properties": {
+            "kind": { "type": "string", "const": "repository" },
+            "repositoryId": { "$ref": "common.schema.json#/$defs/Identifier" },
+            "refPattern": { "type": "string", "maxLength": 512 }
+          }
+        },
+        {
+          "title": "NetworkScope",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "hosts"],
+          "properties": {
+            "kind": { "type": "string", "const": "network" },
+            "hosts": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "type": "string", "maxLength": 253 } }
+          }
+        },
+        {
+          "title": "ToolScope",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "toolIds"],
+          "properties": {
+            "kind": { "type": "string", "const": "tool" },
+            "toolIds": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "$ref": "common.schema.json#/$defs/Identifier" } }
+          }
+        },
+        {
+          "title": "NoneScope",
+          "description": "Explicit empty scope. Used for non-consequential capabilities. Distinct from a missing scope, which is invalid.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "type": "string", "const": "none" } }
+        }
+      ]
+    },
+    "GrantCondition": {
+      "title": "GrantCondition",
+      "description": "Discriminated union of grant preconditions.",
+      "x-discriminator": "kind",
+      "oneOf": [
+        {
+          "title": "RequiresApprovalCondition",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "approverRole"],
+          "properties": {
+            "kind": { "type": "string", "const": "requires_approval" },
+            "approverRole": { "type": "string", "pattern": "^[a-z][a-z0-9_.:-]{1,63}$" }
+          }
+        },
+        {
+          "title": "RequiresDryRunCondition",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "type": "string", "const": "requires_dry_run" } }
+        },
+        {
+          "title": "IsolatedWorktreeCondition",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "worktreeRoot"],
+          "properties": {
+            "kind": { "type": "string", "const": "isolated_worktree" },
+            "worktreeRoot": { "type": "string", "pattern": "^/[^\\u0000]*$", "maxLength": 4096 }
+          }
+        },
+        {
+          "title": "NoNetworkCondition",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "type": "string", "const": "no_network" } }
+        }
+      ]
+    },
+    "CapabilityState": {
+      "title": "CapabilityState",
+      "type": "string",
+      "enum": ["granted", "leased", "reserved", "consumed", "revoked", "expired"]
+    },
+    "Capability": {
+      "title": "Capability",
+      "description": "Definition of what an operation permits.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "capabilityId", "name", "operations", "consequential"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "capabilityId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "operations": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "type": "string", "pattern": "^[a-z][a-z0-9_.:]{1,63}$" } },
+        "consequential": { "type": "boolean" },
+        "dependsOn": { "type": "array", "maxItems": 32, "items": { "$ref": "common.schema.json#/$defs/Identifier" } }
+      }
+    },
+    "CapabilityRequirement": {
+      "title": "CapabilityRequirement",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requirementId", "capabilityId", "operations", "scope"],
+      "properties": {
+        "requirementId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "capabilityId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "operations": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "type": "string", "pattern": "^[a-z][a-z0-9_.:]{1,63}$" } },
+        "scope": { "$ref": "capability.schema.json#/$defs/ResourceScope" }
+      }
+    },
+    "CapabilityGrant": {
+      "title": "CapabilityGrant",
+      "description": "Scoped, conditioned, versioned authorization. policyDecisionId and policyBundleDigest are REQUIRED: authority cannot exist without a recorded decision (ledger Finding I).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "grantId", "subject", "capabilityId", "operations", "scope", "policyDecisionId", "policyBundleDigest", "conditions", "validFrom", "validUntil", "issuedBy", "issuedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "grantId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "subject": { "$ref": "common.schema.json#/$defs/ActorRef" },
+        "capabilityId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "operations": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "type": "string", "pattern": "^[a-z][a-z0-9_.:]{1,63}$" } },
+        "scope": { "$ref": "capability.schema.json#/$defs/ResourceScope" },
+        "policyDecisionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "policyBundleDigest": { "$ref": "common.schema.json#/$defs/Digest" },
+        "conditions": { "type": "array", "maxItems": 32, "items": { "$ref": "capability.schema.json#/$defs/GrantCondition" } },
+        "maxUses": { "type": ["integer", "null"], "minimum": 1, "maximum": 1000000 },
+        "validFrom": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "validUntil": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "issuedBy": {
+          "description": "Must be a governance-kernel actor. Cognition cannot issue grants (invariant 1/2).",
+          "$ref": "common.schema.json#/$defs/ActorRef"
+        },
+        "issuedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      }
+    },
+    "CapabilityLease": {
+      "title": "CapabilityLease",
+      "description": "Binds a grant to mission + task + execution context. A lease may only NARROW its parent grant (ADR-0107).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "leaseId", "grantId", "missionId", "taskId", "executionContextId", "operations", "scope", "validFrom", "validUntil", "activatedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "leaseId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "grantId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "taskId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "executionContextId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "operations": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "type": "string", "pattern": "^[a-z][a-z0-9_.:]{1,63}$" } },
+        "scope": { "$ref": "capability.schema.json#/$defs/ResourceScope" },
+        "maxUses": { "type": ["integer", "null"], "minimum": 1, "maximum": 1000000 },
+        "validFrom": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "validUntil": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "activatedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      }
+    },
+    "CapabilityReservation": {
+      "title": "CapabilityReservation",
+      "description": "One intended consequential use. Created BEFORE the effect; finalized after (ledger Finding E).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "reservationId", "leaseId", "operation", "operationFingerprint", "idempotencyKey", "state", "reservedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "reservationId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "leaseId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "operation": { "type": "string", "pattern": "^[a-z][a-z0-9_.:]{1,63}$" },
+        "operationFingerprint": { "$ref": "common.schema.json#/$defs/Digest" },
+        "idempotencyKey": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "state": { "$ref": "capability.schema.json#/$defs/ReservationState" },
+        "reservedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      }
+    },
+    "ReservationState": {
+      "title": "ReservationState",
+      "type": "string",
+      "enum": ["open", "finalized", "awaiting_reconciliation"]
+    },
+    "ConsumptionOutcome": {
+      "title": "ConsumptionOutcome",
+      "description": "'indeterminate' NEVER permits automatic retry (invariant 12, ADR-0108).",
+      "type": "string",
+      "enum": ["succeeded", "failed", "indeterminate"]
+    },
+    "CapabilityConsumptionRecord": {
+      "title": "CapabilityConsumptionRecord",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "consumptionId", "reservationId", "leaseId", "outcome", "finalizedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "consumptionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "reservationId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "leaseId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "outcome": { "$ref": "capability.schema.json#/$defs/ConsumptionOutcome" },
+        "sideEffectIdentity": { "type": ["string", "null"], "maxLength": 1024 },
+        "finalizedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      }
+    },
+    "RevocationTargetKind": {
+      "title": "RevocationTargetKind",
+      "type": "string",
+      "enum": ["grant", "lease"]
+    },
+    "CapabilityRevocation": {
+      "title": "CapabilityRevocation",
+      "description": "Revocation is terminal and irreversible. Re-authorization requires a new grant with a new PolicyDecision.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "revocationId", "targetKind", "targetId", "reason", "revokedBy", "revokedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "revocationId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "targetKind": { "$ref": "capability.schema.json#/$defs/RevocationTargetKind" },
+        "targetId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "reason": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "revokedBy": { "$ref": "common.schema.json#/$defs/ActorRef" },
+        "revokedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      }
+    }
+  }
+}

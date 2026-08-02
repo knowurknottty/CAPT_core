@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.capt.dev/task.schema.json",
+  "title": "CAPT task contracts",
+  "x-domain": "task",
+  "$defs": {
+    "TaskState": {
+      "title": "TaskState",
+      "description": "Closed task lifecycle. Terminal states are succeeded, failed, cancelled (ADR-0103).",
+      "type": "string",
+      "enum": ["pending", "ready", "assigned", "running", "suspended", "awaiting_verification", "succeeded", "failed", "cancelled"]
+    },
+    "DependencyCondition": {
+      "title": "DependencyCondition",
+      "description": "Spec 8: 'parallel' is NOT an edge type. Parallelism emerges when predecessor conditions are simultaneously satisfied.",
+      "type": "string",
+      "enum": ["completed", "succeeded", "failed", "verified", "approved"]
+    },
+    "TaskDependency": {
+      "title": "TaskDependency",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dependencyId", "predecessorTaskId", "successorTaskId", "condition"],
+      "properties": {
+        "dependencyId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "predecessorTaskId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "successorTaskId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "condition": { "$ref": "task.schema.json#/$defs/DependencyCondition" }
+      }
+    },
+    "TaskNode": {
+      "title": "TaskNode",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["taskId", "missionId", "title", "state", "consequential", "capabilityRequirements", "attempt", "maxAttempts"],
+      "properties": {
+        "taskId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "state": { "$ref": "task.schema.json#/$defs/TaskState" },
+        "consequential": {
+          "description": "True when execution can produce an external side effect. Consequential tasks require a valid lease before dispatch (invariant 7).",
+          "type": "boolean"
+        },
+        "capabilityRequirements": { "type": "array", "maxItems": 32, "items": { "$ref": "capability.schema.json#/$defs/CapabilityRequirement" } },
+        "assignedDriverId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }] },
+        "attempt": { "type": "integer", "minimum": 0 },
+        "maxAttempts": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "recoveryState": { "$ref": "task.schema.json#/$defs/TaskRecoveryState" }
+      }
+    },
+    "TaskRecoveryState": {
+      "title": "TaskRecoveryState",
+      "type": "string",
+      "enum": ["none", "awaiting_reconciliation", "reconciled", "abandoned"]
+    },
+    "TaskGraph": {
+      "title": "TaskGraph",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "taskGraphId", "missionId", "nodes", "dependencies"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "taskGraphId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "nodes": { "type": "array", "minItems": 1, "maxItems": 512, "items": { "$ref": "task.schema.json#/$defs/TaskNode" } },
+        "dependencies": { "type": "array", "maxItems": 2048, "items": { "$ref": "task.schema.json#/$defs/TaskDependency" } }
+      }
+    }
+  }
+}

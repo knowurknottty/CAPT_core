@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.capt.dev/common.schema.json",
+  "title": "CAPT common contract primitives",
+  "x-domain": "common",
+  "$defs": {
+    "SchemaVersion": {
+      "title": "SchemaVersion",
+      "description": "Contract-set version. Readers MUST reject an unequal value (ADR-0101).",
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "Identifier": {
+      "title": "Identifier",
+      "description": "Opaque, caller-minted identifier. Bounded charset prevents injection into paths, SQL, and log lines.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.:-]{1,128}$"
+    },
+    "StreamId": {
+      "title": "StreamId",
+      "description": "Aggregate stream identifier. The prefix declares the owning aggregate (ADR-0103) and is enforced by the store.",
+      "type": "string",
+      "pattern": "^(mission|task|capability|driverrun|claim)-[A-Za-z0-9_.-]{1,96}$"
+    },
+    "Timestamp": {
+      "title": "Timestamp",
+      "description": "RFC 3339 UTC instant. Descriptive only: never used for ordering or conflict resolution (ADR-0106).",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?Z$"
+    },
+    "Digest": {
+      "title": "Digest",
+      "description": "Lowercase hex SHA-256 with algorithm prefix.",
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "AggregateVersion": {
+      "title": "AggregateVersion",
+      "description": "0 means the stream does not yet exist. Increments by exactly 1 per event.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "SequenceNumber": {
+      "title": "SequenceNumber",
+      "type": "integer",
+      "minimum": 1
+    },
+    "ActorKind": {
+      "title": "ActorKind",
+      "type": "string",
+      "enum": ["human", "governance_kernel", "cognitive_plane", "execution_plane", "verification_plane", "claim_authority", "external_driver", "system"]
+    },
+    "ActorRef": {
+      "title": "ActorRef",
+      "description": "Who performed an action. 'kind' carries the authority domain and is checked by authority invariants.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actorId", "kind"],
+      "properties": {
+        "actorId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "kind": { "$ref": "common.schema.json#/$defs/ActorKind" },
+        "displayName": { "type": ["string", "null"], "maxLength": 256 }
+      }
+    },
+    "ReplayPolicy": {
+      "title": "ReplayPolicy",
+      "description": "never: no automatic re-execution. safe: externally idempotent. verify-before-retry: observe external state first (ADR-0108).",
+      "type": "string",
+      "enum": ["never", "safe", "verify-before-retry"]
+    },
+    "CommandMetadata": {
+      "title": "CommandMetadata",
+      "description": "Mandatory envelope for every consequential command (ADR-0108).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "commandId", "idempotencyKey", "operationFingerprint", "correlationId", "actor", "issuedAt", "replayPolicy", "attempt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "commandId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "idempotencyKey": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "operationFingerprint": { "$ref": "common.schema.json#/$defs/Digest" },
+        "correlationId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "causationId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }] },
+        "actor": { "$ref": "common.schema.json#/$defs/ActorRef" },
+        "issuedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "replayPolicy": { "$ref": "common.schema.json#/$defs/ReplayPolicy" },
+        "attempt": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "ExtensionEnvelope": {
+      "title": "ExtensionEnvelope",
+      "description": "THE ONLY permitted generic payload boundary (ADR-0102). Namespaced, validated, and never present in a security-critical decision field.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespace", "payloadDigest", "payloadJson"],
+      "properties": {
+        "namespace": {
+          "type": "string",
+          "pattern": "^x-[a-z0-9]+(\\.[a-z0-9]+)*$",
+          "maxLength": 128
+        },
+        "payloadDigest": { "$ref": "common.schema.json#/$defs/Digest" },
+        "payloadJson": {
+          "description": "Serialized JSON string, not a live object. Keeps untyped data out of the typed tree and forces explicit parsing.",
+          "type": "string",
+          "maxLength": 65536
+        }
+      }
+    },
+    "ErrorCategory": {
+      "title": "ErrorCategory",
+      "type": "string",
+      "enum": ["validation", "authority", "concurrency", "idempotency", "integrity", "not_found", "illegal_transition", "capability_denied", "reconciliation_required", "internal"]
+    },
+    "ErrorEnvelope": {
+      "title": "ErrorEnvelope",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "category", "code", "message", "occurredAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "category": { "$ref": "common.schema.json#/$defs/ErrorCategory" },
+        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{2,63}$" },
+        "message": { "type": "string", "maxLength": 2048 },
+        "occurredAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "correlationId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }] },
+        "streamId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/StreamId" }, { "type": "null" }] },
+        "expectedVersion": { "type": ["integer", "null"], "minimum": 0 },
+        "actualVersion": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "Budget": {
+      "title": "Budget",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wallClockSeconds", "maxOperations"],
+      "properties": {
+        "wallClockSeconds": { "type": "integer", "minimum": 1, "maximum": 86400 },
+        "maxOperations": { "type": "integer", "minimum": 1, "maximum": 1000000 }
+      }
+    }
+  }
+}

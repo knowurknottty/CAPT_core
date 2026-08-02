@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.capt.dev/verification.schema.json",
+  "title": "CAPT verification contracts",
+  "x-domain": "verification",
+  "$defs": {
+    "VerificationStrategy": {
+      "title": "VerificationStrategy",
+      "type": "string",
+      "enum": ["direct_observation", "deterministic_schema_validation", "artifact_hashing", "test_exit_status", "invariant_check", "independent_reproduction", "source_triangulation", "counterargument", "human_review"]
+    },
+    "VerificationStatus": {
+      "title": "VerificationStatus",
+      "description": "Discriminated union. Spec workflow section 9 requires every completion statement to be classified.",
+      "x-discriminator": "kind",
+      "oneOf": [
+        {
+          "title": "VerifiedStatus",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "supportingEvidenceIds"],
+          "properties": {
+            "kind": { "type": "string", "const": "verified" },
+            "supportingEvidenceIds": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "$ref": "common.schema.json#/$defs/Identifier" } }
+          }
+        },
+        {
+          "title": "ObservedUnverifiedStatus",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "reason"],
+          "properties": {
+            "kind": { "type": "string", "const": "observed_unverified" },
+            "reason": { "type": "string", "maxLength": 2048 }
+          }
+        },
+        {
+          "title": "InferenceStatus",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "basis"],
+          "properties": {
+            "kind": { "type": "string", "const": "inference" },
+            "basis": { "type": "string", "maxLength": 2048 }
+          }
+        },
+        {
+          "title": "ContradictedStatus",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "contradictingEvidenceIds"],
+          "properties": {
+            "kind": { "type": "string", "const": "contradicted" },
+            "contradictingEvidenceIds": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "$ref": "common.schema.json#/$defs/Identifier" } }
+          }
+        },
+        {
+          "title": "InconclusiveStatus",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "reason"],
+          "properties": {
+            "kind": { "type": "string", "const": "inconclusive" },
+            "reason": { "type": "string", "maxLength": 2048 }
+          }
+        },
+        {
+          "title": "NotTestedStatus",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": { "kind": { "type": "string", "const": "not_tested" } }
+        }
+      ]
+    },
+    "VerificationResult": {
+      "title": "VerificationResult",
+      "description": "Produced by the verification plane. Verification must not mutate the artifact it verifies (invariant: authority separation).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "verificationId", "claimId", "strategy", "status", "verifiedBy", "verifiedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "verificationId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "claimId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "strategy": { "$ref": "verification.schema.json#/$defs/VerificationStrategy" },
+        "status": { "$ref": "verification.schema.json#/$defs/VerificationStatus" },
+        "verifiedBy": {
+          "description": "Must be a verification-plane actor. ClaimGuard cannot fabricate verification evidence (invariant 5 / workflow Gate 3).",
+          "$ref": "common.schema.json#/$defs/ActorRef"
+        },
+        "verifiedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      }
+    }
+  }
+}

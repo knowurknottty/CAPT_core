@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.capt.dev/event.schema.json",
+  "title": "CAPT durable event contracts",
+  "x-domain": "event",
+  "$defs": {
+    "EventType": {
+      "title": "EventType",
+      "description": "Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110).",
+      "type": "string",
+      "enum": [
+        "MissionCreated",
+        "PolicyEvaluated",
+        "MissionStateChanged",
+        "CheckpointCreated",
+        "MissionResumed",
+        "TaskCreated",
+        "TaskTransitioned",
+        "CapabilityGranted",
+        "CapabilityLeaseActivated",
+        "CapabilityUseReserved",
+        "CapabilityUseFinalized",
+        "CapabilityGrantRevoked",
+        "CapabilityLeaseRevoked",
+        "DriverRunCreated",
+        "DriverRunStateChanged",
+        "ClaimCreated",
+        "EvidenceRecorded",
+        "ClaimVerified",
+        "ClaimGuardDecided"
+      ]
+    },
+    "EventPayload": {
+      "title": "EventPayload",
+      "description": "Discriminated union on eventType. Ledger Finding C: no arbitrary event payload is permitted.",
+      "x-discriminator": "eventType",
+      "oneOf": [
+        {
+          "title": "MissionCreatedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "missionSpec"],
+          "properties": {
+            "eventType": { "type": "string", "const": "MissionCreated" },
+            "missionSpec": { "$ref": "mission.schema.json#/$defs/MissionSpec" }
+          }
+        },
+        {
+          "title": "PolicyEvaluatedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "policyDecision"],
+          "properties": {
+            "eventType": { "type": "string", "const": "PolicyEvaluated" },
+            "policyDecision": { "$ref": "policy.schema.json#/$defs/PolicyDecision" }
+          }
+        },
+        {
+          "title": "MissionStateChangedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "fromState", "toState", "reason"],
+          "properties": {
+            "eventType": { "type": "string", "const": "MissionStateChanged" },
+            "fromState": { "$ref": "mission.schema.json#/$defs/MissionState" },
+            "toState": { "$ref": "mission.schema.json#/$defs/MissionState" },
+            "reason": { "type": "string", "maxLength": 2048 }
+          }
+        },
+        {
+          "title": "CheckpointCreatedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "checkpointId", "integrityDigest"],
+          "properties": {
+            "eventType": { "type": "string", "const": "CheckpointCreated" },
+            "checkpointId": { "$ref": "common.schema.json#/$defs/Identifier" },
+            "integrityDigest": { "$ref": "common.schema.json#/$defs/Digest" }
+          }
+        },
+        {
+          "title": "MissionResumedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "checkpointId", "resumedFromGlobalSequence"],
+          "properties": {
+            "eventType": { "type": "string", "const": "MissionResumed" },
+            "checkpointId": { "$ref": "common.schema.json#/$defs/Identifier" },
+            "resumedFromGlobalSequence": { "$ref": "common.schema.json#/$defs/SequenceNumber" }
+          }
+        },
+        {
+          "title": "TaskCreatedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "task"],
+          "properties": {
+            "eventType": { "type": "string", "const": "TaskCreated" },
+            "task": { "$ref": "task.schema.json#/$defs/TaskNode" }
+          }
+        },
+        {
+          "title": "TaskTransitionedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "taskId", "fromState", "toState", "reason"],
+          "properties": {
+            "eventType": { "type": "string", "const": "TaskTransitioned" },
+            "taskId": { "$ref": "common.schema.json#/$defs/Identifier" },
+            "fromState": { "$ref": "task.schema.json#/$defs/TaskState" },
+            "toState": { "$ref": "task.schema.json#/$defs/TaskState" },
+            "reason": { "type": "string", "maxLength": 2048 }
+          }
+        },
+        {
+          "title": "CapabilityGrantedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "grant"],
+          "properties": {
+            "eventType": { "type": "string", "const": "CapabilityGranted" },
+            "grant": { "$ref": "capability.schema.json#/$defs/CapabilityGrant" }
+          }
+        },
+        {
+          "title": "CapabilityLeaseActivatedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "lease"],
+          "properties": {
+            "eventType": { "type": "string", "const": "CapabilityLeaseActivated" },
+            "lease": { "$ref": "capability.schema.json#/$defs/CapabilityLease" }
+          }
+        },
+        {
+          "title": "CapabilityUseReservedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "reservation"],
+          "properties": {
+            "eventType": { "type": "string", "const": "CapabilityUseReserved" },
+            "reservation": { "$ref": "capability.schema.json#/$defs/CapabilityReservation" }
+          }
+        },
+        {
+          "title": "CapabilityUseFinalizedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "consumption"],
+          "properties": {
+            "eventType": { "type": "string", "const": "CapabilityUseFinalized" },
+            "consumption": { "$ref": "capability.schema.json#/$defs/CapabilityConsumptionRecord" }
+          }
+        },
+        {
+          "title": "CapabilityGrantRevokedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "revocation"],
+          "properties": {
+            "eventType": { "type": "string", "const": "CapabilityGrantRevoked" },
+            "revocation": { "$ref": "capability.schema.json#/$defs/CapabilityRevocation" }
+          }
+        },
+        {
+          "title": "CapabilityLeaseRevokedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "revocation"],
+          "properties": {
+            "eventType": { "type": "string", "const": "CapabilityLeaseRevoked" },
+            "revocation": { "$ref": "capability.schema.json#/$defs/CapabilityRevocation" }
+          }
+        },
+        {
+          "title": "DriverRunCreatedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "driverRun"],
+          "properties": {
+            "eventType": { "type": "string", "const": "DriverRunCreated" },
+            "driverRun": { "$ref": "driver.schema.json#/$defs/DriverRun" }
+          }
+        },
+        {
+          "title": "DriverRunStateChangedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "driverRunId", "fromState", "toState"],
+          "properties": {
+            "eventType": { "type": "string", "const": "DriverRunStateChanged" },
+            "driverRunId": { "$ref": "common.schema.json#/$defs/Identifier" },
+            "fromState": { "$ref": "driver.schema.json#/$defs/DriverRunState" },
+            "toState": { "$ref": "driver.schema.json#/$defs/DriverRunState" }
+          }
+        },
+        {
+          "title": "ClaimCreatedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "claim"],
+          "properties": {
+            "eventType": { "type": "string", "const": "ClaimCreated" },
+            "claim": { "$ref": "claim.schema.json#/$defs/ClaimRecord" }
+          }
+        },
+        {
+          "title": "EvidenceRecordedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "evidence"],
+          "properties": {
+            "eventType": { "type": "string", "const": "EvidenceRecorded" },
+            "evidence": { "$ref": "evidence.schema.json#/$defs/EvidenceRecord" }
+          }
+        },
+        {
+          "title": "ClaimVerifiedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "verification"],
+          "properties": {
+            "eventType": { "type": "string", "const": "ClaimVerified" },
+            "verification": { "$ref": "verification.schema.json#/$defs/VerificationResult" }
+          }
+        },
+        {
+          "title": "ClaimGuardDecidedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "decision"],
+          "properties": {
+            "eventType": { "type": "string", "const": "ClaimGuardDecided" },
+            "decision": { "$ref": "claim.schema.json#/$defs/ClaimGuardDecision" }
+          }
+        }
+      ]
+    },
+    "EventEnvelope": {
+      "title": "EventEnvelope",
+      "description": "Authoritative durable event. Only the CAPT runtime constructs this (ADR-0110).",
+      "type": "object",
+      "additionalProperties": false,
+      "x-cross-field-equal": [["eventType", "payload.eventType"]],
+      "required": ["schemaVersion", "eventId", "streamId", "streamVersion", "globalSequence", "eventType", "occurredAt", "actor", "correlationId", "payload", "payloadDigest"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "eventId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "streamId": { "$ref": "common.schema.json#/$defs/StreamId" },
+        "streamVersion": { "$ref": "common.schema.json#/$defs/SequenceNumber" },
+        "globalSequence": { "$ref": "common.schema.json#/$defs/SequenceNumber" },
+        "eventType": { "$ref": "event.schema.json#/$defs/EventType" },
+        "occurredAt": {
+          "description": "Descriptive only. Never used for ordering (ADR-0106).",
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "actor": { "$ref": "common.schema.json#/$defs/ActorRef" },
+        "missionId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }] },
+        "taskId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }] },
+        "claimId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }] },
+        "correlationId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "causationId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }] },
+        "payload": { "$ref": "event.schema.json#/$defs/EventPayload" },
+        "payloadDigest": { "$ref": "common.schema.json#/$defs/Digest" },
+        "extensions": { "type": "array", "maxItems": 8, "items": { "$ref": "common.schema.json#/$defs/ExtensionEnvelope" } }
+      }
+    }
+  }
+}

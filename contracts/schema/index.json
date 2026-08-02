@@ -1,0 +1,22 @@
+{
+  "contractSchemaVersion": "1.0.0",
+  "runtimeVersion": "0.1.0",
+  "description": "CAPT Runtime canonical contract source. JSON Schema 2020-12 is normative (ADR-0101). TypeScript and Python bindings are GENERATED and are not authoritative.",
+  "generator": "contracts/tools/generate.py",
+  "regenerateCommand": "python3 contracts/tools/generate.py",
+  "driftCheckCommand": "python3 contracts/tools/check_drift.py",
+  "files": [
+    "common.schema.json",
+    "mission.schema.json",
+    "task.schema.json",
+    "policy.schema.json",
+    "capability.schema.json",
+    "tool.schema.json",
+    "evidence.schema.json",
+    "verification.schema.json",
+    "claim.schema.json",
+    "driver.schema.json",
+    "event.schema.json",
+    "checkpoint.schema.json"
+  ]
+}
