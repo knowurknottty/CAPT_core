@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:5ef316defdb5ccf2b5359d4baa627b5504feb6ab778240e039a96b51c9e5932e
+// source digest:  sha256:69ba1debeef17b845117cbbe896761985db6526ee5436bfc2500a6cb9911a249
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -440,6 +440,29 @@ export interface HumanApprovalRequest {
 
 /** Opaque, caller-minted identifier. Bounded charset prevents injection into paths, SQL, and log lines. */
 export type Identifier = string;
+
+/** High-level operator intent submitted to CAPT Runtime to create a bounded mission. The runtime owns all planning: it constructs the MissionSpec, TaskNode, and (when requiresApproval) HumanApprovalRequest from this intent. The desktop never builds aggregates. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001). */
+export interface OperatorMissionIntent {
+  readonly missionId: Identifier;
+  readonly objective: string;
+  readonly requiresApproval: boolean;
+  readonly schemaVersion: SchemaVersion;
+  readonly scope: Readonly<Record<string, unknown>>;
+  readonly budget?: unknown | null;
+  readonly constraints?: readonly Readonly<Record<string, unknown>>[];
+  readonly normalizedRequest?: string | null;
+  readonly operation?: string | null;
+  readonly policyReason?: string | null;
+  readonly rawRequest?: string | null;
+  readonly requestId?: string | null;
+  readonly requestedCapability?: string;
+  readonly resource?: string | null;
+  readonly riskClassification?: RiskClassification;
+  readonly successCriteria?: readonly Readonly<Record<string, unknown>>[];
+  readonly taskId?: string | null;
+  readonly terminationCriteria?: readonly Readonly<Record<string, unknown>>[];
+  readonly unresolvedAmbiguities?: readonly string[];
+}
 
 /** never: no automatic re-execution. safe: externally idempotent. verify-before-retry: observe external state first (ADR-0108). */
 export type ReplayPolicy = "never" | "safe" | "verify-before-retry";

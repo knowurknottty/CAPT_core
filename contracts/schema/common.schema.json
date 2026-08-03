@@ -145,6 +145,42 @@
       "type": "string",
       "enum": ["none", "low", "medium", "high", "consequential"]
     },
+    "OperatorMissionIntent": {
+      "title": "OperatorMissionIntent",
+      "description": "High-level operator intent submitted to CAPT Runtime to create a bounded mission. The runtime owns all planning: it constructs the MissionSpec, TaskNode, and (when requiresApproval) HumanApprovalRequest from this intent. The desktop never builds aggregates. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "missionId", "objective", "scope", "requiresApproval"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "objective": { "type": "string", "maxLength": 4096 },
+        "rawRequest": { "type": ["string", "null"], "maxLength": 8192 },
+        "normalizedRequest": { "type": ["string", "null"], "maxLength": 8192 },
+        "scope": { "type": "object", "additionalProperties": true },
+        "constraints": { "type": "array", "items": { "type": "object" } },
+        "successCriteria": { "type": "array", "items": { "type": "object" } },
+        "terminationCriteria": { "type": "array", "items": { "type": "object" } },
+        "unresolvedAmbiguities": { "type": "array", "items": { "type": "string" } },
+        "budget": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "maxEvents": { "type": ["integer", "null"], "minimum": 0 }
+          }
+        },
+        "requiresApproval": { "type": "boolean" },
+        "requestedCapability": { "type": "string", "maxLength": 256 },
+        "resource": { "type": ["string", "null"], "maxLength": 1024 },
+        "operation": { "type": ["string", "null"], "maxLength": 128 },
+        "riskClassification": { "$ref": "common.schema.json#/$defs/RiskClassification" },
+        "policyReason": { "type": ["string", "null"], "maxLength": 1024 },
+        "taskId": { "type": ["string", "null"], "maxLength": 256 },
+        "requestId": { "type": ["string", "null"], "maxLength": 256 }
+      }
+    },
     "HumanApprovalRequest": {
       "title": "HumanApprovalRequest",
       "description": "A bounded request for operator authorization before a consequential action. Authored by the governance kernel / execution plane; decided by a human operator. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001).",

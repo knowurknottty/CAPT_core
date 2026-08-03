@@ -169,6 +169,7 @@ class DesktopApp:
         normalized = raw.lower()
         inferred = "read-only analysis (no writes)" if ("read" in normalized or "analy" in normalized) else "unspecified"
         payload = {
+            "schemaVersion": "1.0.0",
             "missionId": "m-gui-" + __import__("uuid").uuid4().hex[:8],
             "objective": raw,
             "rawRequest": raw,
@@ -177,7 +178,6 @@ class DesktopApp:
                 {"kind": "resource_boundary", "constraintId": "con-1", "origin": "explicit_user",
                  "scope": {"kind": "filesystem", "rootPath": root_path, "recursive": False}},
             ],
-            "inferredConstraints": [{"kind": "inferred_readonly", "text": inferred}],
             "successCriteria": [{"criterionId": "sc-1", "statement": success, "requiresVerification": True}],
             "terminationCriteria": [{"criterionId": "tc-1", "statement": termination, "terminalState": "failed"}],
             "budget": {"maxEvents": int(budget_max_events or 0)},

@@ -75,6 +75,7 @@ def main() -> int:
 
     mid = "m-m1acc-" + uuid.uuid4().hex[:8]
     payload = {
+        "schemaVersion": "1.0.0",
         "missionId": mid,
         "objective": "Read-only repository analysis of the local worktree.",
         "rawRequest": "analyze repo",

@@ -57,6 +57,7 @@ def client():
 
 def _make_mission_payload(mission_id, requires_approval=False):
     return {
+        "schemaVersion": "1.0.0",
         "missionId": mission_id,
         "objective": "Read-only repository analysis of the local worktree.",
         "rawRequest": "analyze repo",

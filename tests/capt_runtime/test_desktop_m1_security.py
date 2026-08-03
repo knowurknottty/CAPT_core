@@ -54,6 +54,7 @@ def client():
 
 def _mission(mid, approval=False):
     return {
+        "schemaVersion": "1.0.0",
         "missionId": mid, "objective": "analyze", "rawRequest": "analyze",
         "normalizedRequest": "analyze",
         "constraints": [{"kind": "resource_boundary", "constraintId": "c", "origin": "explicit_user",
@@ -94,7 +95,9 @@ def test_conflicting_approval_second_terminal(client):
     req = r["result"]["requestId"]
     client.command("submit_approval_decision", {"requestId": req, "decision": "approve"}, idempotency_key="idem-a1")
     d2 = client.command("submit_approval_decision", {"requestId": req, "decision": "deny"}, idempotency_key="idem-d2")
-    assert d2["classification"] == "already_terminal"
+    # A conflicting decision on an already-decided (terminal) request is
+    # rejected by the runtime's IllegalTransition (category illegal_transition).
+    assert d2["classification"] == "illegal_transition"
 
 
 def test_stale_approval_already_decided(client):
@@ -103,7 +106,10 @@ def test_stale_approval_already_decided(client):
     req = r["result"]["requestId"]
     client.command("submit_approval_decision", {"requestId": req, "decision": "deny"}, idempotency_key="idem-s1")
     d2 = client.command("submit_approval_decision", {"requestId": req, "decision": "deny"}, idempotency_key="idem-s2")
-    assert d2["classification"] in ("already_terminal", "idempotent")
+    # A second decision with a different key on an already-decided request is
+    # rejected by the runtime's IllegalTransition (category illegal_transition).
+    # (A replay with the SAME key returns idempotent, covered elsewhere.)
+    assert d2["classification"] == "illegal_transition"
 
 
 def test_expired_approval_refused(client):
@@ -124,7 +130,9 @@ def test_expired_approval_refused(client):
         commands.command(command_id="exp", idempotency_key="exp", operation_fingerprint="sha256:" + "0" * 64,
                          correlation_id="c", actor_id="exec-1", actor_kind="execution_plane", issued_at="2026-08-03T00:00:00Z"))
     r = client.command("submit_approval_decision", {"requestId": req, "decision": "approve"})
-    assert r["classification"] == "unauthorized"
+    # Expired approval is refused by the runtime's AuthorityViolation
+    # (category "authority" — the runtime owns the error taxonomy).
+    assert r["classification"] == "authority"
 
 
 def test_duplicate_cancellation(client):

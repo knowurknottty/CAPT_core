@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:5ef316defdb5ccf2b5359d4baa627b5504feb6ab778240e039a96b51c9e5932e
+# source digest:  sha256:69ba1debeef17b845117cbbe896761985db6526ee5436bfc2500a6cb9911a249
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -503,6 +503,31 @@ class HumanApprovalRequest(object):
 
 
 Identifier = str
+
+
+@dataclass(frozen=True)
+class OperatorMissionIntent(object):
+    """High-level operator intent submitted to CAPT Runtime to create a bounded mission. The runtime owns all planning: it constructs the MissionSpec, TaskNode, and (when requiresApproval) HumanApprovalRequest from this intent. The desktop never builds aggregates. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001)."""
+
+    missionId: Identifier
+    objective: str
+    requiresApproval: bool
+    schemaVersion: SchemaVersion
+    scope: Dict[str, Any]
+    budget: Optional[Any] = None
+    constraints: List[Dict[str, Any]] = field(default_factory=list)
+    normalizedRequest: Optional[str] = None
+    operation: Optional[str] = None
+    policyReason: Optional[str] = None
+    rawRequest: Optional[str] = None
+    requestId: Optional[str] = None
+    requestedCapability: Optional[str] = None
+    resource: Optional[str] = None
+    riskClassification: Optional[RiskClassification] = None
+    successCriteria: List[Dict[str, Any]] = field(default_factory=list)
+    taskId: Optional[str] = None
+    terminationCriteria: List[Dict[str, Any]] = field(default_factory=list)
+    unresolvedAmbiguities: List[str] = field(default_factory=list)
 
 
 class ReplayPolicy(str, Enum):

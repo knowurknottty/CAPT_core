@@ -26,12 +26,14 @@ Files:
 | Approval scope containment | smuggle wider scope in decision payload | REJECTED: decision ignores payload scope | none (confirmed) |
 | Cancellation reaches driver | cancel active run, check state | PROVEN: cancelled | none |
 | Reconnect correctness | disconnect/reconnect, count missions | PROVEN: no duplicates | none |
-| Duplicate suppression | replay same idempotencyKey | FOUND DEFECT: second cancel/deny returned already_terminal instead of idempotent | FIXED: added store.find_idempotent pre-check in _cancel and _cmd_submit_approval_decision so same-key replay returns idempotent before the aggregate terminal check |
-| Operator identity binding | spoof operatorId in envelope | PROVEN: unauthorized | none |
+| Duplicate suppression | replay same idempotencyKey | FOUND DEFECT (desktop pre-check): second cancel/deny returned already_terminal instead of idempotent | FIXED IN RUNTIME: `RuntimeService.submit_human_approval_decision` / `cancel_task` / `cancel_driver_run` now check `store.find_idempotent` before the aggregate transition; the desktop no longer duplicates this logic |
+| Operator identity binding | spoof operatorId in envelope | PROVEN: unauthorized (transport, before runtime call) | none |
 | Rendering trust distinctions | untrusted model text vs authoritative state | PROVEN: [AUTHORITATIVE] tag separates them; sanitize_for_display strips control chars | none |
 | Approval after deny | approve terminal request | FOUND DEFECT (earlier): state was "deny" not "denied" → terminal check missed | FIXED: aggregate maps decision to "approved"/"denied" terminal states |
-| Idempotency key collision (inner acts) | create_mission+task reuse outer key | FOUND DEFECT: IdempotencyConflict on inner create_task | FIXED: _metadata derives distinct idempotency keys for inner CAPT acts |
-| Authority for create_task | human actor cannot plan | FOUND DEFECT: actor kind human rejected for plan_tasks | FIXED: inner create_task authored as cognitive_plane; approval request as execution_plane; outer envelope remains human operator |
+| Idempotency key collision (inner acts) | create_mission+task reuse outer key | FOUND DEFECT: IdempotencyConflict on inner create_task | FIXED IN RUNTIME: `create_mission_with_approval` commits all three aggregates in ONE transaction under the operator command's idempotency key; inner acts use derived keys only for the per-aggregate actor metadata |
+| Authority for create_task | human actor cannot plan | FOUND DEFECT: actor kind human rejected for plan_tasks | FIXED IN RUNTIME: `create_mission_with_approval` authors the task as cognitive_plane and the approval as execution_plane; the operator command remains human-authored |
+| Planning duplication | desktop built MissionSpec/TaskNode/ApprovalRequest | FOUND DEFECT: desktop duplicated runtime planning + orchestration | CONVERGED: planning + orchestration moved into `RuntimeService`; desktop submits `OperatorMissionIntent` only |
+| Error taxonomy duplication | desktop re-mapped errors.py categories | FOUND DEFECT: `_classify_error` duplicated the runtime taxonomy | CONVERGED: desktop presents `exc.category` from `capt_runtime.errors`; no duplicate classification |
 | Invalid session | command with bogus sessionId | PROVEN: unauthorized | added test (test_invalid_session_rejected) |
 | Cancellation without authority | spoofed operator/session cancel | PROVEN: unauthorized | added test (test_cancellation_without_authority_rejected) |
 | Desktop injects event/verification/claimguard | attempt client write APIs | PROVEN: no such API exists; client is read/command only | added tests (test_desktop_cannot_inject_event_envelope, test_desktop_cannot_mutate_database_directly, test_fake_verification_query_is_read_only) |
