@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:6ab1e9d532c51fd0383e18ac82d8930accae4255fd21bf2ee698fc951b615e90
+// source digest:  sha256:8ff3dcc4f4fc0f2e05bf52ad775dad76a6c5705bcbed856b4b45931c38f21789
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -429,6 +429,78 @@ export type StreamId = string;
 /** RFC 3339 UTC instant. Descriptive only: never used for ordering or conflict resolution (ADR-0106). */
 export type Timestamp = string;
 
+/** Minimal read-only projection handed to a driver. MUST NOT contain governance, policy, claim, capability-graph, ledger, or aggregate references (ADR-0125). */
+export interface ContextSlice {
+  readonly budgets: DriverBudget;
+  readonly expectedArtifacts: readonly ExpectedArtifact[];
+  readonly filesystemPolicy: FilesystemPolicy;
+  readonly lease: Readonly<Record<string, unknown>>;
+  readonly permittedTools: readonly string[];
+  readonly schemaVersion: SchemaVersion;
+  readonly terminationConditions: DriverTerminationCondition;
+  readonly networkPolicy?: NetworkPolicy;
+}
+
+/** A driver-produced artifact candidate. CAPT validates existence before creating an EvidenceRecord. */
+export interface DriverArtifactCandidate {
+  readonly artifactDigest: string;
+  readonly artifactPath: string;
+  readonly candidateId: Identifier;
+  readonly driverRunId: Identifier;
+  readonly producedAt: Timestamp;
+  readonly schemaVersion: SchemaVersion;
+}
+
+/** Alias of DriverBudgets; resource ceilings for one run. */
+export interface DriverBudget {
+  readonly maxArtifacts?: number;
+  readonly maxObservations?: number;
+  readonly maxSeconds?: number;
+}
+
+/** DriverBudgets */
+export interface DriverBudgets {
+  readonly maxArtifacts?: number;
+  readonly maxObservations?: number;
+  readonly maxSeconds?: number;
+}
+
+/** CAPT-authored request to cancel a driver run. The driver cannot self-cancel authoritatively. */
+export interface DriverCancellationRequest {
+  readonly driverRunId: Identifier;
+  readonly reason: string;
+  readonly requestedAt: Timestamp;
+  readonly schemaVersion: SchemaVersion;
+}
+
+/** Read-only capability set a driver may be granted. M0-B permits only read/analysis/artifact-candidate operations; RepositoryWrite is forbidden for drivers. */
+export interface DriverCapabilities {
+  readonly budgets: DriverBudget;
+  readonly filesystemPolicy: FilesystemPolicy;
+  readonly operations: readonly string[];
+  readonly permittedTools: readonly string[];
+  readonly schemaVersion: SchemaVersion;
+}
+
+/** What a driver declares it can do. A declaration grants NO execution authority (ADR-0120). */
+export interface DriverCapabilityDeclaration {
+  readonly declaredOperations: readonly string[];
+  readonly declaredScopes: readonly ResourceScope[];
+  readonly declaredTools: readonly string[];
+  readonly driverId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+}
+
+/** Records the runtime/contract compatibility of a driver at registration time. */
+export interface DriverCompatibilityRecord {
+  readonly compatible: boolean;
+  readonly contractSchemaVersion: SchemaVersion;
+  readonly driverId: Identifier;
+  readonly runtimeVersion: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly notes?: string | null;
+}
+
 /** DriverDescriptor */
 export interface DriverDescriptor {
   readonly driverId: Identifier;
@@ -437,6 +509,55 @@ export interface DriverDescriptor {
   readonly supportedOperations: readonly string[];
   readonly writeCapable: boolean;
 }
+
+/** Untrusted driver-reported error. CAPT decides failure disposition; the driver cannot set terminal state authoritatively. */
+export interface DriverError {
+  readonly driverRunId: Identifier;
+  readonly errorId: Identifier;
+  readonly message: string;
+  readonly reportedAt: Timestamp;
+  readonly schemaVersion: SchemaVersion;
+}
+
+/** DriverProgressSignal */
+export interface DriverProgressSignal {
+  readonly driverRunId: Identifier;
+  readonly phase: string;
+  readonly reportedAt: Timestamp;
+  readonly schemaVersion: SchemaVersion;
+  readonly signalId: Identifier;
+  readonly fraction?: number;
+}
+
+/** Driver-claimed receipt of a step. CAPT validates against the ledger; fake receipts are rejected. */
+export interface DriverReceiptCandidate {
+  readonly claimedAt: Timestamp;
+  readonly driverRunId: Identifier;
+  readonly receiptId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly step: string;
+  readonly contentDigest?: string;
+}
+
+/** CAPT-authored reconciliation report for a driver run. */
+export interface DriverReconciliationRecord {
+  readonly anomalies: readonly string[];
+  readonly detectedAt: Timestamp;
+  readonly driverRunId: Identifier;
+  readonly result: DriverReconciliationResult;
+  readonly schemaVersion: SchemaVersion;
+}
+
+/** Outcome of a CAPT reconciliation pass over a driver run. No automatic re-execution is implied. */
+export type DriverReconciliationResult = "reconciled_completed" | "reconciled_failed" | "reconciliation_requires_human" | "safe_to_retry" | "retry_forbidden" | "external_state_unknown";
+export const DriverReconciliationResultValues = [
+  "reconciled_completed",
+  "reconciled_failed",
+  "reconciliation_requires_human",
+  "safe_to_retry",
+  "retry_forbidden",
+  "external_state_unknown",
+] as const;
 
 /** DriverReconciliationStatus */
 export type DriverReconciliationStatus = "not_required" | "required" | "in_progress" | "resolved_effect_occurred" | "resolved_effect_absent" | "unresolvable";
@@ -448,6 +569,13 @@ export const DriverReconciliationStatusValues = [
   "resolved_effect_absent",
   "unresolvable",
 ] as const;
+
+/** Optional CAPT-authored input to resume a suspended run. */
+export interface DriverResumeInput {
+  readonly driverRunId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly resumeNote?: string | null;
+}
 
 /** DriverRun */
 export interface DriverRun {
@@ -463,19 +591,100 @@ export interface DriverRun {
   readonly externalRunId?: string | null;
 }
 
+/** Per-run recovery state embedded in the CAPT CheckpointManifest. Trusted only after integrity verification. */
+export interface DriverRunCheckpoint {
+  readonly driverRunId: Identifier;
+  readonly lastEventGlobalSequence: number;
+  readonly lastObservationDigest: string | null;
+  readonly openReservations: number;
+  readonly reconciliationStatus: DriverReconciliationStatus;
+  readonly state: DriverRunState;
+  readonly workOrderVersion: number;
+}
+
 /** DriverRunState */
-export type DriverRunState = "created" | "submitted" | "running" | "suspended" | "cancelled" | "completed" | "failed" | "lost" | "reconciled";
+export type DriverRunState = "created" | "queued" | "submitted" | "running" | "suspended" | "completed" | "cancelled" | "failed" | "lost" | "reconciled";
 export const DriverRunStateValues = [
   "created",
+  "queued",
   "submitted",
   "running",
   "suspended",
-  "cancelled",
   "completed",
+  "cancelled",
   "failed",
   "lost",
   "reconciled",
 ] as const;
+
+/** How CAPT terminates a run on anomaly. */
+export interface DriverTerminationCondition {
+  readonly onBudgetExceeded?: string;
+  readonly onTimeout?: string;
+  readonly onUnexpectedWrite?: unknown;
+}
+
+/** Alias of ExecutionDriverWorkOrder retained for compatibility. */
+export interface DriverWorkOrder {
+  readonly contextSlice: ContextSlice;
+  readonly driverId: Identifier;
+  readonly driverRunId: Identifier;
+  readonly missionId: Identifier;
+  readonly operations: readonly string[];
+  readonly schemaVersion: SchemaVersion;
+  readonly taskId: Identifier;
+  readonly workOrderVersion: number;
+}
+
+/** Authoritative CAPT name for the driver descriptor contract (ADR-0120). Structurally identical to DriverDescriptor. */
+export interface ExecutionDriverDescriptor {
+  readonly driverId: Identifier;
+  readonly driverVersion: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly supportedOperations: readonly string[];
+  readonly writeCapable: boolean;
+}
+
+/** CAPT-authored instruction to a driver. Operations must be read-only (ADR-0122). */
+export interface ExecutionDriverWorkOrder {
+  readonly contextSlice: ContextSlice;
+  readonly driverId: Identifier;
+  readonly driverRunId: Identifier;
+  readonly missionId: Identifier;
+  readonly operations: readonly string[];
+  readonly schemaVersion: SchemaVersion;
+  readonly taskId: Identifier;
+  readonly workOrderVersion: number;
+}
+
+/** Descriptor for an artifact a driver may create in the CAPT staging area. */
+export interface ExpectedArtifact {
+  readonly artifactKind: string;
+  readonly artifactPath: string;
+}
+
+/** FilesystemPolicy */
+export interface FilesystemPolicy {
+  readonly allowedPaths: readonly string[];
+  readonly rootPath: string;
+  readonly writesAllowed: unknown;
+}
+
+/** M0-B drivers are read-only; outbound network is denied by default. */
+export interface NetworkPolicy {
+  readonly allowedHosts: readonly string[];
+  readonly egressAllowed: unknown;
+}
+
+/** Alias of DriverReceiptCandidate; a driver-claimed step receipt. */
+export interface RequiredReceipt {
+  readonly claimedAt: Timestamp;
+  readonly driverRunId: Identifier;
+  readonly receiptId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly step: string;
+  readonly contentDigest?: string;
+}
 
 /** CapabilityGrantRevokedPayload */
 export interface CapabilityGrantRevokedPayload {
