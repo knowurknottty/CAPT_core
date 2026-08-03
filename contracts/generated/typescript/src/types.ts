@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:6efe02733ed12971dcc10b2a1b90c116d1c4c2396c1293527c4fb3ad8a7d02ad
+// source digest:  sha256:e30763820bc9f0064c7ddfa40fbd97f893f72c8f099c3c26a2f82742558feaea
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -345,13 +345,36 @@ export interface ActorRef {
   readonly displayName?: string | null;
 }
 
+/** An autonomous agent principal operating under delegated authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface AgentIdentity {
+  readonly agentId: Identifier;
+  readonly delegatedBy: Identifier;
+  readonly principalId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly displayName?: string | null;
+}
+
 /** 0 means the stream does not yet exist. Increments by exactly 1 per event. */
 export type AggregateVersion = number;
+
+/** The unbroken chain of delegations from a root principal to the acting principal. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface AuthorityChain {
+  readonly chainId: Identifier;
+  readonly entries: readonly Delegation[];
+  readonly schemaVersion: SchemaVersion;
+}
 
 /** Budget */
 export interface Budget {
   readonly maxOperations: number;
   readonly wallClockSeconds: number;
+}
+
+/** The subject (principal or resource) a capability is issued against. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface CapabilitySubject {
+  readonly schemaVersion: SchemaVersion;
+  readonly subjectId: Identifier;
+  readonly subjectKind: string;
 }
 
 /** Mandatory envelope for every consequential command (ADR-0108). */
@@ -393,8 +416,27 @@ export interface ContextPack {
   readonly unresolvedConflicts?: readonly Readonly<Record<string, unknown>>[];
 }
 
+/** A bounded transfer of authority from a delegator to a delegate. Must not widen the delegator's own authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface Delegation {
+  readonly delegateId: Identifier;
+  readonly delegationId: Identifier;
+  readonly delegatorId: Identifier;
+  readonly expiresAt: Timestamp;
+  readonly schemaVersion: SchemaVersion;
+  readonly scope: string;
+}
+
 /** Lowercase hex SHA-256 with algorithm prefix. */
 export type Digest = string;
+
+/** An external ExecutionDriver principal. Reuses the existing driver-identity attestation discipline (DriverRegistry.SpoofedDriverIdentity, hermes.probe_hermes_identity). Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface DriverIdentity {
+  readonly driverId: Identifier;
+  readonly executableDigest: Digest;
+  readonly principalId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly version: string;
+}
 
 /** ErrorCategory */
 export type ErrorCategory = "validation" | "authority" | "concurrency" | "idempotency" | "integrity" | "not_found" | "illegal_transition" | "capability_denied" | "reconciliation_required" | "internal";
@@ -463,8 +505,23 @@ export interface HumanApprovalRequest {
   readonly remainingUses?: number | null;
 }
 
+/** A human operator principal. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface HumanIdentity {
+  readonly operatorId: Identifier;
+  readonly principalId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly displayName?: string | null;
+}
+
 /** Opaque, caller-minted identifier. Bounded charset prevents injection into paths, SQL, and log lines. */
 export type Identifier = string;
+
+/** Cryptographic or process attestation that a principal is who it claims. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface IdentityAttestation {
+  readonly digest: Digest;
+  readonly method: string;
+  readonly schemaVersion: SchemaVersion;
+}
 
 /** Typed mandatory memory query emitted by CAPT when a retrieval trigger fires. No anonymous text blobs. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001). */
 export interface MemoryQuery {
@@ -530,6 +587,15 @@ export interface MemoryTriggerPolicy {
   readonly previousPolicyDigest?: string | null;
 }
 
+/** A model principal referenced by a driver. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface ModelIdentity {
+  readonly modelId: Identifier;
+  readonly modelName: string;
+  readonly principalId: Identifier;
+  readonly provider: string;
+  readonly schemaVersion: SchemaVersion;
+}
+
 /** High-level operator intent submitted to CAPT Runtime to create a bounded mission. The runtime owns all planning: it constructs the MissionSpec, TaskNode, and (when requiresApproval) HumanApprovalRequest from this intent. The desktop never builds aggregates. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001). */
 export interface OperatorMissionIntent {
   readonly missionId: Identifier;
@@ -553,6 +619,15 @@ export interface OperatorMissionIntent {
   readonly unresolvedAmbiguities?: readonly string[];
 }
 
+/** The actor on whose behalf authority is exercised. Identity establishes the actor; delegation transfers bounded authority; governance evaluates; capability issuance grants permission. Additive plane-convergence extension under contract 1.0.0 (ADR-DT-PLANE-CONV). */
+export interface Principal {
+  readonly attestation: IdentityAttestation;
+  readonly kind: string;
+  readonly principalId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly displayName?: string | null;
+}
+
 /** never: no automatic re-execution. safe: externally idempotent. verify-before-retry: observe external state first (ADR-0108). */
 export type ReplayPolicy = "never" | "safe" | "verify-before-retry";
 export const ReplayPolicyValues = [
@@ -560,6 +635,15 @@ export const ReplayPolicyValues = [
   "safe",
   "verify-before-retry",
 ] as const;
+
+/** A revocation of a principal, delegation, or session. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface RevocationRecord {
+  readonly reason: string;
+  readonly revocationId: Identifier;
+  readonly revokedAt: Timestamp;
+  readonly schemaVersion: SchemaVersion;
+  readonly targetId: Identifier;
+}
 
 /** Operator-facing risk band for a bounded approval request. Advisory only; CAPT authority invariants remain the sole enforcement path. */
 export type RiskClassification = "none" | "low" | "medium" | "high" | "consequential";
@@ -571,11 +655,28 @@ export const RiskClassificationValues = [
   "consequential",
 ] as const;
 
+/** The CAPT runtime instance principal. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface RuntimeIdentity {
+  readonly principalId: Identifier;
+  readonly runtimeId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly version: string;
+}
+
 /** Contract-set version. Readers MUST reject an unequal value (ADR-0101). */
 export type SchemaVersion = "1.0.0";
 
 /** SequenceNumber */
 export type SequenceNumber = number;
+
+/** A bounded session under which authority is exercised. A session token alone must never become unrestricted authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface SessionIdentity {
+  readonly expiresAt: Timestamp;
+  readonly issuedAt: Timestamp;
+  readonly principalId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly sessionId: string;
+}
 
 /** Aggregate stream identifier. The prefix declares the owning aggregate (ADR-0103) and is enforced by the store. */
 export type StreamId = string;

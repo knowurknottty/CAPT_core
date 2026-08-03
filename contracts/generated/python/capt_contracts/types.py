@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:6efe02733ed12971dcc10b2a1b90c116d1c4c2396c1293527c4fb3ad8a7d02ad
+# source digest:  sha256:e30763820bc9f0064c7ddfa40fbd97f893f72c8f099c3c26a2f82742558feaea
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -397,7 +397,27 @@ class ActorRef(object):
     displayName: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class AgentIdentity(object):
+    """An autonomous agent principal operating under delegated authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    agentId: Identifier
+    delegatedBy: Identifier
+    principalId: Identifier
+    schemaVersion: SchemaVersion
+    displayName: Optional[str] = None
+
+
 AggregateVersion = int
+
+
+@dataclass(frozen=True)
+class AuthorityChain(object):
+    """The unbroken chain of delegations from a root principal to the acting principal. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    chainId: Identifier
+    entries: List[Delegation]
+    schemaVersion: SchemaVersion
 
 
 @dataclass(frozen=True)
@@ -406,6 +426,15 @@ class Budget(object):
 
     maxOperations: int
     wallClockSeconds: int
+
+
+@dataclass(frozen=True)
+class CapabilitySubject(object):
+    """The subject (principal or resource) a capability is issued against. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    schemaVersion: SchemaVersion
+    subjectId: Identifier
+    subjectKind: str
 
 
 @dataclass(frozen=True)
@@ -451,7 +480,30 @@ class ContextPack(object):
     unresolvedConflicts: List[Dict[str, Any]] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class Delegation(object):
+    """A bounded transfer of authority from a delegator to a delegate. Must not widen the delegator's own authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    delegateId: Identifier
+    delegationId: Identifier
+    delegatorId: Identifier
+    expiresAt: Timestamp
+    schemaVersion: SchemaVersion
+    scope: str
+
+
 Digest = str
+
+
+@dataclass(frozen=True)
+class DriverIdentity(object):
+    """An external ExecutionDriver principal. Reuses the existing driver-identity attestation discipline (DriverRegistry.SpoofedDriverIdentity, hermes.probe_hermes_identity). Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    driverId: Identifier
+    executableDigest: Digest
+    principalId: Identifier
+    schemaVersion: SchemaVersion
+    version: str
 
 
 class ErrorCategory(str, Enum):
@@ -529,7 +581,26 @@ class HumanApprovalRequest(object):
     remainingUses: Optional[int] = None
 
 
+@dataclass(frozen=True)
+class HumanIdentity(object):
+    """A human operator principal. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    operatorId: Identifier
+    principalId: Identifier
+    schemaVersion: SchemaVersion
+    displayName: Optional[str] = None
+
+
 Identifier = str
+
+
+@dataclass(frozen=True)
+class IdentityAttestation(object):
+    """Cryptographic or process attestation that a principal is who it claims. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    digest: Digest
+    method: str
+    schemaVersion: SchemaVersion
 
 
 @dataclass(frozen=True)
@@ -603,6 +674,17 @@ class MemoryTriggerPolicy(object):
 
 
 @dataclass(frozen=True)
+class ModelIdentity(object):
+    """A model principal referenced by a driver. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    modelId: Identifier
+    modelName: str
+    principalId: Identifier
+    provider: str
+    schemaVersion: SchemaVersion
+
+
+@dataclass(frozen=True)
 class OperatorMissionIntent(object):
     """High-level operator intent submitted to CAPT Runtime to create a bounded mission. The runtime owns all planning: it constructs the MissionSpec, TaskNode, and (when requiresApproval) HumanApprovalRequest from this intent. The desktop never builds aggregates. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001)."""
 
@@ -627,12 +709,34 @@ class OperatorMissionIntent(object):
     unresolvedAmbiguities: List[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class Principal(object):
+    """The actor on whose behalf authority is exercised. Identity establishes the actor; delegation transfers bounded authority; governance evaluates; capability issuance grants permission. Additive plane-convergence extension under contract 1.0.0 (ADR-DT-PLANE-CONV)."""
+
+    attestation: IdentityAttestation
+    kind: str
+    principalId: Identifier
+    schemaVersion: SchemaVersion
+    displayName: Optional[str] = None
+
+
 class ReplayPolicy(str, Enum):
     """never: no automatic re-execution. safe: externally idempotent. verify-before-retry: observe external state first (ADR-0108)."""
 
     NEVER = "never"
     SAFE = "safe"
     VERIFY_BEFORE_RETRY = "verify-before-retry"
+
+
+@dataclass(frozen=True)
+class RevocationRecord(object):
+    """A revocation of a principal, delegation, or session. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    reason: str
+    revocationId: Identifier
+    revokedAt: Timestamp
+    schemaVersion: SchemaVersion
+    targetId: Identifier
 
 
 class RiskClassification(str, Enum):
@@ -645,10 +749,31 @@ class RiskClassification(str, Enum):
     CONSEQUENTIAL = "consequential"
 
 
+@dataclass(frozen=True)
+class RuntimeIdentity(object):
+    """The CAPT runtime instance principal. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    principalId: Identifier
+    runtimeId: Identifier
+    schemaVersion: SchemaVersion
+    version: str
+
+
 SchemaVersion = Literal["1.0.0"]
 
 
 SequenceNumber = int
+
+
+@dataclass(frozen=True)
+class SessionIdentity(object):
+    """A bounded session under which authority is exercised. A session token alone must never become unrestricted authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    expiresAt: Timestamp
+    issuedAt: Timestamp
+    principalId: Identifier
+    schemaVersion: SchemaVersion
+    sessionId: str
 
 
 StreamId = str

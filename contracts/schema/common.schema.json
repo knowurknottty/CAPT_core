@@ -354,6 +354,167 @@
         "correlationId": { "$ref": "common.schema.json#/$defs/Identifier" },
         "sessionId": { "type": ["string", "null"], "maxLength": 128 }
       }
+    },
+    "Principal": {
+      "title": "Principal",
+      "description": "The actor on whose behalf authority is exercised. Identity establishes the actor; delegation transfers bounded authority; governance evaluates; capability issuance grants permission. Additive plane-convergence extension under contract 1.0.0 (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "principalId", "kind", "attestation"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "kind": { "type": "string", "enum": ["human", "agent", "runtime", "driver", "model", "skill", "plugin"] },
+        "displayName": { "type": ["string", "null"], "maxLength": 256 },
+        "attestation": { "$ref": "common.schema.json#/$defs/IdentityAttestation" }
+      }
+    },
+    "HumanIdentity": {
+      "title": "HumanIdentity",
+      "description": "A human operator principal. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "principalId", "operatorId"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "operatorId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "displayName": { "type": ["string", "null"], "maxLength": 256 }
+      }
+    },
+    "AgentIdentity": {
+      "title": "AgentIdentity",
+      "description": "An autonomous agent principal operating under delegated authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "principalId", "agentId", "delegatedBy"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "agentId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "delegatedBy": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "displayName": { "type": ["string", "null"], "maxLength": 256 }
+      }
+    },
+    "RuntimeIdentity": {
+      "title": "RuntimeIdentity",
+      "description": "The CAPT runtime instance principal. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "principalId", "runtimeId", "version"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "runtimeId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "version": { "type": "string", "maxLength": 64 }
+      }
+    },
+    "DriverIdentity": {
+      "title": "DriverIdentity",
+      "description": "An external ExecutionDriver principal. Reuses the existing driver-identity attestation discipline (DriverRegistry.SpoofedDriverIdentity, hermes.probe_hermes_identity). Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "principalId", "driverId", "executableDigest", "version"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "driverId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "executableDigest": { "$ref": "common.schema.json#/$defs/Digest" },
+        "version": { "type": "string", "maxLength": 64 }
+      }
+    },
+    "ModelIdentity": {
+      "title": "ModelIdentity",
+      "description": "A model principal referenced by a driver. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "principalId", "modelId", "provider", "modelName"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "modelId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "provider": { "type": "string", "maxLength": 64 },
+        "modelName": { "type": "string", "maxLength": 128 }
+      }
+    },
+    "SessionIdentity": {
+      "title": "SessionIdentity",
+      "description": "A bounded session under which authority is exercised. A session token alone must never become unrestricted authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "sessionId", "principalId", "issuedAt", "expiresAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "sessionId": { "type": "string", "maxLength": 128 },
+        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "issuedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "expiresAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      }
+    },
+    "Delegation": {
+      "title": "Delegation",
+      "description": "A bounded transfer of authority from a delegator to a delegate. Must not widen the delegator's own authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "delegationId", "delegatorId", "delegateId", "scope", "expiresAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "delegationId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "delegatorId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "delegateId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "scope": { "type": "string", "maxLength": 256 },
+        "expiresAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      }
+    },
+    "AuthorityChain": {
+      "title": "AuthorityChain",
+      "description": "The unbroken chain of delegations from a root principal to the acting principal. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "chainId", "entries"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "chainId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "entries": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/Delegation" } }
+      }
+    },
+    "IdentityAttestation": {
+      "title": "IdentityAttestation",
+      "description": "Cryptographic or process attestation that a principal is who it claims. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "method", "digest"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "method": { "type": "string", "enum": ["executable_digest", "session_token", "delegation_record", "runtime_attestation"] },
+        "digest": { "$ref": "common.schema.json#/$defs/Digest" }
+      }
+    },
+    "RevocationRecord": {
+      "title": "RevocationRecord",
+      "description": "A revocation of a principal, delegation, or session. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "revocationId", "targetId", "revokedAt", "reason"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "revocationId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "targetId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "revokedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "reason": { "type": "string", "maxLength": 1024 }
+      }
+    },
+    "CapabilitySubject": {
+      "title": "CapabilitySubject",
+      "description": "The subject (principal or resource) a capability is issued against. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "subjectId", "subjectKind"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "subjectId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "subjectKind": { "type": "string", "enum": ["principal", "resource", "mission", "driver"] }
+      }
     }
   }
 }
