@@ -48,7 +48,7 @@ Challenged each integration claim:
 
 | # | Finding | Correction | Affected file | Evidence | Residual uncertainty |
 |---|---------|-----------|---------------|----------|----------------------|
-| R1 | PR #21 base `e215a9e` divergent from current main `55e149b`. | Documented as stale/divergent; disposition = close as superseded (content already in M0-A). No rebase needed. | CAPT_RUNTIME_M0_INTEGRATION_MAP.md, CAPT_RUNTIME_M0_MERGE_PLAN.md | merge-base check; diff of 3 docs | None — supersession confirmed. |
+| R1 | PR #21 base `e215a9e` equals current `origin/main` (local `capt-m0a` main worktree is `55e149b`, 7 ahead from CAPT_core worktree — not a remote divergence). | Corrected wording: base is current remote main, not divergent; disposition = close as superseded (content already in M0-A). No rebase needed. | CAPT_RUNTIME_M0_INTEGRATION_MAP.md, CAPT_RUNTIME_M0_MERGE_PLAN.md | merge-base check; diff of 3 docs | None — supersession confirmed. |
 | R2 | Incident report could imply a CAPT runtime governance failure. | Added Section 9 clarification: activity = bioCAPT Ouroboros subsystem, not CAPT failure; original evidence preserved. | POST_M0B_GOVERNANCE_INCIDENT_REPORT.md (review-doc branch, commit 80fd871) | patch diff | None — factual. |
 | R3 | Freeze marker needed (no tag/release authorized). | Created immutable freeze manifest doc recording final SHA, contract version, proof statuses, CI limitation, driver classification, deferred M0-C. | CAPT_RUNTIME_M0_FREEZE_MARKER.md | this branch | None. |
 | R4 | Composed-stack counts vs isolated — must not carry forward. | Fresh re-run produced 469/51/108; identical to isolated (expected: freeze adds docs only). Stated explicitly. | CAPT_RUNTIME_M0_FINAL_VERIFICATION.md | pytest output | None. |

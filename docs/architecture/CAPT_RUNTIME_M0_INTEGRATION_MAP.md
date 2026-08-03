@@ -23,7 +23,7 @@ Proof:
 
 | Layer | Branch | Head SHA | PR | Current base | Intended final destination | Status |
 |-------|--------|----------|----|--------------|----------------------------|--------|
-| Architecture specification | docs/capt-runtime-architecture-spec | 022f970 | #21 | main (e215a9e, **stale/divergent**) | main (via M0-A) | **SUPERSEDED** — content identical to M0-A |
+| Architecture specification | docs/capt-runtime-architecture-spec | 022f970 | #21 | main (e215a9e = **current origin/main**) | main (via M0-A) | **SUPERSEDED** — content identical to M0-A |
 | M0-A | feat/capt-runtime-m0a-contract-state-proof | 6665a6a | (none open; #23 targets M0-B) | — | main | ready |
 | M0-B | feat/capt-runtime-m0b-readonly-driver-proof-hy3 | 0d851c4 | #23 | M0-A (6665a6a) | main (via M0-A) | ready, DRAFT |
 | M0 freeze | docs/capt-runtime-m0-freeze | f76b1cb | #24 | M0-B (0d851c4) | main (via M0-B) | ready, DRAFT |
@@ -51,7 +51,10 @@ Proof:
 - **Branch collisions:** none. Canonical M0-B name `feat/capt-runtime-m0b-...-hy3`
   coexists with the parallel worktree branch `feat/capt-runtime-m0b-...` (capt-m0b
   worktree, `c518acf`); they are separate and not merged.
-- **Stale PR bases:** PR #21 only. PR #23/#24 bases are correct (proven ancestors).
+- **Stale PR bases:** none in implementation. PR #21's base `e215a9e` equals
+  current `origin/main` (the local `capt-m0a` main worktree is `55e149b`, 7 ahead
+  of origin/main from the CAPT_core worktree — that local-ahead state does not make
+  PR #21's remote base divergent). PR #21 is redundant by content, not by base.
 - **Commits to rebase/cherry-pick:** none required. No history rewrite needed.
 - **Commits that should NOT enter main:** PR #21 (duplicate of M0-A). Close as
   superseded after M0-A merges. The parallel `capt-m0b` worktree branch
