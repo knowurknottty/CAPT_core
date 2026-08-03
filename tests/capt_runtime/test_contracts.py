@@ -51,6 +51,21 @@ def test_drift_check_clean():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def _node_bin_or_skip():
+    """Resolve node via the portable discovery helper; skip only if absent."""
+    from contracts.tools.node_discovery import discover_node_bin
+
+    node = discover_node_bin()
+    if node is None:
+        pytest.skip(
+            "Node.js not discoverable (PATH or CAPT_NODE_BIN or standard "
+            "locations). Cross-language parity requires Node; the CAPT runtime "
+            "itself has no JavaScript dependency. Install Node or set "
+            "CAPT_NODE_BIN."
+        )
+    return node
+
+
 def test_cross_language_fixture_parity():
     """Both languages validate every fixture identically, including error text."""
     # Python side
@@ -61,10 +76,10 @@ def test_cross_language_fixture_parity():
             errs = capt_contracts.validate(case["type"], case["value"])
             py_results[case["id"]] = errs
 
-    # TypeScript side — parse the LAST stdout line as JSON (prior lines are
-    # human-readable progress).
+    # TypeScript side — resolve node portably; skip only if genuinely absent.
+    node = _node_bin_or_skip()
     ts_result = subprocess.run(
-        ["node", str(REPO / "contracts/tools/ts_parity.mjs")],
+        [node, str(REPO / "contracts/tools/ts_parity.mjs")],
         cwd=REPO, capture_output=True, text=True,
     )
     assert ts_result.returncode == 0, ts_result.stdout + ts_result.stderr
