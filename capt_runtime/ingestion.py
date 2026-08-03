@@ -73,18 +73,25 @@ def validate_observation(
     task_id: str,
     allowed_roots: List[str],
     seen: Dict[str, Dict[str, Any]],
+    expected_observed_by: str,
 ) -> Dict[str, Any]:
-    """Validate one untrusted DriverObservation. Returns the normalized record."""
+    """Validate one untrusted DriverObservation. Returns the normalized record.
+
+    Defends against driver impersonation: the observation's ``observedBy`` must
+    equal the registered driver identity for this run (the host passes the
+    verified driver id). Fabricated authoritative types are rejected via
+    ``reject_fabricated_authoritative`` at the run level, not here.
+    """
     require("DriverObservation", observation)
     if observation.get("trust") != "untrusted":
         raise IngestionRejection("driver observation must be trust=untrusted")
-    if observation.get("observedBy") in _FORBIDDEN_DRIVER_TYPES:
-        raise IngestionRejection("driver emitted a forbidden authoritative type")
+    if observation.get("observedBy") != expected_observed_by:
+        raise IngestionRejection(
+            "observation observedBy %r does not match run driver %r (impersonation?)"
+            % (observation.get("observedBy"), expected_observed_by)
+        )
     if observation.get("workOrderId") != driver_run_id:
         raise IngestionRejection("observation references a different run")
-    # Cross-mission/task leakage.
-    # (DriverObservation uses workOrderId only; mission/task binding is enforced
-    #  at the run level by the host, so we check the run id above.)
     # Duplicate / conflicting detection.
     oid = observation["observationId"]
     if oid in seen:

@@ -4,8 +4,8 @@ Owns ONLY driver-run lifecycle and reconciliation. It must NOT own mission
 lifecycle, task lifecycle, capability grants, claim verification, authoritative
 evidence, or policy decisions.
 
-States: created, queued, running, suspended, completed, cancelled, failed,
-reconciliation_required, reconciled.
+States: created, queued, running, suspended, completed, cancelled, failed, lost,
+reconciled.
 
 Terminal states are immutable except through an explicit reconciliation transition
 where justified (lost -> reconciled).

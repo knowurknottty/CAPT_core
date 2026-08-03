@@ -192,7 +192,7 @@ def test_repository_hashes_unchanged(env):
     out = host.dispatch(wo, ctx, DriverRunAggregate.create({"driverRunId": "dr", "driverId": "openharness", "missionId": "m", "taskId": "t"}),
                         now="2026-08-03T01:00:00Z", lease=_lease(env["repo"]))
     seen = {}
-    ing = host.ingest(out, "dr", "m", "t", seen)
+    ing = host.ingest(out, "dr", "m", "t", seen, expected_observed_by="openharness")
     vr = host.verify(before, ing["artifacts"][0]["path"], ing["artifacts"][0]["digest"], "openharness")
     assert vr["status"]["kind"] == "verified"
     after = tree_digest(env["repo"])
@@ -315,7 +315,7 @@ def test_valid_observation_accepted_as_untrusted():
     obs = {"schemaVersion": "1.0.0", "observationId": "o1", "observedBy": "openharness",
            "trust": "untrusted", "workOrderId": "dr", "summary": "ok",
            "observedAt": "2026-08-03T00:00:00Z"}
-    v = validate_observation(obs, "dr", "m", "t", ["/staging"], {})
+    v = validate_observation(obs, "dr", "m", "t", ["/staging"], {}, expected_observed_by="openharness")
     assert not v["duplicate"]
 
 
@@ -324,8 +324,8 @@ def test_duplicate_observation_deduplicated():
            "trust": "untrusted", "workOrderId": "dr", "summary": "ok",
            "observedAt": "2026-08-03T00:00:00Z"}
     seen = {}
-    validate_observation(obs, "dr", "m", "t", ["/staging"], seen)
-    v2 = validate_observation(obs, "dr", "m", "t", ["/staging"], seen)
+    validate_observation(obs, "dr", "m", "t", ["/staging"], seen, expected_observed_by="openharness")
+    v2 = validate_observation(obs, "dr", "m", "t", ["/staging"], seen, expected_observed_by="openharness")
     assert v2["duplicate"]
 
 
@@ -334,9 +334,9 @@ def test_conflicting_duplicate_rejected():
            "trust": "untrusted", "workOrderId": "dr", "summary": "a", "observedAt": "2026-08-03T00:00:00Z"}
     o2 = dict(o1, summary="b")
     seen = {}
-    validate_observation(o1, "dr", "m", "t", ["/staging"], seen)
+    validate_observation(o1, "dr", "m", "t", ["/staging"], seen, expected_observed_by="openharness")
     with pytest.raises(IngestionRejection):
-        validate_observation(o2, "dr", "m", "t", ["/staging"], seen)
+        validate_observation(o2, "dr", "m", "t", ["/staging"], seen, expected_observed_by="openharness")
 
 
 def test_fake_receipt_rejected(env):
@@ -363,7 +363,16 @@ def test_cross_mission_observation_rejected():
            "trust": "untrusted", "workOrderId": "OTHER", "summary": "ok",
            "observedAt": "2026-08-03T00:00:00Z"}
     with pytest.raises(IngestionRejection):
-        validate_observation(obs, "dr", "m", "t", ["/staging"], {})
+        validate_observation(obs, "dr", "m", "t", ["/staging"], {}, expected_observed_by="openharness")
+
+
+def test_driver_impersonation_rejected():
+    # A driver cannot emit observations attributed to a different driver identity.
+    obs = {"schemaVersion": "1.0.0", "observationId": "o1", "observedBy": "evil-driver",
+           "trust": "untrusted", "workOrderId": "dr", "summary": "ok",
+           "observedAt": "2026-08-03T00:00:00Z"}
+    with pytest.raises(IngestionRejection):
+        validate_observation(obs, "dr", "m", "t", ["/staging"], {}, expected_observed_by="openharness")
 
 
 # ---------------------------------------------------------------------------
@@ -568,7 +577,7 @@ def test_m0b_read_only_acceptance_scenario(env):
     assert out["observations"]
 
     seen = {}
-    ing = host.ingest(out, "dr", "m", "t", seen)
+    ing = host.ingest(out, "dr", "m", "t", seen, expected_observed_by="openharness")
     assert ing["artifacts"]
     assert ing["observations"]
 
@@ -586,3 +595,108 @@ def test_m0b_read_only_acceptance_scenario(env):
     rec = reconcile(run_state, [{"eventType": "DriverRunStateChanged", "payload": {"toState": "completed"}}],
                    ing["observations"], artifact_present=True, lease_valid=True, budget_valid=True)
     assert rec["result"] == "reconciled_completed"
+
+
+# ---------------------------------------------------------------------------
+# Security review (adversarial) — Part 19 mission checklist
+# ---------------------------------------------------------------------------
+
+def test_replay_after_cancellation_is_terminal():
+    # A run already cancelled cannot be re-driven to running (replay safety).
+    s = DriverRunAggregate.create({"driverRunId": "dr", "driverId": "openharness", "missionId": "m", "taskId": "t"})
+    s = DriverRunAggregate.transition(s, "queued")
+    s = DriverRunAggregate.transition(s, "running")
+    s = DriverRunAggregate.transition(s, "cancelled")
+    with pytest.raises(IllegalTransition):
+        DriverRunAggregate.transition(s, "running")
+
+
+def test_replay_after_reconciliation_is_terminal():
+    s = DriverRunAggregate.create({"driverRunId": "dr", "driverId": "openharness", "missionId": "m", "taskId": "t"})
+    s = DriverRunAggregate.transition(s, "queued")
+    s = DriverRunAggregate.transition(s, "running")
+    s = DriverRunAggregate.transition(s, "lost")
+    s = DriverRunAggregate.transition(s, "reconciled")
+    with pytest.raises(IllegalTransition):
+        DriverRunAggregate.transition(s, "running")
+
+
+def test_artifact_substitution_rejected():
+    # A driver artifact candidate whose digest does not match the real file is
+    # rejected (artifact substitution defense).
+    import tempfile
+    tmp = tempfile.mkdtemp()
+    staging = os.path.join(tmp, "staging")
+    os.makedirs(staging)
+    p = os.path.join(staging, "a.md")
+    with open(p, "w") as f:
+        f.write("real content")
+    ac = {"schemaVersion": "1.0.0", "candidateId": "ac1", "driverRunId": "dr",
+           "artifactPath": p, "artifactDigest": "sha256:" + "0" * 64,
+           "producedAt": "2026-08-03T00:00:00Z"}
+    with pytest.raises(IngestionRejection):
+        validate_artifact_candidate(ac, "dr", staging)
+
+
+def test_symlink_traversal_rejected():
+    # An artifact candidate pointing through a symlink outside staging is rejected.
+    import tempfile
+    tmp = tempfile.mkdtemp()
+    staging = os.path.join(tmp, "staging")
+    os.makedirs(staging)
+    outside = os.path.join(tmp, "outside")
+    os.makedirs(outside)
+    real = os.path.join(outside, "secret.md")
+    with open(real, "w") as f:
+        f.write("secret")
+    link = os.path.join(staging, "evil.md")
+    try:
+        os.symlink(real, link)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink not supported on this platform")
+    ac = {"schemaVersion": "1.0.0", "candidateId": "ac1", "driverRunId": "dr",
+           "artifactPath": link, "artifactDigest": "sha256:" + "0" * 64,
+           "producedAt": "2026-08-03T00:00:00Z"}
+    with pytest.raises(IngestionRejection):
+        validate_artifact_candidate(ac, "dr", staging)
+
+
+def test_forged_completion_overclaim_rejected():
+    # Reconciliation must not auto-promote a "completed" disposition when the
+    # artifact is absent (forged completion defense).
+    run_state = DriverRunAggregate.create({"driverRunId": "dr", "driverId": "openharness", "missionId": "m", "taskId": "t"})
+    rec = reconcile(run_state, [{"eventType": "DriverRunStateChanged", "payload": {"toState": "completed"}}],
+                   [], artifact_present=False, lease_valid=True, budget_valid=True)
+    assert rec["result"] == "reconciliation_requires_human"
+    assert any("artifact missing" in a for a in rec["anomalies"])
+
+
+def test_capability_escalation_rejected():
+    # A driver work order requesting a denied op is blocked before dispatch. The
+    # contract-level work-order op vocabulary for denied ops is the camelCase set
+    # that maps onto the capability-model denied vocabulary.
+    from capt_runtime.capability import check_work_order_operations, CapabilityViolation
+    for op in ("RepositoryWrite", "FilesystemWrite", "GitCommit", "GitPush"):
+        with pytest.raises(CapabilityViolation):
+            check_work_order_operations([op])
+
+
+def test_authority_confusion_driver_cannot_mutate_aggregates():
+    # The ExecutionDriver Protocol exposes no aggregate-mutation surface.
+    from capt_runtime.drivers import ExecutionDriver
+    for forbidden in ("grant_capability", "create_mission", "transition_task",
+                      "append_event", "create_claim", "verify_claim", "decide_claim"):
+        assert forbidden not in dir(ExecutionDriver), "driver interface leaks authority: %s" % forbidden
+
+
+def test_context_leakage_governance_rejected():
+    # ContextSlice must reject embedded authority objects (context leakage).
+    class PolicyEngine:
+        pass
+    with pytest.raises(ContextOverDisclosure):
+        build_context_slice(
+            lease=_lease(), filesystem_policy={"rootPath": "/r", "allowedPaths": ["/r"], "writesAllowed": False},
+            permitted_tools=[PolicyEngine()], budgets={"maxSeconds": 10}, expected_artifacts=[],
+            termination_conditions={"onUnexpectedWrite": "fail"},
+            network_policy={"egressAllowed": False, "allowedHosts": []},
+        )

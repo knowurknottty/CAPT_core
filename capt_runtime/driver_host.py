@@ -116,11 +116,13 @@ class DriverHost:
         mission_id: str,
         task_id: str,
         seen: Dict[str, Dict[str, Any]],
+        expected_observed_by: str,
     ) -> Dict[str, Any]:
         result: Dict[str, Any] = {"observations": [], "artifacts": [], "receipts": []}
         for obs in driver_output.get("observations", []):
             v = validate_observation(
-                obs, driver_run_id, mission_id, task_id, [self.staging_root], seen
+                obs, driver_run_id, mission_id, task_id, [self.staging_root], seen,
+                expected_observed_by,
             )
             if not v.get("duplicate"):
                 result["observations"].append(v["observation"])
