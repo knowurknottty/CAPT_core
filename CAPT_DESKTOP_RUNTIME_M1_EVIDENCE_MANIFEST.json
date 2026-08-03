@@ -8,7 +8,7 @@
   "remote": "https://github.com/knowurknottty/CAPT_core.git",
   "branch": "feat/capt-desktop-runtime-m1",
   "baseSha": "sha1:9d4fee12bc6147d7fe5da9e5025e8eb32911293a",
-  "finalHeadSha": "PENDING_COMMIT",
+  "finalHeadSha": "sha1:9d96cc7100ae968727e5a5712312f971fbe411cd",
   "contractSchemaVersion": "1.0.0",
   "runtimeVersion": "0.1.0",
   "authoritativeRuntimeActive": true,
