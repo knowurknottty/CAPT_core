@@ -76,6 +76,9 @@ Created:
 | Over-disclosure test used `FakeGovernance` not in forbidden set | test_m0b_driver.py | Use `GovernanceKernel` (matches forbidden type name) | test_context_over_disclosure_rejected passes | None |
 | `command()` requires `sha256:` fingerprint pattern | test_m0b_driver.py | Pass valid 64-hex fingerprints | replay/stale tests pass | None |
 | ruff E702 semicolons in test setup | test_m0b_driver.py | Split statements; `ruff --fix` | ruff clean on M0-B files | 88 pre-existing ruff errors in M0-A files left untouched (out of M0-B scope) |
+| `validate_observation` checked `observedBy` against type names (dead check; can never match a driver identity) | ingestion.py, driver_host.py, test_m0b_driver.py | Replaced with `expected_observed_by` identity equality (driver impersonation defense); added `test_driver_impersonation_rejected` | test_driver_impersonation_rejected + all observation tests pass | None |
+| `driver_run.py` docstring listed `reconciliation_required` but code uses `lost` | driver_run.py | Aligned docstring to actual state machine | doc/code consistent | None |
+| Security-review gaps (replay-after-cancel, replay-after-reconcile, artifact substitution, symlink traversal, forged completion, capability escalation, authority confusion, context leakage) | test_m0b_driver.py | Added 9 adversarial tests covering the mission's security checklist | 51 M0-B tests pass; full suite 469 passed / 44 skipped | None |
 
 ## Residual uncertainty (honest)
 
