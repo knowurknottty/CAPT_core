@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:f37a4bf77b024f99caecbb8b2282ccc2d28d6f1bf867b728979e74586efefe99
+// source digest:  sha256:61ea7f78e61f96bf7656c54a3655c9205db02139096103c8152f84f76d156fb8
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -784,6 +784,23 @@ export interface SimulationMarker {
 
 /** Aggregate stream identifier. The prefix declares the owning aggregate (ADR-0103) and is enforced by the store. */
 export type StreamId = string;
+
+/** Canonical temporal model distinguishing wall-clock, monotonic, logical, causal, mission-relative, lease, policy-effective, evidence-observation, verification, memory-freshness, training-cutoff, and replay times. Additive plane-convergence extension (ADR-DT-PLANE-CONV). Not a Time Plane. */
+export interface TemporalContext {
+  readonly causal: string;
+  readonly logical: number;
+  readonly missionRelative: number;
+  readonly monotonic: number;
+  readonly schemaVersion: SchemaVersion;
+  readonly wallClock: Timestamp;
+  readonly evidenceObservation?: string | null;
+  readonly leaseExpiration?: string | null;
+  readonly memoryFreshness?: string | null;
+  readonly policyEffective?: string | null;
+  readonly replayTime?: string | null;
+  readonly trainingCutoff?: string | null;
+  readonly verificationTime?: string | null;
+}
 
 /** RFC 3339 UTC instant. Descriptive only: never used for ordering or conflict resolution (ADR-0106). */
 export type Timestamp = string;

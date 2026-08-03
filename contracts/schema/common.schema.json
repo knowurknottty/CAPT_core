@@ -722,6 +722,28 @@
         "simId": { "$ref": "common.schema.json#/$defs/Identifier" },
         "kind": { "type": "string", "enum": ["result", "artifact", "evidence", "state"] }
       }
+    },
+    "TemporalContext": {
+      "title": "TemporalContext",
+      "description": "Canonical temporal model distinguishing wall-clock, monotonic, logical, causal, mission-relative, lease, policy-effective, evidence-observation, verification, memory-freshness, training-cutoff, and replay times. Additive plane-convergence extension (ADR-DT-PLANE-CONV). Not a Time Plane.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "wallClock", "monotonic", "logical", "causal", "missionRelative"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "wallClock": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "monotonic": { "type": "number" },
+        "logical": { "type": "integer" },
+        "causal": { "type": "string", "maxLength": 256 },
+        "missionRelative": { "type": "number" },
+        "leaseExpiration": { "type": ["string", "null"], "maxLength": 64 },
+        "policyEffective": { "type": ["string", "null"], "maxLength": 64 },
+        "evidenceObservation": { "type": ["string", "null"], "maxLength": 64 },
+        "verificationTime": { "type": ["string", "null"], "maxLength": 64 },
+        "memoryFreshness": { "type": ["string", "null"], "maxLength": 64 },
+        "trainingCutoff": { "type": ["string", "null"], "maxLength": 64 },
+        "replayTime": { "type": ["string", "null"], "maxLength": 64 }
+      }
     }
   }
 }
