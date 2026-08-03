@@ -5,6 +5,18 @@ Context: M0 stack frozen and verified (M0-A PROVEN, M0-B PROVEN, freeze PASSED).
 Integration artifacts prepared; merge pending owner authorization. M0-C,
 RuntimeAggregate, RuntimeManifest, and external-driver integration have NOT started.
 
+## Implementation status (updated 2026-08-03)
+
+- **Gate A — External ExecutionDriver conformance proof: IMPLEMENTED & PROVEN.**
+  A genuine OpenHarness 0.1.9 harness (isolated venv, local Ollama model
+  `ornith-1.0-9b`) executes the bounded read-only task through a new external
+  adapter (`capt_runtime/external_drivers/openharness/`) that implements the
+  frozen `ExecutionDriver` Protocol. CAPT retains exclusive authority; the frozen
+  51-test M0-B suite passes unchanged. Branch: `feat/capt-runtime-external-driver-conformance`.
+  See `docs/architecture/external-drivers/` for the full evidence set.
+- Gate B (M0-C), Gate C (RuntimeManifest), Gate D (Release Security CI) remain
+  deferred / parallel as described below.
+
 ## Gate evaluation (based on integrated evidence)
 
 | Gate | Description | Dependency / risk | Recommendation |
