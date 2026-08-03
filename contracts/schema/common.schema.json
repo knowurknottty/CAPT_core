@@ -626,6 +626,102 @@
         "contentDigest": { "$ref": "common.schema.json#/$defs/Digest" },
         "verified": { "type": "boolean" }
       }
+    },
+    "TrajectoryRecord": {
+      "title": "TrajectoryRecord",
+      "description": "An immutable record of a mission execution trajectory, admissible to Learning only after verification + ClaimGuard. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "trajectoryId", "missionId", "verified", "claimGuardPassed"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "trajectoryId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "verified": { "type": "boolean" },
+        "claimGuardPassed": { "type": "boolean" },
+        "evidenceRef": { "type": ["string", "null"], "maxLength": 256 }
+      }
+    },
+    "RewardSignal": {
+      "title": "RewardSignal",
+      "description": "A compiled reward signal for a trajectory segment. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "signalId", "trajectoryId", "value"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "signalId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "trajectoryId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "value": { "type": "number" }
+      }
+    },
+    "LearningStrategy": {
+      "title": "LearningStrategy",
+      "description": "A registered learning strategy (GRPO/SFT/DPO/ORPO/KTO/RLOO). Interfaces only; no live training in M0. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "strategyId", "kind"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "strategyId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "kind": { "type": "string", "enum": ["GRPO", "SFT", "DPO", "ORPO", "KTO", "RLOO"] },
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "ModelCandidate": {
+      "title": "ModelCandidate",
+      "description": "A candidate model produced by isolated training, awaiting offline evaluation. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "candidateId", "sourceTrajectoryId", "artifactDigest"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "candidateId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "sourceTrajectoryId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "artifactDigest": { "$ref": "common.schema.json#/$defs/Digest" }
+      }
+    },
+    "LearningPromotionDecision": {
+      "title": "LearningPromotionDecision",
+      "description": "Human-governed promotion decision for a model candidate. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "decision", "decidedBy", "decidedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "decision": { "type": "string", "enum": ["promote", "reject"] },
+        "decidedBy": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "decidedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "reason": { "type": ["string", "null"], "maxLength": 1024 }
+      }
+    },
+    "SimulationEnvironment": {
+      "title": "SimulationEnvironment",
+      "description": "An isolated simulation environment with frozen initial state. Never inherits production authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "simId", "environmentDigest", "datasetDigest", "isSimulation"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "simId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "environmentDigest": { "$ref": "common.schema.json#/$defs/Digest" },
+        "datasetDigest": { "$ref": "common.schema.json#/$defs/Digest" },
+        "isSimulation": { "const": true },
+        "productionAuthority": { "const": false }
+      }
+    },
+    "SimulationMarker": {
+      "title": "SimulationMarker",
+      "description": "An explicit marker that an artifact/result was produced in simulation and must never become production state. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "markerId", "simId", "kind"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "markerId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "simId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "kind": { "type": "string", "enum": ["result", "artifact", "evidence", "state"] }
+      }
     }
   }
 }

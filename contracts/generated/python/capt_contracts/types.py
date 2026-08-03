@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:683ce7d3c261e0e855f0d88284855b2b003e6e0507be4601e93c8c96f7ee6525
+# source digest:  sha256:f37a4bf77b024f99caecbb8b2282ccc2d28d6f1bf867b728979e74586efefe99
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -648,6 +648,27 @@ class IdentityAttestation(object):
 
 
 @dataclass(frozen=True)
+class LearningPromotionDecision(object):
+    """Human-governed promotion decision for a model candidate. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    decidedAt: Timestamp
+    decidedBy: Identifier
+    decision: str
+    schemaVersion: SchemaVersion
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class LearningStrategy(object):
+    """A registered learning strategy (GRPO/SFT/DPO/ORPO/KTO/RLOO). Interfaces only; no live training in M0. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    kind: str
+    schemaVersion: SchemaVersion
+    strategyId: Identifier
+    enabled: Optional[bool] = None
+
+
+@dataclass(frozen=True)
 class MemoryQuery(object):
     """Typed mandatory memory query emitted by CAPT when a retrieval trigger fires. No anonymous text blobs. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001)."""
 
@@ -715,6 +736,16 @@ class MemoryTriggerPolicy(object):
     operatorId: Optional[str] = None
     policyDigest: Optional[str] = None
     previousPolicyDigest: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class ModelCandidate(object):
+    """A candidate model produced by isolated training, awaiting offline evaluation. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    artifactDigest: Digest
+    candidateId: Identifier
+    schemaVersion: SchemaVersion
+    sourceTrajectoryId: Identifier
 
 
 @dataclass(frozen=True)
@@ -804,6 +835,16 @@ class RevocationRecord(object):
     targetId: Identifier
 
 
+@dataclass(frozen=True)
+class RewardSignal(object):
+    """A compiled reward signal for a trajectory segment. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    schemaVersion: SchemaVersion
+    signalId: Identifier
+    trajectoryId: Identifier
+    value: float
+
+
 class RiskClassification(str, Enum):
     """Operator-facing risk band for a bounded approval request. Advisory only; CAPT authority invariants remain the sole enforcement path."""
 
@@ -841,10 +882,44 @@ class SessionIdentity(object):
     sessionId: str
 
 
+@dataclass(frozen=True)
+class SimulationEnvironment(object):
+    """An isolated simulation environment with frozen initial state. Never inherits production authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    datasetDigest: Digest
+    environmentDigest: Digest
+    isSimulation: Any
+    schemaVersion: SchemaVersion
+    simId: Identifier
+    productionAuthority: Optional[Any] = None
+
+
+@dataclass(frozen=True)
+class SimulationMarker(object):
+    """An explicit marker that an artifact/result was produced in simulation and must never become production state. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    kind: str
+    markerId: Identifier
+    schemaVersion: SchemaVersion
+    simId: Identifier
+
+
 StreamId = str
 
 
 Timestamp = str
+
+
+@dataclass(frozen=True)
+class TrajectoryRecord(object):
+    """An immutable record of a mission execution trajectory, admissible to Learning only after verification + ClaimGuard. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    claimGuardPassed: bool
+    missionId: Identifier
+    schemaVersion: SchemaVersion
+    trajectoryId: Identifier
+    verified: bool
+    evidenceRef: Optional[str] = None
 
 
 @dataclass(frozen=True)

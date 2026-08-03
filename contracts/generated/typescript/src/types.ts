@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:683ce7d3c261e0e855f0d88284855b2b003e6e0507be4601e93c8c96f7ee6525
+// source digest:  sha256:f37a4bf77b024f99caecbb8b2282ccc2d28d6f1bf867b728979e74586efefe99
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -559,6 +559,23 @@ export interface IdentityAttestation {
   readonly schemaVersion: SchemaVersion;
 }
 
+/** Human-governed promotion decision for a model candidate. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface LearningPromotionDecision {
+  readonly decidedAt: Timestamp;
+  readonly decidedBy: Identifier;
+  readonly decision: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly reason?: string | null;
+}
+
+/** A registered learning strategy (GRPO/SFT/DPO/ORPO/KTO/RLOO). Interfaces only; no live training in M0. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface LearningStrategy {
+  readonly kind: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly strategyId: Identifier;
+  readonly enabled?: boolean;
+}
+
 /** Typed mandatory memory query emitted by CAPT when a retrieval trigger fires. No anonymous text blobs. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001). */
 export interface MemoryQuery {
   readonly actor: string;
@@ -621,6 +638,14 @@ export interface MemoryTriggerPolicy {
   readonly operatorId?: string | null;
   readonly policyDigest?: string | null;
   readonly previousPolicyDigest?: string | null;
+}
+
+/** A candidate model produced by isolated training, awaiting offline evaluation. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface ModelCandidate {
+  readonly artifactDigest: Digest;
+  readonly candidateId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly sourceTrajectoryId: Identifier;
 }
 
 /** A model principal referenced by a driver. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
@@ -698,6 +723,14 @@ export interface RevocationRecord {
   readonly targetId: Identifier;
 }
 
+/** A compiled reward signal for a trajectory segment. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface RewardSignal {
+  readonly schemaVersion: SchemaVersion;
+  readonly signalId: Identifier;
+  readonly trajectoryId: Identifier;
+  readonly value: number;
+}
+
 /** Operator-facing risk band for a bounded approval request. Advisory only; CAPT authority invariants remain the sole enforcement path. */
 export type RiskClassification = "none" | "low" | "medium" | "high" | "consequential";
 export const RiskClassificationValues = [
@@ -731,11 +764,39 @@ export interface SessionIdentity {
   readonly sessionId: string;
 }
 
+/** An isolated simulation environment with frozen initial state. Never inherits production authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface SimulationEnvironment {
+  readonly datasetDigest: Digest;
+  readonly environmentDigest: Digest;
+  readonly isSimulation: unknown;
+  readonly schemaVersion: SchemaVersion;
+  readonly simId: Identifier;
+  readonly productionAuthority?: unknown;
+}
+
+/** An explicit marker that an artifact/result was produced in simulation and must never become production state. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface SimulationMarker {
+  readonly kind: string;
+  readonly markerId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly simId: Identifier;
+}
+
 /** Aggregate stream identifier. The prefix declares the owning aggregate (ADR-0103) and is enforced by the store. */
 export type StreamId = string;
 
 /** RFC 3339 UTC instant. Descriptive only: never used for ordering or conflict resolution (ADR-0106). */
 export type Timestamp = string;
+
+/** An immutable record of a mission execution trajectory, admissible to Learning only after verification + ClaimGuard. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface TrajectoryRecord {
+  readonly claimGuardPassed: boolean;
+  readonly missionId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly trajectoryId: Identifier;
+  readonly verified: boolean;
+  readonly evidenceRef?: string | null;
+}
 
 /** An isolated worktree/staging directory for artifact production. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
 export interface WorkspaceDescriptor {
