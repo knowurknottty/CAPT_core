@@ -31,3 +31,8 @@ namespaces = true
 "capt_solo.components" = ["*.json"]
 "capt_solo.plugin" = ["*.json"]
 "capt_solo.skills" = ["**/*.md"]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: test spawns a real external runtime process (seconds to minutes)",
+]
