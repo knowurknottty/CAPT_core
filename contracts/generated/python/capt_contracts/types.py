@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:8ff3dcc4f4fc0f2e05bf52ad775dad76a6c5705bcbed856b4b45931c38f21789
+# source digest:  sha256:5ef316defdb5ccf2b5359d4baa627b5504feb6ab778240e039a96b51c9e5932e
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -466,6 +466,42 @@ class ExtensionEnvelope(object):
     payloadJson: str
 
 
+@dataclass(frozen=True)
+class HumanApprovalDecision(object):
+    """Operator decision on a HumanApprovalRequest. 'approve' permits only the originally requested scope; 'deny' must prevent execution. Idempotent by idempotencyKey. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001)."""
+
+    correlationId: Identifier
+    decidedAt: Timestamp
+    decision: str
+    idempotencyKey: Identifier
+    operatorId: Identifier
+    requestId: Identifier
+    schemaVersion: SchemaVersion
+    note: Optional[str] = None
+    sessionId: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class HumanApprovalRequest(object):
+    """A bounded request for operator authorization before a consequential action. Authored by the governance kernel / execution plane; decided by a human operator. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001)."""
+
+    correlationId: Identifier
+    createdAt: Timestamp
+    expiresAt: Timestamp
+    missionId: Identifier
+    operation: str
+    policyReason: str
+    requestId: Identifier
+    requestedBy: ActorRef
+    requestedCapability: str
+    resource: str
+    riskClassification: RiskClassification
+    schemaVersion: SchemaVersion
+    scope: Dict[str, Any]
+    taskId: Identifier
+    remainingUses: Optional[int] = None
+
+
 Identifier = str
 
 
@@ -475,6 +511,16 @@ class ReplayPolicy(str, Enum):
     NEVER = "never"
     SAFE = "safe"
     VERIFY_BEFORE_RETRY = "verify-before-retry"
+
+
+class RiskClassification(str, Enum):
+    """Operator-facing risk band for a bounded approval request. Advisory only; CAPT authority invariants remain the sole enforcement path."""
+
+    NONE = "none"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CONSEQUENTIAL = "consequential"
 
 
 SchemaVersion = Literal["1.0.0"]
@@ -924,6 +970,22 @@ class EvidenceRecordedPayload(object):
 
 
 @dataclass(frozen=True)
+class HumanApprovalDecidedPayload(object):
+    """HumanApprovalDecidedPayload"""
+
+    decision: HumanApprovalDecision
+    eventType: Literal["HumanApprovalDecided"]
+
+
+@dataclass(frozen=True)
+class HumanApprovalRequestedPayload(object):
+    """HumanApprovalRequestedPayload"""
+
+    eventType: Literal["HumanApprovalRequested"]
+    request: HumanApprovalRequest
+
+
+@dataclass(frozen=True)
 class MissionCreatedPayload(object):
     """MissionCreatedPayload"""
 
@@ -978,7 +1040,7 @@ class TaskTransitionedPayload(object):
 
 
 # discriminated on 'eventType'
-EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload]
+EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload]
 
 
 class EventType(str, Enum):
@@ -1003,6 +1065,8 @@ class EventType(str, Enum):
     EVIDENCERECORDED = "EvidenceRecorded"
     CLAIMVERIFIED = "ClaimVerified"
     CLAIMGUARDDECIDED = "ClaimGuardDecided"
+    HUMANAPPROVALREQUESTED = "HumanApprovalRequested"
+    HUMANAPPROVALDECIDED = "HumanApprovalDecided"
 
 
 @dataclass(frozen=True)

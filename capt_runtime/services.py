@@ -17,6 +17,7 @@ from .aggregates import (
     CapabilityAggregate,
     ClaimAggregate,
     DriverRunAggregate,
+    HumanApprovalAggregate,
     MissionAggregate,
     TaskAggregate,
 )
@@ -446,7 +447,80 @@ class RuntimeService(object):
             metadata,
         )
 
-    # -- claim, evidence, verification -------------------------------------
+    # -- human approval (M1 governed operator actions) --------------------
+
+    def request_human_approval(
+        self, request: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        require("HumanApprovalRequest", request)
+        require("CommandMetadata", metadata)
+        require_authority("request_human_approval", metadata["actor"]["kind"])
+
+        stream = HumanApprovalAggregate.stream_id(request["requestId"])
+        expected = self.store.aggregate_version(stream)
+        state = HumanApprovalAggregate.create(request)
+
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1",
+            stream_id=stream,
+            event_type="HumanApprovalRequested",
+            payload={"eventType": "HumanApprovalRequested", "request": request},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+            mission_id=request["missionId"],
+            task_id=request["taskId"],
+        )
+        return self._commit(
+            [AppendRequest(stream, HumanApprovalAggregate.KIND, expected, event, state)],
+            metadata,
+        )
+
+    def submit_human_approval_decision(
+        self,
+        decision: Dict[str, Any],
+        metadata: Dict[str, Any],
+        now: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        require("HumanApprovalDecision", decision)
+        require("CommandMetadata", metadata)
+        require_authority("submit_human_approval_decision", metadata["actor"]["kind"])
+
+        stream = HumanApprovalAggregate.stream_id(decision["requestId"])
+        expected = self.store.aggregate_version(stream)
+        current = self.store.require_state(stream)
+        decided_at = decision.get("decidedAt") or metadata["issuedAt"]
+        state = HumanApprovalAggregate.decide(current, decision, now or decided_at)
+
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1",
+            stream_id=stream,
+            event_type="HumanApprovalDecided",
+            payload={"eventType": "HumanApprovalDecided", "decision": decision},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+            mission_id=current["missionId"],
+            task_id=current["taskId"],
+        )
+        return self._commit(
+            [AppendRequest(stream, HumanApprovalAggregate.KIND, expected, event, state)],
+            metadata,
+        )
+
+    # -- cancellation (M1) ------------------------------------------------
+
+    def cancel_task(
+        self, task_id: str, reason: str, metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        require("CommandMetadata", metadata)
+        require_authority("cancel_task", metadata["actor"]["kind"])
+        return self.transition_task(task_id, "cancelled", reason, metadata)
+
+    def cancel_driver_run(
+        self, driver_run_id: str, reason: str, metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        require("CommandMetadata", metadata)
+        require_authority("cancel_driver_run", metadata["actor"]["kind"])
+        return self.transition_driver_run(driver_run_id, "cancelled", metadata)
 
     def propose_claim(
         self, claim: Dict[str, Any], metadata: Dict[str, Any]

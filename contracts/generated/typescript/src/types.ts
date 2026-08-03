@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:8ff3dcc4f4fc0f2e05bf52ad775dad76a6c5705bcbed856b4b45931c38f21789
+// source digest:  sha256:5ef316defdb5ccf2b5359d4baa627b5504feb6ab778240e039a96b51c9e5932e
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -406,6 +406,38 @@ export interface ExtensionEnvelope {
   readonly payloadJson: string;
 }
 
+/** Operator decision on a HumanApprovalRequest. 'approve' permits only the originally requested scope; 'deny' must prevent execution. Idempotent by idempotencyKey. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001). */
+export interface HumanApprovalDecision {
+  readonly correlationId: Identifier;
+  readonly decidedAt: Timestamp;
+  readonly decision: string;
+  readonly idempotencyKey: Identifier;
+  readonly operatorId: Identifier;
+  readonly requestId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly note?: string | null;
+  readonly sessionId?: string | null;
+}
+
+/** A bounded request for operator authorization before a consequential action. Authored by the governance kernel / execution plane; decided by a human operator. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001). */
+export interface HumanApprovalRequest {
+  readonly correlationId: Identifier;
+  readonly createdAt: Timestamp;
+  readonly expiresAt: Timestamp;
+  readonly missionId: Identifier;
+  readonly operation: string;
+  readonly policyReason: string;
+  readonly requestId: Identifier;
+  readonly requestedBy: ActorRef;
+  readonly requestedCapability: string;
+  readonly resource: string;
+  readonly riskClassification: RiskClassification;
+  readonly schemaVersion: SchemaVersion;
+  readonly scope: Readonly<Record<string, unknown>>;
+  readonly taskId: Identifier;
+  readonly remainingUses?: number | null;
+}
+
 /** Opaque, caller-minted identifier. Bounded charset prevents injection into paths, SQL, and log lines. */
 export type Identifier = string;
 
@@ -415,6 +447,16 @@ export const ReplayPolicyValues = [
   "never",
   "safe",
   "verify-before-retry",
+] as const;
+
+/** Operator-facing risk band for a bounded approval request. Advisory only; CAPT authority invariants remain the sole enforcement path. */
+export type RiskClassification = "none" | "low" | "medium" | "high" | "consequential";
+export const RiskClassificationValues = [
+  "none",
+  "low",
+  "medium",
+  "high",
+  "consequential",
 ] as const;
 
 /** Contract-set version. Readers MUST reject an unequal value (ADR-0101). */
@@ -802,10 +844,12 @@ export type EventPayload =
   | ClaimCreatedPayload
   | EvidenceRecordedPayload
   | ClaimVerifiedPayload
-  | ClaimGuardDecidedPayload;
+  | ClaimGuardDecidedPayload
+  | HumanApprovalRequestedPayload
+  | HumanApprovalDecidedPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -826,12 +870,26 @@ export const EventTypeValues = [
   "EvidenceRecorded",
   "ClaimVerified",
   "ClaimGuardDecided",
+  "HumanApprovalRequested",
+  "HumanApprovalDecided",
 ] as const;
 
 /** EvidenceRecordedPayload */
 export interface EvidenceRecordedPayload {
   readonly eventType: "EvidenceRecorded";
   readonly evidence: EvidenceRecord;
+}
+
+/** HumanApprovalDecidedPayload */
+export interface HumanApprovalDecidedPayload {
+  readonly decision: HumanApprovalDecision;
+  readonly eventType: "HumanApprovalDecided";
+}
+
+/** HumanApprovalRequestedPayload */
+export interface HumanApprovalRequestedPayload {
+  readonly eventType: "HumanApprovalRequested";
+  readonly request: HumanApprovalRequest;
 }
 
 /** MissionCreatedPayload */

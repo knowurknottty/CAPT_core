@@ -24,6 +24,7 @@ Run:
 from __future__ import annotations
 
 import argparse
+import getpass
 import hashlib
 import json
 import os
@@ -44,6 +45,8 @@ from capt_runtime.scenario import build_scenario
 from capt_runtime.services import RuntimeService
 from capt_runtime.store import EventStore
 from capt_runtime.verification import build_verification_result, guard_claim
+
+from desktop.m1_command_service import RuntimeCommandService
 
 RUNTIME_VERSION = getattr(capt_runtime, "RUNTIME_VERSION", "0.1.0")
 CONTRACT_SCHEMA_VERSION = "1.0.0"
@@ -393,12 +396,29 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             if not auth or auth.get("token") != token:
                 _send_json(conn, {"ok": False, "error": "unauthenticated"})
                 return
-            _send_json(conn, {"ok": True, "authenticated": True})
+            # Bind operator identity to this authenticated connection.
+            # Single-user macOS desktop: the operator is the local user. The
+            # session token authenticates the connection; the operator/session
+            # binding prevents the desktop from spoofing another operator or
+            # reusing a stale session's authority (Phase 3).
+            operator_id = "operator-" + (getpass.getuser() or "local")
+            session_id = "sess-" + secrets.token_hex(8)
+            cmd_svc = RuntimeCommandService(store, operator_id, session_id)
+            _send_json(conn, {
+                "ok": True, "authenticated": True,
+                "operatorId": operator_id, "sessionId": session_id,
+            })
             while True:
                 req = _recv_json(conn)
                 if req is None:
                     return
-                _send_json(conn, query.handle(req))
+                if req.get("op") == "command":
+                    # The command envelope must carry the SAME operatorId and
+                    # sessionId bound to this connection, or it is rejected as
+                    # unauthorized by the command service.
+                    _send_json(conn, cmd_svc.execute(req.get("command", {})))
+                else:
+                    _send_json(conn, query.handle(req))
         except Exception:  # noqa: BLE001
             return
         finally:

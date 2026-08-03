@@ -41,6 +41,8 @@ class RuntimeClient:
         self.sock_path = str(sock_path)
         self.token_file = str(token_file)
         self._sock: Optional[socket.socket] = None
+        self.operator_id: Optional[str] = None
+        self.session_id: Optional[str] = None
 
     # -- connection lifecycle ---------------------------------------------
 
@@ -54,6 +56,9 @@ class RuntimeClient:
         if not auth_resp.get("ok"):
             s.close()
             raise RuntimeClientError("authentication failed: %s" % auth_resp.get("error"))
+        # Capture the operator/session identity bound to this connection.
+        self.operator_id = auth_resp.get("operatorId")
+        self.session_id = auth_resp.get("sessionId")
         self._sock = s
         return self.identity()
 
@@ -91,6 +96,39 @@ class RuntimeClient:
 
     def verification(self) -> Dict[str, Any]:
         return self._query({"op": "verification"})["result"]
+
+    # -- command API (governed operator actions, M1) ----------------------
+
+    def command(self, op: str, payload: Dict[str, Any], idempotency_key: Optional[str] = None) -> Dict[str, Any]:
+        """Issue a governed operator command to the runtime.
+
+        The command envelope is bound to the authenticated connection's
+        operatorId and sessionId. The desktop cannot claim a different
+        operator or session — the runtime rejects such attempts as
+        unauthorized. Returns the classified command receipt.
+        """
+        if self.operator_id is None or self.session_id is None:
+            raise RuntimeClientError("not authenticated")
+        import hashlib
+        command_id = "cmd-" + hashlib.sha256(
+            (op + json.dumps(payload, sort_keys=True)).encode()
+        ).hexdigest()[:16]
+        idek = idempotency_key or (command_id + "-idem")
+        envelope = {
+            "commandId": command_id,
+            "operatorId": self.operator_id,
+            "sessionId": self.session_id,
+            "schemaVersion": "1.0.0",
+            "correlationId": "corr-desktop",
+            "idempotencyKey": idek,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "op": op,
+            "payload": payload,
+        }
+        if self._sock is None:
+            raise RuntimeClientError("not connected")
+        self._send(self._sock, {"op": "command", "command": envelope})
+        return self._recv(self._sock)
 
     # -- framed transport --------------------------------------------------
 
@@ -178,3 +216,67 @@ def _extract_evidence(mission_events: List[Dict[str, Any]]) -> List[Dict[str, An
         if payload.get("eventType") == "EvidenceRecorded":
             out.append(payload.get("evidence", {}))
     return out
+
+
+# --------------------------------------------------------------------------
+# M1 projections (governed operator actions read models)
+# --------------------------------------------------------------------------
+
+def project_approval_queue(client: RuntimeClient) -> List[Dict[str, Any]]:
+    """Return all HumanApprovalRequest states from authoritative runtime data."""
+    out = []
+    for agg in client.list_aggregates():
+        if agg["kind"] != "human_approval":
+            continue
+        st = client.get_state(agg["streamId"])
+        if st:
+            out.append(st)
+    return out
+
+
+def project_cancellation_state(client: RuntimeClient, target_id: str, kind: str) -> Optional[Dict[str, Any]]:
+    """Return the authoritative cancellation/terminal state of a task or run."""
+    st = client.get_state(kind + "-" + target_id)
+    if not st:
+        return None
+    return {
+        "targetId": target_id,
+        "kind": kind,
+        "state": st.get("state"),
+        "reconciliationStatus": st.get("reconciliationStatus"),
+    }
+
+
+def project_authoritative_state(client: RuntimeClient) -> Dict[str, Any]:
+    """Reconstruct the full authoritative desktop view from runtime state.
+
+    Deterministic: built only from authoritative aggregates and the event
+    timeline. Handles duplicate/out-of-order delivery safely because it reads
+    final aggregate snapshots (idempotent) rather than replaying events.
+    """
+    aggregates = client.list_aggregates()
+    missions, tasks, approvals, driver_runs, claims = [], [], [], [], []
+    for agg in aggregates:
+        st = client.get_state(agg["streamId"])
+        if st is None:
+            continue
+        if agg["kind"] == "mission":
+            missions.append(st)
+        elif agg["kind"] == "task":
+            tasks.append(st)
+        elif agg["kind"] == "human_approval":
+            approvals.append(st)
+        elif agg["kind"] == "driverrun":
+            driver_runs.append(st)
+        elif agg["kind"] == "claim":
+            claims.append(st)
+    return {
+        "missions": missions,
+        "tasks": tasks,
+        "approvals": approvals,
+        "driverRuns": driver_runs,
+        "claims": claims,
+        "eventTimeline": client.event_timeline(),
+        "verification": client.verification(),
+        "identity": client.identity(),
+    }

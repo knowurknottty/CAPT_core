@@ -20,7 +20,7 @@
       "title": "StreamId",
       "description": "Aggregate stream identifier. The prefix declares the owning aggregate (ADR-0103) and is enforced by the store.",
       "type": "string",
-      "pattern": "^(mission|task|capability|driverrun|claim)-[A-Za-z0-9_.-]{1,96}$"
+      "pattern": "^(mission|task|capability|driverrun|claim|human_approval)-[A-Za-z0-9_.-]{1,96}$"
     },
     "Timestamp": {
       "title": "Timestamp",
@@ -137,6 +137,61 @@
       "properties": {
         "wallClockSeconds": { "type": "integer", "minimum": 1, "maximum": 86400 },
         "maxOperations": { "type": "integer", "minimum": 1, "maximum": 1000000 }
+      }
+    },
+    "RiskClassification": {
+      "title": "RiskClassification",
+      "description": "Operator-facing risk band for a bounded approval request. Advisory only; CAPT authority invariants remain the sole enforcement path.",
+      "type": "string",
+      "enum": ["none", "low", "medium", "high", "consequential"]
+    },
+    "HumanApprovalRequest": {
+      "title": "HumanApprovalRequest",
+      "description": "A bounded request for operator authorization before a consequential action. Authored by the governance kernel / execution plane; decided by a human operator. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "requestId", "missionId", "taskId", "requestedCapability",
+        "resource", "operation", "scope", "riskClassification", "policyReason",
+        "requestedBy", "expiresAt", "correlationId", "createdAt"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "requestId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "taskId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "requestedCapability": { "type": "string", "maxLength": 256 },
+        "resource": { "type": "string", "maxLength": 1024 },
+        "operation": { "type": "string", "maxLength": 128 },
+        "scope": { "type": "object", "additionalProperties": true },
+        "riskClassification": { "$ref": "common.schema.json#/$defs/RiskClassification" },
+        "policyReason": { "type": "string", "maxLength": 1024 },
+        "requestedBy": { "$ref": "common.schema.json#/$defs/ActorRef" },
+        "expiresAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "remainingUses": { "type": ["integer", "null"], "minimum": 1 },
+        "correlationId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "createdAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      }
+    },
+    "HumanApprovalDecision": {
+      "title": "HumanApprovalDecision",
+      "description": "Operator decision on a HumanApprovalRequest. 'approve' permits only the originally requested scope; 'deny' must prevent execution. Idempotent by idempotencyKey. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "requestId", "decision", "operatorId", "decidedAt",
+        "idempotencyKey", "correlationId"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "requestId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "decision": { "type": "string", "enum": ["approve", "deny"] },
+        "operatorId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "decidedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "note": { "type": ["string", "null"], "maxLength": 1024 },
+        "idempotencyKey": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "correlationId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "sessionId": { "type": ["string", "null"], "maxLength": 128 }
       }
     }
   }

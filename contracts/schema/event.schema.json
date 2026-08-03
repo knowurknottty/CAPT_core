@@ -27,7 +27,9 @@
         "ClaimCreated",
         "EvidenceRecorded",
         "ClaimVerified",
-        "ClaimGuardDecided"
+        "ClaimGuardDecided",
+        "HumanApprovalRequested",
+        "HumanApprovalDecided"
       ]
     },
     "EventPayload": {
@@ -232,6 +234,26 @@
           "properties": {
             "eventType": { "type": "string", "const": "ClaimGuardDecided" },
             "decision": { "$ref": "claim.schema.json#/$defs/ClaimGuardDecision" }
+          }
+        },
+        {
+          "title": "HumanApprovalRequestedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "request"],
+          "properties": {
+            "eventType": { "type": "string", "const": "HumanApprovalRequested" },
+            "request": { "$ref": "common.schema.json#/$defs/HumanApprovalRequest" }
+          }
+        },
+        {
+          "title": "HumanApprovalDecidedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "decision"],
+          "properties": {
+            "eventType": { "type": "string", "const": "HumanApprovalDecided" },
+            "decision": { "$ref": "common.schema.json#/$defs/HumanApprovalDecision" }
           }
         }
       ]
