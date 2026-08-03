@@ -1,5 +1,19 @@
 # Hermes Conformance Report
 
+> **Precise status (human-readable): `CAPT_HERMES_EXECUTION_DRIVER_PROVEN`**
+>
+> The earlier broad token `CAPT_HERMES_CONFORMANCE_PROVEN` is intentionally
+> narrowed here. This work proves a *genuine external Hermes ExecutionDriver* —
+> a real Hermes process receives a bounded read-only CAPT work order, performs
+> its own internal model call, returns untrusted output, and stays outside
+> CAPT's authoritative state and trust-promotion boundary. It does **not**
+> establish per-model-turn CAPT interception, Mode B bootstrap-bridge ownership,
+> suppression of every internal Hermes model decision, OS-level sandboxing,
+> repository-write governance, complete Hermes feature conformance, or
+> production readiness. The narrower token is the accurate one; the broader
+> token, if any tooling expects it, should be treated as equivalent to this
+> precise classification and not as a stronger claim.
+
 Branch: `feat/capt-runtime-hermes-execution-driver`
 Base: `5fb323d6edd8511b687eaec9f6656fc4b4d0b320` (`capt-runtime-m0`)
 Environment: macOS 26.4.1 · CPython 3.12 (`/opt/homebrew/bin/python3.12`) · pytest
