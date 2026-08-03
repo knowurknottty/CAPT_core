@@ -1,6 +1,6 @@
 # CAPT Desktop Runtime M1 — Acceptance Report
 
-## Scenario (desktop/acceptance_m1.py, real runtime, no mocks)
+## Scenario A — headless acceptance (desktop/acceptance_m1.py, real runtime)
 
 | # | Step | Result |
 |---|---|---|
@@ -26,16 +26,43 @@
 
 Exit code: 0. Final marker: `CAPT_DESKTOP_M1_ACCEPTED`.
 
+## Scenario B — LIVE GUI acceptance (desktop/acceptance_m1_live.py)
+
+Drives the SAME handler logic the visible Tk GUI buttons invoke
+(`DesktopApp.gui_create_mission` / `gui_decide` / `gui_cancel` / `gui_refresh_*`),
+proving the visible desktop app's behavior, not a parallel client.
+
+| Check | Result |
+|---|---|
+| connect | PASS (runtime 0.1.0) |
+| gui_create_mission accepted | PASS |
+| mission_spec authoritative | PASS |
+| taskgraph authoritative | PASS |
+| approval_request before execution | PASS |
+| deny accepted (state=denied) | PASS |
+| denial prevents DriverRun | PASS (0 runs) |
+| duplicate denial idempotent (same key replay) | PASS |
+| reconnect preserves denied state (digest equal) | PASS |
+| approve accepted (state=approved) | PASS |
+| driverrun begins after approval (running) | PASS |
+| approval scope bounded (cap.fs.read /tmp, no widening) | PASS |
+| cancel accepted (state=cancelled) | PASS |
+| cancellation authoritative | PASS |
+| reconnect reconstructs identical state (digest equal) | PASS |
+| no duplicate missions / approvals / cancellations | PASS |
+
+Exit code: 0. Final marker: `CAPT_DESKTOP_M1_LIVE_GUI_ACCEPTED`.
+
 ## Required outcomes proven
 
 - Mission creation uses real CAPT commands (MissionCreated event). ✓
 - Denial prevents execution (no DriverRun after deny). ✓
 - Approval permits only bounded execution (approved capability == requested cap.fs.read). ✓
 - Cancellation is authoritative and reconciled (DriverRun → cancelled). ✓
-- Reconnect reconstructs state (no duplicates). ✓
+- Reconnect reconstructs state (no duplicates; projection digest stable). ✓
 - Operator identity bound (spoofing rejected). ✓
-- M0 remains green (159 capt_runtime tests pass). ✓
+- M0 remains green (175 capt_runtime tests pass). ✓
 - Contract drift clean. ✓
-- Live GUI acceptance: headless M1 launch renders authoritative projection. ✓
+- Live GUI acceptance passes (visible GUI code paths). ✓
 - Exact-SHA evidence: see CAPT_DESKTOP_RUNTIME_M1_EVIDENCE_MANIFEST.json. ✓
 - Draft PR open (see final report). ✓

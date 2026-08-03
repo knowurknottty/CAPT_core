@@ -12,10 +12,12 @@ Base SHA: sha1:9d4fee12bc6147d7fe5da9e5025e8eb32911293a.
 | `python3.12 -m pytest tests/capt_runtime/test_desktop_m0.py -q` | 5 passed |
 | `python3.12 -m pytest tests/capt_runtime/test_desktop_m1.py -q` | 7 passed |
 | `python3.12 -m pytest tests/capt_runtime/test_desktop_m1_security.py -q` | 11 passed |
-| `python3.12 -m pytest tests/capt_runtime -q` | 159 passed |
+| `python3.12 -m pytest tests/capt_runtime/test_desktop_m1_adversarial.py -q` | 16 passed |
+| `python3.12 -m pytest tests/capt_runtime -q` | 175 passed |
 | `python3.12 -m pytest tests/capt_runtime/test_contracts.py -q` | 7 passed (cross-language parity) |
 | `python3.12 contracts/tools/check_drift.py` | DRIFT CHECK: OK (11 generated files match schema) |
 | `python3.12 desktop/acceptance_m1.py` | exit 0 → CAPT_DESKTOP_M1_ACCEPTED |
+| `python3.12 desktop/acceptance_m1_live.py` | exit 0 → CAPT_DESKTOP_M1_LIVE_GUI_ACCEPTED |
 | `python3.12 desktop/acceptance_m0.py` | exit 0 → CAPT_DESKTOP_M0_PROVEN |
 | `python3.12 desktop/desktop_app.py --m1 --headless` | exit 0 (live GUI headless render) |
 | `git diff --check` | clean |
@@ -36,6 +38,20 @@ tests/capt_runtime/test_desktop_m1_security.py (11):
 - duplicate CreateMission, duplicate approval, conflicting approval, stale approval,
   expired approval, duplicate cancellation, unauthenticated command, operator spoofing,
   schema mismatch, approval scope widening, rendering trust labeling.
+
+tests/capt_runtime/test_desktop_m1_adversarial.py (16):
+- unauthenticated command, invalid session, operator-ID spoofing, approval for
+  nonexistent request, cancellation-without-authority, desktop-cannot-inject-event,
+  desktop-cannot-mutate-db, fake-verification-read-only, terminal-escape-stripped,
+  fake-verified-not-trusted, html-inert, oversized-truncated, path-traversal-inert,
+  symlink-inert, secret-not-trusted, render-authoritative-vs-untrusted.
+
+## Live GUI acceptance
+
+desktop/acceptance_m1_live.py drives the visible GUI handler logic
+(DesktopApp.gui_create_mission / gui_decide / gui_cancel / gui_refresh_*) over
+authenticated IPC to the authoritative runtime. 18 checks, all passing
+(CAPT_DESKTOP_M1_LIVE_GUI_ACCEPTED).
 
 ## Security findings
 

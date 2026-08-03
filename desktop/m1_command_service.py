@@ -327,6 +327,17 @@ class RuntimeCommandService:
                 stream_id=stream,
             )
         current = self.store.load_state(stream)
+        # Idempotency replay: if this exact command idempotency key was already
+        # committed, return the original result without a new event. This must
+        # be checked before the aggregate transition (which would otherwise
+        # raise IllegalTransition on an already-terminal request).
+        prior = self.store.find_idempotent(cmd["idempotencyKey"])
+        if prior is not None:
+            return self._receipt(
+                cmd, status="idempotent", classification="duplicate",
+                result={"requestId": request_id, "state": current.get("state")},
+                stream_id=stream,
+            )
         # Expiry and terminal checks are enforced by the aggregate and the
         # store's idempotency layer. We do NOT short-circuit here: a replay with
         # the same idempotency key must return idempotent (not already_terminal),

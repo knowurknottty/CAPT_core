@@ -280,3 +280,29 @@ def project_authoritative_state(client: RuntimeClient) -> Dict[str, Any]:
         "verification": client.verification(),
         "identity": client.identity(),
     }
+
+
+def project_mission_spec(client: RuntimeClient, mission_id: str) -> Optional[Dict[str, Any]]:
+    """Return the authoritative MissionSpec (mission aggregate state)."""
+    return client.get_state("mission-" + mission_id)
+
+
+def project_task_graph(client: RuntimeClient, task_id: str) -> Optional[Dict[str, Any]]:
+    """Return the authoritative TaskGraph (task aggregate state)."""
+    return client.get_state("task-" + task_id)
+
+
+def project_driver_run(client: RuntimeClient, driver_run_id: str) -> Optional[Dict[str, Any]]:
+    """Return the authoritative DriverRun state."""
+    return client.get_state("driverrun-" + driver_run_id)
+
+
+def project_evidence(client: RuntimeClient, mission_id: str) -> List[Dict[str, Any]]:
+    """Return evidence recorded for a mission (read-only projection)."""
+    events = client.get_stream_events("mission-" + mission_id)
+    return _extract_evidence(events)
+
+
+def project_claimguard(client: RuntimeClient, statement: str) -> Dict[str, Any]:
+    """Return the runtime-computed ClaimGuard disposition (read-only)."""
+    return client.claimguard_disposition(statement)
