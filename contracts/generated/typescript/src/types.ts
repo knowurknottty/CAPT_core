@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:69ba1debeef17b845117cbbe896761985db6526ee5436bfc2500a6cb9911a249
+// source digest:  sha256:6efe02733ed12971dcc10b2a1b90c116d1c4c2396c1293527c4fb3ad8a7d02ad
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -368,6 +368,31 @@ export interface CommandMetadata {
   readonly causationId?: Identifier | null;
 }
 
+/** Governed, idempotent context packet assembled by CAPT from a mandatory memory query. Drivers receive only the authorized slice. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001). */
+export interface ContextPack {
+  readonly contextPackDigest: string;
+  readonly contextPackId: Identifier;
+  readonly contextUsageAfter: number;
+  readonly contextUsageBefore: number;
+  readonly excludedRecords: readonly Readonly<Record<string, unknown>>[];
+  readonly policyVersion: number;
+  readonly schemaVersion: SchemaVersion;
+  readonly selectedRecords: readonly MemoryRecord[];
+  readonly tokenBudget: number;
+  readonly triggerBoundary: number;
+  readonly compressionActions?: readonly Readonly<Record<string, unknown>>[];
+  readonly driverRunId?: string | null;
+  readonly exclusionReasons?: readonly Readonly<Record<string, unknown>>[];
+  readonly missionId?: string | null;
+  readonly previousContextPackDigest?: string | null;
+  readonly provenanceRetained?: boolean;
+  readonly redactions?: readonly Readonly<Record<string, unknown>>[];
+  readonly staleRecords?: readonly string[];
+  readonly summariesGenerated?: readonly string[];
+  readonly taskId?: string | null;
+  readonly unresolvedConflicts?: readonly Readonly<Record<string, unknown>>[];
+}
+
 /** Lowercase hex SHA-256 with algorithm prefix. */
 export type Digest = string;
 
@@ -441,6 +466,70 @@ export interface HumanApprovalRequest {
 /** Opaque, caller-minted identifier. Bounded charset prevents injection into paths, SQL, and log lines. */
 export type Identifier = string;
 
+/** Typed mandatory memory query emitted by CAPT when a retrieval trigger fires. No anonymous text blobs. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001). */
+export interface MemoryQuery {
+  readonly actor: string;
+  readonly contextUsage: number;
+  readonly correlationId: Identifier;
+  readonly missionId: Identifier;
+  readonly purpose: string;
+  readonly recordLimit: number;
+  readonly requestedMemoryClasses: readonly string[];
+  readonly requestingSubsystem: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly taskId: Identifier;
+  readonly tokenBudget: number;
+  readonly triggerBoundary: number;
+  readonly causationId?: string | null;
+  readonly consentScope?: string | null;
+  readonly driverRunId?: string | null;
+  readonly projectScope?: string | null;
+  readonly provenanceRequirement?: string | null;
+  readonly relevanceCriteria?: string | null;
+  readonly sensitivityAllowance?: string | null;
+  readonly timeRange?: unknown | null;
+  readonly trustThreshold?: number;
+}
+
+/** A returned memory record with full provenance and governance metadata. No anonymous text blobs. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001). */
+export interface MemoryRecord {
+  readonly consent: string;
+  readonly digest: string;
+  readonly memoryClass: string;
+  readonly owner: string;
+  readonly provenance: string;
+  readonly recordId: Identifier;
+  readonly sensitivity: string;
+  readonly source: string;
+  readonly trust: string;
+  readonly verificationStatus: string;
+  readonly conflictState?: string | null;
+  readonly createdAt?: string | null;
+  readonly downstreamUseRestriction?: string | null;
+  readonly expiresAt?: string | null;
+  readonly lastVerifiedAt?: string | null;
+  readonly retrievalReason?: string;
+  readonly retrievalScore?: number;
+  readonly stale?: boolean;
+}
+
+/** CAPT-owned mandatory memory trigger policy. The trigger interval is a fixed 32,768 tokens; each trigger type has an independent step count. Drivers and the desktop may not widen a higher-authority bound. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001). */
+export interface MemoryTriggerPolicy {
+  readonly checkpointTriggerSteps: number;
+  readonly compressionTriggerSteps: number;
+  readonly consolidationTriggerSteps: number;
+  readonly hardStopTriggerSteps: number;
+  readonly modelSafeLimitSteps: number;
+  readonly policyVersion: number;
+  readonly retrievalTriggerSteps: number;
+  readonly schemaVersion: SchemaVersion;
+  readonly source: string;
+  readonly triggerIntervalTokens: unknown;
+  readonly operatorId?: string | null;
+  readonly policyDigest?: string | null;
+  readonly previousPolicyDigest?: string | null;
+}
+
 /** High-level operator intent submitted to CAPT Runtime to create a bounded mission. The runtime owns all planning: it constructs the MissionSpec, TaskNode, and (when requiresApproval) HumanApprovalRequest from this intent. The desktop never builds aggregates. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001). */
 export interface OperatorMissionIntent {
   readonly missionId: Identifier;
@@ -503,6 +592,7 @@ export interface ContextSlice {
   readonly permittedTools: readonly string[];
   readonly schemaVersion: SchemaVersion;
   readonly terminationConditions: DriverTerminationCondition;
+  readonly contextPackRef?: unknown | null;
   readonly networkPolicy?: NetworkPolicy;
 }
 
@@ -720,6 +810,7 @@ export interface ExecutionDriverWorkOrder {
   readonly schemaVersion: SchemaVersion;
   readonly taskId: Identifier;
   readonly workOrderVersion: number;
+  readonly memoryPolicyRef?: unknown | null;
 }
 
 /** Descriptor for an artifact a driver may create in the CAPT staging area. */

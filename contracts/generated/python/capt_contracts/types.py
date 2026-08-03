@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:69ba1debeef17b845117cbbe896761985db6526ee5436bfc2500a6cb9911a249
+# source digest:  sha256:6efe02733ed12971dcc10b2a1b90c116d1c4c2396c1293527c4fb3ad8a7d02ad
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -424,6 +424,33 @@ class CommandMetadata(object):
     causationId: Optional[Identifier] = None
 
 
+@dataclass(frozen=True)
+class ContextPack(object):
+    """Governed, idempotent context packet assembled by CAPT from a mandatory memory query. Drivers receive only the authorized slice. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001)."""
+
+    contextPackDigest: str
+    contextPackId: Identifier
+    contextUsageAfter: int
+    contextUsageBefore: int
+    excludedRecords: List[Dict[str, Any]]
+    policyVersion: int
+    schemaVersion: SchemaVersion
+    selectedRecords: List[MemoryRecord]
+    tokenBudget: int
+    triggerBoundary: int
+    compressionActions: List[Dict[str, Any]] = field(default_factory=list)
+    driverRunId: Optional[str] = None
+    exclusionReasons: List[Dict[str, Any]] = field(default_factory=list)
+    missionId: Optional[str] = None
+    previousContextPackDigest: Optional[str] = None
+    provenanceRetained: Optional[bool] = None
+    redactions: List[Dict[str, Any]] = field(default_factory=list)
+    staleRecords: List[str] = field(default_factory=list)
+    summariesGenerated: List[str] = field(default_factory=list)
+    taskId: Optional[str] = None
+    unresolvedConflicts: List[Dict[str, Any]] = field(default_factory=list)
+
+
 Digest = str
 
 
@@ -506,6 +533,76 @@ Identifier = str
 
 
 @dataclass(frozen=True)
+class MemoryQuery(object):
+    """Typed mandatory memory query emitted by CAPT when a retrieval trigger fires. No anonymous text blobs. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001)."""
+
+    actor: str
+    contextUsage: int
+    correlationId: Identifier
+    missionId: Identifier
+    purpose: str
+    recordLimit: int
+    requestedMemoryClasses: List[str]
+    requestingSubsystem: str
+    schemaVersion: SchemaVersion
+    taskId: Identifier
+    tokenBudget: int
+    triggerBoundary: int
+    causationId: Optional[str] = None
+    consentScope: Optional[str] = None
+    driverRunId: Optional[str] = None
+    projectScope: Optional[str] = None
+    provenanceRequirement: Optional[str] = None
+    relevanceCriteria: Optional[str] = None
+    sensitivityAllowance: Optional[str] = None
+    timeRange: Optional[Any] = None
+    trustThreshold: Optional[float] = None
+
+
+@dataclass(frozen=True)
+class MemoryRecord(object):
+    """A returned memory record with full provenance and governance metadata. No anonymous text blobs. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001)."""
+
+    consent: str
+    digest: str
+    memoryClass: str
+    owner: str
+    provenance: str
+    recordId: Identifier
+    sensitivity: str
+    source: str
+    trust: str
+    verificationStatus: str
+    conflictState: Optional[str] = None
+    createdAt: Optional[str] = None
+    downstreamUseRestriction: Optional[str] = None
+    expiresAt: Optional[str] = None
+    lastVerifiedAt: Optional[str] = None
+    retrievalReason: Optional[str] = None
+    retrievalScore: Optional[float] = None
+    stale: Optional[bool] = None
+
+
+@dataclass(frozen=True)
+class MemoryTriggerPolicy(object):
+    """CAPT-owned mandatory memory trigger policy. The trigger interval is a fixed 32,768 tokens; each trigger type has an independent step count. Drivers and the desktop may not widen a higher-authority bound. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001)."""
+
+    checkpointTriggerSteps: int
+    compressionTriggerSteps: int
+    consolidationTriggerSteps: int
+    hardStopTriggerSteps: int
+    modelSafeLimitSteps: int
+    policyVersion: int
+    retrievalTriggerSteps: int
+    schemaVersion: SchemaVersion
+    source: str
+    triggerIntervalTokens: Any
+    operatorId: Optional[str] = None
+    policyDigest: Optional[str] = None
+    previousPolicyDigest: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class OperatorMissionIntent(object):
     """High-level operator intent submitted to CAPT Runtime to create a bounded mission. The runtime owns all planning: it constructs the MissionSpec, TaskNode, and (when requiresApproval) HumanApprovalRequest from this intent. The desktop never builds aggregates. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001)."""
 
@@ -571,6 +668,7 @@ class ContextSlice(object):
     permittedTools: List[str]
     schemaVersion: SchemaVersion
     terminationConditions: DriverTerminationCondition
+    contextPackRef: Optional[Any] = None
     networkPolicy: Optional[NetworkPolicy] = None
 
 
@@ -826,6 +924,7 @@ class ExecutionDriverWorkOrder(object):
     schemaVersion: SchemaVersion
     taskId: Identifier
     workOrderVersion: int
+    memoryPolicyRef: Optional[Any] = None
 
 
 @dataclass(frozen=True)

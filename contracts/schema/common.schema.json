@@ -181,6 +181,131 @@
         "requestId": { "type": ["string", "null"], "maxLength": 256 }
       }
     },
+    "MemoryTriggerPolicy": {
+      "title": "MemoryTriggerPolicy",
+      "description": "CAPT-owned mandatory memory trigger policy. The trigger interval is a fixed 32,768 tokens; each trigger type has an independent step count. Drivers and the desktop may not widen a higher-authority bound. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "policyVersion", "triggerIntervalTokens",
+        "retrievalTriggerSteps", "compressionTriggerSteps",
+        "checkpointTriggerSteps", "consolidationTriggerSteps",
+        "hardStopTriggerSteps", "modelSafeLimitSteps", "source"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "policyVersion": { "type": "integer", "minimum": 1 },
+        "triggerIntervalTokens": { "const": 32768 },
+        "retrievalTriggerSteps": { "type": "integer", "minimum": 1 },
+        "compressionTriggerSteps": { "type": "integer", "minimum": 1 },
+        "checkpointTriggerSteps": { "type": "integer", "minimum": 1 },
+        "consolidationTriggerSteps": { "type": "integer", "minimum": 1 },
+        "hardStopTriggerSteps": { "type": "integer", "minimum": 1 },
+        "modelSafeLimitSteps": { "type": "integer", "minimum": 1 },
+        "source": { "type": "string", "enum": ["constitutional", "runtime_policy", "model_provider", "project_policy", "operator_selected", "driver_preference"] },
+        "operatorId": { "type": ["string", "null"], "maxLength": 256 },
+        "previousPolicyDigest": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" },
+        "policyDigest": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "MemoryQuery": {
+      "title": "MemoryQuery",
+      "description": "Typed mandatory memory query emitted by CAPT when a retrieval trigger fires. No anonymous text blobs. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "missionId", "taskId", "actor", "requestingSubsystem",
+        "triggerBoundary", "contextUsage", "requestedMemoryClasses", "purpose",
+        "recordLimit", "tokenBudget", "correlationId"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "taskId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "driverRunId": { "type": ["string", "null"], "maxLength": 256 },
+        "actor": { "type": "string", "maxLength": 256 },
+        "requestingSubsystem": { "type": "string", "maxLength": 128 },
+        "triggerBoundary": { "type": "integer", "minimum": 0 },
+        "contextUsage": { "type": "integer", "minimum": 0 },
+        "requestedMemoryClasses": { "type": "array", "items": { "type": "string" } },
+        "projectScope": { "type": ["string", "null"], "maxLength": 256 },
+        "purpose": { "type": "string", "maxLength": 2048 },
+        "relevanceCriteria": { "type": ["string", "null"], "maxLength": 2048 },
+        "timeRange": { "type": ["object", "null"], "additionalProperties": true },
+        "trustThreshold": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "consentScope": { "type": ["string", "null"], "maxLength": 256 },
+        "sensitivityAllowance": { "type": ["string", "null"], "maxLength": 64 },
+        "recordLimit": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "tokenBudget": { "type": "integer", "minimum": 0 },
+        "provenanceRequirement": { "type": ["string", "null"], "maxLength": 256 },
+        "correlationId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "causationId": { "type": ["string", "null"], "maxLength": 256 }
+      }
+    },
+    "MemoryRecord": {
+      "title": "MemoryRecord",
+      "description": "A returned memory record with full provenance and governance metadata. No anonymous text blobs. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recordId", "memoryClass", "owner", "source", "provenance", "trust",
+        "verificationStatus", "sensitivity", "consent", "digest"
+      ],
+      "properties": {
+        "recordId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "memoryClass": { "type": "string", "maxLength": 64 },
+        "owner": { "type": "string", "maxLength": 256 },
+        "source": { "type": "string", "maxLength": 512 },
+        "provenance": { "type": "string", "maxLength": 1024 },
+        "trust": { "type": "string", "maxLength": 32 },
+        "verificationStatus": { "type": "string", "maxLength": 32 },
+        "sensitivity": { "type": "string", "maxLength": 32 },
+        "consent": { "type": "string", "maxLength": 32 },
+        "createdAt": { "type": ["string", "null"], "maxLength": 64 },
+        "lastVerifiedAt": { "type": ["string", "null"], "maxLength": 64 },
+        "expiresAt": { "type": ["string", "null"], "maxLength": 64 },
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "retrievalScore": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "retrievalReason": { "type": "string", "maxLength": 512 },
+        "stale": { "type": "boolean" },
+        "conflictState": { "type": ["string", "null"], "maxLength": 64 },
+        "downstreamUseRestriction": { "type": ["string", "null"], "maxLength": 256 }
+      }
+    },
+    "ContextPack": {
+      "title": "ContextPack",
+      "description": "Governed, idempotent context packet assembled by CAPT from a mandatory memory query. Drivers receive only the authorized slice. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "contextPackId", "policyVersion", "triggerBoundary",
+        "contextUsageBefore", "contextUsageAfter", "selectedRecords",
+        "excludedRecords", "tokenBudget", "contextPackDigest"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "contextPackId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "policyVersion": { "type": "integer", "minimum": 1 },
+        "triggerBoundary": { "type": "integer", "minimum": 0 },
+        "contextUsageBefore": { "type": "integer", "minimum": 0 },
+        "contextUsageAfter": { "type": "integer", "minimum": 0 },
+        "selectedRecords": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/MemoryRecord" } },
+        "excludedRecords": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+        "exclusionReasons": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+        "compressionActions": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+        "summariesGenerated": { "type": "array", "items": { "type": "string" } },
+        "provenanceRetained": { "type": "boolean" },
+        "unresolvedConflicts": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+        "staleRecords": { "type": "array", "items": { "type": "string" } },
+        "redactions": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+        "tokenBudget": { "type": "integer", "minimum": 0 },
+        "previousContextPackDigest": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" },
+        "contextPackDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "missionId": { "type": ["string", "null"], "maxLength": 256 },
+        "taskId": { "type": ["string", "null"], "maxLength": 256 },
+        "driverRunId": { "type": ["string", "null"], "maxLength": 256 }
+      }
+    },
     "HumanApprovalRequest": {
       "title": "HumanApprovalRequest",
       "description": "A bounded request for operator authorization before a consequential action. Authored by the governance kernel / execution plane; decided by a human operator. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001).",
