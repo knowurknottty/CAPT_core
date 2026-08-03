@@ -26,14 +26,16 @@ jobs:
       - name: Assert generation is reproducible (byte-identical)
         run: |
           python3 - <<'PY'
-          import subprocess, tempfile, filecmp, shutil
+          import subprocess, tempfile, filecmp, pathlib, os
           a = tempfile.mkdtemp(); b = tempfile.mkdtemp()
           subprocess.run(["python3","contracts/tools/generate.py","--out",a],check=True)
           subprocess.run(["python3","contracts/tools/generate.py","--out",b],check=True)
-          left, right = sorted(str(p) for p in __import__('pathlib').Path(a).rglob('*') if p.is_file()), sorted(str(p) for p in __import__('pathlib').Path(b).rglob('*') if p.is_file())
-          assert left == right, "file sets differ"
-          for x, y in zip(left, right):
-              assert filecmp.cmp(x, y, shallow=False), f"drift at {x}"
+          def rel(p, root): return os.path.relpath(p, root)
+          la = sorted(rel(str(x), a) for x in pathlib.Path(a).rglob('*') if x.is_file())
+          lb = sorted(rel(str(x), b) for x in pathlib.Path(b).rglob('*') if x.is_file())
+          assert la == lb, "file sets differ"
+          for r in la:
+              assert filecmp.cmp(os.path.join(a, r), os.path.join(b, r), shallow=False), f"drift at {r}"
           print("REPRODUCIBLE_OK")
           PY
 

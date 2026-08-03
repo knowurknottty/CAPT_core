@@ -18,20 +18,44 @@ const contractsDir = join(here, "..");
 const srcIndex = join(contractsDir, "generated", "typescript", "src", "index.ts");
 
 // Import the TypeScript source directly via a tiny on-the-fly transpile is not
-// possible in plain node, so we require the built dist. The CI build step
-// produces it; for local parity we build if missing.
-import { existsSync } from "node:fs";
+// possible in plain node, so we require the built dist. If it is missing we
+// build it on the fly with the project's own tsc (hermetic: no external dep).
+import { existsSync, mkdirSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 let indexModule;
-const distIndex = join(contractsDir, "generated", "typescript", "dist", "index.js");
+const tsDir = join(contractsDir, "generated", "typescript");
+const distIndex = join(tsDir, "dist", "index.js");
 if (existsSync(distIndex)) {
   indexModule = distIndex;
 } else {
-  // Fall back to importing the source through tsx-like behaviour is unavailable;
-  // instead require the test to build first. We surface a clear error.
-  console.error(
-    "dist/index.js not found. Run: npm --prefix contracts/generated/typescript run build",
-  );
-  process.exit(2);
+  // Build only what parity needs (emit to dist). Prefer a local tsc; fall back
+  // to the system tsc (CI installs the generated package, local dev may use a
+  // global tsc). If neither works we surface a clear error.
+  const buildCmds = [
+    ["npx", ["--prefix", tsDir, "tsc", "-p", join(tsDir, "tsconfig.json")]],
+    ["tsc", ["-p", join(tsDir, "tsconfig.json")]],
+  ];
+  let built = false;
+  for (const [cmd, args] of buildCmds) {
+    try {
+      execFileSync(cmd, args, { stdio: "ignore" });
+      built = true;
+      break;
+    } catch (e) {
+      // try next
+    }
+  }
+  if (!built) {
+    console.error(
+      "dist/index.js not found and tsc build failed. Run: npm --prefix contracts/generated/typescript install && npm --prefix contracts/generated/typescript run build",
+    );
+    process.exit(2);
+  }
+  if (!existsSync(distIndex)) {
+    console.error("dist/index.js still missing after build attempt.");
+    process.exit(2);
+  }
+  indexModule = distIndex;
 }
 
 const { validate, CONTRACT_SCHEMA_VERSION, knownTypes } = await import(indexModule);
