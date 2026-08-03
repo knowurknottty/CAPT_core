@@ -1,0 +1,85 @@
+{
+  "artifact": "CAPT Desktop Runtime M0 — Evidence Manifest",
+  "generatedBy": "HY3 / CAPT Runtime + Hermes governed workflow",
+  "authoritativeRepo": {
+    "path": "/Users/knowurknot/CAPT_core",
+    "remote": "https://github.com/knowurknottty/CAPT_core.git",
+    "baseBranch": "main",
+    "baseHeadSha": "sha1:6b3f769cc1042428d758aade443cc6009ce6a2b9",
+    "tag": "capt-runtime-m0"
+  },
+  "treasureChestWorkflow": {
+    "repo": "/Users/knowurknot/captstreasurechest",
+    "remote": "https://github.com/knowurknottty/captstreasurechest.git",
+    "branch": "workflow/capt-desktop-runtime-triple-recursion",
+    "authoritativeCommit": "sha1:c98a8be68ffd89d34f28731c3c4a933f89ed1ae0",
+    "workflowFile": "workflows/CAPT_DESKTOP_RUNTIME_TRIPLE_RECURSION_BUILD_WORKFLOW.md"
+  },
+  "gate0Activation": {
+    "command": "python3.12 desktop/gate0_activation.py",
+    "status": "CAPT_RUNTIME_ACTIVE",
+    "exitCode": 0,
+    "headSha": "sha1:6b3f769cc1042428d758aade443cc6009ce6a2b9",
+    "smokesPassed": 10,
+    "smokes": [
+      "imports_resolve", "generated_contracts_available", "event_ledger_smoke",
+      "checkpoint_replay_smoke", "claimguard_reachable", "verification_reachable",
+      "driver_registry_host_reachable", "reference_driver_smoke",
+      "hermes_driver_available", "contract_drift_clean"
+    ],
+    "evidenceFile": "desktop/gate0_evidence.json"
+  },
+  "m0Acceptance": {
+    "command": "python3.12 desktop/acceptance_m0.py",
+    "result": "CAPT_DESKTOP_M0_PROVEN",
+    "exitCode": 0,
+    "ledgerHeadSequence": 13,
+    "viewDigest": "sha256:0807d4d53b9133c4d9baee587e16ea411219f09b976df66d28df89c995d1adb2",
+    "demoMissionId": "m-desktop-m0-demo",
+    "demoDriverRunState": "completed",
+    "verificationStatus": "verified",
+    "claimGuardVerdict": "accepted",
+    "unauthenticatedIpcRejected": true,
+    "noDuplicateExecution": true,
+    "noMutationFromRender": true,
+    "evidenceFile": "desktop/acceptance_m0_evidence.json"
+  },
+  "tests": {
+    "captRuntimeRegression": {"command": "python3.12 -m pytest tests/capt_runtime -q", "exitCode": 0, "passed": 141},
+    "desktopIntegration": {"command": "python3.12 -m pytest tests/capt_runtime/test_desktop_m0.py -q", "exitCode": 0, "passed": 5},
+    "contractDrift": {"command": "python3.12 contracts/tools/check_drift.py", "exitCode": 0, "detail": "DRIFT CHECK OK (11 generated files match the schema source)"}
+  },
+  "artifacts": {
+    "runtimeService": "desktop/capt_runtime_service.py",
+    "desktopClient": "desktop/desktop_runtime_client.py",
+    "desktopApp": "desktop/desktop_app.py",
+    "acceptanceHarness": "desktop/acceptance_m0.py",
+    "gate0Harness": "desktop/gate0_activation.py",
+    "desktopTests": "tests/capt_runtime/test_desktop_m0.py",
+    "docs": [
+      "CAPT_DESKTOP_RUNTIME_RECOVERY_REPORT.md",
+      "CAPT_DESKTOP_RUNTIME_GAP_ANALYSIS.md",
+      "CAPT_DESKTOP_RUNTIME_ARCHITECTURE.md",
+      "CAPT_DESKTOP_RUNTIME_TRUST_BOUNDARIES.md",
+      "CAPT_DESKTOP_RUNTIME_CONTRACT_MAP.md",
+      "CAPT_DESKTOP_RUNTIME_ADRS.md",
+      "CAPT_DESKTOP_RUNTIME_IMPLEMENTATION_ROADMAP.md",
+      "CAPT_DESKTOP_RUNTIME_M0_ACCEPTANCE.md",
+      "CAPT_DESKTOP_RUNTIME_VERIFICATION_REPORT.md",
+      "CAPT_DESKTOP_RUNTIME_TRIPLE_RECURSION_LEDGER.md"
+    ]
+  },
+  "authorityBoundary": {
+    "desktopMutatesLedger": false,
+    "desktopIssuesCommands": false,
+    "captOwnsAggregates": true,
+    "ipcAuth": "unix-socket + per-session 256-bit token (0600 file)"
+  },
+  "finalStatus": "CAPT_DESKTOP_M0_PROVEN",
+  "limitations": [
+    "Accessibility not AX-audited (headless host; Tk native widgets used).",
+    "Ruff not installed on host; lint via py_compile + import.",
+    "IPC local-only (Unix socket); cross-host transport deferred.",
+    "M1-M3 (create-mission command, approvals, replay UI, cross-platform) deferred per stop rule."
+  ]
+}
