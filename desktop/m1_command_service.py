@@ -30,6 +30,7 @@ a single-user macOS desktop operator console; the operator is the local user.
 
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, Optional
 
 from capt_runtime import commands
@@ -57,6 +58,7 @@ _VALID_OPS = (
     "submit_approval_decision",
     "cancel_task",
     "cancel_driver_run",
+    "update_memory_trigger_policy",
 )
 
 
@@ -79,11 +81,13 @@ class RuntimeCommandService:
         store: EventStore,
         operator_id: str,
         session_id: str,
+        memory_engine: Any = None,
     ) -> None:
         self.store = store
         self.svc = RuntimeService(store)
         self.operator_id = operator_id
         self.session_id = session_id
+        self.memory_engine = memory_engine  # optional MemoryTriggerEngine
 
     # -- envelope / identity validation (transport boundary) -------------
 
@@ -106,6 +110,21 @@ class RuntimeCommandService:
         if cmd.get("sessionId") != self.session_id:
             return "unauthorized"
         return None
+
+    def _mission_context_usage(self, payload: Dict[str, Any]) -> Any:
+        """Estimate context usage for a mission intent (ESTIMATED tokens).
+
+        Uses the runtime-owned accounting module; the estimate is labeled
+        ESTIMATED because no exact tokenizer is available. This is the current
+        context usage at mission creation, used to decide whether the retrieval
+        trigger fires.
+        """
+        from capt_runtime.memory.accounting import ContextUsage, estimate_tokens
+        u = ContextUsage()
+        u.mission_spec = estimate_tokens(json.dumps(payload))
+        u.policy_constraints = estimate_tokens("capt_runtime authority governance policy")
+        u.system_instructions = estimate_tokens("capt runtime operator mission")
+        return u
 
     def _operator_metadata(self, cmd: Dict[str, Any]) -> Dict[str, Any]:
         """Build the human operator CommandMetadata for this command.
@@ -138,6 +157,14 @@ class RuntimeCommandService:
         meta = self._operator_metadata(cmd)
         try:
             if op == "create_mission":
+                # Mandatory memory retrieval trigger BEFORE planning: CAPT owns
+                # the trigger decision. The operator intent is submitted; the
+                # runtime fires the governed memory query and assembles the
+                # ContextPack before planning the mission.
+                if self.memory_engine is not None:
+                    mid = cmd["payload"].get("missionId", "")
+                    usage = self._mission_context_usage(cmd["payload"])
+                    self.memory_engine.require_retrieval_before_planning(mid, usage)
                 result = self.svc.create_mission_with_approval(cmd["payload"], meta)
             elif op == "submit_approval_decision":
                 # Assemble the HumanApprovalDecision contract from the operator's
@@ -164,6 +191,52 @@ class RuntimeCommandService:
             elif op == "cancel_driver_run":
                 result = self.svc.cancel_driver_run(
                     cmd["payload"]["driverRunId"], cmd["payload"].get("reason", "Operator cancelled."), meta
+                )
+            elif op == "update_memory_trigger_policy":
+                if self.memory_engine is None:
+                    return self._receipt(
+                        cmd, status="rejected", classification="internal_failure",
+                        error=self._error_envelope(cmd, "internal_failure", "MEMORY_ENGINE_ABSENT"),
+                        detail="memory engine not wired into this runtime instance",
+                    )
+                p = cmd["payload"]
+                try:
+                    new_policy = self.memory_engine.update_policy(
+                        retrieval_trigger_steps=p.get("retrievalTriggerSteps"),
+                        compression_trigger_steps=p.get("compressionTriggerSteps"),
+                        checkpoint_trigger_steps=p.get("checkpointTriggerSteps"),
+                        consolidation_trigger_steps=p.get("consolidationTriggerSteps"),
+                        hard_stop_trigger_steps=p.get("hardStopTriggerSteps"),
+                        model_safe_limit_steps=p.get("modelSafeLimitSteps"),
+                        source="operator_selected",
+                        operator_id=self.operator_id,
+                        command_id=cmd["commandId"],
+                        correlation_id=cmd["correlationId"],
+                    )
+                except ValueError as exc:
+                    return self._receipt(
+                        cmd, status="rejected", classification="policy_denied",
+                        error=self._error_envelope(cmd, "policy_denied", "MEMORY_TRIGGER_CONFIGURATION_INVALID"),
+                        detail=str(exc)[:240],
+                    )
+                return self._receipt(
+                    cmd, status="accepted", classification="accepted",
+                    result={
+                        "policyVersion": new_policy.policy_version,
+                        "policyDigest": new_policy.policy_digest,
+                        "retrievalTriggerSteps": new_policy.retrieval_trigger_steps,
+                        "retrievalTokens": new_policy.retrieval_tokens(),
+                        "compressionTriggerSteps": new_policy.compression_trigger_steps,
+                        "compressionTokens": new_policy.compression_tokens(),
+                        "checkpointTriggerSteps": new_policy.checkpoint_trigger_steps,
+                        "checkpointTokens": new_policy.checkpoint_tokens(),
+                        "consolidationTriggerSteps": new_policy.consolidation_trigger_steps,
+                        "consolidationTokens": new_policy.consolidation_tokens(),
+                        "hardStopTriggerSteps": new_policy.hard_stop_trigger_steps,
+                        "hardStopTokens": new_policy.hard_stop_tokens(),
+                        "modelSafeLimitSteps": new_policy.model_safe_limit_steps,
+                        "source": new_policy.source,
+                    },
                 )
             else:
                 return self._receipt(

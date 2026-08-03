@@ -199,6 +199,50 @@ class DesktopApp:
             return self.cancel_task(target_id, reason)
         return self.cancel_driver_run(target_id, reason)
 
+    # -- memory trigger operator controls (M1-memory) ----------------------
+
+    def get_memory_policy(self) -> dict:
+        """Read-only projection of the active MemoryTriggerPolicy."""
+        return self.client._query({"op": "get_memory_policy"})["result"]
+
+    def get_memory_state(self, mission_id: str = "") -> dict:
+        """Read-only projection of memory path state for a mission."""
+        return self.client._query({"op": "get_memory_state", "missionId": mission_id})["result"]
+
+    def gui_update_memory_trigger_policy(
+        self,
+        *,
+        retrieval_trigger_steps: Optional[int] = None,
+        compression_trigger_steps: Optional[int] = None,
+        checkpoint_trigger_steps: Optional[int] = None,
+        consolidation_trigger_steps: Optional[int] = None,
+        hard_stop_trigger_steps: Optional[int] = None,
+        model_safe_limit_steps: Optional[int] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> dict:
+        """Operator submits a memory-trigger policy change through the
+        authenticated CAPT command path. The runtime validates and persists the
+        authoritative policy; the desktop never mutates config/runtime directly.
+        """
+        payload = {}
+        if retrieval_trigger_steps is not None:
+            payload["retrievalTriggerSteps"] = retrieval_trigger_steps
+        if compression_trigger_steps is not None:
+            payload["compressionTriggerSteps"] = compression_trigger_steps
+        if checkpoint_trigger_steps is not None:
+            payload["checkpointTriggerSteps"] = checkpoint_trigger_steps
+        if consolidation_trigger_steps is not None:
+            payload["consolidationTriggerSteps"] = consolidation_trigger_steps
+        if hard_stop_trigger_steps is not None:
+            payload["hardStopTriggerSteps"] = hard_stop_trigger_steps
+        if model_safe_limit_steps is not None:
+            payload["modelSafeLimitSteps"] = model_safe_limit_steps
+        if not payload:
+            raise ValueError("no trigger steps provided")
+        return self.client.command(
+            "update_memory_trigger_policy", payload, idempotency_key
+        )
+
     def gui_refresh_approvals(self) -> List[dict]:
         self.refresh_m1()
         return getattr(self, "m1_approvals", [])
@@ -509,6 +553,90 @@ def run_gui_m1(sock_path: str, token_file: str) -> int:
 
     ttk.Button(f_cancel, text="Refresh State", command=do_cancel_refresh).pack(anchor="w", padx=6, pady=2)
     ttk.Button(f_cancel, text="Cancel (governed command)", command=do_cancel).pack(anchor="w", padx=6, pady=4)
+
+    # ---- Tab 5: Memory Trigger (M1-memory) --------------------------------
+    f_mem = ttk.Frame(notebook)
+    notebook.add(f_mem, text="Memory Trigger")
+    ttk.Label(f_mem, text="[OPERATOR CONTROL] Memory trigger thresholds (steps of 32,768 tokens)").pack(anchor="w", padx=6, pady=2)
+
+    def _step_row(parent, label, default):
+        ttk.Label(parent, text=label).pack(anchor="w", padx=6)
+        var = tk.StringVar(value=str(default))
+        ent = ttk.Entry(parent, width=10, textvariable=var)
+        ent.pack(anchor="w", padx=6)
+        return var
+
+    mem_out = scrolledtext.ScrolledText(f_mem, wrap="word", height=10)
+    mem_out.pack(fill="both", expand=True, padx=6, pady=6)
+
+    v_retrieval = _step_row(f_mem, "Retrieval trigger (steps)", 8)
+    v_compression = _step_row(f_mem, "Compression trigger (steps)", 8)
+    v_checkpoint = _step_row(f_mem, "Checkpoint trigger (steps)", 8)
+    v_consolidation = _step_row(f_mem, "Consolidation trigger (steps)", 8)
+    v_hardstop = _step_row(f_mem, "Hard-stop trigger (steps)", 8)
+
+    def _steps_ok(var, name):
+        try:
+            v = int(var.get().strip())
+        except ValueError:
+            raise ValueError("%s must be an integer step count" % name)
+        if v < 1:
+            raise ValueError("%s must be >= 1 step" % name)
+        if v > 8:
+            raise ValueError("%s exceeds model safe limit (8 steps)" % name)
+        return v
+
+    def do_mem_refresh():
+        try:
+            pol = app.get_memory_policy()
+            st = app.get_memory_state()
+        except Exception as exc:  # noqa: BLE001
+            mem_out.delete("1.0", "end")
+            mem_out.insert("1.0", trust_tag("policy") + " memory query failed: %s" % sanitize_for_display(str(exc)))
+            return
+        lines = [trust_tag("authoritative") + " MEMORY TRIGGER POLICY"]
+        lines.append("  policyVersion: %s" % pol.get("policyVersion"))
+        lines.append("  policyDigest: %s" % pol.get("policyDigest"))
+        lines.append("  triggerIntervalTokens: %s" % pol.get("triggerIntervalTokens"))
+        lines.append("  retrieval: %s steps = %s tokens" % (pol.get("retrievalTriggerSteps"), pol.get("retrievalTokens")))
+        lines.append("  compression: %s steps = %s tokens" % (pol.get("compressionTriggerSteps"), pol.get("compressionTokens")))
+        lines.append("  checkpoint: %s steps = %s tokens" % (pol.get("checkpointTriggerSteps"), pol.get("checkpointTokens")))
+        lines.append("  consolidation: %s steps = %s tokens" % (pol.get("consolidationTriggerSteps"), pol.get("consolidationTokens")))
+        lines.append("  hardStop: %s steps = %s tokens" % (pol.get("hardStopTriggerSteps"), pol.get("hardStopTokens")))
+        lines.append("  modelSafeLimit: %s steps = %s tokens" % (pol.get("modelSafeLimitSteps"), pol.get("modelSafeLimitTokens")))
+        lines.append("  source: %s" % pol.get("source"))
+        lines.append("  memoryPathActive: %s" % st.get("memoryPathActive"))
+        mem_out.delete("1.0", "end")
+        mem_out.insert("1.0", "\n".join(lines))
+
+    def do_mem_apply():
+        try:
+            retrieval = _steps_ok(v_retrieval, "retrieval")
+            compression = _steps_ok(v_compression, "compression")
+            checkpoint = _steps_ok(v_checkpoint, "checkpoint")
+            consolidation = _steps_ok(v_consolidation, "consolidation")
+            hardstop = _steps_ok(v_hardstop, "hardstop")
+        except ValueError as exc:
+            mem_out.delete("1.0", "end")
+            mem_out.insert("1.0", trust_tag("policy") + " VALIDATION ERROR: %s" % sanitize_for_display(str(exc)))
+            return
+        receipt = app.gui_update_memory_trigger_policy(
+            retrieval_trigger_steps=retrieval,
+            compression_trigger_steps=compression,
+            checkpoint_trigger_steps=checkpoint,
+            consolidation_trigger_steps=consolidation,
+            hard_stop_trigger_steps=hardstop,
+            idempotency_key="mem-ui-%s" % __import__("time").time_ns(),
+        )
+        mem_out.delete("1.0", "end")
+        if receipt.get("status") == "accepted":
+            mem_out.insert("1.0", trust_tag("authoritative") + " POLICY ACCEPTED\n" + _fmt(receipt))
+        else:
+            mem_out.insert("1.0", trust_tag("policy") + " POLICY DENIED\n" + _fmt(receipt))
+        do_mem_refresh()
+
+    ttk.Button(f_mem, text="Refresh Policy", command=do_mem_refresh).pack(anchor="w", padx=6, pady=2)
+    ttk.Button(f_mem, text="Apply Trigger Policy (governed command)", command=do_mem_apply).pack(anchor="w", padx=6, pady=4)
 
     # ---- Tab 4: Authoritative State / Projections ------------------------
     f_state = ttk.Frame(notebook)

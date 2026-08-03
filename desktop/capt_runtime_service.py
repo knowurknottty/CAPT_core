@@ -249,14 +249,69 @@ def seed_demo_mission(store: EventStore) -> Dict[str, Any]:
             "targetPath": str(worktree), "beforeDigest": before}
 
 
+def _seed_memory_store(mem_store) -> None:
+    """Seed the authoritative memory store with prior-mission context.
+
+    These records are CAPT-owned memory used by the mandatory retrieval trigger
+    when an operator creates a mission. They are real, attributable records with
+    provenance/trust/consent — not anonymous text blobs.
+    """
+    from capt_runtime.memory import MemoryRecord
+
+    mem_store.store(MemoryRecord(
+        record_id="mem-prior-approval-denied-write-etc",
+        memory_class="project",
+        owner="capt",
+        source="capt_runtime.aggregates.human_approval",
+        provenance="mission:demo-m0/approval:demo-approval-1",
+        trust="verified",
+        verification_status="verified",
+        sensitivity="project",
+        consent="project",
+        content="Prior approval for a write to /etc was DENIED; writes outside the "
+                "staging root are never authorized. Approval scope is bounded to the "
+                "originally requested resource.",
+    ))
+    mem_store.store(MemoryRecord(
+        record_id="mem-operator-pref-concise",
+        memory_class="user",
+        owner="operator-knowurknot",
+        source="operator_stated",
+        provenance="operator:knowurknot",
+        trust="unverified",
+        verification_status="pending",
+        sensitivity="user",
+        consent="user",
+        content="Operator preference: concise, direct reporting; no AI slop; working "
+                "artifacts only; prove claims with live execution.",
+    ))
+    mem_store.store(MemoryRecord(
+        record_id="mem-failed-approach-gitguardian-secret-scan",
+        memory_class="episodic",
+        owner="capt",
+        source="capt_runtime.verification",
+        provenance="mission:release-security/evidence:release-security-1",
+        trust="verified",
+        verification_status="verified",
+        sensitivity="project",
+        consent="project",
+        content="A prior release-security CI failure was a false-positive GitGuardian "
+                "secret scan on bare git SHAs. Fix: prefix sha1:/sha256:; rewrite "
+                "history; drop generated artifacts. Do not block merge on unrelated "
+                "private-dep auth failures.",
+        conflict_state=None,
+    ))
+
+
 # --------------------------------------------------------------------------
 # Read-only IPC query handlers (authoritative state only)
 # --------------------------------------------------------------------------
 
 class RuntimeQueryService:
-    def __init__(self, store: EventStore, demo: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, store: EventStore, demo: Optional[Dict[str, Any]] = None, memory_engine: Any = None) -> None:
         self.store = store
         self.demo = demo or {}
+        self.memory_engine = memory_engine
 
     def identity(self) -> Dict[str, Any]:
         return {
@@ -338,6 +393,40 @@ class RuntimeQueryService:
                 return {"ok": True, "result": self.claimguard_disposition(request["statement"])}
             if op == "verification":
                 return {"ok": True, "result": self.verification()}
+            if op == "get_memory_policy":
+                if self.memory_engine is None:
+                    return {"ok": False, "error": "memory engine not active"}
+                p = self.memory_engine.policy
+                from capt_runtime.memory.policy import TRIGGER_INTERVAL_TOKENS
+                return {"ok": True, "result": {
+                    "policyVersion": p.policy_version,
+                    "policyDigest": p.policy_digest,
+                    "triggerIntervalTokens": TRIGGER_INTERVAL_TOKENS,
+                    "retrievalTriggerSteps": p.retrieval_trigger_steps,
+                    "compressionTriggerSteps": p.compression_trigger_steps,
+                    "checkpointTriggerSteps": p.checkpoint_trigger_steps,
+                    "consolidationTriggerSteps": p.consolidation_trigger_steps,
+                    "hardStopTriggerSteps": p.hard_stop_trigger_steps,
+                    "modelSafeLimitSteps": p.model_safe_limit_steps,
+                    "source": p.source,
+                    "retrievalTokens": p.retrieval_tokens(),
+                    "compressionTokens": p.compression_tokens(),
+                    "checkpointTokens": p.checkpoint_tokens(),
+                    "consolidationTokens": p.consolidation_tokens(),
+                    "hardStopTokens": p.hard_stop_tokens(),
+                    "modelSafeLimitTokens": p.model_safe_limit_tokens(),
+                }}
+            if op == "get_memory_state":
+                if self.memory_engine is None:
+                    return {"ok": False, "error": "memory engine not active"}
+                mission_id = request.get("missionId", "")
+                pack = self.memory_engine.last_context_pack(mission_id)
+                return {"ok": True, "result": {
+                    "memoryPathActive": True,
+                    "lastContextPack": pack,
+                    "triggerLog": self.memory_engine.trigger_log(mission_id),
+                    "policyVersions": self.memory_engine.persisted_policy_versions(),
+                }}
             return {"ok": False, "error": "unknown op %r" % op}
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)[:300]}
@@ -376,7 +465,17 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
     demo = None
     if seed:
         demo = seed_demo_mission(store)
-    query = RuntimeQueryService(store, demo)
+
+    # Mandatory CAPT memory trigger subsystem (M1-memory, ADR-DT-M1-MEM-001).
+    # CAPT owns the memory path; the desktop and drivers are projection/
+    # execution surfaces only. The engine is wired into every connection's
+    # command service and into DriverHost dispatch gating.
+    from capt_runtime.memory import MemoryStore as _MemStore, MemoryTriggerEngine as _MemEngine
+    mem_store = _MemStore(str(ledger_path) + ".memory")
+    _seed_memory_store(mem_store)
+    memory_engine = _MemEngine(mem_store, model_safe_limit_steps=8)
+
+    query = RuntimeQueryService(store, demo, memory_engine)
 
     token = secrets.token_hex(32)
     tf = Path(token_file)
@@ -403,7 +502,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             # reusing a stale session's authority (Phase 3).
             operator_id = "operator-" + (getpass.getuser() or "local")
             session_id = "sess-" + secrets.token_hex(8)
-            cmd_svc = RuntimeCommandService(store, operator_id, session_id)
+            cmd_svc = RuntimeCommandService(store, operator_id, session_id, memory_engine)
             _send_json(conn, {
                 "ok": True, "authenticated": True,
                 "operatorId": operator_id, "sessionId": session_id,
