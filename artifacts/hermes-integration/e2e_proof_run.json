@@ -1,0 +1,391 @@
+{
+  "hermesRuntime": {
+    "executable": "/Users/knowurknot/.local/bin/hermes",
+    "exitCode": 0,
+    "stdout": "Hermes Agent v0.19.1 (2026.7.30) \u00b7 upstream dae5df22\nInstall directory: /Users/knowurknot/.hermes/hermes-agent\nInstall method: git\nPython: 3.11.15\nOpenAI SDK: 2.24.0\nUpdate available: 753 commits behind \u2014 run 'hermes update'",
+    "stderr": ""
+  },
+  "hermes": {
+    "driverId": "hermes",
+    "observationSummary": "Runtime architecture: single Python package \"fixture\" v0.0.1; one module src/app.py exposing a pure function handler(event) returning {'ok': True}; no deps, no entrypoint, no server, no build config; README only states it is a tiny fixture repo.\n\nOBSERVATION: The project declares no dependencies and defines no executable entrypoint, so src/app.py's handler is only invocable as an imported function, not as a runnable service.",
+    "artifactPath": "/var/folders/1c/zqvsbr7575xfd767m1w2686m0000gn/T/capt-hermes-proof-qdyyh5s9/staging/hermes-analysis-dr-hermes-1.md",
+    "artifactDigest": "sha256:0e6bdaa4fc97ac22029386fe214a85ee25c4cbab174171f92d7059abc727fbfd",
+    "verification": {
+      "schemaVersion": "1.0.0",
+      "verificationId": "vr-sha256:f1626c60a",
+      "status": {
+        "kind": "verified",
+        "supportingEvidenceIds": []
+      },
+      "verifiedBy": {
+        "actorId": "verification_pipeline",
+        "kind": "verification_plane"
+      },
+      "observedBy": "hermes",
+      "checks": {
+        "repositoryUnchanged": true,
+        "noGitMutation": true,
+        "artifactPresent": true
+      },
+      "trust": "capt_authoritative"
+    },
+    "claim": "Repository inspected in read-only mode.",
+    "reconcile": {
+      "schemaVersion": "1.0.0",
+      "driverRunId": "dr-hermes-1",
+      "result": "reconciled_completed",
+      "detectedAt": "2026-08-03T00:00:00Z",
+      "anomalies": []
+    },
+    "before": "sha256:048716dd6a66e0860189ad66f55e4dfb4c8210d54a25fcaca98352ddaf389c90",
+    "after": "sha256:048716dd6a66e0860189ad66f55e4dfb4c8210d54a25fcaca98352ddaf389c90",
+    "diagnostics": {
+      "externalPid": 51294,
+      "exitCode": 0,
+      "elapsedSeconds": 11.798,
+      "executable": "/Users/knowurknot/.local/bin/hermes",
+      "argvShape": [
+        "<exe>",
+        "-z",
+        "<prompt>",
+        "-t",
+        "terminal",
+        "--safe-mode",
+        "--pass-session-id"
+      ],
+      "stderrTail": "",
+      "envKeys": [
+        "CAPT_DRIVER_RUN_ID",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "PATH",
+        "SHELL",
+        "TMPDIR",
+        "USER"
+      ]
+    }
+  },
+  "reference": {
+    "driverId": "openharness",
+    "observationSummary": "Repository inspected in read-only mode. 3 files, 127 bytes. Top extensions: .toml=1, .md=1, .py=1. Git present: False. Bounded observation: no world-writable files detected.",
+    "artifactPath": "/var/folders/1c/zqvsbr7575xfd767m1w2686m0000gn/T/capt-hermes-proof-qdyyh5s9/staging/analysis-dr-ref-1.md",
+    "artifactDigest": "sha256:303b07de6376444411e76495388016af816d50e327db991ef3502965551bf3a5",
+    "verification": {
+      "schemaVersion": "1.0.0",
+      "verificationId": "vr-sha256:8c4e9088e",
+      "status": {
+        "kind": "verified",
+        "supportingEvidenceIds": []
+      },
+      "verifiedBy": {
+        "actorId": "verification_pipeline",
+        "kind": "verification_plane"
+      },
+      "observedBy": "openharness",
+      "checks": {
+        "repositoryUnchanged": true,
+        "noGitMutation": true,
+        "artifactPresent": true
+      },
+      "trust": "capt_authoritative"
+    },
+    "claim": "Repository inspected in read-only mode.",
+    "reconcile": {
+      "schemaVersion": "1.0.0",
+      "driverRunId": "dr-ref-1",
+      "result": "reconciled_completed",
+      "detectedAt": "2026-08-03T00:00:00Z",
+      "anomalies": []
+    },
+    "before": "sha256:048716dd6a66e0860189ad66f55e4dfb4c8210d54a25fcaca98352ddaf389c90",
+    "after": "sha256:048716dd6a66e0860189ad66f55e4dfb4c8210d54a25fcaca98352ddaf389c90",
+    "diagnostics": {}
+  },
+  "swapSemantics": {
+    "bothVerified": true,
+    "bothRepoUnchanged": true,
+    "bothSameBoundedClaim": true,
+    "bothReconciledCompleted": true,
+    "artifactsDistinct": true
+  },
+  "trace": [
+    {
+      "step": "HermesRuntimeIdentified",
+      "at": "2026-08-03T16:14:47Z",
+      "executable": "/Users/knowurknot/.local/bin/hermes",
+      "version": "Hermes Agent v0.19.1 (2026.7.30) \u00b7 upstream dae5df22",
+      "exitCode": 0
+    },
+    {
+      "step": "MissionAndCapabilityPathExecuted",
+      "at": "2026-08-03T16:14:47Z",
+      "eventTypes": [
+        "MissionCreated",
+        "PolicyEvaluated",
+        "CapabilityGranted",
+        "CapabilityLeaseActivated",
+        "TaskCreated",
+        "TaskTransitioned",
+        "TaskTransitioned",
+        "TaskTransitioned"
+      ],
+      "headSequence": 8,
+      "checkpointId": "cp-m0a-001"
+    },
+    {
+      "step": "DriverRegistered",
+      "at": "2026-08-03T16:14:47Z",
+      "driverId": "hermes",
+      "registered": true
+    },
+    {
+      "step": "TargetHashedBefore",
+      "at": "2026-08-03T16:14:47Z",
+      "digest": "sha256:048716dd6a66e0860189ad66f55e4dfb4c8210d54a25fcaca98352ddaf389c90"
+    },
+    {
+      "step": "CapabilityLeaseIssued",
+      "at": "2026-08-03T16:14:47Z",
+      "leaseId": "l-hermes-1",
+      "operations": [
+        "RepositoryRead",
+        "FilesystemRead",
+        "ArtifactCreate",
+        "AnalysisOnly"
+      ],
+      "scope": "filesystem"
+    },
+    {
+      "step": "ContextSliceBuilt",
+      "at": "2026-08-03T16:14:47Z",
+      "keys": [
+        "budgets",
+        "expectedArtifacts",
+        "filesystemPolicy",
+        "lease",
+        "networkPolicy",
+        "permittedTools",
+        "schemaVersion",
+        "terminationConditions"
+      ],
+      "writesAllowed": false,
+      "egressAllowed": false
+    },
+    {
+      "step": "DriverWorkOrderCreated",
+      "at": "2026-08-03T16:14:47Z",
+      "driverRunId": "dr-hermes-1",
+      "operations": [
+        "RepositoryRead",
+        "FilesystemRead",
+        "ArtifactCreate",
+        "AnalysisOnly"
+      ]
+    },
+    {
+      "step": "DriverRunTransitioned",
+      "at": "2026-08-03T16:14:47Z",
+      "state": "running"
+    },
+    {
+      "step": "CapabilityRevalidatedBeforeDispatch",
+      "at": "2026-08-03T16:14:47Z",
+      "ok": true
+    },
+    {
+      "step": "DriverInvoked",
+      "at": "2026-08-03T16:14:58Z",
+      "driverId": "hermes",
+      "externalRunId": "hermes-pid-51294",
+      "externalPid": 51294,
+      "exitCode": 0,
+      "elapsedSeconds": 11.8,
+      "envKeys": [
+        "CAPT_DRIVER_RUN_ID",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "PATH",
+        "SHELL",
+        "TMPDIR",
+        "USER"
+      ]
+    },
+    {
+      "step": "UntrustedObservationIngested",
+      "at": "2026-08-03T16:14:58Z",
+      "observations": 1,
+      "artifacts": 1,
+      "trust": "untrusted"
+    },
+    {
+      "step": "VerificationCompleted",
+      "at": "2026-08-03T16:14:58Z",
+      "status": "verified",
+      "checks": {
+        "repositoryUnchanged": true,
+        "noGitMutation": true,
+        "artifactPresent": true
+      },
+      "trust": "capt_authoritative"
+    },
+    {
+      "step": "ClaimGuardDecision",
+      "at": "2026-08-03T16:14:58Z",
+      "accepted": true,
+      "statement": "Repository inspected in read-only mode."
+    },
+    {
+      "step": "ClaimGuardOverclaimRejected",
+      "at": "2026-08-03T16:14:58Z",
+      "error": "ClaimRejected"
+    },
+    {
+      "step": "TargetHashedAfter",
+      "at": "2026-08-03T16:14:58Z",
+      "digest": "sha256:048716dd6a66e0860189ad66f55e4dfb4c8210d54a25fcaca98352ddaf389c90",
+      "unchanged": true
+    },
+    {
+      "step": "Reconciled",
+      "at": "2026-08-03T16:14:58Z",
+      "result": "reconciled_completed"
+    },
+    {
+      "step": "CheckpointCreated",
+      "at": "2026-08-03T16:14:58Z",
+      "checkpointId": "cp-hermes",
+      "replayEquivalent": true,
+      "fullApplied": 8,
+      "tailApplied": 0
+    },
+    {
+      "step": "SeparateProcessRestartReplay",
+      "at": "2026-08-03T16:14:59Z",
+      "exitCode": 0,
+      "stdout": "{\"equivalent\": true, \"full_applied\": 8, \"replay_applied\": 0, \"full_digest\": \"sha256:b82feb61ce120acf71d420e7074d7f657b6d7a57b0b73e290f12dd5b90e5c3e1\", \"replay_digest\": \"sha256:b82feb61ce120acf71d420e7074d7f657b6d7a57b0b73e290f12dd5b90e5c3e1\"}",
+      "stderr": ""
+    },
+    {
+      "step": "DriverRegistered",
+      "at": "2026-08-03T16:14:59Z",
+      "driverId": "openharness",
+      "registered": true
+    },
+    {
+      "step": "TargetHashedBefore",
+      "at": "2026-08-03T16:14:59Z",
+      "digest": "sha256:048716dd6a66e0860189ad66f55e4dfb4c8210d54a25fcaca98352ddaf389c90"
+    },
+    {
+      "step": "CapabilityLeaseIssued",
+      "at": "2026-08-03T16:14:59Z",
+      "leaseId": "l-hermes-1",
+      "operations": [
+        "RepositoryRead",
+        "FilesystemRead",
+        "ArtifactCreate",
+        "AnalysisOnly"
+      ],
+      "scope": "filesystem"
+    },
+    {
+      "step": "ContextSliceBuilt",
+      "at": "2026-08-03T16:14:59Z",
+      "keys": [
+        "budgets",
+        "expectedArtifacts",
+        "filesystemPolicy",
+        "lease",
+        "networkPolicy",
+        "permittedTools",
+        "schemaVersion",
+        "terminationConditions"
+      ],
+      "writesAllowed": false,
+      "egressAllowed": false
+    },
+    {
+      "step": "DriverWorkOrderCreated",
+      "at": "2026-08-03T16:14:59Z",
+      "driverRunId": "dr-ref-1",
+      "operations": [
+        "RepositoryRead",
+        "FilesystemRead",
+        "ArtifactCreate",
+        "AnalysisOnly"
+      ]
+    },
+    {
+      "step": "DriverRunTransitioned",
+      "at": "2026-08-03T16:14:59Z",
+      "state": "running"
+    },
+    {
+      "step": "CapabilityRevalidatedBeforeDispatch",
+      "at": "2026-08-03T16:14:59Z",
+      "ok": true
+    },
+    {
+      "step": "DriverInvoked",
+      "at": "2026-08-03T16:14:59Z",
+      "driverId": "openharness",
+      "externalRunId": "oh-dr-ref-1",
+      "externalPid": null,
+      "exitCode": null,
+      "elapsedSeconds": 0.0,
+      "envKeys": null
+    },
+    {
+      "step": "UntrustedObservationIngested",
+      "at": "2026-08-03T16:14:59Z",
+      "observations": 1,
+      "artifacts": 1,
+      "trust": "untrusted"
+    },
+    {
+      "step": "VerificationCompleted",
+      "at": "2026-08-03T16:14:59Z",
+      "status": "verified",
+      "checks": {
+        "repositoryUnchanged": true,
+        "noGitMutation": true,
+        "artifactPresent": true
+      },
+      "trust": "capt_authoritative"
+    },
+    {
+      "step": "ClaimGuardDecision",
+      "at": "2026-08-03T16:14:59Z",
+      "accepted": true,
+      "statement": "Repository inspected in read-only mode."
+    },
+    {
+      "step": "ClaimGuardOverclaimRejected",
+      "at": "2026-08-03T16:14:59Z",
+      "error": "ClaimRejected"
+    },
+    {
+      "step": "TargetHashedAfter",
+      "at": "2026-08-03T16:14:59Z",
+      "digest": "sha256:048716dd6a66e0860189ad66f55e4dfb4c8210d54a25fcaca98352ddaf389c90",
+      "unchanged": true
+    },
+    {
+      "step": "Reconciled",
+      "at": "2026-08-03T16:14:59Z",
+      "result": "reconciled_completed"
+    },
+    {
+      "step": "SwapProofCompleted",
+      "at": "2026-08-03T16:14:59Z",
+      "bothVerified": true,
+      "bothRepoUnchanged": true,
+      "bothSameBoundedClaim": true,
+      "bothReconciledCompleted": true,
+      "artifactsDistinct": true
+    }
+  ],
+  "fixtureRoot": "/var/folders/1c/zqvsbr7575xfd767m1w2686m0000gn/T/capt-hermes-proof-qdyyh5s9"
+}
