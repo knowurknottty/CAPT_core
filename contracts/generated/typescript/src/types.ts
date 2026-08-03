@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:e30763820bc9f0064c7ddfa40fbd97f893f72c8f099c3c26a2f82742558feaea
+// source digest:  sha256:683ce7d3c261e0e855f0d88284855b2b003e6e0507be4601e93c8c96f7ee6525
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -357,6 +357,42 @@ export interface AgentIdentity {
 /** 0 means the stream does not yet exist. Increments by exactly 1 per event. */
 export type AggregateVersion = number;
 
+/** An untrusted object produced by a driver, awaiting validation. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface ArtifactCandidate {
+  readonly candidateId: Identifier;
+  readonly contentDigest: Digest;
+  readonly driverRunId: Identifier;
+  readonly path: string;
+  readonly schemaVersion: SchemaVersion;
+}
+
+/** A manifest describing a set of artifacts and their digests. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface ArtifactManifest {
+  readonly artifacts: readonly ArtifactRecord[];
+  readonly manifestId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+}
+
+/** The governance/ClaimGuard decision on artifact promotion. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface ArtifactPromotionDecision {
+  readonly decidedAt: Timestamp;
+  readonly decidedBy: Identifier;
+  readonly decision: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly reason?: string | null;
+  readonly verificationRef?: string | null;
+}
+
+/** A promoted, authoritative artifact. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface ArtifactRecord {
+  readonly artifactId: Identifier;
+  readonly candidateId: Identifier;
+  readonly contentDigest: Digest;
+  readonly path: string;
+  readonly promotionDecision: ArtifactPromotionDecision;
+  readonly schemaVersion: SchemaVersion;
+}
+
 /** The unbroken chain of delegations from a root principal to the acting principal. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
 export interface AuthorityChain {
   readonly chainId: Identifier;
@@ -596,6 +632,16 @@ export interface ModelIdentity {
   readonly schemaVersion: SchemaVersion;
 }
 
+/** A receipt for an artifact mutation (create/update/delete) within a workspace. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface MutationReceipt {
+  readonly artifactPath: string;
+  readonly contentDigest: Digest;
+  readonly operation: string;
+  readonly receiptId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly verified: boolean;
+}
+
 /** High-level operator intent submitted to CAPT Runtime to create a bounded mission. The runtime owns all planning: it constructs the MissionSpec, TaskNode, and (when requiresApproval) HumanApprovalRequest from this intent. The desktop never builds aggregates. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001). */
 export interface OperatorMissionIntent {
   readonly missionId: Identifier;
@@ -617,6 +663,13 @@ export interface OperatorMissionIntent {
   readonly taskId?: string | null;
   readonly terminationCriteria?: readonly Readonly<Record<string, unknown>>[];
   readonly unresolvedAmbiguities?: readonly string[];
+}
+
+/** A bounded filesystem scope for an artifact workspace. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface PathScope {
+  readonly allowedPaths: readonly string[];
+  readonly rootPath: string;
+  readonly schemaVersion: SchemaVersion;
 }
 
 /** The actor on whose behalf authority is exercised. Identity establishes the actor; delegation transfers bounded authority; governance evaluates; capability issuance grants permission. Additive plane-convergence extension under contract 1.0.0 (ADR-DT-PLANE-CONV). */
@@ -683,6 +736,24 @@ export type StreamId = string;
 
 /** RFC 3339 UTC instant. Descriptive only: never used for ordering or conflict resolution (ADR-0106). */
 export type Timestamp = string;
+
+/** An isolated worktree/staging directory for artifact production. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface WorkspaceDescriptor {
+  readonly pathScope: PathScope;
+  readonly rootPath: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly workspaceId: Identifier;
+}
+
+/** A time-boxed, scoped lease over a workspace. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface WorkspaceLease {
+  readonly expiresAt: Timestamp;
+  readonly issuedAt: Timestamp;
+  readonly leaseId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly state: string;
+  readonly workspaceId: Identifier;
+}
 
 /** Minimal read-only projection handed to a driver. MUST NOT contain governance, policy, claim, capability-graph, ledger, or aggregate references (ADR-0125). */
 export interface ContextSlice {

@@ -515,6 +515,117 @@
         "subjectId": { "$ref": "common.schema.json#/$defs/Identifier" },
         "subjectKind": { "type": "string", "enum": ["principal", "resource", "mission", "driver"] }
       }
+    },
+    "PathScope": {
+      "title": "PathScope",
+      "description": "A bounded filesystem scope for an artifact workspace. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "rootPath", "allowedPaths"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "rootPath": { "type": "string", "pattern": "^/[A-Za-z0-9_./-]+$" },
+        "allowedPaths": { "type": "array", "minItems": 1, "maxItems": 256, "items": { "type": "string" } }
+      }
+    },
+    "WorkspaceDescriptor": {
+      "title": "WorkspaceDescriptor",
+      "description": "An isolated worktree/staging directory for artifact production. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "workspaceId", "rootPath", "pathScope"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "workspaceId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "rootPath": { "type": "string", "pattern": "^/[A-Za-z0-9_./-]+$" },
+        "pathScope": { "$ref": "common.schema.json#/$defs/PathScope" }
+      }
+    },
+    "WorkspaceLease": {
+      "title": "WorkspaceLease",
+      "description": "A time-boxed, scoped lease over a workspace. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "leaseId", "workspaceId", "issuedAt", "expiresAt", "state"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "leaseId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "workspaceId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "issuedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "expiresAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "state": { "type": "string", "enum": ["active", "expired", "revoked"] }
+      }
+    },
+    "ArtifactCandidate": {
+      "title": "ArtifactCandidate",
+      "description": "An untrusted object produced by a driver, awaiting validation. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "candidateId", "driverRunId", "path", "contentDigest"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "candidateId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "driverRunId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "path": { "type": "string", "maxLength": 4096 },
+        "contentDigest": { "$ref": "common.schema.json#/$defs/Digest" }
+      }
+    },
+    "ArtifactRecord": {
+      "title": "ArtifactRecord",
+      "description": "A promoted, authoritative artifact. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "artifactId", "candidateId", "path", "contentDigest", "promotionDecision"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "artifactId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "candidateId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "path": { "type": "string", "maxLength": 4096 },
+        "contentDigest": { "$ref": "common.schema.json#/$defs/Digest" },
+        "promotionDecision": { "$ref": "common.schema.json#/$defs/ArtifactPromotionDecision" }
+      }
+    },
+    "ArtifactManifest": {
+      "title": "ArtifactManifest",
+      "description": "A manifest describing a set of artifacts and their digests. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "manifestId", "artifacts"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "manifestId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "artifacts": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/ArtifactRecord" } }
+      }
+    },
+    "ArtifactPromotionDecision": {
+      "title": "ArtifactPromotionDecision",
+      "description": "The governance/ClaimGuard decision on artifact promotion. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "decision", "decidedBy", "decidedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "decision": { "type": "string", "enum": ["promote", "reject", "quarantine"] },
+        "decidedBy": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "decidedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "verificationRef": { "type": ["string", "null"], "maxLength": 256 },
+        "reason": { "type": ["string", "null"], "maxLength": 1024 }
+      }
+    },
+    "MutationReceipt": {
+      "title": "MutationReceipt",
+      "description": "A receipt for an artifact mutation (create/update/delete) within a workspace. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "receiptId", "artifactPath", "operation", "contentDigest", "verified"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "receiptId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "artifactPath": { "type": "string", "maxLength": 4096 },
+        "operation": { "type": "string", "enum": ["create", "update", "delete", "move"] },
+        "contentDigest": { "$ref": "common.schema.json#/$defs/Digest" },
+        "verified": { "type": "boolean" }
+      }
     }
   }
 }

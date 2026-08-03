@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:e30763820bc9f0064c7ddfa40fbd97f893f72c8f099c3c26a2f82742558feaea
+# source digest:  sha256:683ce7d3c261e0e855f0d88284855b2b003e6e0507be4601e93c8c96f7ee6525
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -412,6 +412,50 @@ AggregateVersion = int
 
 
 @dataclass(frozen=True)
+class ArtifactCandidate(object):
+    """An untrusted object produced by a driver, awaiting validation. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    candidateId: Identifier
+    contentDigest: Digest
+    driverRunId: Identifier
+    path: str
+    schemaVersion: SchemaVersion
+
+
+@dataclass(frozen=True)
+class ArtifactManifest(object):
+    """A manifest describing a set of artifacts and their digests. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    artifacts: List[ArtifactRecord]
+    manifestId: Identifier
+    schemaVersion: SchemaVersion
+
+
+@dataclass(frozen=True)
+class ArtifactPromotionDecision(object):
+    """The governance/ClaimGuard decision on artifact promotion. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    decidedAt: Timestamp
+    decidedBy: Identifier
+    decision: str
+    schemaVersion: SchemaVersion
+    reason: Optional[str] = None
+    verificationRef: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class ArtifactRecord(object):
+    """A promoted, authoritative artifact. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    artifactId: Identifier
+    candidateId: Identifier
+    contentDigest: Digest
+    path: str
+    promotionDecision: ArtifactPromotionDecision
+    schemaVersion: SchemaVersion
+
+
+@dataclass(frozen=True)
 class AuthorityChain(object):
     """The unbroken chain of delegations from a root principal to the acting principal. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
 
@@ -685,6 +729,18 @@ class ModelIdentity(object):
 
 
 @dataclass(frozen=True)
+class MutationReceipt(object):
+    """A receipt for an artifact mutation (create/update/delete) within a workspace. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    artifactPath: str
+    contentDigest: Digest
+    operation: str
+    receiptId: Identifier
+    schemaVersion: SchemaVersion
+    verified: bool
+
+
+@dataclass(frozen=True)
 class OperatorMissionIntent(object):
     """High-level operator intent submitted to CAPT Runtime to create a bounded mission. The runtime owns all planning: it constructs the MissionSpec, TaskNode, and (when requiresApproval) HumanApprovalRequest from this intent. The desktop never builds aggregates. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001)."""
 
@@ -707,6 +763,15 @@ class OperatorMissionIntent(object):
     taskId: Optional[str] = None
     terminationCriteria: List[Dict[str, Any]] = field(default_factory=list)
     unresolvedAmbiguities: List[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class PathScope(object):
+    """A bounded filesystem scope for an artifact workspace. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    allowedPaths: List[str]
+    rootPath: str
+    schemaVersion: SchemaVersion
 
 
 @dataclass(frozen=True)
@@ -780,6 +845,28 @@ StreamId = str
 
 
 Timestamp = str
+
+
+@dataclass(frozen=True)
+class WorkspaceDescriptor(object):
+    """An isolated worktree/staging directory for artifact production. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    pathScope: PathScope
+    rootPath: str
+    schemaVersion: SchemaVersion
+    workspaceId: Identifier
+
+
+@dataclass(frozen=True)
+class WorkspaceLease(object):
+    """A time-boxed, scoped lease over a workspace. Additive plane-convergence extension (ADR-DT-PLANE-CONV)."""
+
+    expiresAt: Timestamp
+    issuedAt: Timestamp
+    leaseId: Identifier
+    schemaVersion: SchemaVersion
+    state: str
+    workspaceId: Identifier
 
 
 @dataclass(frozen=True)
