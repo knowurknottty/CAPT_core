@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.capt.dev/claim.schema.json",
+  "title": "CAPT claim contracts",
+  "x-domain": "claim",
+  "$defs": {
+    "ClaimKind": {
+      "title": "ClaimKind",
+      "description": "completion is the strictest: it requires verified status plus required evidence (spec 12.2).",
+      "type": "string",
+      "enum": ["completion", "observation", "capability_assertion", "verification_summary"]
+    },
+    "ClaimPromotionState": {
+      "title": "ClaimPromotionState",
+      "type": "string",
+      "enum": ["proposed", "verified", "accepted", "qualified", "rejected", "escalated", "suppressed"]
+    },
+    "ClaimRecord": {
+      "title": "ClaimRecord",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "claimId", "missionId", "kind", "statement", "evidenceIds", "promotionState", "proposedBy", "proposedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "claimId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "taskId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }] },
+        "kind": { "$ref": "claim.schema.json#/$defs/ClaimKind" },
+        "statement": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "evidenceIds": { "type": "array", "maxItems": 64, "items": { "$ref": "common.schema.json#/$defs/Identifier" } },
+        "verificationId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }] },
+        "promotionState": { "$ref": "claim.schema.json#/$defs/ClaimPromotionState" },
+        "proposedBy": { "$ref": "common.schema.json#/$defs/ActorRef" },
+        "proposedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "sourceProposalId": {
+          "description": "Set when the claim originated from an untrusted DriverClaimProposal. Provenance only; confers no authority (ADR-0110).",
+          "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }]
+        }
+      }
+    },
+    "ClaimGuardVerdict": {
+      "title": "ClaimGuardVerdict",
+      "type": "string",
+      "enum": ["accept", "qualify", "reject", "escalate"]
+    },
+    "ClaimGuardDecision": {
+      "title": "ClaimGuardDecision",
+      "description": "ClaimGuard controls emission/promotion. It cannot itself produce verification evidence; verificationId must reference an independently produced VerificationResult.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "decisionId", "claimId", "verdict", "rationale", "decidedBy", "decidedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "decisionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "claimId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "verdict": { "$ref": "claim.schema.json#/$defs/ClaimGuardVerdict" },
+        "qualification": { "type": ["string", "null"], "maxLength": 4096 },
+        "rationale": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "verificationId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }] },
+        "decidedBy": {
+          "description": "Must be a claim_authority actor.",
+          "$ref": "common.schema.json#/$defs/ActorRef"
+        },
+        "decidedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      }
+    }
+  }
+}

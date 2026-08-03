@@ -1,0 +1,77 @@
+name: M0-A Contract & Runtime Proof
+
+on:
+  pull_request:
+  push:
+    branches: [main, "docs/capt-runtime-architecture-spec", "feat/capt-runtime-m0a-contract-state-proof"]
+
+permissions:
+  contents: read
+
+jobs:
+  contract-drift:
+    name: Contract binding drift + generation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Regenerate bindings and assert no drift
+        run: |
+          python3 contracts/tools/generate.py
+          python3 contracts/tools/check_drift.py
+      - name: Assert generation is reproducible (byte-identical)
+        run: |
+          python3 - <<'PY'
+          import subprocess, tempfile, filecmp, pathlib, os
+          a = tempfile.mkdtemp(); b = tempfile.mkdtemp()
+          subprocess.run(["python3","contracts/tools/generate.py","--out",a],check=True)
+          subprocess.run(["python3","contracts/tools/generate.py","--out",b],check=True)
+          def rel(p, root): return os.path.relpath(p, root)
+          la = sorted(rel(str(x), a) for x in pathlib.Path(a).rglob('*') if x.is_file())
+          lb = sorted(rel(str(x), b) for x in pathlib.Path(b).rglob('*') if x.is_file())
+          assert la == lb, "file sets differ"
+          for r in la:
+              assert filecmp.cmp(os.path.join(a, r), os.path.join(b, r), shallow=False), f"drift at {r}"
+          print("REPRODUCIBLE_OK")
+          PY
+
+  typescript:
+    name: TypeScript bindings build + parity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build generated TypeScript
+        working-directory: contracts/generated/typescript
+        run: npm install && npm run build
+      - name: Cross-language fixture parity
+        run: node contracts/tools/ts_parity.mjs
+
+  python-tests:
+    name: Python conformance suite
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install test tooling
+        run: python -m pip install --upgrade pip pytest
+      - name: Run M0-A conformance suite
+        run: python -m pytest tests/capt_runtime -q
+      - name: Run full regression
+        run: python -m pytest -q

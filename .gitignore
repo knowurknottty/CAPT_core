@@ -49,3 +49,6 @@ capt_solo/components/manifest.json
 build/
 dist/
 *.egg-info/
+
+# Generated TypeScript build output (bindings SOURCE is committed, dist is not)
+contracts/generated/typescript/dist/

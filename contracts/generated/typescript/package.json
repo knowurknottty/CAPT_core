@@ -1,0 +1,13 @@
+{
+  "description": "GENERATED CAPT runtime contract bindings. Do not edit.",
+  "main": "dist/index.js",
+  "name": "@capt/contracts",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "version": "1.0.0"
+}

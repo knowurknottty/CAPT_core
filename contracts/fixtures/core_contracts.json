@@ -1,0 +1,151 @@
+{
+  "fixtureSetVersion": "1.0.0",
+  "description": "Cross-language contract fixtures. Both the Python and TypeScript validators must return byte-identical error lists for every case (ADR-0102).",
+  "cases": [
+    {
+      "id": "mission-spec-valid",
+      "type": "MissionSpec",
+      "expectValid": true,
+      "value": {
+        "schemaVersion": "1.0.0",
+        "missionId": "m-0001",
+        "rawRequest": "Prove the M0-A contract and state transition gate.",
+        "normalizedRequest": "prove m0-a contract and state transition gate",
+        "objectives": [
+          { "objectiveId": "o-1", "statement": "Demonstrate transactional state transitions.", "priority": 1 }
+        ],
+        "constraints": [
+          {
+            "kind": "forbidden_operation",
+            "constraintId": "c-1",
+            "origin": "explicit_user",
+            "operations": ["repo.write", "network.egress"]
+          },
+          {
+            "kind": "budget",
+            "constraintId": "c-2",
+            "origin": "policy_added",
+            "budget": { "wallClockSeconds": 3600, "maxOperations": 500 }
+          }
+        ],
+        "successCriteria": [
+          { "criterionId": "s-1", "statement": "Replay equals checkpoint plus tail.", "requiresVerification": true }
+        ],
+        "terminationCriteria": [
+          { "criterionId": "t-1", "statement": "Any invariant violation.", "terminalState": "failed" }
+        ],
+        "unresolvedAmbiguities": [],
+        "taskGraphId": null,
+        "createdAt": "2026-08-02T00:00:00Z"
+      }
+    },
+    {
+      "id": "mission-spec-missing-required",
+      "type": "MissionSpec",
+      "expectValid": false,
+      "expectedErrors": ["createdAt: is required"],
+      "value": {
+        "schemaVersion": "1.0.0",
+        "missionId": "m-0002",
+        "rawRequest": "x",
+        "normalizedRequest": "x",
+        "objectives": [{ "objectiveId": "o-1", "statement": "y", "priority": 1 }],
+        "constraints": [],
+        "successCriteria": [{ "criterionId": "s-1", "statement": "z", "requiresVerification": false }],
+        "terminationCriteria": [],
+        "unresolvedAmbiguities": []
+      }
+    },
+    {
+      "id": "mission-spec-additional-property",
+      "type": "MissionSpec",
+      "expectValid": false,
+      "expectedErrors": ["sneaky: is not permitted"],
+      "value": {
+        "schemaVersion": "1.0.0",
+        "missionId": "m-0003",
+        "rawRequest": "x",
+        "normalizedRequest": "x",
+        "objectives": [{ "objectiveId": "o-1", "statement": "y", "priority": 1 }],
+        "constraints": [],
+        "successCriteria": [{ "criterionId": "s-1", "statement": "z", "requiresVerification": false }],
+        "terminationCriteria": [],
+        "unresolvedAmbiguities": [],
+        "createdAt": "2026-08-02T00:00:00Z",
+        "sneaky": { "arbitrary": "payload" }
+      }
+    },
+    {
+      "id": "mission-spec-wrong-schema-version",
+      "type": "MissionSpec",
+      "expectValid": false,
+      "expectedErrors": ["schemaVersion: must equal \"1.0.0\""],
+      "value": {
+        "schemaVersion": "2.0.0",
+        "missionId": "m-0004",
+        "rawRequest": "x",
+        "normalizedRequest": "x",
+        "objectives": [{ "objectiveId": "o-1", "statement": "y", "priority": 1 }],
+        "constraints": [],
+        "successCriteria": [{ "criterionId": "s-1", "statement": "z", "requiresVerification": false }],
+        "terminationCriteria": [],
+        "unresolvedAmbiguities": [],
+        "createdAt": "2026-08-02T00:00:00Z"
+      }
+    },
+    {
+      "id": "constraint-invalid-discriminant",
+      "type": "Constraint",
+      "expectValid": false,
+      "expectedErrors": [
+        "$: invalid discriminant kind=\"wormhole\"; expected one of approval_required,budget,forbidden_operation,resource_boundary"
+      ],
+      "value": { "kind": "wormhole", "constraintId": "c-9", "origin": "inferred" }
+    },
+    {
+      "id": "resource-scope-filesystem-valid",
+      "type": "ResourceScope",
+      "expectValid": true,
+      "value": { "kind": "filesystem", "rootPath": "/tmp/capt-m0a", "recursive": true }
+    },
+    {
+      "id": "resource-scope-relative-path-rejected",
+      "type": "ResourceScope",
+      "expectValid": false,
+      "expectedErrors": ["rootPath: does not match pattern ^/[^\\u0000]*$"],
+      "value": { "kind": "filesystem", "rootPath": "../../etc", "recursive": false }
+    },
+    {
+      "id": "extension-envelope-valid",
+      "type": "ExtensionEnvelope",
+      "expectValid": true,
+      "value": {
+        "namespace": "x-capt.telemetry",
+        "payloadDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "payloadJson": "{\"sampled\":true}"
+      }
+    },
+    {
+      "id": "extension-envelope-unnamespaced-rejected",
+      "type": "ExtensionEnvelope",
+      "expectValid": false,
+      "expectedErrors": ["namespace: does not match pattern ^x-[a-z0-9]+(\\.[a-z0-9]+)*$"],
+      "value": {
+        "namespace": "telemetry",
+        "payloadDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "payloadJson": "{}"
+      }
+    },
+    {
+      "id": "extension-envelope-live-object-rejected",
+      "type": "ExtensionEnvelope",
+      "expectValid": false,
+      "expectedErrors": ["payloadJson: must be a string"],
+      "value": {
+        "namespace": "x-capt.telemetry",
+        "payloadDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "payloadJson": { "not": "a string" }
+      }
+    }
+  ]
+}

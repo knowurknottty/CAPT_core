@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.capt.dev/evidence.schema.json",
+  "title": "CAPT evidence contracts",
+  "x-domain": "evidence",
+  "$defs": {
+    "EvidenceKind": {
+      "title": "EvidenceKind",
+      "x-discriminator": "kind",
+      "oneOf": [
+        {
+          "title": "ArtifactHashEvidence",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "artifactPath", "artifactDigest"],
+          "properties": {
+            "kind": { "type": "string", "const": "artifact_hash" },
+            "artifactPath": { "type": "string", "maxLength": 4096 },
+            "artifactDigest": { "$ref": "common.schema.json#/$defs/Digest" }
+          }
+        },
+        {
+          "title": "CommandExitEvidence",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "command", "exitCode", "outputDigest"],
+          "properties": {
+            "kind": { "type": "string", "const": "command_exit" },
+            "command": { "type": "string", "maxLength": 4096 },
+            "exitCode": { "type": "integer" },
+            "outputDigest": { "$ref": "common.schema.json#/$defs/Digest" }
+          }
+        },
+        {
+          "title": "SchemaValidationEvidence",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "schemaId", "valid"],
+          "properties": {
+            "kind": { "type": "string", "const": "schema_validation" },
+            "schemaId": { "type": "string", "maxLength": 512 },
+            "valid": { "type": "boolean" }
+          }
+        },
+        {
+          "title": "StateAssertionEvidence",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "streamId", "streamVersion", "stateDigest"],
+          "properties": {
+            "kind": { "type": "string", "const": "state_assertion" },
+            "streamId": { "$ref": "common.schema.json#/$defs/StreamId" },
+            "streamVersion": { "$ref": "common.schema.json#/$defs/AggregateVersion" },
+            "stateDigest": { "$ref": "common.schema.json#/$defs/Digest" }
+          }
+        },
+        {
+          "title": "HumanAttestationEvidence",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "attestedBy", "statement"],
+          "properties": {
+            "kind": { "type": "string", "const": "human_attestation" },
+            "attestedBy": { "$ref": "common.schema.json#/$defs/ActorRef" },
+            "statement": { "type": "string", "maxLength": 4096 }
+          }
+        }
+      ]
+    },
+    "EvidenceRecord": {
+      "title": "EvidenceRecord",
+      "description": "Authoritative record. CAPT-constructed only. A driver observation must be converted through validation (ADR-0110); provenance is preserved in sourceObservationId without transferring authority.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "evidenceId", "missionId", "evidence", "collectedBy", "collectedAt", "trust"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "evidenceId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "taskId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }] },
+        "evidence": { "$ref": "evidence.schema.json#/$defs/EvidenceKind" },
+        "collectedBy": { "$ref": "common.schema.json#/$defs/ActorRef" },
+        "collectedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "trust": {
+          "description": "Authoritative CAPT evidence. Const value makes Family A structurally non-substitutable with Family B (ADR-0110).",
+          "type": "string",
+          "const": "capt_authoritative"
+        },
+        "sourceObservationId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }] }
+      }
+    },
+    "DriverObservation": {
+      "title": "DriverObservation",
+      "description": "UNTRUSTED Family B type (ADR-0110). Deliberately has no streamId/streamVersion/eventType, so it cannot be appended to the ledger. Do not merge with EvidenceRecord.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "observationId", "observedBy", "trust", "workOrderId", "summary", "observedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "observationId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "observedBy": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "trust": { "type": "string", "const": "untrusted" },
+        "workOrderId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "summary": { "type": "string", "maxLength": 8192 },
+        "observedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      }
+    },
+    "DriverClaimProposal": {
+      "title": "DriverClaimProposal",
+      "description": "UNTRUSTED Family B type. Can only enter CAPT as an UNVERIFIED ClaimRecord; promotion requires an independent VerificationResult (ADR-0110).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "proposalId", "observedBy", "trust", "workOrderId", "statement", "proposedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "proposalId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "observedBy": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "trust": { "type": "string", "const": "untrusted" },
+        "workOrderId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "statement": { "type": "string", "maxLength": 4096 },
+        "proposedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      }
+    }
+  }
+}

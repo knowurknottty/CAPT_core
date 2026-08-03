@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.capt.dev/tool.schema.json",
+  "title": "CAPT tool request/result contracts",
+  "x-domain": "tool",
+  "$defs": {
+    "ToolArgument": {
+      "title": "ToolArgument",
+      "description": "Typed argument. A generic map would allow injection of unvalidated parameters into a consequential call.",
+      "x-discriminator": "kind",
+      "oneOf": [
+        {
+          "title": "StringArgument",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name", "value"],
+          "properties": {
+            "kind": { "type": "string", "const": "string" },
+            "name": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9_]{0,63}$" },
+            "value": { "type": "string", "maxLength": 65536 }
+          }
+        },
+        {
+          "title": "IntegerArgument",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name", "value"],
+          "properties": {
+            "kind": { "type": "string", "const": "integer" },
+            "name": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9_]{0,63}$" },
+            "value": { "type": "integer" }
+          }
+        },
+        {
+          "title": "BooleanArgument",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name", "value"],
+          "properties": {
+            "kind": { "type": "string", "const": "boolean" },
+            "name": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9_]{0,63}$" },
+            "value": { "type": "boolean" }
+          }
+        },
+        {
+          "title": "PathArgument",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name", "value"],
+          "properties": {
+            "kind": { "type": "string", "const": "path" },
+            "name": { "type": "string", "pattern": "^[a-z][a-zA-Z0-9_]{0,63}$" },
+            "value": { "type": "string", "pattern": "^/[^\\u0000]*$", "maxLength": 4096 }
+          }
+        }
+      ]
+    },
+    "ToolRequest": {
+      "title": "ToolRequest",
+      "description": "leaseId is REQUIRED for a consequential request: no side effect without a lease (invariant 7).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "toolRequestId", "toolId", "operation", "arguments", "consequential", "idempotencyKey", "operationFingerprint", "replayPolicy", "requestedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "toolRequestId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "toolId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "operation": { "type": "string", "pattern": "^[a-z][a-z0-9_.:]{1,63}$" },
+        "arguments": { "type": "array", "maxItems": 64, "items": { "$ref": "tool.schema.json#/$defs/ToolArgument" } },
+        "consequential": { "type": "boolean" },
+        "leaseId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }] },
+        "reservationId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }] },
+        "idempotencyKey": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "operationFingerprint": { "$ref": "common.schema.json#/$defs/Digest" },
+        "replayPolicy": { "$ref": "common.schema.json#/$defs/ReplayPolicy" },
+        "requestedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      }
+    },
+    "ToolResultStatus": {
+      "title": "ToolResultStatus",
+      "type": "string",
+      "enum": ["succeeded", "failed", "indeterminate", "denied"]
+    },
+    "ToolResult": {
+      "title": "ToolResult",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "toolResultId", "toolRequestId", "status", "completedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "toolResultId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "toolRequestId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "status": { "$ref": "tool.schema.json#/$defs/ToolResultStatus" },
+        "exitCode": { "type": ["integer", "null"] },
+        "outputDigest": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Digest" }, { "type": "null" }] },
+        "sideEffectIdentity": { "type": ["string", "null"], "maxLength": 1024 },
+        "error": { "oneOf": [{ "$ref": "common.schema.json#/$defs/ErrorEnvelope" }, { "type": "null" }] },
+        "completedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      }
+    }
+  }
+}
