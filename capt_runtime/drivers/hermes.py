@@ -170,12 +170,32 @@ def build_prompt(context_slice: Dict[str, Any], operations: List[str]) -> str:
     Nothing outside the ContextSlice may reach the external runtime. The prompt
     is fully determined by the slice, so context minimization (ADR-0125) is
     enforced by construction.
+
+    The ContextPack reference (digest + selected-record count) is embedded so
+    the driver knows which governed slice it is operating under, but the raw
+    memory content is NEVER forwarded — the driver receives only the
+    authorized slice reference (ADR-DT-M1-MEM-001).
     """
     fs = context_slice["filesystemPolicy"]
     allowed = fs.get("allowedPaths", [])
     target = fs.get("rootPath")
     tools = context_slice.get("permittedTools", [])
     budgets = context_slice.get("budgets", {})
+    pack_ref = context_slice.get("contextPackRef")
+    pack_line = ""
+    if pack_ref:
+        pack_line = (
+            "\nAuthorized memory ContextPack (CAPT-governed slice reference only; "
+            "raw memory is NOT provided to you):\n"
+            "  ContextPackId: %s\n"
+            "  ContextPackDigest: %s\n"
+            "  SelectedRecords: %s\n"
+            % (
+                pack_ref.get("contextPackId", "unknown"),
+                pack_ref.get("contextPackDigest", "unknown"),
+                pack_ref.get("selectedRecordCount", 0),
+            )
+        )
     return (
         "You are executing a bounded, READ-ONLY inspection work order.\n"
         "Target directory: %s\n"
@@ -185,7 +205,8 @@ def build_prompt(context_slice: Dict[str, Any], operations: List[str]) -> str:
         "mutating command.\n"
         "Permitted operations: %s\n"
         "Permitted tools: %s\n"
-        "Time budget (seconds): %s\n\n"
+        "Time budget (seconds): %s\n"
+        "%s\n"
         "Task: inspect the target directory and describe its runtime "
         "architecture in at most 8 lines. Then state exactly one bounded, "
         "evidence-backed observation about it, prefixed with 'OBSERVATION: '. "
@@ -197,6 +218,7 @@ def build_prompt(context_slice: Dict[str, Any], operations: List[str]) -> str:
             ", ".join(operations),
             ", ".join(tools) or "(none)",
             budgets.get("maxSeconds", "unspecified"),
+            pack_line,
         )
     )
 

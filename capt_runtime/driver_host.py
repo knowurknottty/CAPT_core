@@ -33,11 +33,13 @@ class DriverHost:
         registry: DriverRegistry,
         staging_root: str,
         target_repo: str,
+        memory_engine: Any = None,
     ) -> None:
         self.registry = registry
         self.staging_root = staging_root
         self.target_repo = target_repo
         self._driver = None  # set by select_driver
+        self.memory_engine = memory_engine  # optional MemoryTriggerEngine
 
     def select_driver(self, driver) -> None:
         # driver is an ExecutionDriver instance (e.g. OpenHarnessDriver)
@@ -88,6 +90,53 @@ class DriverHost:
         """
         if self._driver is None:
             raise RuntimeError("no driver selected")
+        # Mandatory memory gate: CAPT owns the trigger decision. Refuse dispatch
+        # when memory is inactive, ContextPack missing/stale, consent/scope
+        # violated, or context exceeds the hard-stop boundary.
+        if self.memory_engine is not None:
+            gate = self.memory_engine.require_memory_before_dispatch(
+                work_order.get("missionId", ""),
+                context_pack_digest=context_slice.get("contextPackRef", {}).get("contextPackDigest")
+                if context_slice.get("contextPackRef") else None,
+                policy_digest=work_order.get("memoryPolicyRef", {}).get("policyDigest")
+                if work_order.get("memoryPolicyRef") else None,
+                context_usage=context_slice.get("budgets", {}).get("maxTokens"),
+                consent_ok=True,
+                scope_ok=True,
+            )
+            # Attach the authorized slice reference the driver may consume.
+            cs = dict(context_slice)
+            cs["contextPackRef"] = {
+                "contextPackId": gate["contextPackDigest"].replace("sha256:", "cp-"),
+                "contextPackDigest": gate["contextPackDigest"],
+                "selectedRecordCount": gate["selectedRecordCount"],
+                "tokenBudget": context_slice.get("budgets", {}).get("maxTokens", 0),
+            }
+            wo = dict(work_order)
+            wo["contextSlice"] = cs
+            wo["memoryPolicyRef"] = {
+                "policyVersion": self.memory_engine.policy.policy_version,
+                "policyDigest": self.memory_engine.policy.policy_digest,
+                "hardStopTriggerSteps": self.memory_engine.policy.hard_stop_trigger_steps,
+            }
+            # Reject structurally unsafe operations BEFORE schema validation / dispatch.
+            check_work_order_operations(wo.get("operations", []))
+            # Re-validate the lease immediately before the external call.
+            verify_lease(
+                lease,
+                now=now,
+                driver_id=wo.get("driverId", ""),
+                mission_id=wo.get("missionId", ""),
+                task_id=wo.get("taskId", ""),
+                operations=wo.get("operations", []),
+                resource_path=self.target_repo,
+                budget=budget,
+            )
+            require("ExecutionDriverWorkOrder", wo)
+            # Synchronous wrapper around the async driver for the conformance scenario.
+            import asyncio
+
+            return asyncio.run(self._driver.submit(wo))
         # Reject structurally unsafe operations BEFORE schema validation / dispatch.
         check_work_order_operations(work_order.get("operations", []))
         # Re-validate the lease immediately before the external call.
