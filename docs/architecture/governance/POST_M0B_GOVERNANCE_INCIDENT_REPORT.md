@@ -97,3 +97,21 @@ their known-good version) and either restores or re-authorizes.
 
 Containment: COMPLETE (quarantined, read-only, evidence preserved).
 Restoration: BLOCKED (baseline unrecoverable; owner decision required).
+
+## 9. Clarification addendum (bioCAPT Ouroboros subsystem)
+
+The observed automatic skill-enhancement activity recorded in this incident
+report belongs to the **separate bioCAPT Ouroboros self-improvement subsystem**.
+That subsystem operates outside the CAPT worktree and is **not controlled by this
+harness agent**. It:
+
+- did **not** modify any CAPT runtime code;
+- did **not** alter the CAPT repository;
+- did **not** invalidate M0-A, M0-B, or M0 freeze evidence.
+
+This incident is therefore **not a CAPT runtime governance failure**. It is
+retained as historical evidence of an out-of-band skill-self-improvement event
+that happened to coincide with the post-M0-B window. The CAPT runtime authority
+boundary, read-only driver proof, and freeze verification remain valid and
+unaffected. The Ouroboros subsystem was neither modified nor disabled in response
+to this event.
