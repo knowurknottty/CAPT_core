@@ -1,33 +1,8 @@
-[build-system]
-requires = ["setuptools>=68.0"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "capt-solo"
-version = "0.4.1"
-description = "Local-first cognitive runtime for individual developers, integrating with Hermes."
-readme = "README.md"
-requires-python = ">=3.8"
-license = { text = "MIT" }
-keywords = ["capt", "hermes", "memory", "cognitive", "local-first"]
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
+[tool.pytest.ini_options]
+# Live Gate A tests invoke the genuine OpenHarness binary + a local Ollama model.
+# They are marked `slow` and deselected by default so the core suite (including
+# the frozen 51-test M0-B conformance suite) runs without external model access.
+addopts = "-m 'not slow'"
+markers = [
+    "slow: test invokes the genuine external OpenHarness harness + local Ollama model",
 ]
-
-[project.urls]
-Homepage = "https://github.com/knowurknottty/CAPT_core"
-
-[project.entry-points.hermes_plugins]
-capt-solo = "capt_solo.plugin:get_plugin"
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["capt_solo*"]
-namespaces = true
-
-[tool.setuptools.package-data]
-"capt_solo.components" = ["*.json"]
-"capt_solo.plugin" = ["*.json"]
-"capt_solo.skills" = ["**/*.md"]
