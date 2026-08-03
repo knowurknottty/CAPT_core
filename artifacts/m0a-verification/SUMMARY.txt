@@ -1,0 +1,27 @@
+=== M0-A verification capture 2026-08-03T00:42:08Z ===
+worktree: /Users/knowurknot/capt-m0a
+branch: feat/capt-runtime-m0a-contract-state-proof
+head: 6665a6a677ba2cb07c1b6dcb53b2abfd555803db
+python: Python 3.9.6
+node: v22.22.2
+--- targeted runtime tests ---
+...................................................                      [100%]
+51 passed in 0.35s
+--- full suite ---
+sssssss................................................................. [ 94%]
+........................                                                 [100%]
+412 passed, 44 skipped in 4.35s
+--- schema generate ---
+contract schema version: 1.0.0
+source digest:           sha256:6ab1e9d532c51fd0383e18ac82d8930accae4255fd21bf2ee698fc951b615e90
+types generated:         121
+files written/changed:   0
+contract schema version: 1.0.0
+source digest:           sha256:6ab1e9d532c51fd0383e18ac82d8930accae4255fd21bf2ee698fc951b615e90
+types generated:         121
+files written/changed:   0
+--- drift check ---
+DRIFT CHECK: OK (11 generated files match the schema source)
+DRIFT CHECK: OK (11 generated files match the schema source)
+--- ts parity ---
+{"failures":0,"cases":[{"id":"mission-spec-valid","errors":[]},{"id":"mission-spec-missing-required","errors":["createdAt: is required"]},{"id":"mission-spec-additional-property","errors":["sneaky: is not permitted"]},{"id":"mission-spec-wrong-schema-version","errors":["schemaVersion: must equal \"1.0.0\""]},{"id":"constraint-invalid-discriminant","errors":["$: invalid discriminant kind=\"wormhole\"; expected one of approval_required,budget,forbidden_operation,resource_boundary"]},{"id":"resource-scope-filesystem-valid","errors":[]},{"id":"resource-scope-relative-path-rejected","errors":["rootPath: does not match pattern ^/[^\\u0000]*$"]},{"id":"extension-envelope-valid","errors":[]},{"id":"extension-envelope-unnamespaced-rejected","errors":["namespace: does not match pattern ^x-[a-z0-9]+(\\.[a-z0-9]+)*$"]},{"id":"extension-envelope-live-object-rejected","errors":["payloadJson: must be a string"]},{"id":"capability-grant-valid","errors":[]},{"id":"capability-grant-without-policy-decision-rejected","errors":["policyBundleDigest: is required","policyDecisionId: is required"]},{"id":"capability-lease-valid","errors":[]},{"id":"event-envelope-valid","errors":[]},{"id":"event-envelope-type-payload-mismatch-rejected","errors":["$: eventType must equal payload.eventType"]},{"id":"event-envelope-bad-stream-prefix-rejected","errors":["streamId: does not match pattern ^(mission|task|capability|driverrun|claim)-[A-Za-z0-9_.-]{1,96}$"]},{"id":"event-envelope-zero-stream-version-rejected","errors":["streamVersion: less than minimum 1"]},{"id":"driver-observation-is-untrusted","errors":[]},{"id":"driver-observation-cannot-claim-authoritative-trust","errors":["trust: must equal \"untrusted\""]},{"id":"verification-status-verified-requires-evidence","errors":["supportingEvidenceIds: fewer than minItems 1"]}]}

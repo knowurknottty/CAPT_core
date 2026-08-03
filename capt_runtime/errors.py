@@ -90,6 +90,16 @@ class CapabilityDenied(CaptRuntimeError):
         self.lease_id = lease_id
 
 
+class CapabilityViolation(CaptRuntimeError):
+    """A read-only capability-model invariant was violated (M0-B)."""
+
+    category = "capability_violation"
+
+    def __init__(self, reason: str) -> None:
+        CaptRuntimeError.__init__(self, reason)
+        self.reason = reason
+
+
 class ReconciliationRequired(CaptRuntimeError):
     """An indeterminate operation must be resolved before proceeding."""
 

@@ -3,17 +3,23 @@
   "$id": "https://contracts.capt.dev/driver.schema.json",
   "title": "CAPT driver-run state contracts",
   "x-domain": "driver",
-  "x-m0a-note": "M0-A defines the contract and state model ONLY. No driver is integrated, no DriverHost exists, and no transport is implemented (ADR-0111).",
+  "x-m0a-note": "M0-A defined the contract and state model ONLY. M0-B extends this with the full ExecutionDriver contract set and integrates one read-only driver (OpenHarness).",
   "$defs": {
     "DriverRunState": {
       "title": "DriverRunState",
       "type": "string",
-      "enum": ["created", "submitted", "running", "suspended", "cancelled", "completed", "failed", "lost", "reconciled"]
+      "enum": ["created", "queued", "submitted", "running", "suspended", "completed", "cancelled", "failed", "lost", "reconciled"]
     },
     "DriverReconciliationStatus": {
       "title": "DriverReconciliationStatus",
       "type": "string",
       "enum": ["not_required", "required", "in_progress", "resolved_effect_occurred", "resolved_effect_absent", "unresolvable"]
+    },
+    "DriverReconciliationResult": {
+      "title": "DriverReconciliationResult",
+      "description": "Outcome of a CAPT reconciliation pass over a driver run. No automatic re-execution is implied.",
+      "type": "string",
+      "enum": ["reconciled_completed", "reconciled_failed", "reconciliation_requires_human", "safe_to_retry", "retry_forbidden", "external_state_unknown"]
     },
     "DriverDescriptor": {
       "title": "DriverDescriptor",
@@ -26,6 +32,267 @@
         "driverVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
         "supportedOperations": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "type": "string", "enum": ["describe", "submit", "inspect", "cancel", "resume", "reconcile"] } },
         "writeCapable": { "type": "boolean" }
+      }
+    },
+    "ExecutionDriverDescriptor": {
+      "title": "ExecutionDriverDescriptor",
+      "description": "Authoritative CAPT name for the driver descriptor contract (ADR-0120). Structurally identical to DriverDescriptor.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "driverId", "driverVersion", "supportedOperations", "writeCapable"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "driverId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "driverVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "supportedOperations": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "type": "string", "enum": ["describe", "submit", "inspect", "cancel", "resume", "reconcile"] } },
+        "writeCapable": { "type": "boolean" }
+      }
+    },
+    "DriverCapabilityDeclaration": {
+      "title": "DriverCapabilityDeclaration",
+      "description": "What a driver declares it can do. A declaration grants NO execution authority (ADR-0120).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "driverId", "declaredOperations", "declaredTools", "declaredScopes"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "driverId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "declaredOperations": { "type": "array", "minItems": 0, "maxItems": 64, "items": { "type": "string" } },
+        "declaredTools": { "type": "array", "minItems": 0, "maxItems": 64, "items": { "type": "string" } },
+        "declaredScopes": { "type": "array", "minItems": 0, "maxItems": 64, "items": { "$ref": "capability.schema.json#/$defs/ResourceScope" } }
+      }
+    },
+    "DriverCompatibilityRecord": {
+      "title": "DriverCompatibilityRecord",
+      "description": "Records the runtime/contract compatibility of a driver at registration time.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "driverId", "contractSchemaVersion", "runtimeVersion", "compatible"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "driverId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "contractSchemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "runtimeVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "compatible": { "type": "boolean" },
+        "notes": { "type": ["string", "null"], "maxLength": 1024 }
+      }
+    },
+    "FilesystemPolicy": {
+      "title": "FilesystemPolicy",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rootPath", "allowedPaths", "writesAllowed"],
+      "properties": {
+        "rootPath": { "type": "string", "pattern": "^/[^\\u0000-\\u0020]*$" },
+        "allowedPaths": { "type": "array", "minItems": 1, "maxItems": 256, "items": { "type": "string" } },
+        "writesAllowed": { "const": false }
+      }
+    },
+    "NetworkPolicy": {
+      "title": "NetworkPolicy",
+      "description": "M0-B drivers are read-only; outbound network is denied by default.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["egressAllowed", "allowedHosts"],
+      "properties": {
+        "egressAllowed": { "const": false },
+        "allowedHosts": { "type": "array", "maxItems": 256, "items": { "type": "string" } }
+      }
+    },
+    "DriverBudget": {
+      "title": "DriverBudget",
+      "description": "Alias of DriverBudgets; resource ceilings for one run.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxSeconds": { "type": "integer", "minimum": 1, "maximum": 86400 },
+        "maxArtifacts": { "type": "integer", "minimum": 0, "maximum": 1024 },
+        "maxObservations": { "type": "integer", "minimum": 0, "maximum": 100000 }
+      }
+    },
+    "DriverBudgets": {
+      "title": "DriverBudgets",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxSeconds": { "type": "integer", "minimum": 1, "maximum": 86400 },
+        "maxArtifacts": { "type": "integer", "minimum": 0, "maximum": 1024 },
+        "maxObservations": { "type": "integer", "minimum": 0, "maximum": 100000 }
+      }
+    },
+    "DriverCapabilities": {
+      "title": "DriverCapabilities",
+      "description": "Read-only capability set a driver may be granted. M0-B permits only read/analysis/artifact-candidate operations; RepositoryWrite is forbidden for drivers.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "operations", "filesystemPolicy", "permittedTools", "budgets"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "enum": ["RepositoryRead", "FilesystemRead", "ArtifactCreate", "AnalysisOnly"]
+          }
+        },
+        "filesystemPolicy": { "$ref": "driver.schema.json#/$defs/FilesystemPolicy" },
+        "permittedTools": { "type": "array", "minItems": 0, "maxItems": 64, "items": { "type": "string" } },
+        "budgets": { "$ref": "driver.schema.json#/$defs/DriverBudget" }
+      }
+    },
+    "ExpectedArtifact": {
+      "title": "ExpectedArtifact",
+      "description": "Descriptor for an artifact a driver may create in the CAPT staging area.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactPath", "artifactKind"],
+      "properties": {
+        "artifactPath": { "type": "string", "pattern": "^/[^\\u0000-\\u0020]*$" },
+        "artifactKind": { "type": "string", "maxLength": 128 }
+      }
+    },
+    "RequiredReceipt": {
+      "title": "RequiredReceipt",
+      "description": "Alias of DriverReceiptCandidate; a driver-claimed step receipt.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "receiptId", "driverRunId", "step", "claimedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "receiptId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "driverRunId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "step": { "type": "string", "maxLength": 256 },
+        "claimedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "contentDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "DriverTerminationCondition": {
+      "title": "DriverTerminationCondition",
+      "description": "How CAPT terminates a run on anomaly.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "onTimeout": { "type": "string", "enum": ["cancel", "suspend", "fail"] },
+        "onBudgetExceeded": { "type": "string", "enum": ["cancel", "suspend", "fail"] },
+        "onUnexpectedWrite": { "const": "fail" }
+      }
+    },
+    "ContextSlice": {
+      "title": "ContextSlice",
+      "description": "Minimal read-only projection handed to a driver. MUST NOT contain governance, policy, claim, capability-graph, ledger, or aggregate references (ADR-0125).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "lease", "filesystemPolicy", "permittedTools", "budgets", "expectedArtifacts", "terminationConditions"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "lease": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["leaseId", "operations", "scope", "validFrom", "validUntil"],
+          "properties": {
+            "leaseId": { "$ref": "common.schema.json#/$defs/Identifier" },
+            "operations": { "type": "array", "minItems": 1, "maxItems": 64, "items": { "type": "string" } },
+            "scope": { "$ref": "capability.schema.json#/$defs/ResourceScope" },
+            "validFrom": { "$ref": "common.schema.json#/$defs/Timestamp" },
+            "validUntil": { "$ref": "common.schema.json#/$defs/Timestamp" }
+          }
+        },
+        "filesystemPolicy": { "$ref": "driver.schema.json#/$defs/FilesystemPolicy" },
+        "networkPolicy": { "$ref": "driver.schema.json#/$defs/NetworkPolicy" },
+        "permittedTools": { "type": "array", "minItems": 0, "maxItems": 64, "items": { "type": "string" } },
+        "budgets": { "$ref": "driver.schema.json#/$defs/DriverBudget" },
+        "expectedArtifacts": { "type": "array", "minItems": 0, "maxItems": 256, "items": { "$ref": "driver.schema.json#/$defs/ExpectedArtifact" } },
+        "terminationConditions": { "$ref": "driver.schema.json#/$defs/DriverTerminationCondition" }
+      }
+    },
+    "ExecutionDriverWorkOrder": {
+      "title": "ExecutionDriverWorkOrder",
+      "description": "CAPT-authored instruction to a driver. Operations must be read-only (ADR-0122).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "driverRunId", "driverId", "missionId", "taskId", "workOrderVersion", "contextSlice", "operations"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "driverRunId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "driverId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "taskId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "workOrderVersion": { "type": "integer", "minimum": 1 },
+        "contextSlice": { "$ref": "driver.schema.json#/$defs/ContextSlice" },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": { "type": "string", "enum": ["RepositoryRead", "FilesystemRead", "ArtifactCreate", "AnalysisOnly"] }
+        }
+      }
+    },
+    "DriverWorkOrder": {
+      "title": "DriverWorkOrder",
+      "description": "Alias of ExecutionDriverWorkOrder retained for compatibility.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "driverRunId", "driverId", "missionId", "taskId", "workOrderVersion", "contextSlice", "operations"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "driverRunId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "driverId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "taskId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "workOrderVersion": { "type": "integer", "minimum": 1 },
+        "contextSlice": { "$ref": "driver.schema.json#/$defs/ContextSlice" },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": { "type": "string", "enum": ["RepositoryRead", "FilesystemRead", "ArtifactCreate", "AnalysisOnly"] }
+        }
+      }
+    },
+    "DriverArtifactCandidate": {
+      "title": "DriverArtifactCandidate",
+      "description": "A driver-produced artifact candidate. CAPT validates existence before creating an EvidenceRecord.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "candidateId", "driverRunId", "artifactPath", "artifactDigest", "producedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "candidateId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "driverRunId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "artifactPath": { "type": "string", "pattern": "^/[^\\u0000-\\u0020]*$" },
+        "artifactDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "producedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      }
+    },
+    "DriverReceiptCandidate": {
+      "title": "DriverReceiptCandidate",
+      "description": "Driver-claimed receipt of a step. CAPT validates against the ledger; fake receipts are rejected.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "receiptId", "driverRunId", "step", "claimedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "receiptId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "driverRunId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "step": { "type": "string", "maxLength": 256 },
+        "claimedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "contentDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "DriverProgressSignal": {
+      "title": "DriverProgressSignal",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "signalId", "driverRunId", "phase", "reportedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "signalId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "driverRunId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "phase": { "type": "string", "maxLength": 256 },
+        "fraction": { "type": "number", "minimum": 0, "maximum": 1 },
+        "reportedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
       }
     },
     "DriverRun": {
@@ -44,6 +311,75 @@
         "state": { "$ref": "driver.schema.json#/$defs/DriverRunState" },
         "reconciliationStatus": { "$ref": "driver.schema.json#/$defs/DriverReconciliationStatus" },
         "createdAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      }
+    },
+    "DriverRunCheckpoint": {
+      "title": "DriverRunCheckpoint",
+      "description": "Per-run recovery state embedded in the CAPT CheckpointManifest. Trusted only after integrity verification.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["driverRunId", "state", "reconciliationStatus", "workOrderVersion", "lastEventGlobalSequence", "openReservations", "lastObservationDigest"],
+      "properties": {
+        "driverRunId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "state": { "$ref": "driver.schema.json#/$defs/DriverRunState" },
+        "reconciliationStatus": { "$ref": "driver.schema.json#/$defs/DriverReconciliationStatus" },
+        "workOrderVersion": { "type": "integer", "minimum": 1 },
+        "lastEventGlobalSequence": { "type": "integer", "minimum": 0 },
+        "openReservations": { "type": "integer", "minimum": 0 },
+        "lastObservationDigest": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "DriverReconciliationRecord": {
+      "title": "DriverReconciliationRecord",
+      "description": "CAPT-authored reconciliation report for a driver run.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "driverRunId", "result", "detectedAt", "anomalies"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "driverRunId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "result": { "$ref": "driver.schema.json#/$defs/DriverReconciliationResult" },
+        "detectedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "anomalies": { "type": "array", "maxItems": 256, "items": { "type": "string", "maxLength": 1024 } }
+      }
+    },
+    "DriverCancellationRequest": {
+      "title": "DriverCancellationRequest",
+      "description": "CAPT-authored request to cancel a driver run. The driver cannot self-cancel authoritatively.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "driverRunId", "reason", "requestedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "driverRunId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "reason": { "type": "string", "maxLength": 1024 },
+        "requestedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      }
+    },
+    "DriverResumeInput": {
+      "title": "DriverResumeInput",
+      "description": "Optional CAPT-authored input to resume a suspended run.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "driverRunId"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "driverRunId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "resumeNote": { "type": ["string", "null"], "maxLength": 1024 }
+      }
+    },
+    "DriverError": {
+      "title": "DriverError",
+      "description": "Untrusted driver-reported error. CAPT decides failure disposition; the driver cannot set terminal state authoritatively.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "driverRunId", "errorId", "message", "reportedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "driverRunId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "errorId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "message": { "type": "string", "maxLength": 4096 },
+        "reportedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
       }
     }
   }

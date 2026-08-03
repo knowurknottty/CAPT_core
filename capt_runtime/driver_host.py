@@ -1,0 +1,167 @@
+"""DriverHost (M0-B orchestration, ADR-0120/0123).
+
+Wires the read-only proof scenario: build a ContextSlice, create the DriverRun,
+dispatch the selected driver, ingest untrusted output, verify independently,
+reconcile, and complete. The host is the ONLY place that touches CAPT aggregates
+and the driver together; it enforces the trust boundary at every step.
+
+It does NOT integrate multiple drivers, does NOT write to the target repository,
+and does NOT grant the driver any aggregate-mutation authority.
+"""
+
+from __future__ import annotations
+
+import hashlib
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from .context_slice import build_context_slice
+from .contracts import require
+from .capability import check_work_order_operations, verify_lease
+from .drivers.registry import DriverRegistry
+from .ingestion import (
+    validate_artifact_candidate,
+    validate_observation,
+    validate_receipt_candidate,
+)
+from .verification import build_verification_result, guard_claim
+
+
+class DriverHost:
+    def __init__(
+        self,
+        registry: DriverRegistry,
+        staging_root: str,
+        target_repo: str,
+    ) -> None:
+        self.registry = registry
+        self.staging_root = staging_root
+        self.target_repo = target_repo
+        self._driver = None  # set by select_driver
+
+    def select_driver(self, driver) -> None:
+        # driver is an ExecutionDriver instance (e.g. OpenHarnessDriver)
+        self._driver = driver
+
+    # -- scenario steps ----------------------------------------------------
+
+    def build_context(
+        self,
+        lease: Dict[str, Any],
+        permitted_tools: List[str],
+        budgets: Dict[str, Any],
+        expected_artifacts: List[Dict[str, Any]],
+        termination: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        fs_policy = {
+            "rootPath": self.target_repo,
+            "allowedPaths": [self.target_repo, self.staging_root],
+            "writesAllowed": False,
+        }
+        net_policy = {"egressAllowed": False, "allowedHosts": []}
+        return build_context_slice(
+            lease=lease,
+            filesystem_policy=fs_policy,
+            permitted_tools=permitted_tools,
+            budgets=budgets,
+            expected_artifacts=expected_artifacts,
+            termination_conditions=termination,
+            network_policy=net_policy,
+        )
+
+    def dispatch(
+        self,
+        work_order: Dict[str, Any],
+        context_slice: Dict[str, Any],
+        driver_run_state: Dict[str, Any],
+        *,
+        now: str,
+        lease: Dict[str, Any],
+        budget: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Invoke the driver. Returns untrusted driver output.
+
+        Before any external boundary crossing, CAPT re-validates the capability
+        lease (ADR-0122): identity, scope, active status, operation coverage,
+        path scope, and budget. A failed check raises CapabilityViolation and the
+        driver is never contacted.
+        """
+        if self._driver is None:
+            raise RuntimeError("no driver selected")
+        # Reject structurally unsafe operations BEFORE schema validation / dispatch.
+        check_work_order_operations(work_order.get("operations", []))
+        # Re-validate the lease immediately before the external call.
+        verify_lease(
+            lease,
+            now=now,
+            driver_id=work_order.get("driverId", ""),
+            mission_id=work_order.get("missionId", ""),
+            task_id=work_order.get("taskId", ""),
+            operations=work_order.get("operations", []),
+            resource_path=self.target_repo,
+            budget=budget,
+        )
+        require("ExecutionDriverWorkOrder", work_order)
+        wo = dict(work_order)
+        wo["contextSlice"] = context_slice
+        # Synchronous wrapper around the async driver for the conformance scenario.
+        import asyncio
+
+        return asyncio.run(self._driver.submit(wo))
+
+    def ingest(
+        self,
+        driver_output: Dict[str, Any],
+        driver_run_id: str,
+        mission_id: str,
+        task_id: str,
+        seen: Dict[str, Dict[str, Any]],
+        expected_observed_by: str,
+    ) -> Dict[str, Any]:
+        result: Dict[str, Any] = {"observations": [], "artifacts": [], "receipts": []}
+        for obs in driver_output.get("observations", []):
+            v = validate_observation(
+                obs, driver_run_id, mission_id, task_id, [self.staging_root], seen,
+                expected_observed_by,
+            )
+            if not v.get("duplicate"):
+                result["observations"].append(v["observation"])
+        if "artifactCandidate" in driver_output:
+            ac = validate_artifact_candidate(
+                driver_output["artifactCandidate"], driver_run_id, self.staging_root
+            )
+            result["artifacts"].append(ac)
+        for rc in driver_output.get("receipts", []):
+            result["receipts"].append(
+                validate_receipt_candidate(rc, driver_run_id)
+            )
+        return result
+
+    def verify(
+        self,
+        before_digest: str,
+        artifact_path: str,
+        artifact_digest: str,
+        observed_by: str,
+    ) -> Dict[str, Any]:
+        return build_verification_result(
+            self.target_repo, before_digest, artifact_path, artifact_digest, observed_by
+        )
+
+    def propose_bounded_claim(self, statement: str) -> str:
+        """ClaimGuard: only bounded statements accepted."""
+        return guard_claim(statement)
+
+
+def tree_digest(path: str) -> str:
+    """Independent recursive content digest of a repository tree (before/after)."""
+    root = Path(path)
+    h = hashlib.sha256()
+    for p in sorted(root.rglob("*")):
+        if p.is_file():
+            try:
+                h.update(p.resolve().as_posix().encode("utf-8"))
+                h.update(p.read_bytes())
+            except OSError:
+                continue
+    return "sha256:" + h.hexdigest()

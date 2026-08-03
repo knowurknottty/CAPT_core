@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:6ab1e9d532c51fd0383e18ac82d8930accae4255fd21bf2ee698fc951b615e90
+# source digest:  sha256:8ff3dcc4f4fc0f2e05bf52ad775dad76a6c5705bcbed856b4b45931c38f21789
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -490,6 +490,94 @@ Timestamp = str
 
 
 @dataclass(frozen=True)
+class ContextSlice(object):
+    """Minimal read-only projection handed to a driver. MUST NOT contain governance, policy, claim, capability-graph, ledger, or aggregate references (ADR-0125)."""
+
+    budgets: DriverBudget
+    expectedArtifacts: List[ExpectedArtifact]
+    filesystemPolicy: FilesystemPolicy
+    lease: Dict[str, Any]
+    permittedTools: List[str]
+    schemaVersion: SchemaVersion
+    terminationConditions: DriverTerminationCondition
+    networkPolicy: Optional[NetworkPolicy] = None
+
+
+@dataclass(frozen=True)
+class DriverArtifactCandidate(object):
+    """A driver-produced artifact candidate. CAPT validates existence before creating an EvidenceRecord."""
+
+    artifactDigest: str
+    artifactPath: str
+    candidateId: Identifier
+    driverRunId: Identifier
+    producedAt: Timestamp
+    schemaVersion: SchemaVersion
+
+
+@dataclass(frozen=True)
+class DriverBudget(object):
+    """Alias of DriverBudgets; resource ceilings for one run."""
+
+    maxArtifacts: Optional[int] = None
+    maxObservations: Optional[int] = None
+    maxSeconds: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class DriverBudgets(object):
+    """DriverBudgets"""
+
+    maxArtifacts: Optional[int] = None
+    maxObservations: Optional[int] = None
+    maxSeconds: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class DriverCancellationRequest(object):
+    """CAPT-authored request to cancel a driver run. The driver cannot self-cancel authoritatively."""
+
+    driverRunId: Identifier
+    reason: str
+    requestedAt: Timestamp
+    schemaVersion: SchemaVersion
+
+
+@dataclass(frozen=True)
+class DriverCapabilities(object):
+    """Read-only capability set a driver may be granted. M0-B permits only read/analysis/artifact-candidate operations; RepositoryWrite is forbidden for drivers."""
+
+    budgets: DriverBudget
+    filesystemPolicy: FilesystemPolicy
+    operations: List[str]
+    permittedTools: List[str]
+    schemaVersion: SchemaVersion
+
+
+@dataclass(frozen=True)
+class DriverCapabilityDeclaration(object):
+    """What a driver declares it can do. A declaration grants NO execution authority (ADR-0120)."""
+
+    declaredOperations: List[str]
+    declaredScopes: List[ResourceScope]
+    declaredTools: List[str]
+    driverId: Identifier
+    schemaVersion: SchemaVersion
+
+
+@dataclass(frozen=True)
+class DriverCompatibilityRecord(object):
+    """Records the runtime/contract compatibility of a driver at registration time."""
+
+    compatible: bool
+    contractSchemaVersion: SchemaVersion
+    driverId: Identifier
+    runtimeVersion: str
+    schemaVersion: SchemaVersion
+    notes: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class DriverDescriptor(object):
     """DriverDescriptor"""
 
@@ -498,6 +586,63 @@ class DriverDescriptor(object):
     schemaVersion: SchemaVersion
     supportedOperations: List[str]
     writeCapable: bool
+
+
+@dataclass(frozen=True)
+class DriverError(object):
+    """Untrusted driver-reported error. CAPT decides failure disposition; the driver cannot set terminal state authoritatively."""
+
+    driverRunId: Identifier
+    errorId: Identifier
+    message: str
+    reportedAt: Timestamp
+    schemaVersion: SchemaVersion
+
+
+@dataclass(frozen=True)
+class DriverProgressSignal(object):
+    """DriverProgressSignal"""
+
+    driverRunId: Identifier
+    phase: str
+    reportedAt: Timestamp
+    schemaVersion: SchemaVersion
+    signalId: Identifier
+    fraction: Optional[float] = None
+
+
+@dataclass(frozen=True)
+class DriverReceiptCandidate(object):
+    """Driver-claimed receipt of a step. CAPT validates against the ledger; fake receipts are rejected."""
+
+    claimedAt: Timestamp
+    driverRunId: Identifier
+    receiptId: Identifier
+    schemaVersion: SchemaVersion
+    step: str
+    contentDigest: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class DriverReconciliationRecord(object):
+    """CAPT-authored reconciliation report for a driver run."""
+
+    anomalies: List[str]
+    detectedAt: Timestamp
+    driverRunId: Identifier
+    result: DriverReconciliationResult
+    schemaVersion: SchemaVersion
+
+
+class DriverReconciliationResult(str, Enum):
+    """Outcome of a CAPT reconciliation pass over a driver run. No automatic re-execution is implied."""
+
+    RECONCILED_COMPLETED = "reconciled_completed"
+    RECONCILED_FAILED = "reconciled_failed"
+    RECONCILIATION_REQUIRES_HUMAN = "reconciliation_requires_human"
+    SAFE_TO_RETRY = "safe_to_retry"
+    RETRY_FORBIDDEN = "retry_forbidden"
+    EXTERNAL_STATE_UNKNOWN = "external_state_unknown"
 
 
 class DriverReconciliationStatus(str, Enum):
@@ -509,6 +654,15 @@ class DriverReconciliationStatus(str, Enum):
     RESOLVED_EFFECT_OCCURRED = "resolved_effect_occurred"
     RESOLVED_EFFECT_ABSENT = "resolved_effect_absent"
     UNRESOLVABLE = "unresolvable"
+
+
+@dataclass(frozen=True)
+class DriverResumeInput(object):
+    """Optional CAPT-authored input to resume a suspended run."""
+
+    driverRunId: Identifier
+    schemaVersion: SchemaVersion
+    resumeNote: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -527,18 +681,117 @@ class DriverRun(object):
     externalRunId: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class DriverRunCheckpoint(object):
+    """Per-run recovery state embedded in the CAPT CheckpointManifest. Trusted only after integrity verification."""
+
+    driverRunId: Identifier
+    lastEventGlobalSequence: int
+    lastObservationDigest: Optional[str]
+    openReservations: int
+    reconciliationStatus: DriverReconciliationStatus
+    state: DriverRunState
+    workOrderVersion: int
+
+
 class DriverRunState(str, Enum):
     """DriverRunState"""
 
     CREATED = "created"
+    QUEUED = "queued"
     SUBMITTED = "submitted"
     RUNNING = "running"
     SUSPENDED = "suspended"
-    CANCELLED = "cancelled"
     COMPLETED = "completed"
+    CANCELLED = "cancelled"
     FAILED = "failed"
     LOST = "lost"
     RECONCILED = "reconciled"
+
+
+@dataclass(frozen=True)
+class DriverTerminationCondition(object):
+    """How CAPT terminates a run on anomaly."""
+
+    onBudgetExceeded: Optional[str] = None
+    onTimeout: Optional[str] = None
+    onUnexpectedWrite: Optional[Any] = None
+
+
+@dataclass(frozen=True)
+class DriverWorkOrder(object):
+    """Alias of ExecutionDriverWorkOrder retained for compatibility."""
+
+    contextSlice: ContextSlice
+    driverId: Identifier
+    driverRunId: Identifier
+    missionId: Identifier
+    operations: List[str]
+    schemaVersion: SchemaVersion
+    taskId: Identifier
+    workOrderVersion: int
+
+
+@dataclass(frozen=True)
+class ExecutionDriverDescriptor(object):
+    """Authoritative CAPT name for the driver descriptor contract (ADR-0120). Structurally identical to DriverDescriptor."""
+
+    driverId: Identifier
+    driverVersion: str
+    schemaVersion: SchemaVersion
+    supportedOperations: List[str]
+    writeCapable: bool
+
+
+@dataclass(frozen=True)
+class ExecutionDriverWorkOrder(object):
+    """CAPT-authored instruction to a driver. Operations must be read-only (ADR-0122)."""
+
+    contextSlice: ContextSlice
+    driverId: Identifier
+    driverRunId: Identifier
+    missionId: Identifier
+    operations: List[str]
+    schemaVersion: SchemaVersion
+    taskId: Identifier
+    workOrderVersion: int
+
+
+@dataclass(frozen=True)
+class ExpectedArtifact(object):
+    """Descriptor for an artifact a driver may create in the CAPT staging area."""
+
+    artifactKind: str
+    artifactPath: str
+
+
+@dataclass(frozen=True)
+class FilesystemPolicy(object):
+    """FilesystemPolicy"""
+
+    allowedPaths: List[str]
+    rootPath: str
+    writesAllowed: Any
+
+
+@dataclass(frozen=True)
+class NetworkPolicy(object):
+    """M0-B drivers are read-only; outbound network is denied by default."""
+
+    allowedHosts: List[str]
+    egressAllowed: Any
+
+
+@dataclass(frozen=True)
+class RequiredReceipt(object):
+    """Alias of DriverReceiptCandidate; a driver-claimed step receipt."""
+
+    claimedAt: Timestamp
+    driverRunId: Identifier
+    receiptId: Identifier
+    schemaVersion: SchemaVersion
+    step: str
+    contentDigest: Optional[str] = None
 
 
 @dataclass(frozen=True)
