@@ -1,0 +1,11 @@
+
+
+**(1) Package architecture**
+
+- Bare `pkg` package under `/private/tmp/fixture_repo` consisting of only three `.py` files (`__init__.py`, `core.py`, `sub/util.py`); the public API is a single re-exported function `process()`.
+- No packaging metadata, build script, test suite, or dependency manifest — not installable without manual work.
+- Subpackage layout `/private/tmp/fixture_repo/pkg/sub/` exists as an unused sibling module directory (`util.py`) with no import connections from the rest of the package.
+
+**(2) Code-quality/security observation**
+
+`pkg/core.py:7` contains a classic SQL injection vulnerability — `user_id` is interpolated into the SQLite query via `%s` string formatting and passed straight to `cur.execute()`. A second issue at `pkg/core.py:12` is a bare `except:` that silently swallows all errors, hiding failures from callers.

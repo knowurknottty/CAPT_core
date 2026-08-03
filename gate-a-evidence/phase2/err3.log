@@ -1,0 +1,3 @@
+Error: No API key configured.
+  Run `oh auth login` to set up authentication, or set the
+  ANTHROPIC_API_KEY (or OPENAI_API_KEY) environment variable.
