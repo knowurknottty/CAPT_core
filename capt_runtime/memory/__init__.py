@@ -29,6 +29,7 @@ from .store import MemoryStore, MemoryRecord
 from .query import build_memory_query
 from .contextpack import build_context_pack
 from .engine import MemoryTriggerEngine, MemoryEnforcementError
+from .governor import MemoryGovernor
 
 __all__ = [
     "TRIGGER_INTERVAL_TOKENS",
@@ -47,4 +48,5 @@ __all__ = [
     "build_context_pack",
     "MemoryTriggerEngine",
     "MemoryEnforcementError",
+    "MemoryGovernor",
 ]
