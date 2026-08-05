@@ -1,6 +1,11 @@
 """Session lifecycle integration tests."""
 
+import json
+import os
+import subprocess
 import sys
+from pathlib import Path
+
 sys.path.insert(0, '.')
 
 import pytest
@@ -210,3 +215,48 @@ def test_restart_restores_checkpoint_and_exact_next_action(tmp_path):
     resumed = second.resume_session("session-restart", checkpoint["ctpTxId"])
     assert resumed["exactNextAction"] == "resume-governed-work-packet"
     second_ctp.close()
+
+
+def test_fresh_process_recovers_checkpointed_session(tmp_path):
+    journal = tmp_path / "process-ctp" / "journal.jsonl"
+    source_root = Path(__file__).resolve().parents[2]
+    program = """
+import json
+import os
+from capt_runtime.session import SessionLifecycle
+from capt_solo.ctp.journal import CTPRuntime
+from capt_solo.khsb.bus import KHSB
+journal = os.environ['SESSION_CTP_JOURNAL']
+phase = os.environ['SESSION_PHASE']
+ctp = CTPRuntime(journal_path=journal)
+session = SessionLifecycle(KHSB(), ctp)
+if phase == 'create':
+    session.register_session('process-session', mission_id='process-mission')
+    result = session.checkpoint_session('process-session', 'process-mission', 'resume-after-process-restart', 'offload-process')
+else:
+    state = session.get_session_state('process-session')
+    result = session.resume_session('process-session', state['ctpTxId'])
+print(json.dumps(result, sort_keys=True))
+ctp.close()
+"""
+    env = {**os.environ, "SESSION_CTP_JOURNAL": str(journal)}
+    create = subprocess.run(
+        [sys.executable, "-c", program],
+        cwd=source_root,
+        env={**env, "SESSION_PHASE": "create"},
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    checkpoint = json.loads(create.stdout)
+    resumed = subprocess.run(
+        [sys.executable, "-c", program],
+        cwd=source_root,
+        env={**env, "SESSION_PHASE": "resume"},
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    packet = json.loads(resumed.stdout)
+    assert checkpoint["offloadId"] == "offload-process"
+    assert packet["exactNextAction"] == "resume-after-process-restart"
