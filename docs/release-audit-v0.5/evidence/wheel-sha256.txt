@@ -1,0 +1,1 @@
+348fe9da477e0323d9c9b294677a1e10de4f9245373a27300367a9e8bdf879b3  /tmp/capt-release-evidence-b45c4b005c9171172d055697a55034006bb0f2fe/artifacts/capt_solo-0.5.0-py3-none-any.whl
