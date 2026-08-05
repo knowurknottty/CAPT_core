@@ -835,42 +835,46 @@ class RuntimeService(object):
         self, verification: Dict[str, Any], metadata: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Attach an independently produced VerificationResult."""
-        require("VerificationResult", verification)
+        # Strip view annotations before contract validation so the stored
+        # event payload is contract-conforming (no forbidden additionalProperties).
+        from .verification import strip_view
+        record = strip_view(verification)
+        require("VerificationResult", record)
         require("CommandMetadata", metadata)
         require_authority("produce_verification", metadata["actor"]["kind"])
 
-        if verification["verifiedBy"]["kind"] != "verification_plane":
+        if record["verifiedBy"]["kind"] != "verification_plane":
             raise AuthorityViolation(
                 "VerificationResult.verifiedBy must be a verification_plane actor, "
-                "got %r" % verification["verifiedBy"]["kind"]
+                "got %r" % record["verifiedBy"]["kind"]
             )
 
-        stream = ClaimAggregate.stream_id(verification["claimId"])
+        stream = ClaimAggregate.stream_id(record["claimId"])
         expected = self.store.aggregate_version(stream)
         current = self.store.require_state(stream)
 
         # A 'verified' status must cite evidence this runtime already holds.
         # Otherwise verification could name evidence ids that do not exist.
-        status = verification["status"]
+        status = record["status"]
         if status["kind"] == "verified":
             known = set(current["evidenceIds"])
             missing = [e for e in status["supportingEvidenceIds"] if e not in known]
             if missing:
                 raise AuthorityViolation(
                     "verification cites evidence not recorded on claim %s: %s"
-                    % (verification["claimId"], ", ".join(sorted(missing)))
+                    % (record["claimId"], ", ".join(sorted(missing)))
                 )
 
-        state = ClaimAggregate.record_verification(current, verification)
+        state = ClaimAggregate.record_verification(current, record)
 
         event = commands.envelope(
             event_id=metadata["commandId"] + "-ev1",
             stream_id=stream,
             event_type="ClaimVerified",
-            payload={"eventType": "ClaimVerified", "verification": verification},
+            payload={"eventType": "ClaimVerified", "verification": record},
             metadata=metadata,
             occurred_at=metadata["issuedAt"],
-            claim_id=verification["claimId"],
+            claim_id=record["claimId"],
         )
         return self._commit(
             [AppendRequest(stream, ClaimAggregate.KIND, expected, event, state)], metadata

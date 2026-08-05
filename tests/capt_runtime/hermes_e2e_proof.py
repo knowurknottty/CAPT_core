@@ -182,7 +182,7 @@ def run_driver(driver, driver_id: str, descriptor, repo: Path, staging: Path,
     vr = host.verify(before, ing["artifacts"][0]["path"],
                      ing["artifacts"][0]["digest"], driver_id)
     step("VerificationCompleted", status=vr["status"]["kind"],
-         checks=vr["checks"], trust=vr["trust"])
+         checks=vr["_view"]["checks"], trust=vr["_view"]["trust"])
 
     claim = host.propose_bounded_claim("Repository inspected in read-only mode.")
     step("ClaimGuardDecision", accepted=True, statement=claim)

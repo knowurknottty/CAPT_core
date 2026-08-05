@@ -353,7 +353,7 @@ def test_real_hermes_read_only_governed_run(env):
     vr = host.verify(before, ing["artifacts"][0]["path"],
                      ing["artifacts"][0]["digest"], "hermes")
     assert vr["status"]["kind"] == "verified"
-    assert vr["trust"] == "capt_authoritative"
+    assert vr["_view"]["trust"] == "capt_authoritative"
 
     assert host.propose_bounded_claim("Repository inspected in read-only mode.")
     with pytest.raises(ClaimRejected):

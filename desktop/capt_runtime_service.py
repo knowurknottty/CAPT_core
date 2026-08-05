@@ -360,17 +360,26 @@ class RuntimeQueryService:
 
         This is a read-only computation over authoritative state (the artifact
         produced by the reference-driver proof). It is NOT a desktop decision.
+
+        The returned dict is the contract-conforming VerificationResult with a
+        '_view' sibling carrying trust/checks/observedBy for the GUI layer.
+        The desktop view flattens _view into the top-level response so consumers
+        that expect vr['trust']/vr['checks'] keep working.
         """
         if not self.demo.get("artifactPath"):
             return {"status": {"kind": "not_tested"}, "trust": "capt_authoritative"}
         try:
-            return build_verification_result(
+            vr = build_verification_result(
                 self.demo["targetPath"],
                 self.demo["beforeDigest"],
                 self.demo["artifactPath"],
                 self.demo["artifactDigest"],
                 "openharness",
             )
+            # Flatten _view annotations into the top-level for GUI consumers.
+            view = vr.pop("_view", {})
+            vr.update(view)
+            return vr
         except Exception as exc:  # noqa: BLE001
             return {"status": {"kind": "failed"}, "error": str(exc)[:200],
                     "trust": "capt_authoritative"}

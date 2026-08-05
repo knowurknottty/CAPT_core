@@ -192,9 +192,15 @@ class DriverHost:
         artifact_path: str,
         artifact_digest: str,
         observed_by: str,
+        claim_id: Optional[str] = None,
+        supporting_evidence_ids: Optional[list] = None,
+        verified_at: Optional[str] = None,
     ) -> Dict[str, Any]:
         return build_verification_result(
-            self.target_repo, before_digest, artifact_path, artifact_digest, observed_by
+            self.target_repo, before_digest, artifact_path, artifact_digest, observed_by,
+            claim_id=claim_id,
+            supporting_evidence_ids=supporting_evidence_ids,
+            verified_at=verified_at,
         )
 
     def propose_bounded_claim(self, statement: str) -> str:
