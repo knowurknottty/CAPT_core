@@ -38,10 +38,13 @@ class RuntimeClientError(RuntimeError):
 class RuntimeClient:
     """Authenticated local IPC client to the CAPT runtime service."""
 
-    def __init__(self, sock_path: str, token_file: str, connect_timeout: float = 5.0) -> None:
+    def __init__(self, sock_path: str, token_file: str, connect_timeout: float = 5.0, command_timeout: Optional[float] = None) -> None:
         self.sock_path = str(sock_path)
         self.token_file = str(token_file)
         self.connect_timeout = connect_timeout
+        # Command responses may take minutes (model drivers). The connect
+        # timeout must not be reused as a recv timeout for commands.
+        self.command_timeout = command_timeout
         self._sock: Optional[socket.socket] = None
         self.operator_id: Optional[str] = None
         self.session_id: Optional[str] = None
@@ -61,6 +64,9 @@ class RuntimeClient:
         # Capture the operator/session identity bound to this connection.
         self.operator_id = auth_resp.get("operatorId")
         self.session_id = auth_resp.get("sessionId")
+        # After authentication, command responses may take minutes (model
+        # drivers). Do not reuse the short connect timeout for them.
+        s.settimeout(self.command_timeout)
         self._sock = s
         return self.identity()
 
