@@ -24,7 +24,7 @@ from .aggregates import (
 )
 from .authority import require_authority
 from .contracts import require
-from .errors import AuthorityViolation, ConcurrencyError
+from .errors import AuthorityViolation, ConcurrencyError, IdempotencyConflict
 from .store import AppendRequest, EventStore
 
 
@@ -225,9 +225,18 @@ class RuntimeService(object):
 
         mission_id = intent["missionId"]
         stream = MissionAggregate.stream_id(mission_id)
-        # Idempotency replay of the same operator command.
+        # Idempotency replay of the same operator command. A reused key MUST
+        # carry the SAME operation fingerprint; a conflicting payload is an
+        # authority violation, not a replay (ADR-0108).
         prior = self.store.find_idempotent(metadata["idempotencyKey"])
         if prior is not None:
+            offered = metadata.get("operationFingerprint")
+            if offered and prior["operation_fingerprint"] != offered:
+                raise IdempotencyConflict(
+                    "idempotency key %r reused with a different operation "
+                    "fingerprint (stored %s, offered %s)"
+                    % (metadata["idempotencyKey"], prior["operation_fingerprint"], offered)
+                )
             return self._reconstruct_mission_result(mission_id, metadata)
 
         spec = self._build_mission_spec_from_intent(intent)

@@ -106,6 +106,38 @@ def test_duplicate_command_idempotent():
     assert store.head_sequence() == 1  # still one event
 
 
+def test_idempotency_key_conflicting_payload_rejected():
+    """ADR-0108: a reused idempotency key with a DIFFERENT operation
+    fingerprint is an authority violation, not a replay."""
+    from capt_runtime.errors import IdempotencyConflict
+
+    store = EventStore(":memory:")
+    svc = RuntimeService(store)
+
+    def intent(objective):
+        return {
+            "schemaVersion": "1.0.0", "missionId": "m1", "objective": objective,
+            "scope": {"kind": "filesystem", "rootPath": "/tmp", "recursive": False},
+            "requiresApproval": False, "constraints": [], "successCriteria": [],
+            "terminationCriteria": [], "requestedCapability": "cap.fs.read",
+            "resource": "/tmp", "operation": "ModelOperatorInspection",
+            "riskClassification": "low", "taskId": "m1-task-1",
+        }
+
+    def cmd(objective):
+        return commands.command(
+            command_id="cmd-1", idempotency_key="idem-1",
+            operation_fingerprint=commands.fingerprint("create_mission", intent(objective)),
+            correlation_id="c", actor_id="captain", actor_kind="human",
+            issued_at="2026-08-02T00:00:00Z",
+        )
+
+    first = svc.create_mission_with_approval(intent("alpha"), cmd("alpha"))
+    assert first["status"] == "applied"
+    with pytest.raises(IdempotencyConflict):
+        svc.create_mission_with_approval(intent("beta"), cmd("beta"))
+
+
 def test_stream_versions_monotonic():
     store = EventStore(":memory:")
     svc = RuntimeService(store)
