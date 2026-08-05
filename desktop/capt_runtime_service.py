@@ -584,7 +584,6 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                                              "statement": "Invariant violation terminates the mission.",
                                              "terminalState": "failed"}],
                     "requestedCapability": "cap.fs.read",
-                    "operations": ["repository.read", "filesystem.read", "analysis.execute"],
                     "resource": target_root,
                     "operation": "ModelOperatorInspection",
                     "riskClassification": "low",
