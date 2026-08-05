@@ -51,10 +51,11 @@ import sys
 raise SystemExit(0 if sys.version_info >= (3, 10) else 1)
 PY
 then
-  echo "[INFO] Installing pinned Anti-Token-Extraction runtime"
-  python3 -m pip install --disable-pip-version-check --no-input \
+  echo "[INFO] Installing optional pinned Anti-Token-Extraction runtime"
+  if python3 -m pip install --disable-pip-version-check --no-input \
     "git+$ATE_REPO@$ATE_COMMIT"
-  python3 - <<'PY'
+  then
+    python3 - <<'PY'
 import os
 import sys
 sys.path.insert(0, os.environ["CAPT_SOLO_SRC"])
@@ -64,6 +65,9 @@ if not result.get("healthy"):
     raise SystemExit(f"pinned anti-token-extraction verification failed: {result}")
 print(f"[OK] Anti-Token-Extraction verified at {result['installed_commit']}")
 PY
+  else
+    echo "[WARN] Optional Anti-Token-Extraction install unavailable; CAPT core continues degraded"
+  fi
 else
   echo "[WARN] Python <3.10: Anti-Token-Extraction remains unavailable; CAPT core continues"
 fi
