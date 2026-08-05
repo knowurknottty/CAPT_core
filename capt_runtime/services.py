@@ -896,3 +896,79 @@ class RuntimeService(object):
         return self._commit(
             [AppendRequest(stream, ClaimAggregate.KIND, expected, event, state)], metadata
         )
+
+    # -- work packet abstraction (session continuity) ---------------------
+
+    def get_next_work_packet(
+        self,
+        mission_id: str,
+        session_id: str,
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Derive the next runnable task as a read-only session work packet."""
+        require("CommandMetadata", metadata)
+        runnable_tasks = []
+        for stream_id, _kind, _version in self.store.all_aggregates():
+            if stream_id.startswith("task-"):
+                state = self.store.load_state(stream_id)
+                if (
+                    state
+                    and state.get("missionId") == mission_id
+                    and state.get("state") == "ready"
+                    and int(state["attempt"]) < int(state["maxAttempts"])
+                ):
+                    runnable_tasks.append(state)
+        if not runnable_tasks:
+            return {
+                "hasWork": False,
+                "missionId": mission_id,
+                "sessionId": session_id,
+                "reason": "no_runnable_tasks",
+            }
+        task = runnable_tasks[0]
+        return {
+            "hasWork": True,
+            "packetId": task["taskId"],
+            "missionId": mission_id,
+            "sessionId": session_id,
+            "taskId": task["taskId"],
+            "title": task.get("title"),
+            "state": task["state"],
+            "capabilityRequirements": task.get("capabilityRequirements", []),
+            "exactNextAction": task.get("exactNextAction") or "execute_task",
+            "createdAt": task.get("createdAt"),
+        }
+
+    def submit_result(
+        self, task_id: str, result: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Record an immutable result reference and canonical task transition."""
+        require("CommandMetadata", metadata)
+        require_authority("submit_result", metadata["actor"]["kind"])
+        if set(result) != {"status", "resultRef"}:
+            raise ValueError("result must contain only status and resultRef")
+        status, result_ref = result["status"], result["resultRef"]
+        if status not in ("succeeded", "failed", "cancelled"):
+            raise ValueError("result status must be succeeded, failed, or cancelled")
+        if not isinstance(result_ref, str) or not result_ref:
+            raise ValueError("resultRef must be a non-empty reference string")
+        stream = TaskAggregate.stream_id(task_id)
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            return self._commit([], metadata)
+        expected = self.store.aggregate_version(stream)
+        current = self.store.require_state(stream)
+        to_state = "awaiting_verification" if status == "succeeded" else status
+        state = TaskAggregate.record_result(current, result_ref)
+        state = TaskAggregate.transition(state, to_state)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-result", stream_id=stream,
+            event_type="TaskResultSubmitted",
+            payload={"eventType": "TaskResultSubmitted", "taskId": task_id,
+                     "resultRef": result_ref, "toState": to_state},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+            mission_id=current["missionId"], task_id=task_id,
+        )
+        return self._commit(
+            [AppendRequest(stream, TaskAggregate.KIND, expected, event, state)], metadata
+        )

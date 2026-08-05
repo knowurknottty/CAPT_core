@@ -16,6 +16,7 @@
         "MissionResumed",
         "TaskCreated",
         "TaskTransitioned",
+        "TaskResultSubmitted",
         "CapabilityGranted",
         "CapabilityLeaseActivated",
         "CapabilityUseReserved",
@@ -112,6 +113,18 @@
             "fromState": { "$ref": "task.schema.json#/$defs/TaskState" },
             "toState": { "$ref": "task.schema.json#/$defs/TaskState" },
             "reason": { "type": "string", "maxLength": 2048 }
+          }
+        },
+        {
+          "title": "TaskResultSubmittedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "taskId", "resultRef", "toState"],
+          "properties": {
+            "eventType": { "type": "string", "const": "TaskResultSubmitted" },
+            "taskId": { "$ref": "common.schema.json#/$defs/Identifier" },
+            "resultRef": { "type": "string", "minLength": 1, "maxLength": 2048 },
+            "toState": { "$ref": "task.schema.json#/$defs/TaskState" }
           }
         },
         {

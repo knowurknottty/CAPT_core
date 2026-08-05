@@ -110,6 +110,9 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         nxt = TaskAggregate.create(payload["task"])
     elif event_type == "TaskTransitioned":
         nxt = TaskAggregate.transition(existing(), payload["toState"])
+    elif event_type == "TaskResultSubmitted":
+        nxt = TaskAggregate.record_result(existing(), payload["resultRef"])
+        nxt = TaskAggregate.transition(nxt, payload["toState"])
     elif event_type == "CapabilityGranted":
         nxt = CapabilityAggregate.grant(payload["grant"])
     elif event_type == "CapabilityLeaseActivated":

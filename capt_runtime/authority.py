@@ -32,6 +32,7 @@ _PERMITTED: Dict[str, FrozenSet[str]] = {
     "create_mission": frozenset({HUMAN, SYSTEM}),
     "plan_tasks": frozenset({COGNITION, SYSTEM}),
     "transition_task": frozenset({EXECUTION, SYSTEM}),
+    "submit_result": frozenset({EXECUTION, SYSTEM}),
     "request_human_approval": frozenset({EXECUTION, GOVERNANCE, SYSTEM}),
     "submit_human_approval_decision": frozenset({HUMAN}),
     "cancel_task": frozenset({EXECUTION, HUMAN, SYSTEM}),
