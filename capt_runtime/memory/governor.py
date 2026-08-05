@@ -24,10 +24,8 @@ import json
 import time
 from typing import Any, Dict, List, Optional
 
-from .accounting import ContextAccounting, ContextUsage, TriggerState
 from .contextpack import build_context_pack
-from .engine import MemoryTriggerEngine, MemoryEnforcementError
-from .policy import MemoryTriggerPolicy, PolicySource, TRIGGER_INTERVAL_TOKENS
+from .engine import MemoryTriggerEngine
 from .query import build_memory_query
 from .store import MemoryRecord, MemoryStore
 
@@ -66,8 +64,7 @@ class MemoryGovernor:
         self.ladder_step = ladder_step
         self.soft_threshold = soft_threshold or ladder_step
         self.hard_threshold = hard_threshold or min(
-            self.ladder_step * 2 - 4_096,
-            int(effective_context_tokens * 0.75)
+            self.ladder_step * 2 - 4_096, int(effective_context_tokens * 0.75)
         )
         self.emergency_threshold = emergency_threshold or int(
             effective_context_tokens * 0.85
@@ -107,24 +104,25 @@ class MemoryGovernor:
             verification_status="verified",
             sensitivity="project",
             consent="project",
-            content=json.dumps({
-                "mission_id": self.mission_id,
-                "session_id": self.session_id,
-                "model_provider": self.model_provider,
-                "effective_context_tokens": self.effective_context_tokens,
-                "ladder_step": self.ladder_step,
-                "soft_threshold": self.soft_threshold,
-                "hard_threshold": self.hard_threshold,
-                "emergency_threshold": self.emergency_threshold,
-                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            }),
+            content=json.dumps(
+                {
+                    "mission_id": self.mission_id,
+                    "session_id": self.session_id,
+                    "model_provider": self.model_provider,
+                    "effective_context_tokens": self.effective_context_tokens,
+                    "ladder_step": self.ladder_step,
+                    "soft_threshold": self.soft_threshold,
+                    "hard_threshold": self.hard_threshold,
+                    "emergency_threshold": self.emergency_threshold,
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                }
+            ),
         )
         self.store.store(record)
 
     def estimate_tokens_from_message(self, message: Dict[str, Any]) -> int:
         """Estimate tokens consumed by a single message."""
         content = message.get("content", "") or ""
-        role = message.get("role", "unknown")
         # Approximate: 1 token ~= 4 chars for English text
         return max(1, len(content) // 4)
 
@@ -158,17 +156,16 @@ class MemoryGovernor:
 
         # Conversation history accumulation
         self._conversation_tokens = sum(
-            self.estimate_tokens_from_message(msg)
-            for msg in conversation_history
+            self.estimate_tokens_from_message(msg) for msg in conversation_history
         )
 
         # Total estimate
         self._estimated_tokens = (
-            self._system_prompt_baseline +
-            self._skill_content_tokens +
-            self._memory_provider_tokens +
-            self._conversation_tokens +
-            self._tool_output_tokens
+            self._system_prompt_baseline
+            + self._skill_content_tokens
+            + self._memory_provider_tokens
+            + self._conversation_tokens
+            + self._tool_output_tokens
         )
 
         return self._check_thresholds()
@@ -189,18 +186,18 @@ class MemoryGovernor:
             self._tool_output_tokens += self.estimate_tokens_from_tool_result(tr)
 
         self._estimated_tokens = (
-            self._system_prompt_baseline +
-            self._skill_content_tokens +
-            self._memory_provider_tokens +
-            self._conversation_tokens +
-            self._tool_output_tokens
+            self._system_prompt_baseline
+            + self._skill_content_tokens
+            + self._memory_provider_tokens
+            + self._conversation_tokens
+            + self._tool_output_tokens
         )
 
         return self._check_thresholds()
 
     def _check_thresholds(self) -> Dict[str, Any]:
         """Check which thresholds have been crossed."""
-        status = {
+        status: Dict[str, Any] = {
             "estimated_tokens": self._estimated_tokens,
             "soft_threshold": self.soft_threshold,
             "hard_threshold": self.hard_threshold,
@@ -307,8 +304,14 @@ class MemoryGovernor:
             trigger_boundary=self._last_offload_boundary,
             context_usage=self._estimated_tokens,
             requested_memory_classes=[
-                "working", "episodic", "semantic", "procedural",
-                "project", "user", "agent_private", "shared",
+                "working",
+                "episodic",
+                "semantic",
+                "procedural",
+                "project",
+                "user",
+                "agent_private",
+                "shared",
             ],
             purpose="governor context pack compilation",
             record_limit=10,
