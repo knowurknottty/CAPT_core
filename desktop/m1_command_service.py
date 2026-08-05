@@ -82,9 +82,12 @@ class RuntimeCommandService:
         operator_id: str,
         session_id: str,
         memory_engine: Any = None,
+        runtime_service: Optional[RuntimeService] = None,
     ) -> None:
         self.store = store
-        self.svc = RuntimeService(store)
+        # Production operator surfaces inject the canonical composition-owned
+        # service.  The fallback preserves existing isolated unit-test callers.
+        self.svc = runtime_service or RuntimeService(store)
         self.operator_id = operator_id
         self.session_id = session_id
         self.memory_engine = memory_engine  # optional MemoryTriggerEngine

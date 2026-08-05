@@ -45,6 +45,7 @@ from capt_runtime.scenario import build_scenario
 from capt_runtime.services import RuntimeService
 from capt_runtime.store import EventStore
 from capt_runtime.verification import build_verification_result, guard_claim
+from capt_runtime.composition import RuntimeComposition, create_runtime
 
 from desktop.m1_command_service import RuntimeCommandService
 
@@ -77,7 +78,7 @@ def _meta(step, actor_kind, actor_id, operation, subject):
     )
 
 
-def seed_demo_mission(store: EventStore) -> Dict[str, Any]:
+def seed_demo_mission(runtime: RuntimeComposition) -> Dict[str, Any]:
     """Create a faithful read-only demonstration mission using real CAPT.
 
     Builds the M0-A governance/policy/capability/task sequence, then runs a
@@ -87,10 +88,11 @@ def seed_demo_mission(store: EventStore) -> Dict[str, Any]:
     desktop.
     """
     # Idempotent: if the demo mission already exists, do not duplicate.
+    store = runtime.store
     if store.aggregate_version("mission-" + DEMO_MISSION_ID) > 0:
         return {"seeded": False, "reason": "demo mission already present"}
 
-    svc = RuntimeService(store)
+    svc = runtime.service
 
     mission_spec = {
         "schemaVersion": "1.0.0",
@@ -191,10 +193,9 @@ def seed_demo_mission(store: EventStore) -> Dict[str, Any]:
     staging = worktree.parent / (worktree.name + "-staging")
     staging.mkdir(parents=True, exist_ok=True)
 
-    reg = DriverRegistry()
-    reg.register(REF)
-    host = DriverHost(reg, str(staging), str(worktree))
-    host.select_driver(OpenHarnessDriver(str(staging)))
+    host = runtime.openharness_host(
+        target_repo=str(worktree), staging_root=str(staging), enforce_memory=False
+    )
     ctx = host.build_context(
         {"leaseId": lease["leaseId"], "operations": lease["operations"],
          "scope": lease["scope"], "validFrom": lease["validFrom"], "validUntil": lease["validUntil"]},
@@ -461,19 +462,18 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
     if sock_path.exists():
         sock_path.unlink()
 
-    store = EventStore(str(ledger_path))
+    runtime = create_runtime(str(ledger_path))
+    store = runtime.store
     demo = None
     if seed:
-        demo = seed_demo_mission(store)
+        _seed_memory_store(runtime.memory_store)
+        demo = seed_demo_mission(runtime)
 
     # Mandatory CAPT memory trigger subsystem (M1-memory, ADR-DT-M1-MEM-001).
     # CAPT owns the memory path; the desktop and drivers are projection/
     # execution surfaces only. The engine is wired into every connection's
     # command service and into DriverHost dispatch gating.
-    from capt_runtime.memory import MemoryStore as _MemStore, MemoryTriggerEngine as _MemEngine
-    mem_store = _MemStore(str(ledger_path) + ".memory")
-    _seed_memory_store(mem_store)
-    memory_engine = _MemEngine(mem_store, model_safe_limit_steps=8)
+    memory_engine = runtime.memory_engine
 
     query = RuntimeQueryService(store, demo, memory_engine)
 
@@ -502,7 +502,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             # reusing a stale session's authority (Phase 3).
             operator_id = "operator-" + (getpass.getuser() or "local")
             session_id = "sess-" + secrets.token_hex(8)
-            cmd_svc = RuntimeCommandService(store, operator_id, session_id, memory_engine)
+            cmd_svc = runtime.command_service(operator_id, session_id)
             _send_json(conn, {
                 "ok": True, "authenticated": True,
                 "operatorId": operator_id, "sessionId": session_id,
@@ -531,7 +531,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             conn, _ = srv.accept()
             threading.Thread(target=handle_conn, args=(conn,), daemon=True).start()
     finally:
-        store.close()
+        runtime.close()
         try:
             sock_path.unlink()
         except OSError:
