@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:88aec90317998fbaed70c452f1e575ddc8b7b967558b9761cef88e737f832ffa
+// source digest:  sha256:e84dfdf1eea315a6c9261b3e8ab127caae6ed4b5ac45ee888f5baf5c7173b871
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -425,7 +425,6 @@ export interface CommandMetadata {
   readonly replayPolicy: ReplayPolicy;
   readonly schemaVersion: SchemaVersion;
   readonly causationId?: Identifier | null;
-  readonly identityContext?: IdentityContext | null;
 }
 
 /** Governed, idempotent context packet assembled by CAPT from a mandatory memory query. Drivers receive only the authorized slice. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001). */
@@ -510,17 +509,6 @@ export interface ExtensionEnvelope {
   readonly payloadJson: string;
 }
 
-/** Canonical classification of what CAPT can enforce, observe, request, or only receive as an external declaration. Deployment profiles may render user-facing aliases but must not define a competing taxonomy. */
-export type GuaranteeClassification = "ENFORCED_BY_CAPT" | "OBSERVED_BY_CAPT" | "REQUESTED_OF_EXTERNAL_SYSTEM" | "EXTERNAL_SYSTEM_REPORTED" | "PROVIDER_DECLARED" | "UNVERIFIABLE";
-export const GuaranteeClassificationValues = [
-  "ENFORCED_BY_CAPT",
-  "OBSERVED_BY_CAPT",
-  "REQUESTED_OF_EXTERNAL_SYSTEM",
-  "EXTERNAL_SYSTEM_REPORTED",
-  "PROVIDER_DECLARED",
-  "UNVERIFIABLE",
-] as const;
-
 /** Operator decision on a HumanApprovalRequest. 'approve' permits only the originally requested scope; 'deny' must prevent execution. Idempotent by idempotencyKey. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001). */
 export interface HumanApprovalDecision {
   readonly correlationId: Identifier;
@@ -569,14 +557,6 @@ export interface IdentityAttestation {
   readonly digest: Digest;
   readonly method: string;
   readonly schemaVersion: SchemaVersion;
-}
-
-/** Identity/authority context attached to control-plane commands (ADR-DT-PLANE-CONV). Binds the command to the authenticated operator, the session that proved possession, and the authority-chain root. Carried on CommandMetadata so governance and replay see who authorized the command without a per-aggregate registry lookup. */
-export interface IdentityContext {
-  readonly chainRoot: Identifier;
-  readonly chainVerifiedAt: Timestamp;
-  readonly operatorId: Identifier;
-  readonly sessionId: Identifier;
 }
 
 /** Human-governed promotion decision for a model candidate. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
@@ -1173,12 +1153,6 @@ export interface ClaimVerifiedPayload {
   readonly verification: VerificationResult;
 }
 
-/** ContextPackCreatedPayload */
-export interface ContextPackCreatedPayload {
-  readonly contextPack: ContextPack;
-  readonly eventType: "ContextPackCreated";
-}
-
 /** DriverRunCreatedPayload */
 export interface DriverRunCreatedPayload {
   readonly driverRun: DriverRun;
@@ -1237,18 +1211,10 @@ export type EventPayload =
   | ClaimVerifiedPayload
   | ClaimGuardDecidedPayload
   | HumanApprovalRequestedPayload
-  | HumanApprovalDecidedPayload
-  | IdentityRuntimeRecordedPayload
-  | IdentityOperatorBoundPayload
-  | IdentitySessionIssuedPayload
-  | IdentityDriverRecordedPayload
-  | IdentityModelRecordedPayload
-  | IdentityRevokedPayload
-  | ContextPackCreatedPayload
-  | ImplementationProgressPayload;
+  | HumanApprovalDecidedPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "IdentityRuntimeRecorded" | "IdentityOperatorBound" | "IdentitySessionIssued" | "IdentityDriverRecorded" | "IdentityModelRecorded" | "IdentityRevoked" | "ContextPackCreated" | "ImplementationSliceStarted";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -1272,14 +1238,6 @@ export const EventTypeValues = [
   "ClaimGuardDecided",
   "HumanApprovalRequested",
   "HumanApprovalDecided",
-  "IdentityRuntimeRecorded",
-  "IdentityOperatorBound",
-  "IdentitySessionIssued",
-  "IdentityDriverRecorded",
-  "IdentityModelRecorded",
-  "IdentityRevoked",
-  "ContextPackCreated",
-  "ImplementationSliceStarted",
 ] as const;
 
 /** EvidenceRecordedPayload */
@@ -1298,48 +1256,6 @@ export interface HumanApprovalDecidedPayload {
 export interface HumanApprovalRequestedPayload {
   readonly eventType: "HumanApprovalRequested";
   readonly request: HumanApprovalRequest;
-}
-
-/** IdentityDriverRecordedPayload */
-export interface IdentityDriverRecordedPayload {
-  readonly driverIdentity: DriverIdentity;
-  readonly eventType: "IdentityDriverRecorded";
-}
-
-/** IdentityModelRecordedPayload */
-export interface IdentityModelRecordedPayload {
-  readonly eventType: "IdentityModelRecorded";
-  readonly modelIdentity: ModelIdentity;
-}
-
-/** IdentityOperatorBoundPayload */
-export interface IdentityOperatorBoundPayload {
-  readonly eventType: "IdentityOperatorBound";
-  readonly principal: Principal;
-}
-
-/** IdentityRevokedPayload */
-export interface IdentityRevokedPayload {
-  readonly eventType: "IdentityRevoked";
-  readonly revocation: RevocationRecord;
-}
-
-/** IdentityRuntimeRecordedPayload */
-export interface IdentityRuntimeRecordedPayload {
-  readonly eventType: "IdentityRuntimeRecorded";
-  readonly runtimeIdentity: RuntimeIdentity;
-}
-
-/** IdentitySessionIssuedPayload */
-export interface IdentitySessionIssuedPayload {
-  readonly eventType: "IdentitySessionIssued";
-  readonly session: SessionIdentity;
-}
-
-/** ImplementationProgressPayload */
-export interface ImplementationProgressPayload {
-  readonly eventType: "ImplementationSliceStarted";
-  readonly progress: Readonly<Record<string, unknown>>;
 }
 
 /** MissionCreatedPayload */
@@ -1762,13 +1678,6 @@ export interface ObservedUnverifiedStatus {
   readonly reason: string;
 }
 
-/** Concrete checks performed by the verification plane when producing a VerificationResult. Each check is a boolean gate; a verified result implies all checks passed at verification time. */
-export interface VerificationChecks {
-  readonly artifactPresent: boolean;
-  readonly noGitMutation: boolean;
-  readonly repositoryUnchanged: boolean;
-}
-
 /** Produced by the verification plane. Verification must not mutate the artifact it verifies (invariant: authority separation). */
 export interface VerificationResult {
   readonly claimId: Identifier;
@@ -1778,9 +1687,6 @@ export interface VerificationResult {
   readonly verificationId: Identifier;
   readonly verifiedAt: Timestamp;
   readonly verifiedBy: ActorRef;
-  readonly checks?: VerificationChecks;
-  readonly observedBy?: Identifier;
-  readonly trust?: "capt_authoritative";
 }
 
 /** Discriminated union. Spec workflow section 9 requires every completion statement to be classified. */

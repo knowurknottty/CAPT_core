@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:88aec90317998fbaed70c452f1e575ddc8b7b967558b9761cef88e737f832ffa
+# source digest:  sha256:e84dfdf1eea315a6c9261b3e8ab127caae6ed4b5ac45ee888f5baf5c7173b871
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -495,7 +495,6 @@ class CommandMetadata(object):
     replayPolicy: ReplayPolicy
     schemaVersion: SchemaVersion
     causationId: Optional[Identifier] = None
-    identityContext: Optional[IdentityContext] = None
 
 
 @dataclass(frozen=True)
@@ -590,17 +589,6 @@ class ExtensionEnvelope(object):
     payloadJson: str
 
 
-class GuaranteeClassification(str, Enum):
-    """Canonical classification of what CAPT can enforce, observe, request, or only receive as an external declaration. Deployment profiles may render user-facing aliases but must not define a competing taxonomy."""
-
-    ENFORCED_BY_CAPT = "ENFORCED_BY_CAPT"
-    OBSERVED_BY_CAPT = "OBSERVED_BY_CAPT"
-    REQUESTED_OF_EXTERNAL_SYSTEM = "REQUESTED_OF_EXTERNAL_SYSTEM"
-    EXTERNAL_SYSTEM_REPORTED = "EXTERNAL_SYSTEM_REPORTED"
-    PROVIDER_DECLARED = "PROVIDER_DECLARED"
-    UNVERIFIABLE = "UNVERIFIABLE"
-
-
 @dataclass(frozen=True)
 class HumanApprovalDecision(object):
     """Operator decision on a HumanApprovalRequest. 'approve' permits only the originally requested scope; 'deny' must prevent execution. Idempotent by idempotencyKey. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001)."""
@@ -657,16 +645,6 @@ class IdentityAttestation(object):
     digest: Digest
     method: str
     schemaVersion: SchemaVersion
-
-
-@dataclass(frozen=True)
-class IdentityContext(object):
-    """Identity/authority context attached to control-plane commands (ADR-DT-PLANE-CONV). Binds the command to the authenticated operator, the session that proved possession, and the authority-chain root. Carried on CommandMetadata so governance and replay see who authorized the command without a per-aggregate registry lookup."""
-
-    chainRoot: Identifier
-    chainVerifiedAt: Timestamp
-    operatorId: Identifier
-    sessionId: Identifier
 
 
 @dataclass(frozen=True)
@@ -1374,14 +1352,6 @@ class ClaimVerifiedPayload(object):
 
 
 @dataclass(frozen=True)
-class ContextPackCreatedPayload(object):
-    """ContextPackCreatedPayload"""
-
-    contextPack: ContextPack
-    eventType: Literal["ContextPackCreated"]
-
-
-@dataclass(frozen=True)
 class DriverRunCreatedPayload(object):
     """DriverRunCreatedPayload"""
 
@@ -1443,62 +1413,6 @@ class HumanApprovalRequestedPayload(object):
 
     eventType: Literal["HumanApprovalRequested"]
     request: HumanApprovalRequest
-
-
-@dataclass(frozen=True)
-class IdentityDriverRecordedPayload(object):
-    """IdentityDriverRecordedPayload"""
-
-    driverIdentity: DriverIdentity
-    eventType: Literal["IdentityDriverRecorded"]
-
-
-@dataclass(frozen=True)
-class IdentityModelRecordedPayload(object):
-    """IdentityModelRecordedPayload"""
-
-    eventType: Literal["IdentityModelRecorded"]
-    modelIdentity: ModelIdentity
-
-
-@dataclass(frozen=True)
-class IdentityOperatorBoundPayload(object):
-    """IdentityOperatorBoundPayload"""
-
-    eventType: Literal["IdentityOperatorBound"]
-    principal: Principal
-
-
-@dataclass(frozen=True)
-class IdentityRevokedPayload(object):
-    """IdentityRevokedPayload"""
-
-    eventType: Literal["IdentityRevoked"]
-    revocation: RevocationRecord
-
-
-@dataclass(frozen=True)
-class IdentityRuntimeRecordedPayload(object):
-    """IdentityRuntimeRecordedPayload"""
-
-    eventType: Literal["IdentityRuntimeRecorded"]
-    runtimeIdentity: RuntimeIdentity
-
-
-@dataclass(frozen=True)
-class IdentitySessionIssuedPayload(object):
-    """IdentitySessionIssuedPayload"""
-
-    eventType: Literal["IdentitySessionIssued"]
-    session: SessionIdentity
-
-
-@dataclass(frozen=True)
-class ImplementationProgressPayload(object):
-    """ImplementationProgressPayload"""
-
-    eventType: Literal["ImplementationSliceStarted"]
-    progress: Dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -1566,7 +1480,7 @@ class TaskTransitionedPayload(object):
 
 
 # discriminated on 'eventType'
-EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, IdentityRuntimeRecordedPayload, IdentityOperatorBoundPayload, IdentitySessionIssuedPayload, IdentityDriverRecordedPayload, IdentityModelRecordedPayload, IdentityRevokedPayload, ContextPackCreatedPayload, ImplementationProgressPayload]
+EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload]
 
 
 class EventType(str, Enum):
@@ -1594,14 +1508,6 @@ class EventType(str, Enum):
     CLAIMGUARDDECIDED = "ClaimGuardDecided"
     HUMANAPPROVALREQUESTED = "HumanApprovalRequested"
     HUMANAPPROVALDECIDED = "HumanApprovalDecided"
-    IDENTITYRUNTIMERECORDED = "IdentityRuntimeRecorded"
-    IDENTITYOPERATORBOUND = "IdentityOperatorBound"
-    IDENTITYSESSIONISSUED = "IdentitySessionIssued"
-    IDENTITYDRIVERRECORDED = "IdentityDriverRecorded"
-    IDENTITYMODELRECORDED = "IdentityModelRecorded"
-    IDENTITYREVOKED = "IdentityRevoked"
-    CONTEXTPACKCREATED = "ContextPackCreated"
-    IMPLEMENTATIONSLICESTARTED = "ImplementationSliceStarted"
 
 
 @dataclass(frozen=True)
@@ -2024,15 +1930,6 @@ class ObservedUnverifiedStatus(object):
 
 
 @dataclass(frozen=True)
-class VerificationChecks(object):
-    """Concrete checks performed by the verification plane when producing a VerificationResult. Each check is a boolean gate; a verified result implies all checks passed at verification time."""
-
-    artifactPresent: bool
-    noGitMutation: bool
-    repositoryUnchanged: bool
-
-
-@dataclass(frozen=True)
 class VerificationResult(object):
     """Produced by the verification plane. Verification must not mutate the artifact it verifies (invariant: authority separation)."""
 
@@ -2043,9 +1940,6 @@ class VerificationResult(object):
     verificationId: Identifier
     verifiedAt: Timestamp
     verifiedBy: ActorRef
-    checks: Optional[VerificationChecks] = None
-    observedBy: Optional[Identifier] = None
-    trust: Optional[Literal["capt_authoritative"]] = None
 
 
 @dataclass(frozen=True)
