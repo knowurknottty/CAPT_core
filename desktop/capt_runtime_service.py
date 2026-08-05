@@ -701,7 +701,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 artifact_digest = out["artifactCandidate"]["artifactDigest"]
                 before = tree_digest(str(worktree))
                 vr = build_verification_result(str(worktree), before, artifact_path, artifact_digest, "hermes")
-                accepted = guard_claim("Model task produced evidence-backed observations in read-only mode.")
+                accepted = guard_claim("Repository inspected in read-only mode.")
                 svc.propose_claim(
                     {"schemaVersion": "1.0.0", "claimId": claim_id, "missionId": mission_id,
                      "taskId": task_id, "kind": "completion", "statement": accepted,
