@@ -184,3 +184,29 @@ def test_ctp_correlation_id_bound_to_session():
 
     assert "ctpTxId" in result
     assert result["ctpTxId"] is not None
+
+
+def test_restart_restores_checkpoint_and_exact_next_action(tmp_path):
+    journal = tmp_path / "ctp" / "journal.jsonl"
+    first_ctp = CTPRuntime(journal_path=journal)
+    first = SessionLifecycle(KHSB(), first_ctp)
+    first.register_session("session-restart", mission_id="mission-restart")
+    checkpoint = first.checkpoint_session(
+        "session-restart",
+        mission_id="mission-restart",
+        exact_next_action="resume-governed-work-packet",
+        offload_id="offload-restart",
+    )
+    first_ctp.close()
+
+    second_ctp = CTPRuntime(journal_path=journal)
+    second = SessionLifecycle(KHSB(), second_ctp)
+    restored = second.get_session_state("session-restart")
+    assert restored is not None
+    assert restored["state"] == "checkpointed"
+    assert restored["exactNextAction"] == "resume-governed-work-packet"
+    assert restored["offloadId"] == "offload-restart"
+
+    resumed = second.resume_session("session-restart", checkpoint["ctpTxId"])
+    assert resumed["exactNextAction"] == "resume-governed-work-packet"
+    second_ctp.close()

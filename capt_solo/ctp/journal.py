@@ -174,6 +174,14 @@ class CTPRuntime:
         except KeyError as exc:
             raise TransactionError(f"transaction has no receipt: {tx_id}") from exc
 
+    def receipts(self) -> List[Receipt]:
+        """Return finalized receipts in finalization order.
+
+        Consumers may reconstruct reference-only lifecycle state from durable
+        metadata without owning or mutating the CTP journal.
+        """
+        return sorted(self._receipts.values(), key=lambda receipt: receipt.finalized_at)
+
     def recover(self) -> List[str]:
         return [tx_id for tx_id, tx in self._transactions.items() if tx.get("status") == "pending"]
 
