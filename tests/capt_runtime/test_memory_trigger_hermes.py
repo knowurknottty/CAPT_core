@@ -29,6 +29,8 @@ import tempfile
 
 import pytest
 
+pytestmark = pytest.mark.slow
+
 from capt_runtime.drivers.hermes import (
     HermesDriver,
     HermesDriverUnavailable,
