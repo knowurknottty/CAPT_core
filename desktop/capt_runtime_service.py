@@ -486,6 +486,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
 
     runtime = create_runtime(str(ledger_path))
     store = runtime.store
+    svc = runtime.service
     demo = None
     if seed:
         _seed_memory_store(runtime.memory_store)
@@ -511,6 +512,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
     srv.settimeout(0.2)
     shutdown_requested = threading.Event()
     fixed_work_receipts: Dict[str, Dict[str, Any]] = {}
+    hermes_work_receipts: Dict[str, Dict[str, Any]] = {}
     checkpoint_receipts: Dict[str, Dict[str, Any]] = {}
     print("CAPT_RUNTIME_SERVICE_READY sock=%s ledger=%s pid=%d" % (sock_path, ledger_path, os.getpid()))
 
@@ -540,6 +542,194 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 fixed_work_receipts[key] = result
                 return result
             cmd_svc.fixed_openharness_runner = _fixed_openharness
+            # Governed model operator: the CLI objective becomes authoritative
+            # mission/task state; the frozen work order carries only the
+            # missionId/taskId references; HermesDriver derives its prompt from
+            # the resolved authoritative task (TaskResolver) inside CAPT.
+            def _run_approved_hermes(command: Dict[str, Any]):
+                key = command["idempotencyKey"]
+                prior = hermes_work_receipts.get(key)
+                if prior is not None:
+                    return {**prior, "_idempotent": True}
+                payload = command.get("payload", {})
+                objective = payload.get("objective")
+                target_root = payload.get("targetRoot")
+                if not objective or not target_root:
+                    raise ValueError("MODEL_TASK_OBJECTIVE_OR_TARGET_MISSING")
+                command_id = command["commandId"]
+                now = command.get("timestamp") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                mission_id = payload.get("missionId") or ("m-model-" + command_id)
+                task_id = payload.get("taskId") or (mission_id + "-task-1")
+                run_id = payload.get("driverRunId") or ("dr-model-" + command_id)
+                grant_id = payload.get("grantId") or ("g-model-" + command_id)
+                lease_id = payload.get("leaseId") or ("l-model-" + command_id)
+                claim_id = payload.get("claimId") or ("cl-model-" + command_id)
+                policy_id = payload.get("policyDecisionId") or ("pd-model-" + command_id)
+                executable = payload.get("executable") or None
+                # 1. Authoritative mission/task state (objective persisted in
+                # the Task aggregate by RuntimeService planning).
+                intent = {
+                    "schemaVersion": "1.0.0",
+                    "missionId": mission_id,
+                    "objective": objective,
+                    "scope": {"kind": "filesystem", "rootPath": target_root, "recursive": True},
+                    "requiresApproval": False,
+                    "constraints": [{"kind": "resource_boundary", "constraintId": "con-model-1",
+                                     "origin": "explicit_user",
+                                     "scope": {"kind": "filesystem", "rootPath": target_root, "recursive": True}}],
+                    "successCriteria": [{"criterionId": "sc-model-1",
+                                         "statement": "Model task completed with evidence-backed observations.",
+                                         "requiresVerification": True}],
+                    "terminationCriteria": [{"criterionId": "tc-model-1",
+                                             "statement": "Invariant violation terminates the mission.",
+                                             "terminalState": "failed"}],
+                    "requestedCapability": "cap.fs.read",
+                    "operations": ["repository.read", "filesystem.read", "analysis.execute"],
+                    "resource": target_root,
+                    "operation": "ModelOperatorInspection",
+                    "riskClassification": "low",
+                    "taskId": task_id,
+                }
+                meta = commands.command(
+                    command_id=command_id + ":mission",
+                    idempotency_key=key + ":mission",
+                    operation_fingerprint=commands.fingerprint("create_mission", intent),
+                    correlation_id=command.get("correlationId", "corr-model"),
+                    actor_id=cmd_svc.operator_id,
+                    actor_kind="human",
+                    issued_at=now,
+                    replay_policy="never",
+                )
+                svc.create_mission_with_approval(intent, meta)
+                exec_meta = lambda step: commands.command(
+                    command_id=command_id + ":" + step,
+                    idempotency_key=key + ":" + step,
+                    operation_fingerprint=commands.fingerprint("transition_task", {"taskId": task_id, "to": step}),
+                    correlation_id=command.get("correlationId", "corr-model"),
+                    actor_id="exec-1", actor_kind="execution_plane",
+                    issued_at=now, replay_policy="never",
+                )
+                svc.transition_task(task_id, "ready", "authoritative task approved", exec_meta("ready"))
+                svc.transition_task(task_id, "assigned", "assigned to hermes execution context", exec_meta("assigned"))
+                svc.transition_task(task_id, "running", "model operator dispatch authorized", exec_meta("running"))
+                # 2. Authoritative policy/grant/lease for the external call.
+                gk_meta = lambda step: commands.command(
+                    command_id=command_id + ":" + step,
+                    idempotency_key=key + ":" + step,
+                    operation_fingerprint=commands.fingerprint(step, {"missionId": mission_id, "taskId": task_id}),
+                    correlation_id=command.get("correlationId", "corr-model"),
+                    actor_id="gk-1", actor_kind="governance_kernel",
+                    issued_at=now, replay_policy="never",
+                )
+                policy = {
+                    "schemaVersion": "1.0.0", "policyDecisionId": policy_id,
+                    "policyBundleDigest": contracts.digest({"policyBundle": "model-operator", "version": 1}),
+                    "effect": "allow_with_conditions",
+                    "subject": {"actorId": "exec-1", "kind": "execution_plane"},
+                    "missionId": mission_id, "taskId": task_id,
+                    "requestedOperations": ["repository.read", "filesystem.read", "analysis.execute"],
+                    "requestedScope": {"kind": "filesystem", "rootPath": target_root, "recursive": True},
+                    "conditions": [{"kind": "isolated_worktree", "worktreeRoot": target_root}],
+                    "rationale": "Bounded read-only model operator task.",
+                    "decidedBy": {"actorId": "gk-1", "kind": "governance_kernel"},
+                    "decidedAt": now,
+                }
+                svc.evaluate_policy(policy, gk_meta("evaluate_policy"))
+                grant = {
+                    "schemaVersion": "1.0.0", "grantId": grant_id,
+                    "subject": {"actorId": "exec-1", "kind": "execution_plane"},
+                    "capabilityId": "cap.fs.read",
+                    "operations": ["repository.read", "filesystem.read", "analysis.execute"],
+                    "scope": {"kind": "filesystem", "rootPath": target_root, "recursive": True},
+                    "policyDecisionId": policy_id,
+                    "policyBundleDigest": contracts.digest({"policyBundle": "model-operator", "version": 1}),
+                    "conditions": [{"kind": "isolated_worktree", "worktreeRoot": target_root}],
+                    "maxUses": 1, "validFrom": now, "validUntil": "2030-01-01T00:00:00Z",
+                    "issuedBy": {"actorId": "gk-1", "kind": "governance_kernel"}, "issuedAt": now,
+                }
+                svc.issue_grant(grant, gk_meta("issue_grant"))
+                lease = {
+                    "schemaVersion": "1.0.0", "leaseId": lease_id, "grantId": grant_id,
+                    "missionId": mission_id, "taskId": task_id,
+                    "executionContextId": "ec-model-" + command_id,
+                    "operations": ["repository.read", "filesystem.read", "analysis.execute"],
+                    "scope": {"kind": "filesystem", "rootPath": target_root, "recursive": True},
+                    "maxUses": 1, "validFrom": now, "validUntil": "2030-01-01T00:00:00Z",
+                    "activatedAt": now,
+                }
+                svc.activate_lease(lease, gk_meta("activate_lease"))
+                dispatch_lease = dict(lease)
+                dispatch_lease["scope"] = {**lease["scope"], "allowedPaths": [target_root]}
+                # 3. DriverHost dispatch with the resolved authoritative task.
+                worktree = Path(target_root)
+                staging = worktree.parent / (worktree.name + "-model-staging")
+                staging.mkdir(parents=True, exist_ok=True)
+                host = runtime.hermes_host(
+                    target_repo=str(worktree), staging_root=str(staging),
+                    executable=executable, enforce_memory=False,
+                )
+                ctx = host.build_context(
+                    {"leaseId": lease["leaseId"], "operations": lease["operations"],
+                     "scope": lease["scope"], "validFrom": lease["validFrom"],
+                     "validUntil": lease["validUntil"]},
+                    ["terminal"], {"maxSeconds": 600, "maxArtifacts": 1, "maxObservations": 10},
+                    [{"artifactPath": str(staging / "model-analysis.md"), "artifactKind": "report"}],
+                    {"onUnexpectedWrite": "fail"},
+                )
+                wo = {
+                    "schemaVersion": "1.0.0", "driverRunId": run_id, "driverId": "hermes",
+                    "missionId": mission_id, "taskId": task_id, "workOrderVersion": 1,
+                    "contextSlice": ctx,
+                    "operations": ["RepositoryRead", "FilesystemRead", "ArtifactCreate", "AnalysisOnly"],
+                }
+                svc.create_driver_run(
+                    {"schemaVersion": "1.0.0", "driverRunId": run_id, "driverId": "hermes",
+                     "missionId": mission_id, "taskId": task_id, "workOrderVersion": 1,
+                     "externalRunId": None, "state": "created", "reconciliationStatus": "not_required",
+                     "createdAt": now},
+                    commands.command(command_id=command_id + ":drcreate", idempotency_key=key + ":drcreate",
+                                     operation_fingerprint=commands.fingerprint("create_driver_run", {"driverRunId": run_id}),
+                                     correlation_id=command.get("correlationId", "corr-model"),
+                                     actor_id="exec-1", actor_kind="execution_plane",
+                                     issued_at=now, replay_policy="never"),
+                )
+                svc.transition_driver_run(run_id, "submitted", exec_meta("drsubmit"))
+                svc.transition_driver_run(run_id, "running", exec_meta("drrun"))
+                out = host.dispatch(wo, ctx, {"state": "running"}, now=now, lease=dispatch_lease)
+                svc.transition_driver_run(run_id, "completed", exec_meta("drcomplete"))
+                # 4. Verification + ClaimGuard (CAPT-authored).
+                artifact_path = out["artifactCandidate"]["artifactPath"]
+                artifact_digest = out["artifactCandidate"]["artifactDigest"]
+                before = tree_digest(str(worktree))
+                vr = build_verification_result(str(worktree), before, artifact_path, artifact_digest, "hermes")
+                accepted = guard_claim("Model task produced evidence-backed observations in read-only mode.")
+                svc.propose_claim(
+                    {"schemaVersion": "1.0.0", "claimId": claim_id, "missionId": mission_id,
+                     "taskId": task_id, "kind": "completion", "statement": accepted,
+                     "evidenceIds": [], "promotionState": "proposed",
+                     "proposedBy": {"actorId": "cog-1", "kind": "cognitive_plane"},
+                     "proposedAt": now, "sourceProposalId": None},
+                    commands.command(command_id=command_id + ":claim", idempotency_key=key + ":claim",
+                                     operation_fingerprint=commands.fingerprint("propose_claim", {"claimId": claim_id}),
+                                     correlation_id=command.get("correlationId", "corr-model"),
+                                     actor_id="cog-1", actor_kind="cognitive_plane",
+                                     issued_at=now, replay_policy="never"),
+                )
+                # 5. Checkpoint records continuation.
+                create_checkpoint(store, "cp-model-" + command_id, now,
+                                  contracts.digest({"policyBundle": "model-operator", "version": 1}))
+                receipt = {
+                    "missionId": mission_id, "taskId": task_id,
+                    "driverRunId": run_id, "claimId": claim_id,
+                    "verificationId": vr["verificationId"],
+                    "artifactPath": artifact_path, "artifactDigest": artifact_digest,
+                    "targetPath": str(worktree), "beforeDigest": before,
+                    "observations": out.get("observations", []),
+                    "driver": "hermes",
+                }
+                hermes_work_receipts[key] = receipt
+                return receipt
+            cmd_svc.approved_hermes_runner = _run_approved_hermes
             def _runtime_checkpoint(command: Dict[str, Any]):
                 from capt_runtime.checkpoint import create_checkpoint
                 from capt_runtime.contracts import digest

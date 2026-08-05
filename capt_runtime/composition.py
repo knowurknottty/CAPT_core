@@ -17,6 +17,7 @@ from .memory.engine import MemoryTriggerEngine
 from .memory.store import MemoryStore
 from .services import RuntimeService
 from .store import EventStore
+from .task_resolver import TaskResolver
 
 
 @dataclass
@@ -54,6 +55,23 @@ class RuntimeComposition:
         )
         host.select_driver(OpenHarnessDriver(staging_root))
         return host
+
+    def hermes_host(
+        self, *, target_repo: str, staging_root: str, executable: Optional[str] = None,
+        enforce_memory: bool = True,
+    ) -> DriverHost:
+        from .drivers.hermes import DESCRIPTOR as HERMES_DESCRIPTOR, HermesDriver
+        if not self.registry.is_registered(HERMES_DESCRIPTOR["driverId"]):
+            self.registry.register(HERMES_DESCRIPTOR)
+        host = DriverHost(self.registry, staging_root, target_repo,
+                          memory_engine=self.memory_engine if enforce_memory else None)
+        host.select_driver(HermesDriver(staging_root, executable=executable,
+                                        task_resolver=self.task_resolver()))
+        return host
+
+    def task_resolver(self) -> TaskResolver:
+        """Return CAPT's authoritative task-reference resolver."""
+        return TaskResolver(self.store)
 
     def close(self) -> None:
         self.memory_store.close()

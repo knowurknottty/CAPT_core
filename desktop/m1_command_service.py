@@ -60,6 +60,7 @@ _VALID_OPS = (
     "cancel_driver_run",
     "update_memory_trigger_policy",
     "run_fixed_openharness_inspection",
+    "run_approved_hermes_inspection",
     "checkpoint_runtime",
     "shutdown",
     "resume_runtime",
@@ -96,6 +97,7 @@ class RuntimeCommandService:
         self.session_id = session_id
         self.memory_engine = memory_engine  # optional MemoryTriggerEngine
         self.fixed_openharness_runner = None
+        self.approved_hermes_runner = None
         self.runtime_checkpoint_runner = None
         self.shutdown_runner = None
         self.resume_runner = None
@@ -253,6 +255,13 @@ class RuntimeCommandService:
                 runner = getattr(self, "fixed_openharness_runner", None)
                 if runner is None:
                     return self._receipt(cmd, status="rejected", classification="internal_failure", error=self._error_envelope(cmd, "internal_failure", "FIXED_DRIVER_UNAVAILABLE"))
+                result = runner(cmd)
+                status = "idempotent" if result.pop("_idempotent", False) else "accepted"
+                return self._receipt(cmd, status=status, classification="duplicate" if status == "idempotent" else "accepted", result=result)
+            elif op == "run_approved_hermes_inspection":
+                runner = getattr(self, "approved_hermes_runner", None)
+                if runner is None:
+                    return self._receipt(cmd, status="rejected", classification="internal_failure", error=self._error_envelope(cmd, "internal_failure", "HERMES_DRIVER_UNAVAILABLE"))
                 result = runner(cmd)
                 status = "idempotent" if result.pop("_idempotent", False) else "accepted"
                 return self._receipt(cmd, status=status, classification="duplicate" if status == "idempotent" else "accepted", result=result)

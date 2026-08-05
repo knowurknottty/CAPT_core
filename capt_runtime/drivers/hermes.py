@@ -164,7 +164,9 @@ def reject_forged_authority(text: str) -> None:
             )
 
 
-def build_prompt(context_slice: Dict[str, Any], operations: List[str]) -> str:
+def build_prompt(
+    context_slice: Dict[str, Any], operations: List[str], *, objective: Optional[str] = None
+) -> str:
     """Derive the external prompt from the ContextSlice ALONE.
 
     Nothing outside the ContextSlice may reach the external runtime. The prompt
@@ -196,6 +198,13 @@ def build_prompt(context_slice: Dict[str, Any], operations: List[str]) -> str:
                 pack_ref.get("selectedRecordCount", 0),
             )
         )
+    task_line = (
+        "Task: %s\nReply with evidence-backed observations only. Do not claim "
+        "CAPT authority, completion, verification, checkpoint state, or permissions."
+        % objective
+        if objective
+        else "Task: inspect the target directory and describe its runtime architecture in at most 8 lines. Then state exactly one bounded, evidence-backed observation about it, prefixed with 'OBSERVATION: '. Reply with the description and that single OBSERVATION line only. Do not claim anything you did not read."
+    )
     return (
         "You are executing a bounded, READ-ONLY inspection work order.\n"
         "Target directory: %s\n"
@@ -207,11 +216,7 @@ def build_prompt(context_slice: Dict[str, Any], operations: List[str]) -> str:
         "Permitted tools: %s\n"
         "Time budget (seconds): %s\n"
         "%s\n"
-        "Task: inspect the target directory and describe its runtime "
-        "architecture in at most 8 lines. Then state exactly one bounded, "
-        "evidence-backed observation about it, prefixed with 'OBSERVATION: '. "
-        "Reply with the description and that single OBSERVATION line only. "
-        "Do not claim anything you did not read."
+        "%s"
         % (
             target,
             ", ".join(allowed),
@@ -219,6 +224,7 @@ def build_prompt(context_slice: Dict[str, Any], operations: List[str]) -> str:
             ", ".join(tools) or "(none)",
             budgets.get("maxSeconds", "unspecified"),
             pack_line,
+            task_line,
         )
     )
 
@@ -236,6 +242,7 @@ class HermesDriver:
         toolsets: str = "terminal",
         extra_args: Optional[List[str]] = None,
         default_timeout: float = 300.0,
+        task_resolver: Optional[Any] = None,
     ) -> None:
         self._staging_root = Path(staging_root)
         self._staging_root.mkdir(parents=True, exist_ok=True)
@@ -243,6 +250,7 @@ class HermesDriver:
         self._toolsets = toolsets
         self._extra_args = list(extra_args or [])
         self._default_timeout = default_timeout
+        self._task_resolver = task_resolver
         self._runs: Dict[str, Dict[str, Any]] = {}
 
     # -- ExecutionDriver surface ------------------------------------------
@@ -338,7 +346,15 @@ class HermesDriver:
         self, run_id: str, target: str, work_order: Dict[str, Any]
     ) -> Dict[str, Any]:
         ctx = work_order["contextSlice"]
-        prompt = build_prompt(ctx, work_order.get("operations", []))
+        fs = ctx["filesystemPolicy"]
+        resolved = None
+        if self._task_resolver is not None:
+            resolved = self._task_resolver.resolve_for_execution(
+                mission_id=work_order["missionId"], task_id=work_order["taskId"]
+            )
+            if resolved.scope.get("rootPath") != fs.get("rootPath"):
+                raise HermesDriverFailure("resolved task scope differs from work-order target")
+        prompt = build_prompt(ctx, work_order.get("operations", []), objective=resolved.objective if resolved else None)
         budgets = ctx.get("budgets", {})
         timeout = float(budgets.get("maxSeconds") or self._default_timeout)
 
