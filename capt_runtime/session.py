@@ -70,20 +70,26 @@ class SessionLifecycle:
                     "createdAt": receipt.created_at,
                 }
             elif session_id in self._sessions and action == "checkpoint":
-                self._sessions[session_id].update({
-                    "state": "checkpointed",
-                    "ctpTxId": receipt.tx_id,
-                    "exactNextAction": meta.get("exactNextAction"),
-                    "offloadId": meta.get("offloadId"),
-                })
+                self._sessions[session_id].update(
+                    {
+                        "state": "checkpointed",
+                        "ctpTxId": receipt.tx_id,
+                        "exactNextAction": meta.get("exactNextAction"),
+                        "offloadId": meta.get("offloadId"),
+                    }
+                )
             elif session_id in self._sessions and action == "resume":
-                self._sessions[session_id].update({"state": "active", "ctpTxId": receipt.tx_id})
+                self._sessions[session_id].update(
+                    {"state": "active", "ctpTxId": receipt.tx_id}
+                )
             elif session_id in self._sessions and action == "close":
-                self._sessions[session_id].update({
-                    "state": "closed",
-                    "ctpTxId": receipt.tx_id,
-                    "closeReason": meta.get("reason"),
-                })
+                self._sessions[session_id].update(
+                    {
+                        "state": "closed",
+                        "ctpTxId": receipt.tx_id,
+                        "closeReason": meta.get("reason"),
+                    }
+                )
 
     def _on_session_event(self, message: Any) -> None:
         """Internal handler for session lifecycle events."""

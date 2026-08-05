@@ -75,8 +75,12 @@ class CTPRuntime:
                 try:
                     event = json.loads(line)
                 except (TypeError, ValueError) as exc:
-                    raise IntegrityError(f"invalid CTP journal record at line {number}") from exc
-                if not isinstance(event, dict) or not isinstance(event.get("tx_id"), str):
+                    raise IntegrityError(
+                        f"invalid CTP journal record at line {number}"
+                    ) from exc
+                if not isinstance(event, dict) or not isinstance(
+                    event.get("tx_id"), str
+                ):
                     raise IntegrityError(f"invalid CTP journal record at line {number}")
                 self._apply(event)
                 self._events.append(event)
@@ -96,7 +100,9 @@ class CTPRuntime:
         elif kind in {"commit", "abort"}:
             tx = self._transactions.get(tx_id)
             if tx is None:
-                raise IntegrityError(f"finalization references unknown transaction {tx_id}")
+                raise IntegrityError(
+                    f"finalization references unknown transaction {tx_id}"
+                )
             status = "committed" if kind == "commit" else "aborted"
             tx["status"] = status
             receipt = Receipt(
@@ -136,27 +142,44 @@ class CTPRuntime:
     ) -> str:
         with self._lock:
             if idempotency_key and idempotency_key in self._finalized_keys:
-                raise IdempotencyError(f"idempotency key already finalized: {idempotency_key}")
+                raise IdempotencyError(
+                    f"idempotency key already finalized: {idempotency_key}"
+                )
             tx_id = uuid.uuid4().hex
-            self._append({
-                "type": "begin",
-                "tx_id": tx_id,
-                "timestamp": time.time(),
-                "correlation_id": correlation_id,
-                "idempotency_key": idempotency_key,
-                "meta": dict(meta or {}),
-            })
+            self._append(
+                {
+                    "type": "begin",
+                    "tx_id": tx_id,
+                    "timestamp": time.time(),
+                    "correlation_id": correlation_id,
+                    "idempotency_key": idempotency_key,
+                    "meta": dict(meta or {}),
+                }
+            )
             return tx_id
 
     def validate(self, tx_id: str, result: Any) -> bool:
         self._require_pending(tx_id)
-        ok = bool(result.get("ok")) if isinstance(result, dict) and "ok" in result else bool(result)
-        self._append({"type": "validate", "tx_id": tx_id, "timestamp": time.time(), "ok": ok})
+        ok = (
+            bool(result.get("ok"))
+            if isinstance(result, dict) and "ok" in result
+            else bool(result)
+        )
+        self._append(
+            {"type": "validate", "tx_id": tx_id, "timestamp": time.time(), "ok": ok}
+        )
         return ok
 
     def note(self, tx_id: str, note: str) -> None:
         self._require_pending(tx_id)
-        self._append({"type": "note", "tx_id": tx_id, "timestamp": time.time(), "note": str(note)})
+        self._append(
+            {
+                "type": "note",
+                "tx_id": tx_id,
+                "timestamp": time.time(),
+                "note": str(note),
+            }
+        )
 
     def commit(self, tx_id: str) -> Receipt:
         self._require_pending(tx_id)
@@ -183,7 +206,11 @@ class CTPRuntime:
         return sorted(self._receipts.values(), key=lambda receipt: receipt.finalized_at)
 
     def recover(self) -> List[str]:
-        return [tx_id for tx_id, tx in self._transactions.items() if tx.get("status") == "pending"]
+        return [
+            tx_id
+            for tx_id, tx in self._transactions.items()
+            if tx.get("status") == "pending"
+        ]
 
     def audit_trail(self, tx_id: str) -> List[Dict[str, Any]]:
         if tx_id not in self._transactions:

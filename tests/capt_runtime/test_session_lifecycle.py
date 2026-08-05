@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, '.')
+sys.path.insert(0, ".")
 
 import pytest
 from capt_runtime.session import SessionLifecycle, SessionLifecycleError
@@ -185,7 +185,9 @@ def test_ctp_correlation_id_bound_to_session():
     ctp = CTPRuntime()
     lifecycle = SessionLifecycle(bus, ctp)
 
-    result = lifecycle.register_session("session-ctp-corr", mission_id="mission-ctp-corr")
+    result = lifecycle.register_session(
+        "session-ctp-corr", mission_id="mission-ctp-corr"
+    )
 
     assert "ctpTxId" in result
     assert result["ctpTxId"] is not None
