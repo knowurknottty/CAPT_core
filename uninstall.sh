@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CAPT Solo v0.4.1 — uninstaller
+# CAPT Solo v0.5.0 — uninstaller
 # Removes the plugin and skills from Hermes. Leaves data unless --purge given.
 set -euo pipefail
 
@@ -8,7 +8,7 @@ PLUGIN_TARGET="$HERMES_CONFIG_DIR/plugins/capt-solo"
 SKILLS_TARGET="$HERMES_CONFIG_DIR/skills"
 PURGE="${1:-}"
 
-echo "== CAPT Solo v0.4.1 uninstaller =="
+echo "== CAPT Solo v0.5.0 uninstaller =="
 
 if [ -d "$PLUGIN_TARGET" ]; then
   rm -rf "$PLUGIN_TARGET"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CAPT Solo v0.4.1 installer
+# CAPT Solo v0.5.0 installer
 set -euo pipefail
 
 CAPT_SOLO_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,7 +13,7 @@ ATE_COMMIT="b68adac7311b2315d992592b479e6761aa9dc856"
 export CAPT_SOLO_HOME="$INSTALL_PREFIX"
 export CAPT_SOLO_SRC
 
-echo "== CAPT Solo v0.4.1 installer =="
+echo "== CAPT Solo v0.5.0 installer =="
 echo "Source : $CAPT_SOLO_SRC"
 echo "Home   : $INSTALL_PREFIX"
 echo "Hermes : $HERMES_CONFIG_DIR"

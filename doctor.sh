@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CAPT Solo v0.4.1 — doctor
+# CAPT Solo v0.5.0 — doctor
 # Diagnoses the local environment and reports what is and isn't available.
 # Emits STRUCTURED checks: check_id | status | severity | summary | evidence | remediation | duration_ms
 # Status: pass | warn | fail | skip
@@ -9,7 +9,7 @@ CAPT_SOLO_SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_PREFIX="${CAPT_SOLO_HOME:-$HOME/.capt-solo}"
 HERMES_CONFIG_DIR="${HERMES_CONFIG_DIR:-$HOME/.hermes}"
 
-echo "== CAPT Solo v0.4.1 doctor =="
+echo "== CAPT Solo v0.5.0 doctor =="
 
 emit() { # check_id status severity summary evidence remediation
   local cid="$1" st="$2" sev="$3" sum="$4" ev="$5" rem="$6"
