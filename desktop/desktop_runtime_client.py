@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import socket
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -40,6 +41,7 @@ class RuntimeClient:
     def __init__(self, sock_path: str, token_file: str, connect_timeout: float = 5.0) -> None:
         self.sock_path = str(sock_path)
         self.token_file = str(token_file)
+        self.connect_timeout = connect_timeout
         self._sock: Optional[socket.socket] = None
         self.operator_id: Optional[str] = None
         self.session_id: Optional[str] = None
@@ -49,7 +51,7 @@ class RuntimeClient:
     def connect(self) -> Dict[str, Any]:
         token = Path(self.token_file).read_text().strip()
         s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(5.0)
+        s.settimeout(self.connect_timeout)
         s.connect(self.sock_path)
         self._send(s, {"token": token})
         auth_resp = self._recv(s)
@@ -78,6 +80,9 @@ class RuntimeClient:
 
     def identity(self) -> Dict[str, Any]:
         return self._query({"op": "identity"})["result"]
+
+    def capabilities(self) -> Dict[str, Any]:
+        return self._query({"op": "capabilities"})["result"]
 
     def list_aggregates(self) -> List[Dict[str, Any]]:
         return self._query({"op": "list_aggregates"})["result"]
@@ -119,7 +124,7 @@ class RuntimeClient:
             "operatorId": self.operator_id,
             "sessionId": self.session_id,
             "schemaVersion": "1.0.0",
-            "correlationId": "corr-desktop",
+            "correlationId": "corr-" + uuid.uuid4().hex,
             "idempotencyKey": idek,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "op": op,

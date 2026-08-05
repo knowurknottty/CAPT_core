@@ -24,6 +24,7 @@ Run:
 from __future__ import annotations
 
 import argparse
+from datetime import UTC, datetime
 import getpass
 import hashlib
 import json
@@ -379,6 +380,14 @@ class RuntimeQueryService:
         try:
             if op == "identity":
                 return {"ok": True, "result": self.identity()}
+            if op == "capabilities":
+                return {"ok": True, "result": {
+                    "schemaVersion": CONTRACT_SCHEMA_VERSION,
+                    "queryOperations": ["identity", "capabilities", "list_aggregates", "get_state", "get_stream_events", "event_timeline", "claimguard", "verification", "get_memory_policy", "get_memory_state"],
+                    "commandOperations": ["create_mission", "submit_approval_decision", "cancel_task", "cancel_driver_run", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "checkpoint_runtime", "shutdown", "resume_runtime"],
+                    "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True},
+                    "lifecycleOperations": {"checkpoint": True, "shutdown": True, "resume": True},
+                }}
             if op == "list_aggregates":
                 return {"ok": True, "result": self.list_aggregates()}
             if op == "get_state":
@@ -460,7 +469,20 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
     sock_path = Path(sock_path)
     sock_path.parent.mkdir(parents=True, exist_ok=True)
     if sock_path.exists():
-        sock_path.unlink()
+        if not sock_path.is_socket():
+            raise RuntimeError("CAPT runtime socket path is not a socket: %s" % sock_path)
+        probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            probe.settimeout(0.2)
+            probe.connect(str(sock_path))
+        except ConnectionRefusedError:
+            sock_path.unlink()
+        except FileNotFoundError:
+            pass
+        else:
+            raise RuntimeError("CAPT runtime service already active at %s" % sock_path)
+        finally:
+            probe.close()
 
     runtime = create_runtime(str(ledger_path))
     store = runtime.store
@@ -486,6 +508,10 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
     srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     srv.bind(str(sock_path))
     srv.listen(8)
+    srv.settimeout(0.2)
+    shutdown_requested = threading.Event()
+    fixed_work_receipts: Dict[str, Dict[str, Any]] = {}
+    checkpoint_receipts: Dict[str, Dict[str, Any]] = {}
     print("CAPT_RUNTIME_SERVICE_READY sock=%s ledger=%s pid=%d" % (sock_path, ledger_path, os.getpid()))
 
     def handle_conn(conn: socket.socket) -> None:
@@ -503,6 +529,37 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             operator_id = "operator-" + (getpass.getuser() or "local")
             session_id = "sess-" + secrets.token_hex(8)
             cmd_svc = runtime.command_service(operator_id, session_id)
+            # Fixed v0.5 OpenHarness inspection: service-owned runner uses the
+            # already-created canonical RuntimeComposition; no duplicate runtime.
+            def _fixed_openharness(command: Dict[str, Any]):
+                key = command["idempotencyKey"]
+                prior = fixed_work_receipts.get(key)
+                if prior is not None:
+                    return {**prior, "_idempotent": True}
+                result = seed_demo_mission(runtime)
+                fixed_work_receipts[key] = result
+                return result
+            cmd_svc.fixed_openharness_runner = _fixed_openharness
+            def _runtime_checkpoint(command: Dict[str, Any]):
+                from capt_runtime.checkpoint import create_checkpoint
+                from capt_runtime.contracts import digest
+                key = command["idempotencyKey"]
+                prior = checkpoint_receipts.get(key)
+                if prior is not None:
+                    return {**prior, "_idempotent": True}
+                manifest = create_checkpoint(runtime.store, "cp-" + command["commandId"], datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"), digest({"policyBundle": "harness", "version": 1}))
+                checkpoint_receipts[key] = manifest
+                return manifest
+            cmd_svc.runtime_checkpoint_runner = _runtime_checkpoint
+            cmd_svc.shutdown_runner = lambda: (shutdown_requested.set() or {"shutdown": "accepted"})
+            def _resume_runtime():
+                from capt_runtime.checkpoint import verify_checkpoint
+                manifest = runtime.store.latest_checkpoint()
+                if manifest is None:
+                    raise ValueError("NO_CHECKPOINT")
+                verify_checkpoint(manifest)
+                return {"checkpoint": manifest, "execution": "not_repeated"}
+            cmd_svc.resume_runner = _resume_runtime
             _send_json(conn, {
                 "ok": True, "authenticated": True,
                 "operatorId": operator_id, "sessionId": session_id,
@@ -527,8 +584,11 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 pass
 
     try:
-        while True:
-            conn, _ = srv.accept()
+        while not shutdown_requested.is_set():
+            try:
+                conn, _ = srv.accept()
+            except TimeoutError:
+                continue
             threading.Thread(target=handle_conn, args=(conn,), daemon=True).start()
     finally:
         runtime.close()

@@ -59,6 +59,10 @@ _VALID_OPS = (
     "cancel_task",
     "cancel_driver_run",
     "update_memory_trigger_policy",
+    "run_fixed_openharness_inspection",
+    "checkpoint_runtime",
+    "shutdown",
+    "resume_runtime",
 )
 
 
@@ -91,6 +95,10 @@ class RuntimeCommandService:
         self.operator_id = operator_id
         self.session_id = session_id
         self.memory_engine = memory_engine  # optional MemoryTriggerEngine
+        self.fixed_openharness_runner = None
+        self.runtime_checkpoint_runner = None
+        self.shutdown_runner = None
+        self.resume_runner = None
 
     # -- envelope / identity validation (transport boundary) -------------
 
@@ -241,6 +249,30 @@ class RuntimeCommandService:
                         "source": new_policy.source,
                     },
                 )
+            elif op == "run_fixed_openharness_inspection":
+                runner = getattr(self, "fixed_openharness_runner", None)
+                if runner is None:
+                    return self._receipt(cmd, status="rejected", classification="internal_failure", error=self._error_envelope(cmd, "internal_failure", "FIXED_DRIVER_UNAVAILABLE"))
+                result = runner(cmd)
+                status = "idempotent" if result.pop("_idempotent", False) else "accepted"
+                return self._receipt(cmd, status=status, classification="duplicate" if status == "idempotent" else "accepted", result=result)
+            elif op == "checkpoint_runtime":
+                runner = self.runtime_checkpoint_runner
+                if runner is None:
+                    return self._receipt(cmd, status="rejected", classification="internal_failure", error=self._error_envelope(cmd, "internal_failure", "CHECKPOINT_UNAVAILABLE"))
+                result = runner(cmd)
+                status = "idempotent" if result.pop("_idempotent", False) else "accepted"
+                return self._receipt(cmd, status=status, classification="duplicate" if status == "idempotent" else "accepted", result=result)
+            elif op == "shutdown":
+                runner = self.shutdown_runner
+                if runner is None:
+                    return self._receipt(cmd, status="rejected", classification="internal_failure", error=self._error_envelope(cmd, "internal_failure", "SHUTDOWN_UNAVAILABLE"))
+                return self._receipt(cmd, status="accepted", classification="accepted", result=runner())
+            elif op == "resume_runtime":
+                runner = self.resume_runner
+                if runner is None:
+                    return self._receipt(cmd, status="rejected", classification="internal_failure", error=self._error_envelope(cmd, "internal_failure", "RESUME_UNAVAILABLE"))
+                return self._receipt(cmd, status="accepted", classification="accepted", result=runner())
             else:
                 return self._receipt(
                     cmd, status="rejected", classification="malformed",

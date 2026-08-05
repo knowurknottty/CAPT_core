@@ -42,6 +42,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import uuid
+import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -60,6 +63,8 @@ from capt_solo.foundry import (  # noqa: E402
     SkillCurator, CompositionEngine,
 )
 from capt_solo.ctp.journal import CTPRuntime  # noqa: E402
+from capt_runtime.composition import create_runtime  # noqa: E402
+from capt_runtime import commands as runtime_commands  # noqa: E402
 
 
 def _json_or_human(data: Any, as_json: bool) -> str:
@@ -99,6 +104,7 @@ def _fail(msg: str) -> int:
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="capt", description="CAPT Solo memory review CLI")
     parser.add_argument("--json", action="store_true", help="machine-readable output")
+    parser.add_argument("--version", action="version", version="capt-solo 0.5.0")
     sub = parser.add_subparsers(dest="group")
 
     # memory
@@ -177,12 +183,54 @@ def main(argv: Optional[List[str]] = None) -> int:
     fws.add_parser("curate")
     fws.add_parser("audit")
 
+    # One canonical bounded CAPT Core transaction, constructed via create_runtime().
+    rr = sub.add_parser("runtime", help="canonical CAPT Core runtime operations")
+    rrs = rr.add_subparsers(dest="action")
+    p = rrs.add_parser("mission-begin")
+    p.add_argument("--ledger", required=True)
+    p.add_argument("--objective", required=True)
+    p.add_argument("--operator", default="cli-operator")
+
+    harness = sub.add_parser("harness", help="headless canonical CAPT runtime service")
+    hs = harness.add_subparsers(dest="action")
+    p = hs.add_parser("start")
+    p.add_argument("--ledger", required=True)
+    p.add_argument("--sock", required=True)
+    p.add_argument("--token-file", required=True)
+    p.add_argument("--seed", action="store_true")
+    for name in ("health", "capabilities"):
+        p = hs.add_parser(name)
+        p.add_argument("--sock", required=True)
+        p.add_argument("--token-file", required=True)
+    p = hs.add_parser("checkpoint")
+    p.add_argument("--sock", required=True)
+    p.add_argument("--token-file", required=True)
+    p.add_argument("--idempotency-key", required=True)
+    p = hs.add_parser("resume")
+    p.add_argument("--sock", required=True)
+    p.add_argument("--token-file", required=True)
+    p.add_argument("--idempotency-key", required=True)
+    p = hs.add_parser("stop")
+    p.add_argument("--sock", required=True)
+    p.add_argument("--token-file", required=True)
+    p.add_argument("--idempotency-key", required=True)
+    p = hs.add_parser("command", help="send an existing governed runtime command")
+    p.add_argument("operation")
+    p.add_argument("--payload-json", required=True)
+    p.add_argument("--idempotency-key")
+    p.add_argument("--sock", required=True)
+    p.add_argument("--token-file", required=True)
+
     args = parser.parse_args(argv)
     if not args.group:
         parser.print_help()
         return 1
 
     as_json = args.json
+    if args.group == "runtime":
+        return _cmd_runtime(args, as_json)
+    if args.group == "harness":
+        return _cmd_harness(args)
     try:
         eng = MemoryEngine()
         mgr = LifecycleManager(eng)
@@ -208,6 +256,85 @@ def main(argv: Optional[List[str]] = None) -> int:
         except Exception:
             pass
     return 1
+
+
+def _cmd_harness(args) -> int:
+    if args.action in ("health", "capabilities"):
+        from desktop.desktop_runtime_client import RuntimeClient
+        client = RuntimeClient(args.sock, args.token_file)
+        try:
+            identity = client.connect()
+            result = client.capabilities() if args.action == "capabilities" else {"status": "HEALTHY" if identity.get("integrity") == "ok" else "UNHEALTHY", "identity": identity}
+            print(_json_or_human(result, args.json))
+            return 0 if result.get("status", "HEALTHY") == "HEALTHY" else 1
+        finally:
+            client.disconnect()
+    if args.action in ("checkpoint", "stop", "resume"):
+        from desktop.desktop_runtime_client import RuntimeClient
+        client = RuntimeClient(args.sock, args.token_file)
+        try:
+            client.connect()
+            operation = {"checkpoint": "checkpoint_runtime", "stop": "shutdown", "resume": "resume_runtime"}[args.action]
+            receipt = client.command(operation, {}, args.idempotency_key)
+            print(_json_or_human(receipt, args.json))
+            return 0 if receipt.get("status") in ("accepted", "idempotent") else 1
+        finally:
+            client.disconnect()
+    if args.action == "command":
+        from desktop.desktop_runtime_client import RuntimeClient
+        try:
+            payload = json.loads(args.payload_json)
+        except json.JSONDecodeError as exc:
+            return _fail("invalid --payload-json: %s" % exc)
+        client = RuntimeClient(args.sock, args.token_file)
+        try:
+            client.connect()
+            receipt = client.command(args.operation, payload, args.idempotency_key)
+            print(_json_or_human(receipt, args.json))
+            return 0 if receipt.get("status") in ("accepted", "idempotent") else 1
+        finally:
+            client.disconnect()
+    if args.action != "start":
+        return _fail("harness action required")
+    argv = [sys.executable, "-m", "desktop.capt_runtime_service", "--ledger", args.ledger,
+            "--sock", args.sock, "--token-file", args.token_file]
+    if args.seed:
+        argv.append("--seed")
+    return subprocess.call(argv)
+
+
+def _cmd_runtime(args, as_json) -> int:
+    """Run one persisted CAPT Core mission transaction and close deterministically."""
+    mission_id = "mission-" + uuid.uuid4().hex
+    command_id = "cmd-" + uuid.uuid4().hex
+    metadata = runtime_commands.command(
+        command_id=command_id,
+        idempotency_key="idem-" + command_id,
+        operation_fingerprint=runtime_commands.fingerprint(
+            "create_mission", {"missionId": mission_id, "objective": args.objective}
+        ),
+        correlation_id="runtime-mission-begin:" + mission_id,
+        actor_id=args.operator,
+        actor_kind="human",
+        issued_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        replay_policy="never",
+    )
+    runtime = create_runtime(args.ledger)
+    try:
+        result = runtime.service.create_mission_with_approval(
+            {
+                "schemaVersion": "1.0.0", "missionId": mission_id,
+                "objective": args.objective,
+                "rawRequest": args.objective, "normalizedRequest": args.objective,
+                "scope": {"kind": "filesystem", "rootPath": "/tmp", "recursive": False},
+                "requiresApproval": False,
+            }, metadata
+        )
+        return _ok({"ok": True, "ledger": args.ledger, **result}, as_json)
+    except Exception as exc:
+        return _fail(f"{type(exc).__name__}: {exc}")
+    finally:
+        runtime.close()
 
 
 def _cmd_memory(mgr, args, as_json) -> int:

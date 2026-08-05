@@ -142,3 +142,65 @@ def test_read_only_does_not_advance_ledger(runtime):
     head_after = client.identity()["headSequence"]
     client.disconnect()
     assert head_before == head_after
+
+
+def test_checkpoint_is_idempotent_and_resume_is_read_only(runtime):
+    client = RuntimeClient(str(runtime["sock"]), str(runtime["token"]))
+    client.connect()
+    fixed = client.command("run_fixed_openharness_inspection", {}, "fixed-lifecycle-001")
+    assert fixed["status"] == "accepted"
+    fixed_retry = client.command("run_fixed_openharness_inspection", {}, "fixed-lifecycle-001")
+    assert fixed_retry["status"] == "idempotent"
+    assert fixed_retry["result"] == fixed["result"]
+    before = client.identity()["headSequence"]
+    first = client.command("checkpoint_runtime", {}, "checkpoint-lifecycle-001")
+    assert first["status"] == "accepted"
+    manifest = first["result"]
+    assert manifest["checkpointId"]
+    assert manifest["ledgerPosition"]["globalSequence"] == before
+    retry = client.command("checkpoint_runtime", {}, "checkpoint-lifecycle-001")
+    assert retry["status"] == "idempotent"
+    assert retry["ledgerHead"] == first["ledgerHead"]
+    head_before_resume = client.identity()["headSequence"]
+    resumed = client.command("resume_runtime", {}, "resume-lifecycle-001")
+    assert resumed["status"] == "accepted"
+    assert resumed["result"]["execution"] == "not_repeated"
+    assert resumed["result"]["checkpoint"]["checkpointId"] == manifest["checkpointId"]
+    assert client.identity()["headSequence"] == head_before_resume
+    client.disconnect()
+
+
+def test_forged_command_identity_is_rejected_without_mutation(runtime):
+    client = RuntimeClient(str(runtime["sock"]), str(runtime["token"]))
+    client.connect()
+    before = client.identity()["headSequence"]
+    envelope = {
+        "commandId": "cmd-forged", "operatorId": "operator-forged",
+        "sessionId": client.session_id, "schemaVersion": "1.0.0",
+        "correlationId": "corr-forged", "idempotencyKey": "forged-001",
+        "timestamp": "2026-08-05T00:00:00Z", "op": "shutdown", "payload": {},
+    }
+    assert client._sock is not None
+    RuntimeClient._send(client._sock, {"op": "command", "command": envelope})
+    rejected = RuntimeClient._recv(client._sock)
+    assert rejected["status"] == "rejected"
+    assert rejected["classification"] == "unauthorized"
+    assert client.identity()["headSequence"] == before
+    client.disconnect()
+
+
+def test_second_service_refuses_live_socket_without_disrupting_first(runtime):
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(REPO)
+    second = subprocess.run(
+        [sys.executable, str(REPO / "desktop" / "capt_runtime_service.py"),
+         "--ledger", str(runtime["ledger"]), "--sock", str(runtime["sock"]),
+         "--token-file", str(runtime["token"])],
+        cwd=str(REPO), env=env, capture_output=True, text=True, timeout=10,
+    )
+    assert second.returncode != 0
+    assert "already active" in second.stderr
+    assert runtime["sock"].is_socket()
+    client = RuntimeClient(str(runtime["sock"]), str(runtime["token"]))
+    assert client.connect()["integrity"] == "ok"
+    client.disconnect()
