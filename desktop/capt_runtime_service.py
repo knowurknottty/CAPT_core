@@ -24,7 +24,8 @@ Run:
 from __future__ import annotations
 
 import argparse
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+UTC = timezone.utc
 import getpass
 import hashlib
 import json
@@ -785,7 +786,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
         while not shutdown_requested.is_set():
             try:
                 conn, _ = srv.accept()
-            except TimeoutError:
+            except (TimeoutError, socket.timeout):
                 continue
             threading.Thread(target=handle_conn, args=(conn,), daemon=True).start()
     finally:
