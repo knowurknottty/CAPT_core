@@ -1,11 +1,31 @@
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.1.0",
+  "evidenceModel": "non-self-referential (external attestation for evidence commit SHA)",
   "repository": "knowurknottty/CAPT_core",
   "branch": "release/capt-standalone-final",
-  "sourceSha": "c015c62be8484435af252eb8d9589bbe9ede8467",
+  "runtimeSourceSha": "548ab3ae311366a3a83d4ae50ac6f2bb7495dcd4",
+  "wheelBuiltAtSha": "84a26df38844fb511cdccb896d6ec5c0ca0a067e",
+  "verifiedAgainstParentSha": "84a26df38844fb511cdccb896d6ec5c0ca0a067e",
   "wheelFilename": "capt_solo-0.5.0-py3-none-any.whl",
   "wheelSha256": "f70c3a0e9c10c9dff09b1689d400733e12ebb55f7f066db84fef1d3a0acb17f3",
   "wheelByteSize": 311157,
+  "wheelInputScope": {
+    "packageRoots": [
+      "capt_solo*",
+      "capt_runtime*",
+      "capt_contracts*",
+      "desktop*"
+    ],
+    "topLevelModules": [
+      "capt_cli.py"
+    ],
+    "readmeMetadata": "README.md",
+    "buildConfig": "pyproject.toml",
+    "entryPoints": [
+      "[project.scripts] capt = capt_cli:main"
+    ],
+    "note": "No MANIFEST.in / setup.cfg / setup.py present. Verified via git diff that commits after runtimeSourceSha (548ab3a) changed only .github/workflows and release_evidence/ \u2014 i.e. ONLY non-wheel inputs. README.md and pyproject.toml unchanged."
+  },
   "buildCommand": "SOURCE_DATE_EPOCH=1750000000 python3 -m build --wheel",
   "buildEnvironment": {
     "python": "3.14.6",
@@ -13,16 +33,15 @@
     "build": "1.4.3",
     "setuptools": "81.0.0",
     "wheel": "0.47.0",
-    "platform": "macOS aarch64",
-    "os": "darwin"
+    "platform": "macOS aarch64 (darwin)"
   },
-  "creationTime": "2026-08-07T01:40:00Z",
+  "creationTime": "2026-08-07T02:00:00Z",
   "packageVersion": "0.5.0",
   "determinism": {
     "method": "SOURCE_DATE_EPOCH=1750000000",
-    "build1Sha256": "f70c3a0e9c10c9dff09b1689d400733e12ebb55f7f066db84fef1d3a0acb17f3",
-    "build2Sha256": "f70c3a0e9c10c9dff09b1689d400733e12ebb55f7f066db84fef1d3a0acb17f3",
-    "byteIdentical": true
+    "buildABuildBByteIdentical": true,
+    "wheelSha256StableAcrossHeads": true,
+    "evidence": "Two clean builds produced identical f70c3a0e; wheel also byte-identical when rebuilt at 548ab3a/176186d/9d564ee/84a26df because intervening commits touched only non-wheel inputs."
   },
   "packageContentChecks": {
     "capt_runtime": true,
@@ -43,6 +62,5 @@
     "outsideRepo": true,
     "result": "ALL_INSTALLED_IMPORTS_OK",
     "cliVersion": "capt-solo 0.5.0"
-  },
-  "buildNotes": "Final head 176186d differs from 548ab3a only in .github/workflows and release_evidence/ (YAML + docs, no .py); wheel is byte-identical."
+  }
 }
