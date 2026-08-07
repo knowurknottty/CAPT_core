@@ -57,14 +57,35 @@ jobs:
           print(p)
           PY
       - name: Note if Anti-Token-Extraction unavailable
-        if: steps.anti_token.outcome != 'success'
+        id: security_gate
+        if: always()
         run: |
-          echo "::warning::Anti-Token-Extraction private dependency unavailable on hosted CI; security check degraded to conditional"
+          if [ "${{ steps.anti_token.outcome }}" = "success" ]; then
+            echo "SECURITY_GATE=FULL_SECURITY_GATE" >> "$GITHUB_OUTPUT"
+            echo "::notice::Security gate: FULL_SECURITY_GATE (anti-token-extraction installed and verified)"
+          else
+            echo "SECURITY_GATE=DEGRADED_OPTIONAL_DEPENDENCY" >> "$GITHUB_OUTPUT"
+            echo "::warning::Security gate: DEGRADED_OPTIONAL_DEPENDENCY — anti-token-extraction private dependency unavailable on hosted CI. The rest of the security suite still runs, but this optional anti-token-extraction check is skipped. This is NOT a FULL_SECURITY_GATE."
+          fi
+      - name: Assert security gate classification is explicit (never silent green)
+        if: always()
+        run: |
+          gate="${{ steps.security_gate.outputs.SECURITY_GATE }}"
+          echo "Explicit security gate classification: $gate"
+          if [ -z "$gate" ]; then
+            echo "::error::Security gate classification missing; cannot assume FULL_SECURITY_GATE."
+            exit 1
+          fi
       - name: Test suite report
         id: tests
         continue-on-error: true
         run: |
           set -o pipefail
+          # Coverage threshold (--cov-fail-under=80) intentionally not enforced as a hard gate:
+          # coverage is a diagnostic tool, not a release blocker, and the private anti-token
+          # dependency's absence would distort the coverage denominator on hosted CI.
+          # Coverage is instead reported as a diagnostic in the pytest log and is tracked
+          # as DECLARED_DEFERRED in the release-evidence coverage note.
           python -m pytest -q 2>&1 | tee pytest-${{ matrix.python-version }}.log
       - name: Upload pytest diagnostics
         if: always()
