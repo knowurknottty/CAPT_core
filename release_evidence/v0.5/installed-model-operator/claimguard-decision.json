@@ -1,0 +1,16 @@
+{
+  "decision": {
+    "claimId": "cl-model-version-audit-7",
+    "decidedAt": "2026-08-06T18:18:01Z",
+    "decidedBy": {
+      "actorId": "claim-guard",
+      "kind": "claim_authority"
+    },
+    "decisionId": "cgd-cmd-38dbc93793625166",
+    "rationale": "Bounded statement accepted by ClaimGuard; evidence and verification recorded.",
+    "schemaVersion": "1.0.0",
+    "verdict": "accept",
+    "verificationId": "vr-sha256:44c5f6eef"
+  },
+  "eventType": "ClaimGuardDecided"
+}

@@ -1,0 +1,119 @@
+{
+  "package": "CAPT Standalone Harness v0.5 \u2014 b79c4f0",
+  "date": "2026-08-05",
+  "attribution": "knowurknot",
+  "sha_scoping": {
+    "PRE_REPAIR_INSTALLED_CANDIDATE_SHA": "b45c4b005c9171172d055697a55034006bb0f2fe",
+    "VERIFICATION_REPAIR_SHA": "b79c4f05784d001268e3fef523755365b1f5888e",
+    "CURRENT_LOCAL_HEAD": "b79c4f05784d001268e3fef523755365b1f5888e",
+    "FINAL_RELEASE_CANDIDATE_SHA": "NOT_POPULATED",
+    "REMOTE_VERIFIED_SHA": "NOT_POPULATED"
+  },
+  "wheel": {
+    "name": "capt_solo-0.5.0-py3-none-any.whl",
+    "sha256": "348fe9da477e0323d9c9b294677a1e10de4f9245373a27300367a9e8bdf879b3",
+    "built_from": "b45c4b005c9171172d055697a55034006bb0f2fe",
+    "rebuilt_after_repair": false
+  },
+  "test_results": {
+    "source_b45c4b0": {
+      "passed": 766,
+      "deselected": 12,
+      "duration_s": 19.83,
+      "exit_code": 0
+    },
+    "source_b79c4f0": {
+      "passed": 766,
+      "deselected": 12,
+      "duration_s": 19.44,
+      "exit_code": 0
+    }
+  },
+  "contract_conformance": {
+    "verification_result_after_strip_view": "PASS",
+    "evidence_record_artifact_hash": "PASS",
+    "evidence_record_command_exit": "PASS",
+    "contracts_unchanged": true
+  },
+  "documents": [
+    {
+      "id": "00",
+      "name": "Audit Index",
+      "status": "CREATED"
+    },
+    {
+      "id": "01",
+      "name": "VerificationResult Defect and Repair",
+      "status": "CREATED"
+    },
+    {
+      "id": "02",
+      "name": "Harness Functionality Audit",
+      "status": "CREATED"
+    },
+    {
+      "id": "03",
+      "name": "Model Operator Status",
+      "status": "CREATED"
+    },
+    {
+      "id": "04",
+      "name": "Test, Contract, and Quality Evidence",
+      "status": "CREATED"
+    },
+    {
+      "id": "05",
+      "name": "Public Claim Audit",
+      "status": "CREATED (INCOMPLETE)"
+    },
+    {
+      "id": "06",
+      "name": "Treasure Chest Reconciliation",
+      "status": "CREATED (rebuilt)"
+    },
+    {
+      "id": "07",
+      "name": "Branch Shadow Reconciliation",
+      "status": "CREATED (rebuilt)"
+    },
+    {
+      "id": "08",
+      "name": "Release Evidence Manifest",
+      "status": "CREATED"
+    },
+    {
+      "id": "09",
+      "name": "Residual Backlog",
+      "status": "CREATED"
+    },
+    {
+      "id": "10",
+      "name": "Canonical Handoff",
+      "status": "CREATED"
+    },
+    {
+      "id": "11",
+      "name": "Validation Report",
+      "status": "CREATED"
+    },
+    {
+      "id": "12",
+      "name": "Git Release Provenance",
+      "status": "CREATED (pending commits)"
+    }
+  ],
+  "quarantined": [
+    "06 \u2014 Treasure Chest Function Reconciliation.md (original draft)",
+    "07 \u2014 Branch Shadow Reconciliation.md (original draft)"
+  ],
+  "audit_failure_modes": [
+    {
+      "mode": "INVENTED_ACRONYM_EXPANSION",
+      "status": "ENCOUNTERED, CORRECTED"
+    },
+    {
+      "mode": "ABSENCE_CLAIM_WITHOUT_CANONICAL_SEARCH",
+      "status": "ENCOUNTERED, CORRECTED"
+    }
+  ]
+}

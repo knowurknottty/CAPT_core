@@ -20,7 +20,7 @@
       "title": "StreamId",
       "description": "Aggregate stream identifier. The prefix declares the owning aggregate (ADR-0103) and is enforced by the store.",
       "type": "string",
-      "pattern": "^(mission|task|capability|driverrun|claim)-[A-Za-z0-9_.-]{1,96}$"
+      "pattern": "^(mission|task|capability|driverrun|claim|human_approval)-[A-Za-z0-9_.-]{1,96}$"
     },
     "Timestamp": {
       "title": "Timestamp",
@@ -137,6 +137,612 @@
       "properties": {
         "wallClockSeconds": { "type": "integer", "minimum": 1, "maximum": 86400 },
         "maxOperations": { "type": "integer", "minimum": 1, "maximum": 1000000 }
+      }
+    },
+    "RiskClassification": {
+      "title": "RiskClassification",
+      "description": "Operator-facing risk band for a bounded approval request. Advisory only; CAPT authority invariants remain the sole enforcement path.",
+      "type": "string",
+      "enum": ["none", "low", "medium", "high", "consequential"]
+    },
+    "OperatorMissionIntent": {
+      "title": "OperatorMissionIntent",
+      "description": "High-level operator intent submitted to CAPT Runtime to create a bounded mission. The runtime owns all planning: it constructs the MissionSpec, TaskNode, and (when requiresApproval) HumanApprovalRequest from this intent. The desktop never builds aggregates. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "missionId", "objective", "scope", "requiresApproval"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "objective": { "type": "string", "maxLength": 4096 },
+        "rawRequest": { "type": ["string", "null"], "maxLength": 8192 },
+        "normalizedRequest": { "type": ["string", "null"], "maxLength": 8192 },
+        "scope": { "type": "object", "additionalProperties": true },
+        "constraints": { "type": "array", "items": { "type": "object" } },
+        "successCriteria": { "type": "array", "items": { "type": "object" } },
+        "terminationCriteria": { "type": "array", "items": { "type": "object" } },
+        "unresolvedAmbiguities": { "type": "array", "items": { "type": "string" } },
+        "budget": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "maxEvents": { "type": ["integer", "null"], "minimum": 0 }
+          }
+        },
+        "requiresApproval": { "type": "boolean" },
+        "requestedCapability": { "type": "string", "maxLength": 256 },
+        "resource": { "type": ["string", "null"], "maxLength": 1024 },
+        "operation": { "type": ["string", "null"], "maxLength": 128 },
+        "riskClassification": { "$ref": "common.schema.json#/$defs/RiskClassification" },
+        "policyReason": { "type": ["string", "null"], "maxLength": 1024 },
+        "taskId": { "type": ["string", "null"], "maxLength": 256 },
+        "requestId": { "type": ["string", "null"], "maxLength": 256 }
+      }
+    },
+    "MemoryTriggerPolicy": {
+      "title": "MemoryTriggerPolicy",
+      "description": "CAPT-owned mandatory memory trigger policy. The trigger interval is a fixed 32,768 tokens; each trigger type has an independent step count. Drivers and the desktop may not widen a higher-authority bound. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "policyVersion", "triggerIntervalTokens",
+        "retrievalTriggerSteps", "compressionTriggerSteps",
+        "checkpointTriggerSteps", "consolidationTriggerSteps",
+        "hardStopTriggerSteps", "modelSafeLimitSteps", "source"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "policyVersion": { "type": "integer", "minimum": 1 },
+        "triggerIntervalTokens": { "const": 32768 },
+        "retrievalTriggerSteps": { "type": "integer", "minimum": 1 },
+        "compressionTriggerSteps": { "type": "integer", "minimum": 1 },
+        "checkpointTriggerSteps": { "type": "integer", "minimum": 1 },
+        "consolidationTriggerSteps": { "type": "integer", "minimum": 1 },
+        "hardStopTriggerSteps": { "type": "integer", "minimum": 1 },
+        "modelSafeLimitSteps": { "type": "integer", "minimum": 1 },
+        "source": { "type": "string", "enum": ["constitutional", "runtime_policy", "model_provider", "project_policy", "operator_selected", "driver_preference"] },
+        "operatorId": { "type": ["string", "null"], "maxLength": 256 },
+        "previousPolicyDigest": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" },
+        "policyDigest": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "MemoryQuery": {
+      "title": "MemoryQuery",
+      "description": "Typed mandatory memory query emitted by CAPT when a retrieval trigger fires. No anonymous text blobs. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "missionId", "taskId", "actor", "requestingSubsystem",
+        "triggerBoundary", "contextUsage", "requestedMemoryClasses", "purpose",
+        "recordLimit", "tokenBudget", "correlationId"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "taskId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "driverRunId": { "type": ["string", "null"], "maxLength": 256 },
+        "actor": { "type": "string", "maxLength": 256 },
+        "requestingSubsystem": { "type": "string", "maxLength": 128 },
+        "triggerBoundary": { "type": "integer", "minimum": 0 },
+        "contextUsage": { "type": "integer", "minimum": 0 },
+        "requestedMemoryClasses": { "type": "array", "items": { "type": "string" } },
+        "projectScope": { "type": ["string", "null"], "maxLength": 256 },
+        "purpose": { "type": "string", "maxLength": 2048 },
+        "relevanceCriteria": { "type": ["string", "null"], "maxLength": 2048 },
+        "timeRange": { "type": ["object", "null"], "additionalProperties": true },
+        "trustThreshold": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "consentScope": { "type": ["string", "null"], "maxLength": 256 },
+        "sensitivityAllowance": { "type": ["string", "null"], "maxLength": 64 },
+        "recordLimit": { "type": "integer", "minimum": 1, "maximum": 1000 },
+        "tokenBudget": { "type": "integer", "minimum": 0 },
+        "provenanceRequirement": { "type": ["string", "null"], "maxLength": 256 },
+        "correlationId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "causationId": { "type": ["string", "null"], "maxLength": 256 }
+      }
+    },
+    "MemoryRecord": {
+      "title": "MemoryRecord",
+      "description": "A returned memory record with full provenance and governance metadata. No anonymous text blobs. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recordId", "memoryClass", "owner", "source", "provenance", "trust",
+        "verificationStatus", "sensitivity", "consent", "digest"
+      ],
+      "properties": {
+        "recordId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "memoryClass": { "type": "string", "maxLength": 64 },
+        "owner": { "type": "string", "maxLength": 256 },
+        "source": { "type": "string", "maxLength": 512 },
+        "provenance": { "type": "string", "maxLength": 1024 },
+        "trust": { "type": "string", "maxLength": 32 },
+        "verificationStatus": { "type": "string", "maxLength": 32 },
+        "sensitivity": { "type": "string", "maxLength": 32 },
+        "consent": { "type": "string", "maxLength": 32 },
+        "createdAt": { "type": ["string", "null"], "maxLength": 64 },
+        "lastVerifiedAt": { "type": ["string", "null"], "maxLength": 64 },
+        "expiresAt": { "type": ["string", "null"], "maxLength": 64 },
+        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "retrievalScore": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+        "retrievalReason": { "type": "string", "maxLength": 512 },
+        "stale": { "type": "boolean" },
+        "conflictState": { "type": ["string", "null"], "maxLength": 64 },
+        "downstreamUseRestriction": { "type": ["string", "null"], "maxLength": 256 }
+      }
+    },
+    "ContextPack": {
+      "title": "ContextPack",
+      "description": "Governed, idempotent context packet assembled by CAPT from a mandatory memory query. Drivers receive only the authorized slice. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "contextPackId", "policyVersion", "triggerBoundary",
+        "contextUsageBefore", "contextUsageAfter", "selectedRecords",
+        "excludedRecords", "tokenBudget", "contextPackDigest"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "contextPackId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "policyVersion": { "type": "integer", "minimum": 1 },
+        "triggerBoundary": { "type": "integer", "minimum": 0 },
+        "contextUsageBefore": { "type": "integer", "minimum": 0 },
+        "contextUsageAfter": { "type": "integer", "minimum": 0 },
+        "selectedRecords": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/MemoryRecord" } },
+        "excludedRecords": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+        "exclusionReasons": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+        "compressionActions": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+        "summariesGenerated": { "type": "array", "items": { "type": "string" } },
+        "provenanceRetained": { "type": "boolean" },
+        "unresolvedConflicts": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+        "staleRecords": { "type": "array", "items": { "type": "string" } },
+        "redactions": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+        "tokenBudget": { "type": "integer", "minimum": 0 },
+        "previousContextPackDigest": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" },
+        "contextPackDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "missionId": { "type": ["string", "null"], "maxLength": 256 },
+        "taskId": { "type": ["string", "null"], "maxLength": 256 },
+        "driverRunId": { "type": ["string", "null"], "maxLength": 256 }
+      }
+    },
+    "HumanApprovalRequest": {
+      "title": "HumanApprovalRequest",
+      "description": "A bounded request for operator authorization before a consequential action. Authored by the governance kernel / execution plane; decided by a human operator. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "requestId", "missionId", "taskId", "requestedCapability",
+        "resource", "operation", "scope", "riskClassification", "policyReason",
+        "requestedBy", "expiresAt", "correlationId", "createdAt"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "requestId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "taskId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "requestedCapability": { "type": "string", "maxLength": 256 },
+        "resource": { "type": "string", "maxLength": 1024 },
+        "operation": { "type": "string", "maxLength": 128 },
+        "scope": { "type": "object", "additionalProperties": true },
+        "riskClassification": { "$ref": "common.schema.json#/$defs/RiskClassification" },
+        "policyReason": { "type": "string", "maxLength": 1024 },
+        "requestedBy": { "$ref": "common.schema.json#/$defs/ActorRef" },
+        "expiresAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "remainingUses": { "type": ["integer", "null"], "minimum": 1 },
+        "correlationId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "createdAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      }
+    },
+    "HumanApprovalDecision": {
+      "title": "HumanApprovalDecision",
+      "description": "Operator decision on a HumanApprovalRequest. 'approve' permits only the originally requested scope; 'deny' must prevent execution. Idempotent by idempotencyKey. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "requestId", "decision", "operatorId", "decidedAt",
+        "idempotencyKey", "correlationId"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "requestId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "decision": { "type": "string", "enum": ["approve", "deny"] },
+        "operatorId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "decidedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "note": { "type": ["string", "null"], "maxLength": 1024 },
+        "idempotencyKey": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "correlationId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "sessionId": { "type": ["string", "null"], "maxLength": 128 }
+      }
+    },
+    "Principal": {
+      "title": "Principal",
+      "description": "The actor on whose behalf authority is exercised. Identity establishes the actor; delegation transfers bounded authority; governance evaluates; capability issuance grants permission. Additive plane-convergence extension under contract 1.0.0 (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "principalId", "kind", "attestation"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "kind": { "type": "string", "enum": ["human", "agent", "runtime", "driver", "model", "skill", "plugin"] },
+        "displayName": { "type": ["string", "null"], "maxLength": 256 },
+        "attestation": { "$ref": "common.schema.json#/$defs/IdentityAttestation" }
+      }
+    },
+    "HumanIdentity": {
+      "title": "HumanIdentity",
+      "description": "A human operator principal. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "principalId", "operatorId"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "operatorId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "displayName": { "type": ["string", "null"], "maxLength": 256 }
+      }
+    },
+    "AgentIdentity": {
+      "title": "AgentIdentity",
+      "description": "An autonomous agent principal operating under delegated authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "principalId", "agentId", "delegatedBy"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "agentId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "delegatedBy": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "displayName": { "type": ["string", "null"], "maxLength": 256 }
+      }
+    },
+    "RuntimeIdentity": {
+      "title": "RuntimeIdentity",
+      "description": "The CAPT runtime instance principal. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "principalId", "runtimeId", "version"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "runtimeId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "version": { "type": "string", "maxLength": 64 }
+      }
+    },
+    "DriverIdentity": {
+      "title": "DriverIdentity",
+      "description": "An external ExecutionDriver principal. Reuses the existing driver-identity attestation discipline (DriverRegistry.SpoofedDriverIdentity, hermes.probe_hermes_identity). Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "principalId", "driverId", "executableDigest", "version"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "driverId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "executableDigest": { "$ref": "common.schema.json#/$defs/Digest" },
+        "version": { "type": "string", "maxLength": 64 }
+      }
+    },
+    "ModelIdentity": {
+      "title": "ModelIdentity",
+      "description": "A model principal referenced by a driver. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "principalId", "modelId", "provider", "modelName"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "modelId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "provider": { "type": "string", "maxLength": 64 },
+        "modelName": { "type": "string", "maxLength": 128 }
+      }
+    },
+    "SessionIdentity": {
+      "title": "SessionIdentity",
+      "description": "A bounded session under which authority is exercised. A session token alone must never become unrestricted authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "sessionId", "principalId", "issuedAt", "expiresAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "sessionId": { "type": "string", "maxLength": 128 },
+        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "issuedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "expiresAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      }
+    },
+    "Delegation": {
+      "title": "Delegation",
+      "description": "A bounded transfer of authority from a delegator to a delegate. Must not widen the delegator's own authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "delegationId", "delegatorId", "delegateId", "scope", "expiresAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "delegationId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "delegatorId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "delegateId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "scope": { "type": "string", "maxLength": 256 },
+        "expiresAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+      }
+    },
+    "AuthorityChain": {
+      "title": "AuthorityChain",
+      "description": "The unbroken chain of delegations from a root principal to the acting principal. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "chainId", "entries"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "chainId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "entries": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/Delegation" } }
+      }
+    },
+    "IdentityAttestation": {
+      "title": "IdentityAttestation",
+      "description": "Cryptographic or process attestation that a principal is who it claims. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "method", "digest"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "method": { "type": "string", "enum": ["executable_digest", "session_token", "delegation_record", "runtime_attestation"] },
+        "digest": { "$ref": "common.schema.json#/$defs/Digest" }
+      }
+    },
+    "RevocationRecord": {
+      "title": "RevocationRecord",
+      "description": "A revocation of a principal, delegation, or session. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "revocationId", "targetId", "revokedAt", "reason"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "revocationId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "targetId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "revokedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "reason": { "type": "string", "maxLength": 1024 }
+      }
+    },
+    "CapabilitySubject": {
+      "title": "CapabilitySubject",
+      "description": "The subject (principal or resource) a capability is issued against. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "subjectId", "subjectKind"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "subjectId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "subjectKind": { "type": "string", "enum": ["principal", "resource", "mission", "driver"] }
+      }
+    },
+    "PathScope": {
+      "title": "PathScope",
+      "description": "A bounded filesystem scope for an artifact workspace. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "rootPath", "allowedPaths"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "rootPath": { "type": "string", "pattern": "^/[A-Za-z0-9_./-]+$" },
+        "allowedPaths": { "type": "array", "minItems": 1, "maxItems": 256, "items": { "type": "string" } }
+      }
+    },
+    "WorkspaceDescriptor": {
+      "title": "WorkspaceDescriptor",
+      "description": "An isolated worktree/staging directory for artifact production. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "workspaceId", "rootPath", "pathScope"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "workspaceId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "rootPath": { "type": "string", "pattern": "^/[A-Za-z0-9_./-]+$" },
+        "pathScope": { "$ref": "common.schema.json#/$defs/PathScope" }
+      }
+    },
+    "WorkspaceLease": {
+      "title": "WorkspaceLease",
+      "description": "A time-boxed, scoped lease over a workspace. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "leaseId", "workspaceId", "issuedAt", "expiresAt", "state"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "leaseId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "workspaceId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "issuedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "expiresAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "state": { "type": "string", "enum": ["active", "expired", "revoked"] }
+      }
+    },
+    "ArtifactCandidate": {
+      "title": "ArtifactCandidate",
+      "description": "An untrusted object produced by a driver, awaiting validation. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "candidateId", "driverRunId", "path", "contentDigest"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "candidateId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "driverRunId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "path": { "type": "string", "maxLength": 4096 },
+        "contentDigest": { "$ref": "common.schema.json#/$defs/Digest" }
+      }
+    },
+    "ArtifactRecord": {
+      "title": "ArtifactRecord",
+      "description": "A promoted, authoritative artifact. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "artifactId", "candidateId", "path", "contentDigest", "promotionDecision"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "artifactId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "candidateId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "path": { "type": "string", "maxLength": 4096 },
+        "contentDigest": { "$ref": "common.schema.json#/$defs/Digest" },
+        "promotionDecision": { "$ref": "common.schema.json#/$defs/ArtifactPromotionDecision" }
+      }
+    },
+    "ArtifactManifest": {
+      "title": "ArtifactManifest",
+      "description": "A manifest describing a set of artifacts and their digests. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "manifestId", "artifacts"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "manifestId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "artifacts": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/ArtifactRecord" } }
+      }
+    },
+    "ArtifactPromotionDecision": {
+      "title": "ArtifactPromotionDecision",
+      "description": "The governance/ClaimGuard decision on artifact promotion. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "decision", "decidedBy", "decidedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "decision": { "type": "string", "enum": ["promote", "reject", "quarantine"] },
+        "decidedBy": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "decidedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "verificationRef": { "type": ["string", "null"], "maxLength": 256 },
+        "reason": { "type": ["string", "null"], "maxLength": 1024 }
+      }
+    },
+    "MutationReceipt": {
+      "title": "MutationReceipt",
+      "description": "A receipt for an artifact mutation (create/update/delete) within a workspace. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "receiptId", "artifactPath", "operation", "contentDigest", "verified"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "receiptId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "artifactPath": { "type": "string", "maxLength": 4096 },
+        "operation": { "type": "string", "enum": ["create", "update", "delete", "move"] },
+        "contentDigest": { "$ref": "common.schema.json#/$defs/Digest" },
+        "verified": { "type": "boolean" }
+      }
+    },
+    "TrajectoryRecord": {
+      "title": "TrajectoryRecord",
+      "description": "An immutable record of a mission execution trajectory, admissible to Learning only after verification + ClaimGuard. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "trajectoryId", "missionId", "verified", "claimGuardPassed"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "trajectoryId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "verified": { "type": "boolean" },
+        "claimGuardPassed": { "type": "boolean" },
+        "evidenceRef": { "type": ["string", "null"], "maxLength": 256 }
+      }
+    },
+    "RewardSignal": {
+      "title": "RewardSignal",
+      "description": "A compiled reward signal for a trajectory segment. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "signalId", "trajectoryId", "value"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "signalId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "trajectoryId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "value": { "type": "number" }
+      }
+    },
+    "LearningStrategy": {
+      "title": "LearningStrategy",
+      "description": "A registered learning strategy (GRPO/SFT/DPO/ORPO/KTO/RLOO). Interfaces only; no live training in M0. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "strategyId", "kind"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "strategyId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "kind": { "type": "string", "enum": ["GRPO", "SFT", "DPO", "ORPO", "KTO", "RLOO"] },
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "ModelCandidate": {
+      "title": "ModelCandidate",
+      "description": "A candidate model produced by isolated training, awaiting offline evaluation. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "candidateId", "sourceTrajectoryId", "artifactDigest"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "candidateId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "sourceTrajectoryId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "artifactDigest": { "$ref": "common.schema.json#/$defs/Digest" }
+      }
+    },
+    "LearningPromotionDecision": {
+      "title": "LearningPromotionDecision",
+      "description": "Human-governed promotion decision for a model candidate. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "decision", "decidedBy", "decidedAt"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "decision": { "type": "string", "enum": ["promote", "reject"] },
+        "decidedBy": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "decidedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "reason": { "type": ["string", "null"], "maxLength": 1024 }
+      }
+    },
+    "SimulationEnvironment": {
+      "title": "SimulationEnvironment",
+      "description": "An isolated simulation environment with frozen initial state. Never inherits production authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "simId", "environmentDigest", "datasetDigest", "isSimulation"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "simId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "environmentDigest": { "$ref": "common.schema.json#/$defs/Digest" },
+        "datasetDigest": { "$ref": "common.schema.json#/$defs/Digest" },
+        "isSimulation": { "const": true },
+        "productionAuthority": { "const": false }
+      }
+    },
+    "SimulationMarker": {
+      "title": "SimulationMarker",
+      "description": "An explicit marker that an artifact/result was produced in simulation and must never become production state. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "markerId", "simId", "kind"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "markerId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "simId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "kind": { "type": "string", "enum": ["result", "artifact", "evidence", "state"] }
+      }
+    },
+    "TemporalContext": {
+      "title": "TemporalContext",
+      "description": "Canonical temporal model distinguishing wall-clock, monotonic, logical, causal, mission-relative, lease, policy-effective, evidence-observation, verification, memory-freshness, training-cutoff, and replay times. Additive plane-convergence extension (ADR-DT-PLANE-CONV). Not a Time Plane.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "wallClock", "monotonic", "logical", "causal", "missionRelative"],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "wallClock": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "monotonic": { "type": "number" },
+        "logical": { "type": "integer" },
+        "causal": { "type": "string", "maxLength": 256 },
+        "missionRelative": { "type": "number" },
+        "leaseExpiration": { "type": ["string", "null"], "maxLength": 64 },
+        "policyEffective": { "type": ["string", "null"], "maxLength": 64 },
+        "evidenceObservation": { "type": ["string", "null"], "maxLength": 64 },
+        "verificationTime": { "type": ["string", "null"], "maxLength": 64 },
+        "memoryFreshness": { "type": ["string", "null"], "maxLength": 64 },
+        "trainingCutoff": { "type": ["string", "null"], "maxLength": 64 },
+        "replayTime": { "type": ["string", "null"], "maxLength": 64 }
       }
     }
   }

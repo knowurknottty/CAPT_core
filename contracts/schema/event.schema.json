@@ -16,6 +16,7 @@
         "MissionResumed",
         "TaskCreated",
         "TaskTransitioned",
+        "TaskResultSubmitted",
         "CapabilityGranted",
         "CapabilityLeaseActivated",
         "CapabilityUseReserved",
@@ -27,7 +28,9 @@
         "ClaimCreated",
         "EvidenceRecorded",
         "ClaimVerified",
-        "ClaimGuardDecided"
+        "ClaimGuardDecided",
+        "HumanApprovalRequested",
+        "HumanApprovalDecided"
       ]
     },
     "EventPayload": {
@@ -110,6 +113,18 @@
             "fromState": { "$ref": "task.schema.json#/$defs/TaskState" },
             "toState": { "$ref": "task.schema.json#/$defs/TaskState" },
             "reason": { "type": "string", "maxLength": 2048 }
+          }
+        },
+        {
+          "title": "TaskResultSubmittedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "taskId", "resultRef", "toState"],
+          "properties": {
+            "eventType": { "type": "string", "const": "TaskResultSubmitted" },
+            "taskId": { "$ref": "common.schema.json#/$defs/Identifier" },
+            "resultRef": { "type": "string", "minLength": 1, "maxLength": 2048 },
+            "toState": { "$ref": "task.schema.json#/$defs/TaskState" }
           }
         },
         {
@@ -232,6 +247,26 @@
           "properties": {
             "eventType": { "type": "string", "const": "ClaimGuardDecided" },
             "decision": { "$ref": "claim.schema.json#/$defs/ClaimGuardDecision" }
+          }
+        },
+        {
+          "title": "HumanApprovalRequestedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "request"],
+          "properties": {
+            "eventType": { "type": "string", "const": "HumanApprovalRequested" },
+            "request": { "$ref": "common.schema.json#/$defs/HumanApprovalRequest" }
+          }
+        },
+        {
+          "title": "HumanApprovalDecidedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "decision"],
+          "properties": {
+            "eventType": { "type": "string", "const": "HumanApprovalDecided" },
+            "decision": { "$ref": "common.schema.json#/$defs/HumanApprovalDecision" }
           }
         }
       ]

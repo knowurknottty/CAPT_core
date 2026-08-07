@@ -583,8 +583,8 @@ def test_m0b_read_only_acceptance_scenario(env):
 
     vr = host.verify(before, ing["artifacts"][0]["path"], ing["artifacts"][0]["digest"], "openharness")
     assert vr["status"]["kind"] == "verified"
-    assert vr["checks"]["repositoryUnchanged"] is True
-    assert vr["checks"]["noGitMutation"] is True
+    assert vr["_view"]["checks"]["repositoryUnchanged"] is True
+    assert vr["_view"]["checks"]["noGitMutation"] is True
 
     claim = host.propose_bounded_claim("Repository inspected in read-only mode.")
     assert claim

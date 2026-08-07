@@ -1,0 +1,17 @@
+{
+  "schemaVersion": "1.0.0",
+  "checkpointId": "cp-cmd-3e02c666f8c60dcb",
+  "checkpointAccepted": true,
+  "stopAccepted": true,
+  "socketCleanupConfirmed": true,
+  "restartWithSameLedgerHead": 29,
+  "resumeResult": "accepted",
+  "resumeExecution": "not_repeated",
+  "checkpointVerified": true,
+  "originalDriverRunIdPreserved": "dr-model-version-audit-7",
+  "originalVerificationIdPreserved": "vr-sha256:44c5f6eef",
+  "secondDistinctActionAccepted": true,
+  "secondLedgerHead": 45,
+  "finalCheckpointAccepted": true,
+  "finalStopAccepted": true
+}

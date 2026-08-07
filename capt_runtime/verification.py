@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from .contracts import digest
 
@@ -131,17 +131,94 @@ def guard_claim(statement: str) -> str:
     return s
 
 
+def build_artifact_hash_evidence(
+    mission_id: str,
+    artifact_path: str,
+    artifact_digest: str,
+    collected_by: Dict[str, Any],
+    evidence_id: str,
+    task_id: Optional[str] = None,
+    collected_at: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Build an authoritative EvidenceRecord (kind=artifact_hash).
+
+    Conforms to the FROZEN evidence.schema.json EvidenceRecord contract.
+    CAPT-constructed only (trust=capt_authoritative). The verification
+    result cites this evidenceId in supportingEvidenceIds.
+    """
+    import time as _time
+    return {
+        "schemaVersion": "1.0.0",
+        "evidenceId": evidence_id,
+        "missionId": mission_id,
+        "taskId": task_id,
+        "evidence": {
+            "kind": "artifact_hash",
+            "artifactPath": artifact_path,
+            "artifactDigest": artifact_digest,
+        },
+        "collectedBy": collected_by,
+        "collectedAt": collected_at or _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
+        "trust": "capt_authoritative",
+    }
+
+
+def build_command_exit_evidence(
+    mission_id: str,
+    command: str,
+    exit_code: int,
+    output_digest: str,
+    collected_by: Dict[str, Any],
+    evidence_id: str,
+    task_id: Optional[str] = None,
+    collected_at: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Build an authoritative EvidenceRecord (kind=command_exit).
+
+    Conforms to the FROZEN evidence.schema.json EvidenceRecord contract.
+    """
+    import time as _time
+    return {
+        "schemaVersion": "1.0.0",
+        "evidenceId": evidence_id,
+        "missionId": mission_id,
+        "taskId": task_id,
+        "evidence": {
+            "kind": "command_exit",
+            "command": command,
+            "exitCode": exit_code,
+            "outputDigest": output_digest,
+        },
+        "collectedBy": collected_by,
+        "collectedAt": collected_at or _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
+        "trust": "capt_authoritative",
+    }
+
+
 def build_verification_result(
     target_path: str,
     before_digest: str,
     artifact_path: str,
     artifact_digest: str,
     observed_by: str,
+    claim_id: Optional[str] = None,
+    supporting_evidence_ids: Optional[list] = None,
+    verified_at: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Independently verify and return a VerificationResult-shaped record.
 
     This is CAPT-authored (trust=capt_authoritative), not driver output.
+
+    Returns a dict containing:
+    - The contract-conforming VerificationResult (all required frozen-schema
+      fields: claimId, strategy, verifiedAt; no forbidden additionalProperties).
+    - A '_view' key carrying view-level annotations (checks, trust, observedBy)
+      that are NOT part of the frozen contract and must NOT be passed to
+      require('VerificationResult', ...). The stored/committed event payload
+      uses only the contract-conforming subset; callers strip _view before
+      require() or commit. The view layer merges _view into query responses.
     """
+    import time as _time
     repo_unchanged = verify_repository_unchanged(target_path, before_digest)
     no_git = verify_no_git_mutation(target_path)
     artifact_ok = verify_artifact(artifact_path, artifact_digest)
@@ -150,11 +227,17 @@ def build_verification_result(
             "verification failed: repo_unchanged=%s no_git=%s artifact_ok=%s"
             % (repo_unchanged, no_git, artifact_ok)
         )
-    return {
+    evidence_ids = supporting_evidence_ids or ["ev-" + digest({"artifact": artifact_digest})[:16]]
+    record: Dict[str, Any] = {
         "schemaVersion": "1.0.0",
         "verificationId": "vr-" + digest({"t": target_path, "a": artifact_digest})[:16],
-        "status": {"kind": "verified", "supportingEvidenceIds": []},
+        "claimId": claim_id,
+        "strategy": "artifact_hashing",
+        "status": {"kind": "verified", "supportingEvidenceIds": evidence_ids},
         "verifiedBy": {"actorId": "verification_pipeline", "kind": "verification_plane"},
+        "verifiedAt": verified_at or _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
+    }
+    record["_view"] = {
         "observedBy": observed_by,
         "checks": {
             "repositoryUnchanged": repo_unchanged,
@@ -163,3 +246,13 @@ def build_verification_result(
         },
         "trust": "capt_authoritative",
     }
+    return record
+
+
+def strip_view(record: Dict[str, Any]) -> Dict[str, Any]:
+    """Return a contract-conforming copy with _view removed.
+
+    Use before require('VerificationResult', record) or before committing
+    the event payload to the EventStore.
+    """
+    return {k: v for k, v in record.items() if k != "_view"}

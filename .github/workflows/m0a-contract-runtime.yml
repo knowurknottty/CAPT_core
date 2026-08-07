@@ -2,8 +2,9 @@ name: M0-A Contract & Runtime Proof
 
 on:
   pull_request:
+    branches: [main]
   push:
-    branches: [main, "docs/capt-runtime-architecture-spec", "feat/capt-runtime-m0a-contract-state-proof"]
+    branches: [main, release/capt-standalone-final]
 
 permissions:
   contents: read
@@ -70,8 +71,50 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install test tooling
-        run: python -m pip install --upgrade pip pytest
+        run: python -m pip install --upgrade pip pytest jsonschema build
       - name: Run M0-A conformance suite
         run: python -m pytest tests/capt_runtime -q
       - name: Run full regression
-        run: python -m pytest -q
+        run: python -m pytest tests/ -q
+      - name: Build wheel
+        run: python -m build --wheel
+      - name: Install wheel (no editable)
+        run: python -m pip install --force-reinstall dist/*.whl
+      - name: Clean import smoke test (installed, no source on path)
+        run: |
+          cd /tmp
+          python - <<'PY'
+          import capt_runtime, capt_solo, capt_contracts
+          import capt_runtime.verification
+          import capt_runtime.composition
+          import capt_runtime.drivers.hermes
+          import capt_runtime.drivers.openharness
+          import capt_runtime.memory.governor
+          import capt_runtime.memory.contextpack
+          import capt_solo.khsb.bus
+          import capt_solo.ctp.journal
+          import capt_solo.memory.engine
+          print("INSTALLED_IMPORT_OK")
+          PY
+      - name: Package content inspection
+        run: |
+          python - <<'PY'
+          import zipfile, os
+          wheels = [f for f in os.listdir("dist") if f.endswith(".whl")]
+          assert len(wheels) == 1, f"expected 1 wheel, got {wheels}"
+          z = zipfile.ZipFile(os.path.join("dist", wheels[0]))
+          names = z.namelist()
+          assert any(n.startswith("capt_runtime/") for n in names), "capt_runtime missing"
+          assert any(n.startswith("capt_solo/") for n in names), "capt_solo missing"
+          assert any(n.startswith("capt_contracts/") for n in names), "capt_contracts missing"
+          assert any(n.startswith("desktop/") for n in names), "desktop missing"
+          assert any(n == "capt_cli.py" for n in names), "capt_cli.py missing"
+          assert any("khsb" in n for n in names), "khsb missing"
+          assert any("ctp" in n for n in names), "ctp missing"
+          print("PACKAGE_CONTENT_OK")
+          PY
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-py${{ matrix.python-version }}
+          path: dist/*.whl

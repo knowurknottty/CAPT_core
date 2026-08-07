@@ -29,6 +29,9 @@ hermes-verify-*
 /tmp/
 *.json.tmp
 
+# Session-local release execution contract (kept on disk, never committed)
+.hermes.md
+
 # Editor / OS
 .DS_Store
 *.swp

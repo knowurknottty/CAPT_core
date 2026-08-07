@@ -1,4 +1,4 @@
-"""CAPT Solo v0.4.1 — optional components.
+"""CAPT Solo v0.5.0 — optional components.
 
 Components are isolated capabilities that run as local child processes. They
 never embed into CAPT memory, CTP, or KHSB internals. Failure of a component

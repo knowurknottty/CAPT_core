@@ -447,6 +447,6 @@ class EventStore(object):
 
     def latest_checkpoint(self) -> Optional[Dict[str, Any]]:
         row = self._conn.execute(
-            "SELECT manifest_json FROM checkpoints ORDER BY global_sequence DESC LIMIT 1"
+            "SELECT manifest_json FROM checkpoints ORDER BY global_sequence DESC, rowid DESC LIMIT 1"
         ).fetchone()
         return json.loads(row["manifest_json"]) if row else None

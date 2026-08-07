@@ -10,6 +10,7 @@ explicit service method here, so cross-aggregate coupling is enumerable.
 
 from __future__ import annotations
 
+import time
 from typing import Any, Dict, List, Optional
 
 from . import commands
@@ -17,13 +18,18 @@ from .aggregates import (
     CapabilityAggregate,
     ClaimAggregate,
     DriverRunAggregate,
+    HumanApprovalAggregate,
     MissionAggregate,
     TaskAggregate,
 )
 from .authority import require_authority
 from .contracts import require
-from .errors import AuthorityViolation, ConcurrencyError
+from .errors import AuthorityViolation, ConcurrencyError, IdempotencyConflict
 from .store import AppendRequest, EventStore
+
+
+def _now_rfc3339() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
 class RuntimeService(object):
@@ -59,11 +65,18 @@ class RuntimeService(object):
         require("MissionSpec", spec)
         require("CommandMetadata", metadata)
         require_authority("create_mission", metadata["actor"]["kind"])
+        return self._commit(
+            [self._append_create_mission(spec, metadata)], metadata
+        )
 
+    def _append_create_mission(
+        self, spec: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> "AppendRequest":
+        require("MissionSpec", spec)
+        require_authority("create_mission", metadata["actor"]["kind"])
         stream = MissionAggregate.stream_id(spec["missionId"])
         expected = self.store.aggregate_version(stream)
         state = MissionAggregate.create(spec)
-
         event = commands.envelope(
             event_id=metadata["commandId"] + "-ev1",
             stream_id=stream,
@@ -73,10 +86,211 @@ class RuntimeService(object):
             occurred_at=metadata["issuedAt"],
             mission_id=spec["missionId"],
         )
-        return self._commit(
-            [AppendRequest(stream, MissionAggregate.KIND, expected, event, state)],
-            metadata,
+        return AppendRequest(stream, MissionAggregate.KIND, expected, event, state)
+
+    # -- operator mission intent (M1 governed operator actions) -----------
+    #
+    # The desktop submits a high-level OperatorMissionIntent. ALL planning
+    # (MissionSpec / TaskNode / HumanApprovalRequest construction) and the
+    # cross-aggregate orchestration live here, in the runtime. The desktop
+    # never builds aggregates. The whole intent is committed in ONE
+    # transaction under the operator command's idempotency key, with the
+    # correct actor kind per aggregate (human mission, cognitive_plane task,
+    # execution_plane approval).
+
+    def _inner_metadata(
+        self,
+        outer: Dict[str, Any],
+        operation: str,
+        subject: Dict[str, Any],
+        actor_kind: str,
+        actor_id: str,
+        idem_suffix: str,
+    ) -> Dict[str, Any]:
+        idek = outer["idempotencyKey"] + (":" + idem_suffix if idem_suffix else "")
+        return commands.command(
+            command_id=outer["commandId"] + (":" + idem_suffix if idem_suffix else ""),
+            idempotency_key=idek,
+            operation_fingerprint=commands.fingerprint(operation, subject),
+            correlation_id=outer.get("correlationId", "corr-m1"),
+            actor_id=actor_id,
+            actor_kind=actor_kind,
+            issued_at=outer.get("issuedAt") or outer.get("timestamp") or _now_rfc3339(),
+            replay_policy="never",
         )
+
+    def _build_mission_spec_from_intent(self, intent: Dict[str, Any]) -> Dict[str, Any]:
+        objectives = intent.get("objectives") or [
+            {"objectiveId": "obj-1", "statement": intent.get("objective", "Operator mission"),
+             "priority": 1}
+        ]
+        constraints = intent.get("constraints", [])
+        success = intent.get("successCriteria") or [
+            {"criterionId": "sc-1", "statement": "Mission objective achieved",
+             "requiresVerification": True}
+        ]
+        termination = intent.get("terminationCriteria") or [
+            {"criterionId": "tc-1", "statement": "Invariant violation terminates mission",
+             "terminalState": "failed"}
+        ]
+        return {
+            "schemaVersion": "1.0.0",
+            "missionId": intent["missionId"],
+            "rawRequest": intent.get("rawRequest", intent.get("objective", "")),
+            "normalizedRequest": intent.get("normalizedRequest", intent.get("objective", "")),
+            "objectives": objectives,
+            "constraints": constraints,
+            "successCriteria": success,
+            "terminationCriteria": termination,
+            "unresolvedAmbiguities": intent.get("unresolvedAmbiguities", []),
+            "taskGraphId": None,
+            "createdAt": _now_rfc3339(),
+        }
+
+    def _build_task_from_intent(self, intent: Dict[str, Any], task_id: str) -> Dict[str, Any]:
+        scope = intent.get("scope") or {"kind": "filesystem", "rootPath": "/tmp", "recursive": False}
+        if "recursive" not in scope:
+            scope = {**scope, "recursive": False}
+        return {
+            "taskId": task_id,
+            "missionId": intent["missionId"],
+            "title": intent.get("objective", "Operator task"),
+            "state": "pending",
+            "consequential": bool(intent.get("consequential", True)),
+            "capabilityRequirements": [
+                {
+                    "requirementId": "req-1",
+                    "capabilityId": intent.get("requestedCapability", "cap.fs.read"),
+                    "operations": intent.get("operations", ["repository.read"]),
+                    "scope": scope,
+                }
+            ],
+            "assignedDriverId": None,
+            "attempt": 0,
+            "maxAttempts": 1,
+            "recoveryState": "none",
+        }
+
+    def _build_approval_request_from_intent(
+        self, intent: Dict[str, Any], task_id: str, request_id: str
+    ) -> Dict[str, Any]:
+        scope = intent.get("scope") or {"kind": "filesystem", "rootPath": "/tmp", "recursive": False}
+        if "recursive" not in scope:
+            scope = {**scope, "recursive": False}
+        return {
+            "schemaVersion": "1.0.0",
+            "requestId": request_id,
+            "missionId": intent["missionId"],
+            "taskId": task_id,
+            "requestedCapability": intent.get("requestedCapability", "cap.fs.read"),
+            "resource": intent.get("resource", intent.get("target", "/tmp")),
+            "operation": intent.get("operation", "RepositoryRead"),
+            "scope": scope,
+            "riskClassification": intent.get("riskClassification", "low"),
+            "policyReason": intent.get(
+                "policyReason",
+                "Operator-initiated consequential action requires approval.",
+            ),
+            "requestedBy": {"actorId": "exec-1", "kind": "execution_plane"},
+            "expiresAt": intent.get("expiresAt", "2030-01-01T00:00:00Z"),
+            "remainingUses": intent.get("remainingUses"),
+            "correlationId": intent.get("correlationId", "corr-m1"),
+            "createdAt": _now_rfc3339(),
+        }
+
+    def create_mission_with_approval(
+        self, intent: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Create a bounded mission from an operator intent (runtime-owned planning).
+
+        The operator command's CommandMetadata (human actor, bound operatorId)
+        is the authority source. This method owns ALL planning: it builds the
+        MissionSpec, TaskNode, and (when requiresApproval) HumanApprovalRequest,
+        then commits them in ONE transaction under the operator command's
+        idempotency key. Actor kinds are correct per aggregate: the mission is
+        human-authored, the task is planned by the cognitive plane, the
+        approval is requested by the execution plane.
+
+        A replay of the same operator command (same idempotencyKey) returns
+        idempotent without creating duplicates.
+        """
+        require("OperatorMissionIntent", intent)
+        require("CommandMetadata", metadata)
+        require_authority("create_mission", metadata["actor"]["kind"])
+        if metadata["actor"]["kind"] != "human":
+            raise AuthorityViolation(
+                "operator mission commands must be human-authored, got %r"
+                % metadata["actor"]["kind"]
+            )
+
+        mission_id = intent["missionId"]
+        stream = MissionAggregate.stream_id(mission_id)
+        # Idempotency replay of the same operator command. A reused key MUST
+        # carry the SAME operation fingerprint; a conflicting payload is an
+        # authority violation, not a replay (ADR-0108).
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            offered = metadata.get("operationFingerprint")
+            if offered and prior["operation_fingerprint"] != offered:
+                raise IdempotencyConflict(
+                    "idempotency key %r reused with a different operation "
+                    "fingerprint (stored %s, offered %s)"
+                    % (metadata["idempotencyKey"], prior["operation_fingerprint"], offered)
+                )
+            return self._reconstruct_mission_result(mission_id, metadata)
+
+        spec = self._build_mission_spec_from_intent(intent)
+        task_id = intent.get("taskId") or (mission_id + "-task-1")
+        task = self._build_task_from_intent(intent, task_id)
+        appends = [self._append_create_mission(spec, metadata)]
+        appends.append(
+            self._append_create_task(
+                task,
+                self._inner_metadata(
+                    metadata, "create_task", {"taskId": task_id},
+                    "cognitive_plane", "cog-1", "task",
+                ),
+            )
+        )
+        request_id = None
+        if intent.get("requiresApproval"):
+            request_id = intent.get("requestId") or (mission_id + "-approval-1")
+            request = self._build_approval_request_from_intent(intent, task_id, request_id)
+            appends.append(
+                self._append_request_human_approval(
+                    request,
+                    self._inner_metadata(
+                        metadata, "request_human_approval", {"requestId": request_id},
+                        "execution_plane", "exec-1", "approval",
+                    ),
+                )
+            )
+        result = self._commit(appends, metadata)
+        result = dict(result)
+        result["missionId"] = mission_id
+        result["taskId"] = task_id
+        result["requestId"] = request_id
+        return result
+
+    def _reconstruct_mission_result(
+        self, mission_id: str, metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        result: Dict[str, Any] = {
+            "status": "idempotent",
+            "missionId": mission_id,
+            "taskId": None,
+            "requestId": None,
+        }
+        for (sid, _kind, _ver) in self.store.all_aggregates():
+            if sid.startswith("task-") or sid.startswith("human_approval-"):
+                st = self.store.load_state(sid)
+                if st and st.get("missionId") == mission_id:
+                    if sid.startswith("task-"):
+                        result["taskId"] = st.get("taskId")
+                    elif sid.startswith("human_approval-"):
+                        result["requestId"] = st.get("requestId")
+        return result
+
 
     def evaluate_policy(
         self, decision: Dict[str, Any], metadata: Dict[str, Any]
@@ -162,11 +376,16 @@ class RuntimeService(object):
         require("TaskNode", node)
         require("CommandMetadata", metadata)
         require_authority("plan_tasks", metadata["actor"]["kind"])
+        return self._commit([self._append_create_task(node, metadata)], metadata)
 
+    def _append_create_task(
+        self, node: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> "AppendRequest":
+        require("TaskNode", node)
+        require_authority("plan_tasks", metadata["actor"]["kind"])
         stream = TaskAggregate.stream_id(node["taskId"])
         expected = self.store.aggregate_version(stream)
         state = TaskAggregate.create(node)
-
         event = commands.envelope(
             event_id=metadata["commandId"] + "-ev1",
             stream_id=stream,
@@ -177,9 +396,7 @@ class RuntimeService(object):
             mission_id=node["missionId"],
             task_id=node["taskId"],
         )
-        return self._commit(
-            [AppendRequest(stream, TaskAggregate.KIND, expected, event, state)], metadata
-        )
+        return AppendRequest(stream, TaskAggregate.KIND, expected, event, state)
 
     def transition_task(
         self,
@@ -446,7 +663,116 @@ class RuntimeService(object):
             metadata,
         )
 
-    # -- claim, evidence, verification -------------------------------------
+    # -- human approval (M1 governed operator actions) --------------------
+
+    def request_human_approval(
+        self, request: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        require("HumanApprovalRequest", request)
+        require("CommandMetadata", metadata)
+        require_authority("request_human_approval", metadata["actor"]["kind"])
+        return self._commit(
+            [self._append_request_human_approval(request, metadata)], metadata
+        )
+
+    def _append_request_human_approval(
+        self, request: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> "AppendRequest":
+        require("HumanApprovalRequest", request)
+        require_authority("request_human_approval", metadata["actor"]["kind"])
+        stream = HumanApprovalAggregate.stream_id(request["requestId"])
+        expected = self.store.aggregate_version(stream)
+        state = HumanApprovalAggregate.create(request)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1",
+            stream_id=stream,
+            event_type="HumanApprovalRequested",
+            payload={"eventType": "HumanApprovalRequested", "request": request},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+            mission_id=request["missionId"],
+            task_id=request["taskId"],
+        )
+        return AppendRequest(stream, HumanApprovalAggregate.KIND, expected, event, state)
+
+    def submit_human_approval_decision(
+        self,
+        decision: Dict[str, Any],
+        metadata: Dict[str, Any],
+        now: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        require("HumanApprovalDecision", decision)
+        require("CommandMetadata", metadata)
+        require_authority("submit_human_approval_decision", metadata["actor"]["kind"])
+
+        stream = HumanApprovalAggregate.stream_id(decision["requestId"])
+        # Idempotency replay of the same operator command: return the prior
+        # result without a new event. Checked here (before the aggregate
+        # transition, which would otherwise raise IllegalTransition on an
+        # already-terminal request) so a retried command is a clean no-op.
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            current = self.store.load_state(stream)
+            return {
+                "status": "idempotent",
+                "requestId": decision["requestId"],
+                "state": current["state"] if current else None,
+            }
+        expected = self.store.aggregate_version(stream)
+        current = self.store.require_state(stream)
+        decided_at = decision.get("decidedAt") or metadata["issuedAt"]
+        state = HumanApprovalAggregate.decide(current, decision, now or decided_at)
+
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1",
+            stream_id=stream,
+            event_type="HumanApprovalDecided",
+            payload={"eventType": "HumanApprovalDecided", "decision": decision},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+            mission_id=current["missionId"],
+            task_id=current["taskId"],
+        )
+        return self._commit(
+            [AppendRequest(stream, HumanApprovalAggregate.KIND, expected, event, state)],
+            metadata,
+        )
+
+    # -- cancellation (M1) ------------------------------------------------
+
+    def cancel_task(
+        self, task_id: str, reason: str, metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        require("CommandMetadata", metadata)
+        require_authority("cancel_task", metadata["actor"]["kind"])
+        stream = TaskAggregate.stream_id(task_id)
+        # Idempotency replay of the same operator command (see
+        # submit_human_approval_decision for rationale).
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            current = self.store.load_state(stream)
+            return {
+                "status": "idempotent",
+                "targetId": task_id,
+                "state": current["state"] if current else None,
+            }
+        return self.transition_task(task_id, "cancelled", reason, metadata)
+
+    def cancel_driver_run(
+        self, driver_run_id: str, reason: str, metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        require("CommandMetadata", metadata)
+        require_authority("cancel_driver_run", metadata["actor"]["kind"])
+        stream = DriverRunAggregate.stream_id(driver_run_id)
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            current = self.store.load_state(stream)
+            return {
+                "status": "idempotent",
+                "targetId": driver_run_id,
+                "state": current["state"] if current else None,
+            }
+        return self.transition_driver_run(driver_run_id, "cancelled", metadata)
 
     def propose_claim(
         self, claim: Dict[str, Any], metadata: Dict[str, Any]
@@ -509,42 +835,46 @@ class RuntimeService(object):
         self, verification: Dict[str, Any], metadata: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Attach an independently produced VerificationResult."""
-        require("VerificationResult", verification)
+        # Strip view annotations before contract validation so the stored
+        # event payload is contract-conforming (no forbidden additionalProperties).
+        from .verification import strip_view
+        record = strip_view(verification)
+        require("VerificationResult", record)
         require("CommandMetadata", metadata)
         require_authority("produce_verification", metadata["actor"]["kind"])
 
-        if verification["verifiedBy"]["kind"] != "verification_plane":
+        if record["verifiedBy"]["kind"] != "verification_plane":
             raise AuthorityViolation(
                 "VerificationResult.verifiedBy must be a verification_plane actor, "
-                "got %r" % verification["verifiedBy"]["kind"]
+                "got %r" % record["verifiedBy"]["kind"]
             )
 
-        stream = ClaimAggregate.stream_id(verification["claimId"])
+        stream = ClaimAggregate.stream_id(record["claimId"])
         expected = self.store.aggregate_version(stream)
         current = self.store.require_state(stream)
 
         # A 'verified' status must cite evidence this runtime already holds.
         # Otherwise verification could name evidence ids that do not exist.
-        status = verification["status"]
+        status = record["status"]
         if status["kind"] == "verified":
             known = set(current["evidenceIds"])
             missing = [e for e in status["supportingEvidenceIds"] if e not in known]
             if missing:
                 raise AuthorityViolation(
                     "verification cites evidence not recorded on claim %s: %s"
-                    % (verification["claimId"], ", ".join(sorted(missing)))
+                    % (record["claimId"], ", ".join(sorted(missing)))
                 )
 
-        state = ClaimAggregate.record_verification(current, verification)
+        state = ClaimAggregate.record_verification(current, record)
 
         event = commands.envelope(
             event_id=metadata["commandId"] + "-ev1",
             stream_id=stream,
             event_type="ClaimVerified",
-            payload={"eventType": "ClaimVerified", "verification": verification},
+            payload={"eventType": "ClaimVerified", "verification": record},
             metadata=metadata,
             occurred_at=metadata["issuedAt"],
-            claim_id=verification["claimId"],
+            claim_id=record["claimId"],
         )
         return self._commit(
             [AppendRequest(stream, ClaimAggregate.KIND, expected, event, state)], metadata
@@ -578,4 +908,80 @@ class RuntimeService(object):
         )
         return self._commit(
             [AppendRequest(stream, ClaimAggregate.KIND, expected, event, state)], metadata
+        )
+
+    # -- work packet abstraction (session continuity) ---------------------
+
+    def get_next_work_packet(
+        self,
+        mission_id: str,
+        session_id: str,
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Derive the next runnable task as a read-only session work packet."""
+        require("CommandMetadata", metadata)
+        runnable_tasks = []
+        for stream_id, _kind, _version in self.store.all_aggregates():
+            if stream_id.startswith("task-"):
+                state = self.store.load_state(stream_id)
+                if (
+                    state
+                    and state.get("missionId") == mission_id
+                    and state.get("state") == "ready"
+                    and int(state["attempt"]) < int(state["maxAttempts"])
+                ):
+                    runnable_tasks.append(state)
+        if not runnable_tasks:
+            return {
+                "hasWork": False,
+                "missionId": mission_id,
+                "sessionId": session_id,
+                "reason": "no_runnable_tasks",
+            }
+        task = runnable_tasks[0]
+        return {
+            "hasWork": True,
+            "packetId": task["taskId"],
+            "missionId": mission_id,
+            "sessionId": session_id,
+            "taskId": task["taskId"],
+            "title": task.get("title"),
+            "state": task["state"],
+            "capabilityRequirements": task.get("capabilityRequirements", []),
+            "exactNextAction": task.get("exactNextAction") or "execute_task",
+            "createdAt": task.get("createdAt"),
+        }
+
+    def submit_result(
+        self, task_id: str, result: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Record an immutable result reference and canonical task transition."""
+        require("CommandMetadata", metadata)
+        require_authority("submit_result", metadata["actor"]["kind"])
+        if set(result) != {"status", "resultRef"}:
+            raise ValueError("result must contain only status and resultRef")
+        status, result_ref = result["status"], result["resultRef"]
+        if status not in ("succeeded", "failed", "cancelled"):
+            raise ValueError("result status must be succeeded, failed, or cancelled")
+        if not isinstance(result_ref, str) or not result_ref:
+            raise ValueError("resultRef must be a non-empty reference string")
+        stream = TaskAggregate.stream_id(task_id)
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            return self._commit([], metadata)
+        expected = self.store.aggregate_version(stream)
+        current = self.store.require_state(stream)
+        to_state = "awaiting_verification" if status == "succeeded" else status
+        state = TaskAggregate.record_result(current, result_ref)
+        state = TaskAggregate.transition(state, to_state)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-result", stream_id=stream,
+            event_type="TaskResultSubmitted",
+            payload={"eventType": "TaskResultSubmitted", "taskId": task_id,
+                     "resultRef": result_ref, "toState": to_state},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+            mission_id=current["missionId"], task_id=task_id,
+        )
+        return self._commit(
+            [AppendRequest(stream, TaskAggregate.KIND, expected, event, state)], metadata
         )

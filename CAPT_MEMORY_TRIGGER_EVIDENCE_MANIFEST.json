@@ -1,0 +1,101 @@
+{
+  "report": "CAPT_MEMORY_TRIGGER_EVIDENCE_MANIFEST",
+  "adr": "ADR-DT-M1-MEM-001",
+  "finalStatus": "CAPT_MEMORY_TRIGGER_PROVEN",
+  "generatedBy": "capt_runtime memory trigger verification (Homebrew python3.12)",
+  "authoritativeRepo": "/Users/knowurknot/CAPT_core",
+  "authoritativeRemote": "https://github.com/knowurknottty/CAPT_core.git",
+  "branch": "feat/capt-memory-trigger-integration",
+  "baseSha": "9d4fee12bc6147d7fe5da9e5025e8eb32911293a",
+  "finalSha": "UNCOMMITTED_WORKING_TREE",
+  "pullRequest": "https://github.com/knowurknottty/CAPT_core/pull/31",
+  "triggerIntervalTokens": 32768,
+  "configuredSteps": {
+    "retrievalTriggerSteps": 8,
+    "compressionTriggerSteps": 8,
+    "checkpointTriggerSteps": 8,
+    "consolidationTriggerSteps": 8,
+    "hardStopTriggerSteps": 8,
+    "modelSafeLimitSteps": 8
+  },
+  "effectiveTokenThresholds": {
+    "retrievalTokens": 262144,
+    "compressionTokens": 262144,
+    "checkpointTokens": 262144,
+    "consolidationTokens": 262144,
+    "hardStopTokens": 262144,
+    "modelSafeLimitTokens": 262144
+  },
+  "accountingMethod": "chars/4.0 (ESTIMATED; no exact tokenizer available)",
+  "testResults": {
+    "harnessTriggerTests": 43,
+    "hermesConformanceTests": 10,
+    "desktopControlTests": 5,
+    "adversarialTests": 16,
+    "totalMemoryTests": 74,
+    "fullCaptRuntimeSuite": 251,
+    "allPassing": true
+  },
+  "hermesConformance": {
+    "driver": "capt_runtime.drivers.hermes.HermesDriver",
+    "executable": "/Users/knowurknot/.local/bin/hermes",
+    "version": "Hermes Agent v0.19.1",
+    "realDispatchSettings": [32768, 65536, 98304, 131072],
+    "sliceOnly": true,
+    "policyOverrideImpossible": true
+  },
+  "contextPack": {
+    "mandatory": true,
+    "idempotent": true,
+    "digestAlgorithm": "sha256",
+    "selectedExcludedVisible": true
+  },
+  "triggerState": {
+    "persists": true,
+    "replays": true,
+    "noStatelessFallback": true
+  },
+  "promotion": {
+    "governed": true,
+    "evidenceRequired": true,
+    "unverifiedNotPromotedAsFact": true
+  },
+  "evidenceArtifacts": [
+    "CAPT_MEMORY_TRIGGER_ARCHITECTURE.md",
+    "CAPT_MEMORY_TRIGGER_POLICY.md",
+    "CAPT_MEMORY_TRIGGER_CONTEXT_ACCOUNTING.md",
+    "CAPT_MEMORY_TRIGGER_HARNESS_CONFORMANCE.md",
+    "CAPT_MEMORY_TRIGGER_HERMES_CONFORMANCE.md",
+    "CAPT_MEMORY_TRIGGER_SECURITY_REVIEW.md",
+    "CAPT_MEMORY_TRIGGER_TEST_MATRIX.md",
+    "CAPT_DESKTOP_M1_MEMORY_INTEGRATION.md",
+    "CAPT_MEMORY_TRIGGER_VERIFICATION_REPORT.md",
+    "CAPT_MEMORY_TRIGGER_TRIPLE_RECURSION_LEDGER.md"
+  ],
+  "sourceFiles": [
+    "capt_runtime/memory/__init__.py",
+    "capt_runtime/memory/policy.py",
+    "capt_runtime/memory/accounting.py",
+    "capt_runtime/memory/store.py",
+    "capt_runtime/memory/query.py",
+    "capt_runtime/memory/contextpack.py",
+    "capt_runtime/memory/engine.py",
+    "capt_runtime/driver_host.py",
+    "capt_runtime/drivers/hermes.py",
+    "desktop/m1_command_service.py",
+    "desktop/desktop_app.py",
+    "desktop/capt_runtime_service.py",
+    "contracts/schema/common.schema.json",
+    "contracts/schema/driver.schema.json",
+    "tests/capt_runtime/test_memory_trigger.py",
+    "tests/capt_runtime/test_memory_trigger_hermes.py",
+    "tests/capt_runtime/test_memory_trigger_desktop.py",
+    "tests/capt_runtime/test_memory_trigger_adversarial.py"
+  ],
+  "residualRisks": [
+    "Token estimate is heuristic (chars/4.0), labeled ESTIMATED.",
+    "Hermes is untrusted; output is trust=untrusted and cannot alter CAPT policy.",
+    "Memory store is SQLite (ledger-family); swappable for shared ledger in multi-process CAPT."
+  ],
+  "explicitConfirmation": "No stateless fallback, M2, packaging, Mode B, or repository-write automation was started. This deliverable is the M1-memory trigger system only."
+}

@@ -1,0 +1,72 @@
+{
+  "report": "CAPT Desktop Runtime M1 — Evidence Manifest",
+  "finalClassification": "CAPT_DESKTOP_M1_PROVEN",
+  "generatedBy": "HY3 (capt-runtime-hermes governed)",
+  "interpreter": "/opt/homebrew/bin/python3.12",
+  "systemPythonUntouched": "/usr/bin/python3 (Apple-managed, not modified)",
+  "repository": "/Users/knowurknot/CAPT_core",
+  "remote": "https://github.com/knowurknottty/CAPT_core.git",
+  "branch": "feat/capt-desktop-runtime-m1",
+  "baseSha": "sha1:9d4fee12bc6147d7fe5da9e5025e8eb32911293a",
+  "finalHeadSha": "sha1:782c44d84a83e8d177334d347e576571895e28ea",
+  "contractSchemaVersion": "1.0.0",
+  "runtimeVersion": "0.1.0",
+  "authoritativeRuntimeActive": true,
+  "verifications": {
+    "gate0RuntimeActivation": "CAPT_RUNTIME_ACTIVE",
+    "m0Regression": "5 passed (tests/capt_runtime/test_desktop_m0.py)",
+    "m1Integration": "7 passed (tests/capt_runtime/test_desktop_m1.py)",
+    "m1Security": "11 passed (tests/capt_runtime/test_desktop_m1_security.py)",
+    "m1Adversarial": "16 passed (tests/capt_runtime/test_desktop_m1_adversarial.py)",
+    "captRuntimeTotal": "175 passed (tests/capt_runtime)",
+    "contractDrift": "DRIFT CHECK: OK (11 generated files match the schema source)",
+    "contractParity": "7 passed (tests/capt_runtime/test_contracts.py)",
+    "acceptanceM1": "CAPT_DESKTOP_M1_ACCEPTED (desktop/acceptance_m1.py, exit 0)",
+    "acceptanceM1LiveGui": "CAPT_DESKTOP_M1_LIVE_GUI_ACCEPTED (desktop/acceptance_m1_live.py, 18 checks, exit 0)",
+    "acceptanceM0": "CAPT_DESKTOP_M0_PROVEN (desktop/acceptance_m0.py, exit 0)",
+    "liveGuiM1Headless": "exit 0 (desktop/desktop_app.py --m1 --headless)",
+    "gitDiffCheck": "clean",
+    "secretScan": "no bare high-entropy hex; all digests carry sha1:/sha256: scheme"
+  },
+  "requiredOutcomes": {
+    "missionCreationRealCommand": true,
+    "denialPreventsExecution": true,
+    "approvalBoundedOnly": true,
+    "cancellationAuthoritativeReconciled": true,
+    "reconnectReconstructsState": true,
+    "duplicatesSuppressed": true,
+    "operatorIdentityBound": true,
+    "m0RemainsGreen": true,
+    "contractDriftClean": true,
+    "liveGuiAcceptance": true,
+    "exactShaEvidence": true,
+    "draftPrOpen": true
+  },
+  "artifactShas": {
+    "desktop/m1_command_service.py": "sha256:8d6246f89334a569af83482486a934617b2ef8b6df2b7de35bde549003d333e8",
+    "desktop/capt_runtime_service.py": "sha256:90e2b2b495771bce0d29443b718bbcac5556e2e26adeaaa5007fd17998d8deae",
+    "desktop/desktop_runtime_client.py": "sha256:cecdc11e72dde3687147be320f5fa051fa88a5eb690e89ac2cdcc4afe385ddcc",
+    "desktop/desktop_app.py": "sha256:9c3b23a7767c781989482ff9b99f436c29b77780a3e04f0d6f13efbb172fc2b1",
+    "desktop/acceptance_m1.py": "sha256:eee1ef6abadc5aafc1205c01dc86b23ce307794c7eea31418d1990f047f6bb9a",
+    "capt_runtime/aggregates/human_approval.py": "sha256:f0e2a8ea99a81b5cd93a70e05103d1528115182280728fec35e129acd32f6df6",
+    "capt_runtime/services.py": "sha256:2e3c4afc7fdebdbf3325472be9658972e58409a6d1f50b501a3faf79a4cc7e77",
+    "contracts/schema/common.schema.json": "sha256:23eee3053c0ff40ed18a698ce50adc96a04a328367d39fafb1e90e531ef3934c",
+    "contracts/schema/event.schema.json": "sha256:23c7806afd9cddacce52550d9fba9590198f41d218fa269f786a98aff29c54e5",
+    "tests/capt_runtime/test_desktop_m1.py": "sha256:ab692b2f0453330c2c4b362e75ee46ccbf54709892d47f0eb10d3d083e9d95d0",
+    "tests/capt_runtime/test_desktop_m1_security.py": "sha256:3b3364b56029a31c2b8ee4b575afefed4d569f4602e38c73140818298307f8eb"
+  },
+  "knownCiFailureOutsideScope": {
+    "workflow": "Release Security (python 3.10 / 3.12)",
+    "rootCause": "pip install git+https://github.com/knowurknottty/anti-token-extraction.git fails: 'could not read Username for https://github.com: No such device or address' (private dependency clone auth failure in CI).",
+    "relationToM1": "Unrelated to M1 desktop code (tests capt_solo + private dep). Not classified as an M1 code failure."
+  },
+  "residualRisks": [
+    "Single-user macOS operator model only; no multi-user/tenant isolation (documented, out of M1 scope).",
+    "DriverRun execution in acceptance is seeded via the authoritative RuntimeService (real CAPT state path), not a live external driver dispatch, to keep the scenario harmless and deterministic; the cancellation command still flows through the same governed path a live driver would."
+  ],
+  "notStarted": [
+    "packaging", "signing", "notarization", "distribution", "M2",
+    "multi-agent orchestration", "plugin marketplaces", "Mode B Hermes interception",
+    "RuntimeAggregate/Manifest/Identity", "general repository-write automation"
+  ]
+}

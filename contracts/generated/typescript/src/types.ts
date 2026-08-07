@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:8ff3dcc4f4fc0f2e05bf52ad775dad76a6c5705bcbed856b4b45931c38f21789
+// source digest:  sha256:e84dfdf1eea315a6c9261b3e8ab127caae6ed4b5ac45ee888f5baf5c7173b871
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -345,13 +345,72 @@ export interface ActorRef {
   readonly displayName?: string | null;
 }
 
+/** An autonomous agent principal operating under delegated authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface AgentIdentity {
+  readonly agentId: Identifier;
+  readonly delegatedBy: Identifier;
+  readonly principalId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly displayName?: string | null;
+}
+
 /** 0 means the stream does not yet exist. Increments by exactly 1 per event. */
 export type AggregateVersion = number;
+
+/** An untrusted object produced by a driver, awaiting validation. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface ArtifactCandidate {
+  readonly candidateId: Identifier;
+  readonly contentDigest: Digest;
+  readonly driverRunId: Identifier;
+  readonly path: string;
+  readonly schemaVersion: SchemaVersion;
+}
+
+/** A manifest describing a set of artifacts and their digests. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface ArtifactManifest {
+  readonly artifacts: readonly ArtifactRecord[];
+  readonly manifestId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+}
+
+/** The governance/ClaimGuard decision on artifact promotion. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface ArtifactPromotionDecision {
+  readonly decidedAt: Timestamp;
+  readonly decidedBy: Identifier;
+  readonly decision: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly reason?: string | null;
+  readonly verificationRef?: string | null;
+}
+
+/** A promoted, authoritative artifact. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface ArtifactRecord {
+  readonly artifactId: Identifier;
+  readonly candidateId: Identifier;
+  readonly contentDigest: Digest;
+  readonly path: string;
+  readonly promotionDecision: ArtifactPromotionDecision;
+  readonly schemaVersion: SchemaVersion;
+}
+
+/** The unbroken chain of delegations from a root principal to the acting principal. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface AuthorityChain {
+  readonly chainId: Identifier;
+  readonly entries: readonly Delegation[];
+  readonly schemaVersion: SchemaVersion;
+}
 
 /** Budget */
 export interface Budget {
   readonly maxOperations: number;
   readonly wallClockSeconds: number;
+}
+
+/** The subject (principal or resource) a capability is issued against. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface CapabilitySubject {
+  readonly schemaVersion: SchemaVersion;
+  readonly subjectId: Identifier;
+  readonly subjectKind: string;
 }
 
 /** Mandatory envelope for every consequential command (ADR-0108). */
@@ -368,8 +427,52 @@ export interface CommandMetadata {
   readonly causationId?: Identifier | null;
 }
 
+/** Governed, idempotent context packet assembled by CAPT from a mandatory memory query. Drivers receive only the authorized slice. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001). */
+export interface ContextPack {
+  readonly contextPackDigest: string;
+  readonly contextPackId: Identifier;
+  readonly contextUsageAfter: number;
+  readonly contextUsageBefore: number;
+  readonly excludedRecords: readonly Readonly<Record<string, unknown>>[];
+  readonly policyVersion: number;
+  readonly schemaVersion: SchemaVersion;
+  readonly selectedRecords: readonly MemoryRecord[];
+  readonly tokenBudget: number;
+  readonly triggerBoundary: number;
+  readonly compressionActions?: readonly Readonly<Record<string, unknown>>[];
+  readonly driverRunId?: string | null;
+  readonly exclusionReasons?: readonly Readonly<Record<string, unknown>>[];
+  readonly missionId?: string | null;
+  readonly previousContextPackDigest?: string | null;
+  readonly provenanceRetained?: boolean;
+  readonly redactions?: readonly Readonly<Record<string, unknown>>[];
+  readonly staleRecords?: readonly string[];
+  readonly summariesGenerated?: readonly string[];
+  readonly taskId?: string | null;
+  readonly unresolvedConflicts?: readonly Readonly<Record<string, unknown>>[];
+}
+
+/** A bounded transfer of authority from a delegator to a delegate. Must not widen the delegator's own authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface Delegation {
+  readonly delegateId: Identifier;
+  readonly delegationId: Identifier;
+  readonly delegatorId: Identifier;
+  readonly expiresAt: Timestamp;
+  readonly schemaVersion: SchemaVersion;
+  readonly scope: string;
+}
+
 /** Lowercase hex SHA-256 with algorithm prefix. */
 export type Digest = string;
+
+/** An external ExecutionDriver principal. Reuses the existing driver-identity attestation discipline (DriverRegistry.SpoofedDriverIdentity, hermes.probe_hermes_identity). Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface DriverIdentity {
+  readonly driverId: Identifier;
+  readonly executableDigest: Digest;
+  readonly principalId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly version: string;
+}
 
 /** ErrorCategory */
 export type ErrorCategory = "validation" | "authority" | "concurrency" | "idempotency" | "integrity" | "not_found" | "illegal_transition" | "capability_denied" | "reconciliation_required" | "internal";
@@ -406,8 +509,202 @@ export interface ExtensionEnvelope {
   readonly payloadJson: string;
 }
 
+/** Operator decision on a HumanApprovalRequest. 'approve' permits only the originally requested scope; 'deny' must prevent execution. Idempotent by idempotencyKey. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001). */
+export interface HumanApprovalDecision {
+  readonly correlationId: Identifier;
+  readonly decidedAt: Timestamp;
+  readonly decision: string;
+  readonly idempotencyKey: Identifier;
+  readonly operatorId: Identifier;
+  readonly requestId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly note?: string | null;
+  readonly sessionId?: string | null;
+}
+
+/** A bounded request for operator authorization before a consequential action. Authored by the governance kernel / execution plane; decided by a human operator. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001). */
+export interface HumanApprovalRequest {
+  readonly correlationId: Identifier;
+  readonly createdAt: Timestamp;
+  readonly expiresAt: Timestamp;
+  readonly missionId: Identifier;
+  readonly operation: string;
+  readonly policyReason: string;
+  readonly requestId: Identifier;
+  readonly requestedBy: ActorRef;
+  readonly requestedCapability: string;
+  readonly resource: string;
+  readonly riskClassification: RiskClassification;
+  readonly schemaVersion: SchemaVersion;
+  readonly scope: Readonly<Record<string, unknown>>;
+  readonly taskId: Identifier;
+  readonly remainingUses?: number | null;
+}
+
+/** A human operator principal. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface HumanIdentity {
+  readonly operatorId: Identifier;
+  readonly principalId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly displayName?: string | null;
+}
+
 /** Opaque, caller-minted identifier. Bounded charset prevents injection into paths, SQL, and log lines. */
 export type Identifier = string;
+
+/** Cryptographic or process attestation that a principal is who it claims. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface IdentityAttestation {
+  readonly digest: Digest;
+  readonly method: string;
+  readonly schemaVersion: SchemaVersion;
+}
+
+/** Human-governed promotion decision for a model candidate. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface LearningPromotionDecision {
+  readonly decidedAt: Timestamp;
+  readonly decidedBy: Identifier;
+  readonly decision: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly reason?: string | null;
+}
+
+/** A registered learning strategy (GRPO/SFT/DPO/ORPO/KTO/RLOO). Interfaces only; no live training in M0. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface LearningStrategy {
+  readonly kind: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly strategyId: Identifier;
+  readonly enabled?: boolean;
+}
+
+/** Typed mandatory memory query emitted by CAPT when a retrieval trigger fires. No anonymous text blobs. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001). */
+export interface MemoryQuery {
+  readonly actor: string;
+  readonly contextUsage: number;
+  readonly correlationId: Identifier;
+  readonly missionId: Identifier;
+  readonly purpose: string;
+  readonly recordLimit: number;
+  readonly requestedMemoryClasses: readonly string[];
+  readonly requestingSubsystem: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly taskId: Identifier;
+  readonly tokenBudget: number;
+  readonly triggerBoundary: number;
+  readonly causationId?: string | null;
+  readonly consentScope?: string | null;
+  readonly driverRunId?: string | null;
+  readonly projectScope?: string | null;
+  readonly provenanceRequirement?: string | null;
+  readonly relevanceCriteria?: string | null;
+  readonly sensitivityAllowance?: string | null;
+  readonly timeRange?: unknown | null;
+  readonly trustThreshold?: number;
+}
+
+/** A returned memory record with full provenance and governance metadata. No anonymous text blobs. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001). */
+export interface MemoryRecord {
+  readonly consent: string;
+  readonly digest: string;
+  readonly memoryClass: string;
+  readonly owner: string;
+  readonly provenance: string;
+  readonly recordId: Identifier;
+  readonly sensitivity: string;
+  readonly source: string;
+  readonly trust: string;
+  readonly verificationStatus: string;
+  readonly conflictState?: string | null;
+  readonly createdAt?: string | null;
+  readonly downstreamUseRestriction?: string | null;
+  readonly expiresAt?: string | null;
+  readonly lastVerifiedAt?: string | null;
+  readonly retrievalReason?: string;
+  readonly retrievalScore?: number;
+  readonly stale?: boolean;
+}
+
+/** CAPT-owned mandatory memory trigger policy. The trigger interval is a fixed 32,768 tokens; each trigger type has an independent step count. Drivers and the desktop may not widen a higher-authority bound. Additive M1-memory extension under contract 1.0.0 (ADR-DT-M1-MEM-001). */
+export interface MemoryTriggerPolicy {
+  readonly checkpointTriggerSteps: number;
+  readonly compressionTriggerSteps: number;
+  readonly consolidationTriggerSteps: number;
+  readonly hardStopTriggerSteps: number;
+  readonly modelSafeLimitSteps: number;
+  readonly policyVersion: number;
+  readonly retrievalTriggerSteps: number;
+  readonly schemaVersion: SchemaVersion;
+  readonly source: string;
+  readonly triggerIntervalTokens: unknown;
+  readonly operatorId?: string | null;
+  readonly policyDigest?: string | null;
+  readonly previousPolicyDigest?: string | null;
+}
+
+/** A candidate model produced by isolated training, awaiting offline evaluation. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface ModelCandidate {
+  readonly artifactDigest: Digest;
+  readonly candidateId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly sourceTrajectoryId: Identifier;
+}
+
+/** A model principal referenced by a driver. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface ModelIdentity {
+  readonly modelId: Identifier;
+  readonly modelName: string;
+  readonly principalId: Identifier;
+  readonly provider: string;
+  readonly schemaVersion: SchemaVersion;
+}
+
+/** A receipt for an artifact mutation (create/update/delete) within a workspace. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface MutationReceipt {
+  readonly artifactPath: string;
+  readonly contentDigest: Digest;
+  readonly operation: string;
+  readonly receiptId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly verified: boolean;
+}
+
+/** High-level operator intent submitted to CAPT Runtime to create a bounded mission. The runtime owns all planning: it constructs the MissionSpec, TaskNode, and (when requiresApproval) HumanApprovalRequest from this intent. The desktop never builds aggregates. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001). */
+export interface OperatorMissionIntent {
+  readonly missionId: Identifier;
+  readonly objective: string;
+  readonly requiresApproval: boolean;
+  readonly schemaVersion: SchemaVersion;
+  readonly scope: Readonly<Record<string, unknown>>;
+  readonly budget?: unknown | null;
+  readonly constraints?: readonly Readonly<Record<string, unknown>>[];
+  readonly normalizedRequest?: string | null;
+  readonly operation?: string | null;
+  readonly policyReason?: string | null;
+  readonly rawRequest?: string | null;
+  readonly requestId?: string | null;
+  readonly requestedCapability?: string;
+  readonly resource?: string | null;
+  readonly riskClassification?: RiskClassification;
+  readonly successCriteria?: readonly Readonly<Record<string, unknown>>[];
+  readonly taskId?: string | null;
+  readonly terminationCriteria?: readonly Readonly<Record<string, unknown>>[];
+  readonly unresolvedAmbiguities?: readonly string[];
+}
+
+/** A bounded filesystem scope for an artifact workspace. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface PathScope {
+  readonly allowedPaths: readonly string[];
+  readonly rootPath: string;
+  readonly schemaVersion: SchemaVersion;
+}
+
+/** The actor on whose behalf authority is exercised. Identity establishes the actor; delegation transfers bounded authority; governance evaluates; capability issuance grants permission. Additive plane-convergence extension under contract 1.0.0 (ADR-DT-PLANE-CONV). */
+export interface Principal {
+  readonly attestation: IdentityAttestation;
+  readonly kind: string;
+  readonly principalId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly displayName?: string | null;
+}
 
 /** never: no automatic re-execution. safe: externally idempotent. verify-before-retry: observe external state first (ADR-0108). */
 export type ReplayPolicy = "never" | "safe" | "verify-before-retry";
@@ -417,17 +714,124 @@ export const ReplayPolicyValues = [
   "verify-before-retry",
 ] as const;
 
+/** A revocation of a principal, delegation, or session. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface RevocationRecord {
+  readonly reason: string;
+  readonly revocationId: Identifier;
+  readonly revokedAt: Timestamp;
+  readonly schemaVersion: SchemaVersion;
+  readonly targetId: Identifier;
+}
+
+/** A compiled reward signal for a trajectory segment. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface RewardSignal {
+  readonly schemaVersion: SchemaVersion;
+  readonly signalId: Identifier;
+  readonly trajectoryId: Identifier;
+  readonly value: number;
+}
+
+/** Operator-facing risk band for a bounded approval request. Advisory only; CAPT authority invariants remain the sole enforcement path. */
+export type RiskClassification = "none" | "low" | "medium" | "high" | "consequential";
+export const RiskClassificationValues = [
+  "none",
+  "low",
+  "medium",
+  "high",
+  "consequential",
+] as const;
+
+/** The CAPT runtime instance principal. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface RuntimeIdentity {
+  readonly principalId: Identifier;
+  readonly runtimeId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly version: string;
+}
+
 /** Contract-set version. Readers MUST reject an unequal value (ADR-0101). */
 export type SchemaVersion = "1.0.0";
 
 /** SequenceNumber */
 export type SequenceNumber = number;
 
+/** A bounded session under which authority is exercised. A session token alone must never become unrestricted authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface SessionIdentity {
+  readonly expiresAt: Timestamp;
+  readonly issuedAt: Timestamp;
+  readonly principalId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly sessionId: string;
+}
+
+/** An isolated simulation environment with frozen initial state. Never inherits production authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface SimulationEnvironment {
+  readonly datasetDigest: Digest;
+  readonly environmentDigest: Digest;
+  readonly isSimulation: unknown;
+  readonly schemaVersion: SchemaVersion;
+  readonly simId: Identifier;
+  readonly productionAuthority?: unknown;
+}
+
+/** An explicit marker that an artifact/result was produced in simulation and must never become production state. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface SimulationMarker {
+  readonly kind: string;
+  readonly markerId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly simId: Identifier;
+}
+
 /** Aggregate stream identifier. The prefix declares the owning aggregate (ADR-0103) and is enforced by the store. */
 export type StreamId = string;
 
+/** Canonical temporal model distinguishing wall-clock, monotonic, logical, causal, mission-relative, lease, policy-effective, evidence-observation, verification, memory-freshness, training-cutoff, and replay times. Additive plane-convergence extension (ADR-DT-PLANE-CONV). Not a Time Plane. */
+export interface TemporalContext {
+  readonly causal: string;
+  readonly logical: number;
+  readonly missionRelative: number;
+  readonly monotonic: number;
+  readonly schemaVersion: SchemaVersion;
+  readonly wallClock: Timestamp;
+  readonly evidenceObservation?: string | null;
+  readonly leaseExpiration?: string | null;
+  readonly memoryFreshness?: string | null;
+  readonly policyEffective?: string | null;
+  readonly replayTime?: string | null;
+  readonly trainingCutoff?: string | null;
+  readonly verificationTime?: string | null;
+}
+
 /** RFC 3339 UTC instant. Descriptive only: never used for ordering or conflict resolution (ADR-0106). */
 export type Timestamp = string;
+
+/** An immutable record of a mission execution trajectory, admissible to Learning only after verification + ClaimGuard. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface TrajectoryRecord {
+  readonly claimGuardPassed: boolean;
+  readonly missionId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly trajectoryId: Identifier;
+  readonly verified: boolean;
+  readonly evidenceRef?: string | null;
+}
+
+/** An isolated worktree/staging directory for artifact production. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface WorkspaceDescriptor {
+  readonly pathScope: PathScope;
+  readonly rootPath: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly workspaceId: Identifier;
+}
+
+/** A time-boxed, scoped lease over a workspace. Additive plane-convergence extension (ADR-DT-PLANE-CONV). */
+export interface WorkspaceLease {
+  readonly expiresAt: Timestamp;
+  readonly issuedAt: Timestamp;
+  readonly leaseId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly state: string;
+  readonly workspaceId: Identifier;
+}
 
 /** Minimal read-only projection handed to a driver. MUST NOT contain governance, policy, claim, capability-graph, ledger, or aggregate references (ADR-0125). */
 export interface ContextSlice {
@@ -438,6 +842,7 @@ export interface ContextSlice {
   readonly permittedTools: readonly string[];
   readonly schemaVersion: SchemaVersion;
   readonly terminationConditions: DriverTerminationCondition;
+  readonly contextPackRef?: unknown | null;
   readonly networkPolicy?: NetworkPolicy;
 }
 
@@ -655,6 +1060,7 @@ export interface ExecutionDriverWorkOrder {
   readonly schemaVersion: SchemaVersion;
   readonly taskId: Identifier;
   readonly workOrderVersion: number;
+  readonly memoryPolicyRef?: unknown | null;
 }
 
 /** Descriptor for an artifact a driver may create in the CAPT staging area. */
@@ -791,6 +1197,7 @@ export type EventPayload =
   | MissionResumedPayload
   | TaskCreatedPayload
   | TaskTransitionedPayload
+  | TaskResultSubmittedPayload
   | CapabilityGrantedPayload
   | CapabilityLeaseActivatedPayload
   | CapabilityUseReservedPayload
@@ -802,10 +1209,12 @@ export type EventPayload =
   | ClaimCreatedPayload
   | EvidenceRecordedPayload
   | ClaimVerifiedPayload
-  | ClaimGuardDecidedPayload;
+  | ClaimGuardDecidedPayload
+  | HumanApprovalRequestedPayload
+  | HumanApprovalDecidedPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -814,6 +1223,7 @@ export const EventTypeValues = [
   "MissionResumed",
   "TaskCreated",
   "TaskTransitioned",
+  "TaskResultSubmitted",
   "CapabilityGranted",
   "CapabilityLeaseActivated",
   "CapabilityUseReserved",
@@ -826,12 +1236,26 @@ export const EventTypeValues = [
   "EvidenceRecorded",
   "ClaimVerified",
   "ClaimGuardDecided",
+  "HumanApprovalRequested",
+  "HumanApprovalDecided",
 ] as const;
 
 /** EvidenceRecordedPayload */
 export interface EvidenceRecordedPayload {
   readonly eventType: "EvidenceRecorded";
   readonly evidence: EvidenceRecord;
+}
+
+/** HumanApprovalDecidedPayload */
+export interface HumanApprovalDecidedPayload {
+  readonly decision: HumanApprovalDecision;
+  readonly eventType: "HumanApprovalDecided";
+}
+
+/** HumanApprovalRequestedPayload */
+export interface HumanApprovalRequestedPayload {
+  readonly eventType: "HumanApprovalRequested";
+  readonly request: HumanApprovalRequest;
 }
 
 /** MissionCreatedPayload */
@@ -865,6 +1289,14 @@ export interface PolicyEvaluatedPayload {
 export interface TaskCreatedPayload {
   readonly eventType: "TaskCreated";
   readonly task: TaskNode;
+}
+
+/** TaskResultSubmittedPayload */
+export interface TaskResultSubmittedPayload {
+  readonly eventType: "TaskResultSubmitted";
+  readonly resultRef: string;
+  readonly taskId: Identifier;
+  readonly toState: TaskState;
 }
 
 /** TaskTransitionedPayload */

@@ -128,6 +128,7 @@ class TaskAggregate(object):
             "task.recoveryState",
             "task.dependencies",
             "task.consequential",
+            "task.resultRefs",
         }
     )
     REFERENCE_FIELDS = frozenset({"taskId", "missionId"})
@@ -141,13 +142,16 @@ class TaskAggregate(object):
         return {
             "taskId": node["taskId"],
             "missionId": node["missionId"],
+            "title": node["title"],
             "state": node.get("state", "pending"),
+            "capabilityRequirements": node["capabilityRequirements"],
             "attempt": node.get("attempt", 0),
             "maxAttempts": node.get("maxAttempts", 1),
             "assignedDriverId": node.get("assignedDriverId"),
             "recoveryState": node.get("recoveryState", "none"),
             "dependencies": node.get("dependencies", []),
             "consequential": node.get("consequential", False),
+            "resultRefs": [],
         }
 
     @staticmethod
@@ -174,4 +178,14 @@ class TaskAggregate(object):
                 )
         if driver_id is not None:
             nxt["assignedDriverId"] = driver_id
+        return nxt
+
+    @staticmethod
+    def record_result(state: Dict[str, Any], result_ref: str) -> Dict[str, Any]:
+        """Record an immutable result reference without importing result content."""
+        nxt = dict(state)
+        refs = list(nxt["resultRefs"])
+        if result_ref not in refs:
+            refs.append(result_ref)
+        nxt["resultRefs"] = refs
         return nxt

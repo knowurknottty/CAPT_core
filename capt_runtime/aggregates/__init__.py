@@ -2,6 +2,7 @@
 
 from .capability import CapabilityAggregate, scope_contains
 from .claim_driver import ClaimAggregate, DriverRunAggregate
+from .human_approval import HumanApprovalAggregate
 from .mission_task import MissionAggregate, TaskAggregate
 
 ALL_AGGREGATES = (
@@ -10,6 +11,7 @@ ALL_AGGREGATES = (
     CapabilityAggregate,
     DriverRunAggregate,
     ClaimAggregate,
+    HumanApprovalAggregate,
 )
 
 __all__ = [
@@ -17,6 +19,7 @@ __all__ = [
     "CapabilityAggregate",
     "ClaimAggregate",
     "DriverRunAggregate",
+    "HumanApprovalAggregate",
     "MissionAggregate",
     "TaskAggregate",
     "scope_contains",

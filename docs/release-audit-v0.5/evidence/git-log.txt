@@ -1,0 +1,8 @@
+b45c4b0 fix(runtime): reject idempotency key reuse with conflicting payload
+6737f2c fix(harness): use ClaimGuard allowlisted claim for model task
+6af19cd fix(client): decouple command recv timeout from connect timeout
+ac6d057 fix(harness): grant artifact.create in model operator lease
+3aa1be5 fix(harness): drop non-contract field from OperatorMissionIntent
+cb8089d feat(harness): advertise governed Hermes model operator capability
+554ff15 feat(harness): expose governed Hermes model operator
+7475dcf feat(runtime): resolve driver tasks from authoritative task references
