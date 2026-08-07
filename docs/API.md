@@ -1,10 +1,15 @@
-# CAPT Solo API Reference
+# CAPT Public Integration Reference
 
-**Use `capt_solo.api` for supported integrations.**
+CAPT Core exposes two supported public surfaces:
 
-This page starts with the smallest useful example, then expands into the full API surface. The Hermes plugin exposes the same supported boundary as named tools.
+1. `capt_solo.api` for in-process CAPT Solo integrations.
+2. The installed `capt harness` CLI for governed runtime lifecycle and bounded execution.
 
-## Start here
+They serve different purposes and should not be treated as interchangeable.
+
+## CAPT Solo API
+
+Use `capt_solo.api` for persistent local memory, CTP transactions, KHSB coordination, and proof-governed domain services.
 
 ```python
 from capt_solo.api import MemoryEngine, CTPRuntime
@@ -21,276 +26,115 @@ tx_id = ctp.begin(meta={"action": "example"})
 ctp.commit(tx_id)
 ```
 
-Use `capt_solo.api` rather than importing internal modules directly. Internal implementations may evolve while the public boundary remains stable.
+Use the public API rather than importing internal modules directly.
 
-## Choose the capability you need
+### Core CAPT Solo capabilities
 
 | Need | Public entry point |
 |---|---|
-| Store and search durable local memory | `MemoryEngine` |
-| Record transactional work and recovery state | `CTPRuntime` |
+| Store and search durable local knowledge | `MemoryEngine` |
+| Record operational transactions and recovery state | `CTPRuntime` |
 | Coordinate local in-process messages | `KHSB` |
-| Work with proof-governed capabilities and skills | Foundry APIs |
-| Call CAPT from Hermes | `capt_solo.plugin` tools |
+| Evaluate evidence and capability state | Foundry and proof APIs |
+| Guard unsupported claims | `ClaimGuard` |
 
-## Memory Engine
+### Memory Engine
 
-### `MemoryEngine(db_path=None)`
+`MemoryEngine` is SQLite-backed persistent local storage. It supports store, get, update, delete, search, list, import/export, backup/restore, integrity checks, and pluggable search adapters.
 
-SQLite-backed storage. With no path, it uses the default local CAPT data directory.
+It is distinct from the Runtime Memory Governor. The Memory Engine stores durable knowledge; the Runtime Memory Governor controls bounded runtime context and trigger policy.
 
-```python
-from capt_solo.api import MemoryEngine
+### CTP Runtime
 
-engine = MemoryEngine()
-engine.store(
-    "Release candidate requires independent verification.",
-    namespace="release",
-    tags=["audit"],
-    provenance="maintainer",
-    confidence=0.95,
-)
+`CTPRuntime` records operational transaction boundaries, receipts, idempotency, correlation identifiers, and recovery state.
 
-matches = engine.search("independent verification")
+CTP does not own the standalone runtime's authoritative event ledger. EventStore owns that authority.
+
+### KHSB
+
+`KHSB` provides local in-process publish/subscribe and request/reply behavior. It is not durable, cross-process, or distributed.
+
+### Foundry and proof APIs
+
+The public domain APIs include proof evidence, capability lifecycle, ClaimGuard, governed skill lifecycle, workflow proof, Knowledge Bubbles, and governance records.
+
+A generated or importable component is not automatically verified.
+
+## CAPT Runtime Harness
+
+Use the installed harness for governed runtime lifecycle:
+
+```zsh
+capt harness start
+capt harness health
+capt harness capabilities
+capt harness stop
 ```
 
-| Method | Returns | Notes |
-|---|---|---|
-| `store(content, *, namespace="default", tags=None, provenance="unknown", confidence=1.0, metadata=None)` | `Memory` | Rejects empty content and confidence outside `[0,1]`. |
-| `get(memory_id)` | `Memory \| None` | Returns one record when present. |
-| `update(memory_id, *, content=None, namespace=None, tags=None, provenance=None, confidence=None, metadata=None)` | `Memory` | Raises if the ID is missing. |
-| `delete(memory_id)` | `bool` | `True` when removed. |
-| `search(query, *, limit=10, namespace=None, tags=None)` | `list[Memory]` | Uses the active search adapter. |
-| `list(*, namespace=None, tags=None, limit=100)` | `list[Memory]` | Newest first. |
-| `export_json(path=None)` | `Path` | Human-readable export. |
-| `import_json(path, *, merge=True)` | `int` | Returns the number imported. |
-| `backup(path=None)` | `Path` | Creates a self-contained database copy. |
-| `restore(path)` | `None` | Replaces the live database from backup. |
-| `integrity_check()` | `bool` | SQLite integrity plus referential checks. |
-| `set_search_adapter(adapter)` | `None` | Replaces the search backend. |
-| `close()` | `None` | Commits and closes the connection. |
+Inspect the exact installed command surface with:
 
-### `Memory`
-
-Fields:
-
-`memory_id, content, namespace, tags, provenance, confidence, metadata, created_at, updated_at`
-
-Method: `to_dict()`.
-
-### `SearchAdapter`
-
-Interface:
-
-```python
-index(memory_id, text, metadata)
-remove(memory_id)
-search(query, limit=10) -> list[SearchHit]
-clear()
+```zsh
+capt harness --help
+capt harness command --help
 ```
 
-The default `KeywordSearchAdapter` is deterministic and dependency-free.
+The harness owns:
 
-## CTP Runtime
+- authenticated RuntimeService access;
+- EventStore persistence and replay;
+- TaskResolver;
+- DriverHost;
+- Runtime Memory Governor;
+- ContextPack construction and rotation;
+- idempotent command handling;
+- checkpoint and restart continuity;
+- bounded external-driver execution;
+- persisted evidence and verification state.
 
-### `CTPRuntime(journal_dir=None)`
+The currently proven Hermes-facing operator action is bounded read-only inspection. General unrestricted repository engineering is not claimed.
 
-Append-only transactional execution with receipts and recovery.
+## External clients and compatibility layers
 
-```python
-from capt_solo.api import CTPRuntime
+Hermes and other callers are external clients. A compatibility skill or adapter may invoke the installed CAPT surface, but it must not reconstruct CAPT behavior or assume runtime authority.
 
-ctp = CTPRuntime()
-tx_id = ctp.begin(
-    correlation_id="release-2026-07",
-    idempotency_key="publish-candidate-1",
-)
-
-if ctp.validate(tx_id, {"tests_passed": True}):
-    receipt = ctp.commit(tx_id)
-else:
-    receipt = ctp.abort(tx_id)
-```
-
-| Method | Returns | Notes |
-|---|---|---|
-| `begin(correlation_id=None, idempotency_key=None, meta=None)` | `str` | Raises when a finalized idempotency key is reused. |
-| `validate(tx_id, checks)` | `bool` | Records validation in the journal. |
-| `commit(tx_id)` | `Receipt` | Finalizes a successful transaction. |
-| `abort(tx_id)` | `Receipt` | Finalizes an aborted transaction while preserving history. |
-| `note(tx_id, note)` | `None` | Adds an audit note. |
-| `get_receipt(tx_id)` | `Receipt \| None` | Returns a finalized receipt. |
-| `audit_trail(tx_id)` | `list[dict]` | Returns all events for a transaction. |
-| `recover()` | `list[str]` | Returns unfinished transaction IDs. |
-| `integrity_check()` | `bool` | Verifies journal integrity. |
-
-### `Receipt`
-
-Fields:
-
-`tx_id, status, correlation_id, idempotency_key, committed_at, events`
-
-Method: `to_dict()`.
-
-## KHSB Message Bus
-
-### `KHSB()`
-
-Local, in-process coordination with publish/subscribe and request/reply behavior.
-
-| Method | Returns | Notes |
-|---|---|---|
-| `publish(topic, payload, correlation_id=None)` | `str` | Returns a message ID. |
-| `subscribe(topic, handler)` | `str` | Registers `handler(Message)`. |
-| `unsubscribe(subscription_id)` | `bool` | Removes a subscription. |
-| `request(topic, payload, *, timeout=5.0)` | `Any` | Raises `BusError` on timeout. |
-| `reply(request_message, payload)` | `str` | Replies to a request message. |
-| `ack(message_id)` | `None` | Marks a message acknowledged. |
-| `is_acked(message_id)` | `bool` | Checks acknowledgement state. |
-| `pending_messages(topic=None)` | `list[dict]` | Lists pending messages. |
-| `reset()` | `None` | Clears in-process state. |
-
-### `Message`
-
-Fields:
-
-`message_id, topic, payload, correlation_id, reply_to, ts, type`
-
-Method: `to_dict()`.
-
-## Hermes Plugin Tools
-
-The Hermes plugin exposes supported CAPT operations as named tools. Common examples:
-
-| Tool | Maps to |
-|---|---|
-| `capt_store_memory` | `MemoryEngine.store` |
-| `capt_search_memory` | `MemoryEngine.search` |
-| `capt_get_memory` | `MemoryEngine.get` |
-| `capt_begin_transaction` | `CTPRuntime.begin` |
-| `capt_commit_transaction` | `CTPRuntime.commit` |
-| `capt_abort_transaction` | `CTPRuntime.abort` |
-| `capt_send_message` | `KHSB.publish` |
-| `capt_health` | runtime health |
-| `capt_export_project` | `MemoryEngine.export_json` |
-| `capt_import_project` | `MemoryEngine.import_json` |
-
-Plugin calls return a dictionary with an `ok` boolean. Error paths return an error object rather than raising into Hermes.
-
-See [Plugin Guide](PLUGIN_GUIDE.md) for the full public tool inventory.
-
-## Foundry APIs
-
-Foundry adds evidence, capability lifecycles, ClaimGuard, governed skills, workflows, and Knowledge Bubbles.
-
-### `ProofEngine(conn)`
-
-Records evidence and evaluates it against requirements.
-
-| Method | Purpose |
-|---|---|
-| `record(...)` | Store one evidence object. |
-| `get(evidence_id)` | Retrieve evidence. |
-| `aggregate(capability_id)` | Evaluate requirement satisfaction. |
-| `set_requirements(scope, requirements)` | Replace requirements for a scope. |
-| `get_requirements(scope)` | Read requirements for a scope. |
-
-### `CapabilityRegistry(conn, proof)`
-
-Tracks capability state and degradation.
-
-Primary lifecycle:
+Canonical boundary:
 
 ```text
-candidate -> validated -> proven -> verified
+external client -> installed CAPT public surface -> CAPT-owned runtime path
 ```
 
-Additional states include experimental, degraded, deprecated, and revoked.
+Prohibited boundary:
 
-Important methods:
-
-- `register(...)`
-- `verify(...)`
-- `mark_proven(...)`
-- `govern_approve(...)`
-- `degrade(...)`
-- `get_degradations(...)`
-- `get(...)`
-
-### `SkillFoundry(conn, proof, procedure_store)`
-
-Moves generated skills through validation, review, approval, publication, deprecation, and revocation.
-
-Important methods:
-
-- `create_candidate(...)`
-- `build_skill(...)`
-- `validate(...)`
-- `submit_for_review(...)`
-- `approve(...)`
-- `publish(...)`
-- `deprecate(...)`
-- `revoke(...)`
-
-### `ClaimGuard(registry, proof)`
-
-```python
-verdict = claim_guard.verify_claim(
-    "The release is verified.",
-    capability_id="release-verification",
-)
+```text
+external client -> prompt convention -> reconstructed CAPT behavior
 ```
 
-Returns a `ClaimVerdict` containing support status, lifecycle state, and governed language. Unsupported claims are downgraded rather than presented as verified.
+The historical Hermes compatibility skill has been moved out of CAPT Core for modernization against the v0.5 harness.
 
-### `WorkflowProofEngine(conn, foundry, proof)`
+## Reachability classifications
 
-Evaluates composed workflows independently of their component verification.
+Documentation and release evidence distinguish:
 
-Important methods:
+- packaged;
+- importable API;
+- API-only;
+- internal runtime service;
+- operator-facing;
+- local real-process proven;
+- hosted-CI proven;
+- deferred;
+- unproven.
 
-- `evaluate(...)`
-- `record_evidence(...)`
-- `validate()`
+Do not infer operator availability from package inclusion alone.
 
-### `KnowledgeBubbleRuntime(conn, foundry)`
+## Evidence and release status
 
-Builds, imports, validates, approves, installs, and exports governed packages.
-
-Imported bubbles are quarantined by default.
-
-Important methods:
-
-- `build_bubble(...)`
-- `import_bubble(...)`
-- `validate_bubble(...)`
-- `approve_bubble(...)`
-- `install_bubble(...)`
-
-### `Governance(conn, ctp, *, foundry, registry, bubbles)`
-
-Wraps consequential actions in CTP transactions and audit records.
-
-### `SkillCurator(foundry)`
-
-Detects duplicate, overlapping, unsafe, incomplete, or obsolete skill definitions and returns recommendations.
-
-## Errors
-
-Public errors derive from `CaptSoloError`:
-
-- `MemoryError_`
-- `TransactionError`
-- `IdempotencyError`
-- `BusError`
-- `IntegrityError`
-- `ConfigurationError`
-- `MigrationBackupError`
+See [`release_evidence/v0.5`](../release_evidence/v0.5) for exact wheel identities, test matrices, skip reasons, runtime lifecycle evidence, and requirement-to-evidence mappings.
 
 ## Related documentation
 
-- [Quickstart and project overview](../README.md)
+- [Project overview](../README.md)
 - [Architecture](ARCHITECTURE.md)
-- [Plugin Guide](PLUGIN_GUIDE.md)
-- [Skill Guide](SKILL_GUIDE.md)
-- [Extending CAPT](EXTENDING.md)
+- [Runtime and integration guide](PLUGIN_GUIDE.md)
+- [Security boundaries](SECURITY.md)
+- [Whitepaper](WHITEPAPER.md)
