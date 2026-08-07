@@ -1,77 +1,85 @@
-# CAPT Solo v0.1 — Roadmap
+# CAPT Core Roadmap
 
-This is the **smallest stable public foundation**. The items below are reserved
-extension points — they are NOT in v0.1 and have no code behind them yet.
+This roadmap separates **released**, **next**, and **future** work. Historical milestones are preserved without being mislabeled as the current release.
 
-## v0.1 (this release) — DONE
+## Current release: v0.5
 
-- [x] Local-first Memory Engine (SQLite) with tags, namespaces, provenance,
-      confidence, metadata, export/import, backup.
-- [x] CTP append-only transaction journal with receipts, idempotency, correlation
-      ids, audit trail, and crash recovery.
-- [x] KHSB in-process message bus (publish/subscribe/request/reply/timeout/ack).
-- [x] Hermes plugin with 10 stable public tools.
-- [x] 8 beginner-friendly skills.
-- [x] One-command install / doctor / uninstall / verify.
-- [x] Production docs (9 files).
-- [x] Automated tests, 95%+ public-surface coverage.
-- [x] Versioned schema with migration hook.
+Released and evidenced:
 
-## v0.2 (candidates)
+- [x] CAPT Solo local Memory Engine with provenance, confidence, metadata, import/export, backup, and integrity checks.
+- [x] CTP operational transaction journal with receipts, idempotency, correlation IDs, and recovery state.
+- [x] KHSB in-process coordination.
+- [x] Proof Engine, Capability Registry, ClaimGuard, Skill Foundry, Workflow Proof, and Knowledge Bubble lifecycle controls.
+- [x] EventStore authoritative runtime event ledger with ordered persistence and replay.
+- [x] Authenticated standalone harness service.
+- [x] TaskResolver and DriverHost composition.
+- [x] Checkpoint, restart, and no-repeat resume behavior.
+- [x] Runtime Memory Governor, ContextPack construction, rotation, stale-pack rejection, and budget enforcement.
+- [x] Packaged Hermes and OpenHarness driver surfaces.
+- [x] Bounded read-only Hermes operator action proven locally through an installed wheel.
+- [x] Python 3.10 and 3.12 hosted CI for build, install, import, package inspection, contracts, regression tests, secrets, and dependency audit.
+- [x] Versioned release evidence under `release_evidence/v0.5`.
 
-- [ ] Vector search adapter reference implementation (pluggable, opt-in).
-- [ ] `capt_health` richer report (per-subsystem latency, counts).
-- [ ] Backup rotation / retention policy.
-- [ ] Encrypted export/backup (`--encrypt`).
+Explicit boundaries:
 
-## v0.3 (candidates)
+- General unrestricted model-driven repository engineering is not proven.
+- KHSB is not durable or cross-process.
+- CTP is not the authoritative EventStore ledger.
+- The CAPT Solo Memory Engine and Runtime Memory Governor are distinct.
+- Hosted CI does not rerun the external Hermes/provider lifecycle.
+- Hosted security status is degraded when the private optional anti-token-extraction dependency cannot be verified.
 
-- [ ] Distributed KHSB transport (networking behind a config flag, off by default).
-- [ ] Remote memory store backend (same public API).
-- [ ] GPG-signed CTP receipts.
+## Near-term hardening
 
-## v0.4 (this release) — DONE
+- [ ] Modernize package license metadata and raise the setuptools floor deliberately.
+- [ ] Restore a meaningful scoped or changed-line coverage policy.
+- [ ] Review PR #28 history and port only still-relevant adversarial OpenHarness tests to the canonical DriverHost implementation.
+- [ ] Rewrite the external Hermes compatibility skill against the v0.5 `capt harness` command surface.
+- [ ] Independently validate the rewritten Hermes compatibility package before moving it from Treasure Chest to a dedicated repository.
+- [ ] Add a documented private vulnerability-reporting channel.
+- [ ] Add a concise post-merge release attestation linking runtime source, evidence, wheel, and merge identities.
 
-- [x] Skill Foundry (procedure → skill → 12-stage validate → review → publish).
-- [x] Proof Engine (evidence + aggregation).
-- [x] Capability Registry (candidate→validated→proven→verified; 12 degradation codes).
-- [x] ClaimGuard (claim validation + scoped degradation language).
-- [x] Knowledge Bubble Runtime (v2 manifest, 12-step validation, quarantine-default).
-- [x] Governance Layer (CTP-bounded, audited).
-- [x] Workflow Proof Engine (composed workflows carry independent proof).
-- [x] Migration safety gate (backup-gated, abort on failure).
-- [x] CLI `foundry` group + 10 new plugin tools (46 total).
-- [x] Doctor/verify extensions + boundary audit.
-- [x] 348 tests passing; verify_runtime 5/5 sections.
+## Runtime usability
 
-## v0.4.1 (this release) — DONE
+- [ ] Improve installed CLI discoverability and examples for harness commands.
+- [ ] Complete a polished operator-facing TUI or desktop workflow without moving authority out of RuntimeService.
+- [ ] Add model-adapter configuration guides for local-first runtimes.
+- [ ] Expand bounded operator actions only with explicit capability, lease, verification, and adversarial tests.
 
-- [x] Anti-Token-Extraction component (optional, independently degradable).
-- [x] Local child-process stdio only; cache mode off; sensitive-input refusal.
-- [x] Pinned upstream repo + commit recorded in component manifest.
-- [x] Legacy cache purge on bootstrap/upgrade.
-- [x] Hermes MCP template (stdio, no creds, isolation metadata).
-- [x] Capability registry + installer + doctor + verify_runtime + docs updated.
-- [x] 9 required integration tests; all 17 v0.4 release gates remain green.
-- [x] Plugin tool `capt_anti_token_extraction_status` (47 total).
+## Security and trust
 
-## v1.0 (candidates)
+- [ ] Optional encrypted backup and export.
+- [ ] Cryptographically signed release attestations and receipts.
+- [ ] Cryptographic Knowledge Bubble signature verification.
+- [ ] Stronger process isolation for optional external drivers.
+- [ ] Multi-user identity and authorization as a separate higher-trust profile.
 
-- [ ] Multi-agent federation via CTP correlation ids.
-- [ ] bioCAPT integration as a local memory consumer.
-- [ ] Web UI for memory browsing (local-only, no network).
-- [ ] Signed bubble verification (signature_metadata is placeholder in v0.4).
-- [ ] Automated re-verification on environment change.
+## Memory and context
 
-## Non-goals (explicitly out of scope)
+- [ ] Additional retrieval adapters behind the existing memory boundary.
+- [ ] Cross-model continuity demonstrations using the same authoritative runtime state.
+- [ ] Better ContextPack observability and operator diagnostics.
+- [ ] Policy-driven retention, consolidation, and archival controls.
 
-- Cloud sync / multi-device live replication.
-- Hosting CAPT Solo as a service for untrusted users.
-- Replacing the full CAPT architecture — Solo is a foundation, not the whole.
+## Future architecture
+
+These are directions, not implementation claims:
+
+- distributed or cross-process KHSB transports;
+- alternate durable storage backends;
+- multi-agent federation;
+- additional audio, vision, and multimodal drivers;
+- remote stores behind authenticated interfaces;
+- signed and independently verifiable audit chains.
+
+## Historical milestones
+
+Earlier versions established the CAPT Solo Memory Engine, CTP, KHSB, Foundry, proof, ClaimGuard, Knowledge Bubbles, migration safeguards, and optional anti-token-extraction integration. Their exact historical test and tool counts are retained in release history and evidence documents, not treated as current v0.5 status.
 
 ## Versioning policy
 
-- **Major:** breaking change to a public signature in `capt_solo.api` or a
-  plugin tool.
-- **Minor:** additive (new tool, new optional param, new extension point).
-- **Patch:** bug fix / doc / internal change with no public-surface change.
+- **Major:** breaking changes to supported public API or runtime contracts.
+- **Minor:** additive capabilities or supported integration surfaces.
+- **Patch:** fixes and documentation changes that preserve public contracts.
+
+A roadmap checkbox is not release evidence. A capability becomes a public release claim only after implementation, tests, preserved evidence, and documentation agree.
