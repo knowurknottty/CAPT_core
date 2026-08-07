@@ -108,8 +108,8 @@ Import them from `capt_solo.foundry`.
 | `CapabilityRegistry` | 13 |
 | `ClaimGuard` | 2 |
 | `ClaimVerdict` | 1 |
-| `ColumnDecodeError` | 2 |
-| `ComponentUnavailable` | 2 |
+| `ColumnDecodeError` | 0 |
+| `ComponentUnavailable` | 0 |
 | `CompositeWorkflow` | 1 |
 | `CompositionEngine` | 2 |
 | `CompositionStep` | 1 |
@@ -125,7 +125,7 @@ Import them from `capt_solo.foundry`.
 | `SkillCurator` | 2 |
 | `SkillFoundry` | 14 |
 | `StageResult` | 1 |
-| `UnsafeConfiguration` | 2 |
+| `UnsafeConfiguration` | 0 |
 | `ValidationHarness` | 1 |
 | `ValidationReport` | 1 |
 | `WorkflowProof` | 2 |

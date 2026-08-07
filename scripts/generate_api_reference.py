@@ -107,9 +107,15 @@ def render() -> str:
     for n in _api_public_names(foundry):
         obj = getattr(foundry, n)
         if isinstance(obj, type):
+            # Public method count is version-stable: exclude builtin protocol
+            # members inherited from BaseException (add_note added in 3.11,
+            # with_traceback) so the doc renders identically on CI 3.10/3.12.
+            _BUILTIN_EXC = {"with_traceback", "add_note", "__init__"}
             count = sum(
                 1 for m in dir(obj)
-                if not m.startswith("_") and callable(getattr(obj, m))
+                if not m.startswith("_")
+                and m not in _BUILTIN_EXC
+                and callable(getattr(obj, m))
             )
             md.append(f"| `{n}` | {count} |")
 
