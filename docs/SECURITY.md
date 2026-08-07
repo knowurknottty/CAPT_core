@@ -1,146 +1,139 @@
 # CAPT Core Security Boundaries
 
-CAPT Core is local-first by design. This document describes the protections
-implemented by the current CAPT Solo reference runtime, the trust assumptions it
-makes, and the controls it does **not** yet provide.
+CAPT Core is local-first by design. This document describes the protections implemented by CAPT Solo and the v0.5 Runtime Harness, the assumptions they make, and the controls they do not yet provide.
+
+## Trust model
+
+The current release assumes one trusted local operating-system user and account. The host operating system, filesystem permissions, Python runtime, and local account are part of the trusted computing base.
+
+CAPT Core is not currently a multi-user authorization service and does not defend against a compromised host account or process with equivalent filesystem access.
 
 ## Security goals
 
 The current runtime is designed to:
 
-- avoid mandatory cloud services and network egress
-- minimize secret handling
-- keep persistent state local and inspectable
-- preserve transaction integrity and crash recovery
-- prevent unsupported capability claims
-- quarantine imported governed packages before approval
-- attribute consequential actions to named actors
-- fail closed on unsafe migrations and validation failures
+- avoid mandatory cloud services and required network egress;
+- minimize secret handling;
+- keep persistent state local and inspectable;
+- authenticate local harness access;
+- preserve EventStore ordering, replay, and integrity evidence;
+- preserve CTP transaction receipts and recovery state;
+- reject duplicate or stale runtime operations where specified;
+- prevent unsupported capability and completion claims;
+- quarantine imported governed packages before approval;
+- attribute consequential actions to named actors;
+- fail closed on unsafe migrations and validation failures.
 
-## Trust model
+## Public security surfaces
 
-CAPT Solo currently assumes a single trusted local user and operating-system
-account. It is not a multi-user authorization service.
+### CAPT Solo API
 
-The host operating system, filesystem permissions, Python runtime, and local
-account are part of the trusted computing base.
+`capt_solo.api` exposes supported in-process memory, CTP, KHSB, and proof-governed services. Raw SQL and internal runtime mutation are not public integration contracts.
 
-## Architectural protections
+### CAPT Runtime Harness
 
-- **No required network egress.** The base runtime performs no telemetry, update
-  check, or remote database call.
-- **No external database.** Persistent state is stored in local SQLite files under
-  `~/.capt-solo`.
-- **No Docker requirement.** The runtime does not depend on a privileged container.
-- **No required API secrets.** Core operation does not require model-provider keys.
-- **Stable public boundary.** Public callers use `capt_solo.api`; raw SQL is kept
-  out of the public API and CLI surfaces.
+The installed `capt harness` surface communicates with an authenticated local RuntimeService. Runtime authority remains inside CAPT through EventStore, Memory Governor, ContextPack, TaskResolver, DriverHost, checkpointing, and recovery.
+
+External clients such as Hermes are callers. They do not become the runtime or system of record.
 
 ## Data at rest
 
-Memory, exports, backups, and transaction journals are plaintext unless protected
-by external filesystem or disk encryption.
+Memory, exports, backups, EventStore databases, and transaction journals are plaintext unless protected by host, filesystem, or disk encryption.
 
-Do not store credentials, access tokens, private keys, or unnecessary sensitive
-personal data in CAPT memory content or metadata.
+Do not store credentials, access tokens, private keys, or unnecessary sensitive personal data in CAPT memory or metadata.
 
-On multi-user systems, restrict the runtime directory appropriately, for example:
+Restrict local runtime directories to the trusted user, for example:
 
-```bash
+```zsh
 chmod 700 ~/.capt-solo
 ```
 
-## Integrity and recovery
+## Integrity, replay, and recovery
 
-- SQLite integrity is checked with `PRAGMA integrity_check` and referential checks.
-- CTP journals are append-only and flushed per write.
-- `recover()` identifies transactions without a final commit or abort event.
-- Reusing a finalized idempotency key raises an error instead of applying the same
-  operation twice.
+- EventStore owns the authoritative ordered runtime event ledger.
+- CTP records operational transaction receipts and recovery state; it is not the authoritative runtime ledger.
+- SQLite integrity is checked with `PRAGMA integrity_check` and referential checks where applicable.
+- Idempotency keys and command classifications prevent specified duplicate application paths.
+- Checkpoints preserve restart state.
+- Resume evidence demonstrates prior execution is not repeated in the proven lifecycle.
 - Forward migrations require a verified backup, integrity check, and receipt.
-- Failed backup or integrity validation aborts the migration before partial apply.
+- Failed backup or integrity validation aborts migration before partial application.
+
+These controls do not create a universal exactly-once guarantee for arbitrary external side effects.
+
+## Memory and context boundaries
+
+The CAPT Solo Memory Engine stores persistent local knowledge.
+
+The Runtime Memory Governor is a separate subsystem that owns trigger policy, token accounting, ContextPack rotation, stale-pack rejection, budget enforcement, and dispatch gating.
+
+External drivers should receive only the authorized ContextPack slice or reference. They should not receive unrestricted durable-memory access.
 
 ## Proof and claim controls
 
-- A capability, skill, or workflow is not reported verified without sufficient
-  evidence for its declared requirements.
+- Capabilities, skills, and workflows require sufficient evidence for their declared requirements.
 - ClaimGuard downgrades unsupported or stale claims.
-- Degradation is scope-aware so a platform-specific failure is not represented as
-  a global revoke.
-- Capability lifecycle transitions and degradation records preserve provenance and
-  remediation context.
+- Degradation remains scope-aware.
+- Verification evidence preserves process outcome, evidence identifiers, scope, environment, and limitations.
+- Local real-process proof is not represented as hosted-CI proof.
 
 ## Skill and package validation
 
-- Skill validation uses a 12-stage harness.
-- Unsafe command patterns, secret patterns, and disallowed permissions fail
-  validation.
-- A rollback strategy is required before a skill can be validated.
+- Skill validation uses staged checks and proof requirements.
+- Unsafe command patterns, secret patterns, disallowed permissions, and missing rollback strategies can block validation.
 - Imported Knowledge Bubbles are quarantined by default.
-- Bubble validation is manifest-first and blocks unsafe permissions and secret
-  patterns before approval.
+- Bubble validation is manifest-first.
 - Imported bubbles are not automatically trusted, executed, or installed.
 
-## Governance audit
+## External drivers and providers
 
-Consequential actions such as approval, publication, installation, deprecation,
-and revocation are:
+The base runtime requires no provider credential. Optional external drivers may require network access or credentials.
 
-- executed inside CTP transaction boundaries
-- attributed to a named actor
-- linked to append-only audit records
-- rejected when anonymous governance is attempted
+External model output is untrusted until processed through the governed evidence and verification path.
 
-## Component isolation and secret minimization
+The currently proven Hermes-facing action is bounded read-only inspection. General unrestricted model-driven repository engineering is not claimed.
 
-Optional components are expected to degrade independently rather than becoming a
-mandatory failure point for the core runtime.
+## Optional Anti-Token-Extraction integration
 
-The hardened Anti-Token-Extraction integration is designed to run locally over a
-bounded stdio JSON-RPC boundary with cache mode disabled, sensitive-input refusal,
-and no credentials passed through MCP arguments.
+The optional Anti-Token-Extraction component is designed to run over a bounded local stdio JSON-RPC boundary with cache mode disabled, sensitive-input refusal, and no credentials passed through MCP arguments.
+
+Hosted CI cannot currently verify the private optional dependency. Release Security therefore surfaces `DEGRADED_OPTIONAL_DEPENDENCY` rather than presenting a silent full-security pass.
 
 ## Known limitations
 
 The current runtime does **not** claim:
 
-- encryption at rest
-- multi-user authentication or authorization
-- cryptographic verification of Knowledge Bubble signatures
-- cryptographically signed CTP audit trails
-- protection from a compromised host operating system or local account
-- universal isolation for every optional external model or tool runtime
+- encryption at rest;
+- multi-user authentication or authorization;
+- cryptographic Knowledge Bubble signature verification;
+- cryptographically signed EventStore or CTP records;
+- protection from a compromised operating system or local account;
+- universal isolation for every optional external model or tool runtime;
+- unrestricted safe repository mutation by an external model.
 
-These limitations are intentional documentation, not implied future functionality.
-Consumers requiring a higher-trust environment must add appropriate host,
-filesystem, identity, isolation, and cryptographic controls.
+Higher-trust environments must add suitable host, filesystem, identity, isolation, encryption, and cryptographic controls.
 
 ## Security validation
 
-The repository includes automated tests, runtime verification, diagnostics, and
-release validation. Security-related changes should include a reproducer or
-regression test whenever practical.
-
 Run:
 
-```bash
+```zsh
 ./verify.sh
 ./doctor.sh
-python verify_runtime.py
-python -m pytest tests/ -q
+python3 verify_runtime.py
+python3 -m pytest tests/ -q
 ```
+
+The release evidence under [`release_evidence/v0.5`](../release_evidence/v0.5) records exact artifact, test, lifecycle, and limitation information.
 
 ## Reporting vulnerabilities
 
-Report security issues privately to the maintainer before public disclosure. Do
-not open public issues containing real secrets or data from a local CAPT store.
+Report vulnerabilities privately before public disclosure. Do not open a public issue containing real secrets or data from a CAPT store.
+
+A dedicated private vulnerability-reporting channel is still a documented near-term repository-hardening task. Until it is enabled, contact the repository maintainer through an established private channel.
 
 ## Planned higher-trust work
 
-Reserved future work includes:
+Future work may include encrypted backup/export, signed attestations and receipts, cryptographic Knowledge Bubble verification, stronger driver isolation, and separate multi-user authorization profiles.
 
-- encrypted backup and export
-- cryptographic Knowledge Bubble verification
-- signed CTP receipts and audit records
-- optional authenticated remote stores behind the stable API
-- stronger process isolation for optional components
+These are planned directions, not current capability claims.
