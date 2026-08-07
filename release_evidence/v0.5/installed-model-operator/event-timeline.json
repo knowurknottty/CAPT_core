@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "1.0.0",
+  "totalEvents": 45,
+  "eventTypes": {
+    "MissionCreated": 3,
+    "PolicyEvaluated": 3,
+    "CapabilityGranted": 3,
+    "CapabilityLeaseActivated": 3,
+    "TaskCreated": 3,
+    "TaskTransitioned": 9,
+    "DriverRunCreated": 3,
+    "DriverRunStateChanged": 9,
+    "ClaimCreated": 3,
+    "EvidenceRecorded": 2,
+    "ClaimVerified": 2,
+    "ClaimGuardDecided": 2
+  }
+}

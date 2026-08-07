@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "1.0.0",
+  "idempotencyKey": "idem-version-audit-7",
+  "firstCommandResult": "status=accepted, classification=accepted",
+  "repeatCommandResult": "status=idempotent, classification=duplicate",
+  "secondHermesProcessExecution": "none",
+  "duplicateArtifact": "none",
+  "duplicateVerification": "none",
+  "duplicateEvidence": "none",
+  "duplicateClaimGuardPromotion": "none",
+  "ledgerHeadBefore": 29,
+  "ledgerHeadAfterDuplicate": 29,
+  "driverRunIdPreserved": "dr-model-version-audit-7",
+  "verificationIdPreserved": "vr-sha256:44c5f6eef"
+}

@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "1.0.0",
+  "repository": "knowurknottty/CAPT_core",
+  "branch": "release/capt-standalone-final",
+  "sourceSha": "176186dba64b49311a9f876c315b152e38b16340",
+  "wheelFilename": "capt_solo-0.5.0-py3-none-any.whl",
+  "wheelSha256": "f70c3a0e9c10c9dff09b1689d400733e12ebb55f7f066db84fef1d3a0acb17f3",
+  "wheelByteSize": 311157,
+  "buildCommand": "SOURCE_DATE_EPOCH=1750000000 python3 -m build --wheel",
+  "buildEnvironment": {
+    "python": "3.14.6",
+    "pip": "26.1.2",
+    "build": "1.4.3",
+    "setuptools": "81.0.0",
+    "wheel": "0.47.0",
+    "platform": "macOS aarch64",
+    "os": "darwin"
+  },
+  "creationTime": "2026-08-07T01:40:00Z",
+  "packageVersion": "0.5.0",
+  "determinism": {
+    "method": "SOURCE_DATE_EPOCH=1750000000",
+    "build1Sha256": "f70c3a0e9c10c9dff09b1689d400733e12ebb55f7f066db84fef1d3a0acb17f3",
+    "build2Sha256": "f70c3a0e9c10c9dff09b1689d400733e12ebb55f7f066db84fef1d3a0acb17f3",
+    "byteIdentical": true
+  },
+  "packageContentChecks": {
+    "capt_runtime": true,
+    "capt_solo": true,
+    "capt_contracts": true,
+    "desktop": true,
+    "capt_cli.py": true,
+    "khsb": true,
+    "ctp": true,
+    "memory_engine": true,
+    "contextpack": true,
+    "governor": true,
+    "hermes_driver": true,
+    "openharness_driver": true
+  },
+  "installedImport": {
+    "venv": "/tmp/capt-final-install-venv",
+    "outsideRepo": true,
+    "result": "ALL_INSTALLED_IMPORTS_OK",
+    "cliVersion": "capt-solo 0.5.0"
+  },
+  "buildNotes": "Final head 176186d differs from 548ab3a only in .github/workflows and release_evidence/ (YAML + docs, no .py); wheel is byte-identical."
+}

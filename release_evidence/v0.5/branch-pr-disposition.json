@@ -1,0 +1,118 @@
+{
+  "schemaVersion": "1.0.0",
+  "releaseBranch": "release/capt-standalone-final",
+  "releaseHead": "548ab3ae311366a3a83d4ae50ac6f2bb7495dcd4",
+  "base": "main",
+  "table": [
+    {
+      "branch": "feat/capt-desktop-runtime-m1",
+      "pr": "PR #31",
+      "head": "55b367b",
+      "relation": "FULLY_INCLUDED (branch is ancestor of release)",
+      "commits": "0 unique, released",
+      "semanticReplacement": "Native desktop-m1 path in release",
+      "disposition": "CLOSE_AS_SUPERSEDED",
+      "rationale": "All branch work is ancestor of release; nothing unique to port.",
+      "action": "Close PR #31 as superseded by release branch."
+    },
+    {
+      "branch": "feat/capt-memory-trigger-integration",
+      "pr": "PR #32",
+      "head": "52761c4",
+      "relation": "FULLY_INCLUDED (branch is ancestor of release)",
+      "commits": "0 unique, released",
+      "semanticReplacement": "Memory trigger engine in release",
+      "disposition": "CLOSE_AS_SUPERSEDED",
+      "rationale": "All branch work is ancestor of release.",
+      "action": "Close PR #32 as superseded."
+    },
+    {
+      "branch": "feat/capt-runtime-m0a-contract-state-proof",
+      "pr": "PR #22",
+      "head": "6665a6a",
+      "relation": "FULLY_INCLUDED (branch is ancestor of release)",
+      "commits": "0 unique, released",
+      "semanticReplacement": "M0-A contract/state proof in release",
+      "disposition": "RETAIN_AS_HISTORICAL_EVIDENCE",
+      "rationale": "Historical M0-A contract-state proof already subsumed by release; keep as provenance, not merged separately.",
+      "action": "Close PR #22 with historical note."
+    },
+    {
+      "branch": "feat/capt-runtime-external-driver-conformance",
+      "pr": "PR #28",
+      "head": "9efe965",
+      "relation": "DIVERGED (5 commits not in release, not ancestor)",
+      "commits": "5 unique (Gate-A OpenHarness conformance tests)",
+      "semanticReplacement": "Canonical DriverHost/OpenHarnessDriver in release supersedes this approach",
+      "disposition": "SEMANTICALLY_SUPERSEDED",
+      "rationale": "5 unique commits are Gate-A OpenHarness adapter work superseded by release's packaged OpenHarnessDriver/DriverHost. If the adversarial tests are missing from release, port them; otherwise close.",
+      "action": "Close PR #28; port any missing adversarial tests."
+    },
+    {
+      "branch": "feature/capt-bootstrap-bridge",
+      "pr": "PR #20",
+      "head": "76dd716",
+      "relation": "DIVERGED (104 commits not in release)",
+      "commits": "104 unique",
+      "semanticReplacement": "Canonical capt_runtime_service Unix-socket harness supersedes bootstrap bridge IPC",
+      "disposition": "CLOSE_AS_SUPERSEDED",
+      "rationale": "Bootstrap bridge ownership/IPC path obsolete; replaced by authenticated harness service.",
+      "action": "Close PR #20 as superseded."
+    },
+    {
+      "branch": "feature/hermes-capt-core-runtime-skill",
+      "pr": "PR #19",
+      "head": "c1f0149",
+      "relation": "DIVERGED (93 commits not in release)",
+      "commits": "93 unique",
+      "semanticReplacement": "Hermes compatibility product, not CAPT Core",
+      "disposition": "REQUIRES_SEPARATE_PRODUCT",
+      "rationale": "Hermes-native CAPT skill is a separate compatibility layer.",
+      "action": "Keep PR #19 open as separate-product work."
+    },
+    {
+      "branch": "release/capt-v05-layer-reconciliation",
+      "pr": "n/a (prior internal)",
+      "head": "c0f9340",
+      "relation": "HISTORICAL",
+      "commits": "86 unique prior reconciliation",
+      "semanticReplacement": "Superseded by this release branch",
+      "disposition": "RETAIN_AS_HISTORICAL_EVIDENCE",
+      "rationale": "Prior reconciliation work retained for provenance.",
+      "action": "No action."
+    },
+    {
+      "branch": "integration/full-public-architecture",
+      "pr": "n/a",
+      "head": "973b4ab",
+      "relation": "FULLY_INCLUDED",
+      "commits": "0 unique",
+      "semanticReplacement": "Public architecture in release",
+      "disposition": "INCLUDED_IN_RELEASE",
+      "rationale": "Fully subsumed.",
+      "action": "No action."
+    },
+    {
+      "branch": "integration/capt-v05-final-audit",
+      "pr": "n/a",
+      "head": "466f0d2",
+      "relation": "HISTORICAL",
+      "commits": "85 unique prior audit",
+      "semanticReplacement": "Final audit evidence in release",
+      "disposition": "RETAIN_AS_HISTORICAL_EVIDENCE",
+      "rationale": "Prior audit retained.",
+      "action": "No action."
+    },
+    {
+      "branch": "integration/capt-v05-release-corrected",
+      "pr": "n/a",
+      "head": "2d64844",
+      "relation": "HISTORICAL",
+      "commits": "76 unique prior corrections",
+      "semanticReplacement": "Corrections absorbed in release",
+      "disposition": "RETAIN_AS_HISTORICAL_EVIDENCE",
+      "rationale": "Prior corrections retained.",
+      "action": "No action."
+    }
+  ]
+}

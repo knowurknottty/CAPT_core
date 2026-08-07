@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "1.0.0",
+  "evidenceClass": "LOCAL_REAL_PROCESS_PROVEN / INSTALLED_WHEEL_PROVEN",
+  "classification": "Locally executed; installed-wheel; real Hermes process; externally dependent model/provider; NOT rerun by hosted CI.",
+  "installedWheel": {
+    "builtFrom": "4005809f482ce81762ca5634615024683e4d6158",
+    "filename": "capt_solo-0.5.0-py3-none-any.whl",
+    "sha256": "2a8a6ef95f688b546227b162b603bcb07b644e7686c11a44bffa30fbd5397be2",
+    "note": "Proof wheel built from 4005809. Final-head wheel (548ab3a) is f70c3a0e...; only YAML/docs differ between 4005809 and 548ab3a (no .py source changed), so the runtime path is identical."
+  },
+  "runtime": {
+    "hermesExecutable": "/Users/knowurknot/.local/bin/hermes",
+    "hermesVersion": "v0.20.0 (2026.8.3)",
+    "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "provider": "openrouter",
+    "rateLimitCondition": "Hermes reported HTTP 429 free-models-per-day-high-balance after 3 retries; produced minimal output but completed lifecycle normatively."
+  },
+  "mission": {
+    "missionId": "m-model-version-audit-7",
+    "taskId": "m-model-version-audit-7-task-1",
+    "driverRunId": "dr-model-version-audit-7",
+    "claimId": "cl-model-version-audit-7",
+    "evidenceId": "ev-sha256:01997b44a",
+    "verificationId": "vr-sha256:44c5f6eef",
+    "idempotencyKey": "idem-version-audit-7",
+    "checkpointId": "cp-cmd-3e02c666f8c60dcb",
+    "artifactPath": "/tmp/capt-clean-target-model-staging/hermes-analysis-dr-model-version-audit-7.md",
+    "artifactDigest": "sha256:13ab095c591f23fb94c0f0187cdbf3bf73cd4f30afafe563b85d69eb4c5eab21"
+  },
+  "ledgerHeads": {
+    "afterSeed": 13,
+    "afterFirstAction": 29,
+    "afterDuplicateIdempotentAction": 29,
+    "afterSecondDistinctAction": 45
+  },
+  "eventTypeSequence": [
+    "MissionCreated",
+    "TaskCreated",
+    "TaskTransitioned",
+    "PolicyEvaluated",
+    "CapabilityGranted",
+    "CapabilityLeaseActivated",
+    "DriverRunCreated",
+    "DriverRunStateChanged",
+    "ClaimCreated",
+    "EvidenceRecorded",
+    "ClaimVerified",
+    "ClaimGuardDecided"
+  ],
+  "idempotencyProof": {
+    "repeatSameKeyResult": "status=idempotent, classification=duplicate",
+    "secondHermesProcess": "none",
+    "driverRunIdUnchanged": true,
+    "verificationIdUnchanged": true,
+    "ledgerHeadUnchanged": true
+  },
+  "restartNoRepeat": {
+    "checkpointThenStop": true,
+    "socketCleanup": true,
+    "restartSameLedgerHead": 29,
+    "resumeResult": "execution=not_repeated",
+    "originalIdsPreserved": true
+  }
+}

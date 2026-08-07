@@ -1,0 +1,567 @@
+{
+  "schemaVersion": "1.0.0",
+  "claims": [
+    {
+      "claimId": "C-ES-01",
+      "wording": "EventStore persists events transactionally (aggregate+event+outbox)",
+      "classification": "UNIT_TEST_PROVEN / INSTALLED_WHEEL_PROVEN",
+      "sourceFiles": [
+        "capt_runtime/store.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_ledger.py",
+        "tests/capt_runtime/test_replay.py"
+      ],
+      "executionEnvironment": "local py3.10/3.12 + installed wheel",
+      "artifactOrTranscript": "ledger_export (45 events)",
+      "evidenceStrength": "full",
+      "limitations": "Ledger head 13->29->45 observed",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-ES-02",
+      "wording": "Hash-chain ledger integrity (chain digest)",
+      "classification": "UNIT_TEST_PROVEN",
+      "sourceFiles": [
+        "capt_runtime/store.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_ledger.py"
+      ],
+      "executionEnvironment": "local",
+      "artifactOrTranscript": "health: ledgerChainDigest sha256:...",
+      "evidenceStrength": "full",
+      "limitations": "health check rejects tamper",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-ID-01",
+      "wording": "Idempotency by key (duplicate suppression)",
+      "classification": "INSTALLED_WHEEL_PROVEN",
+      "sourceFiles": [
+        "capt_runtime/store.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_ledger.py"
+      ],
+      "executionEnvironment": "installed wheel",
+      "artifactOrTranscript": "idempotency-receipt.json",
+      "evidenceStrength": "full",
+      "limitations": "status=idempotent, duplicate receipt",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-CK-01",
+      "wording": "Checkpoint creation with manifest+integrity",
+      "classification": "INSTALLED_WHEEL_PROVEN",
+      "sourceFiles": [
+        "capt_runtime/checkpoint.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_replay.py"
+      ],
+      "executionEnvironment": "installed wheel",
+      "artifactOrTranscript": "restart-resume-receipt.json",
+      "evidenceStrength": "full",
+      "limitations": "cp-cmd-3e02... created",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-CK-02",
+      "wording": "Restart continuity with same state directory",
+      "classification": "INSTALLED_WHEEL_PROVEN",
+      "sourceFiles": [
+        "desktop/capt_runtime_service.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_replay.py",
+        "tests/capt_runtime/restart_process.py"
+      ],
+      "executionEnvironment": "installed wheel",
+      "artifactOrTranscript": "restart-resume-receipt.json",
+      "evidenceStrength": "full",
+      "limitations": "head=29 preserved",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-CK-03",
+      "wording": "Resume without re-execution",
+      "classification": "INSTALLED_WHEEL_PROVEN",
+      "sourceFiles": [
+        "desktop/capt_runtime_service.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_replay.py"
+      ],
+      "executionEnvironment": "installed wheel",
+      "artifactOrTranscript": "restart-resume-receipt.json",
+      "evidenceStrength": "full",
+      "limitations": "execution=not_repeated",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-TR-01",
+      "wording": "TaskResolver authoritative task resolution",
+      "classification": "UNIT_TEST_PROVEN",
+      "sourceFiles": [
+        "capt_runtime/task_resolver.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_task_resolver.py"
+      ],
+      "executionEnvironment": "local",
+      "artifactOrTranscript": "-",
+      "evidenceStrength": "full",
+      "limitations": "resolved task scope checked",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-DH-01",
+      "wording": "DriverHost dispatch host honoring lease/context",
+      "classification": "UNIT_TEST_PROVEN",
+      "sourceFiles": [
+        "capt_runtime/driver_host.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_m0b_driver.py",
+        "tests/capt_runtime/test_model_operator.py"
+      ],
+      "executionEnvironment": "local",
+      "artifactOrTranscript": "-",
+      "evidenceStrength": "full",
+      "limitations": "-",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-HD-01",
+      "wording": "HermesDriver executes real external Hermes process",
+      "classification": "INSTALLED_WHEEL_PROVEN / LOCAL_REAL_PROCESS_PROVEN",
+      "sourceFiles": [
+        "capt_runtime/drivers/hermes.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_hermes_driver.py"
+      ],
+      "executionEnvironment": "installed wheel + local real Hermes",
+      "artifactOrTranscript": "installed-model-operator/",
+      "evidenceStrength": "full",
+      "limitations": "rate-limited HTTP 429 on first mission; full response on second",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-OH-01",
+      "wording": "OpenHarnessDriver fixed-function external driver",
+      "classification": "UNIT_TEST_PROVEN",
+      "sourceFiles": [
+        "capt_runtime/drivers/openharness.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_m0b_driver.py"
+      ],
+      "executionEnvironment": "local",
+      "artifactOrTranscript": "-",
+      "evidenceStrength": "full",
+      "limitations": "-",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-VR-01",
+      "wording": "VerificationResult conforms to frozen contract (claimId,strategy,verifiedAt,supportingEvidenceIds; no _view/trust/checks/observedBy)",
+      "classification": "INSTALLED_WHEEL_PROVEN",
+      "sourceFiles": [
+        "capt_runtime/verification.py",
+        "contracts/schema/verification.schema.json"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_contracts.py",
+        "tests/capt_runtime/test_m0b_driver.py"
+      ],
+      "executionEnvironment": "installed wheel",
+      "artifactOrTranscript": "persisted-verification-payload.json",
+      "evidenceStrength": "full",
+      "limitations": "proven on ClaimVerified event global_seq 28",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-EV-01",
+      "wording": "Artifact evidence recorded (EvidenceRecorded)",
+      "classification": "INSTALLED_WHEEL_PROVEN",
+      "sourceFiles": [
+        "capt_runtime/verification.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_m0b_driver.py"
+      ],
+      "executionEnvironment": "installed wheel",
+      "artifactOrTranscript": "persisted-evidence-payload.json",
+      "evidenceStrength": "full",
+      "limitations": "ev-sha256:01997b44a",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-CG-01",
+      "wording": "ClaimGuard decision (accept) with verdict field",
+      "classification": "INSTALLED_WHEEL_PROVEN",
+      "sourceFiles": [
+        "capt_runtime/verification.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_claim.py"
+      ],
+      "executionEnvironment": "installed wheel",
+      "artifactOrTranscript": "claimguard-decision.json",
+      "evidenceStrength": "full",
+      "limitations": "verdict=accept",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-CL-01",
+      "wording": "Capability grant+lease lifecycle",
+      "classification": "UNIT_TEST_PROVEN",
+      "sourceFiles": [
+        "capt_runtime/aggregates/capability.py",
+        "capt_runtime/services.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_capability.py"
+      ],
+      "executionEnvironment": "local",
+      "artifactOrTranscript": "-",
+      "evidenceStrength": "full",
+      "limitations": "PolicyEvaluated+CapabilityGranted+CapabilityLeaseActivated",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-UA-01",
+      "wording": "Unix socket authentication (token)",
+      "classification": "UNIT_TEST_PROVEN / INSTALLED_WHEEL_PROVEN",
+      "sourceFiles": [
+        "desktop/capt_runtime_service.py",
+        "desktop/desktop_runtime_client.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_desktop_m0.py"
+      ],
+      "executionEnvironment": "installed wheel",
+      "artifactOrTranscript": "health: integrity ok",
+      "evidenceStrength": "full",
+      "limitations": "auth token 0600 file",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-ME-01",
+      "wording": "CAPT Solo Memory Engine (capt_solo.memory.engine)",
+      "classification": "API_ONLY / IMPORTABLE_API",
+      "sourceFiles": [
+        "capt_solo/memory/engine.py"
+      ],
+      "tests": [
+        "tests/test_memory.py",
+        "tests/test_v03_sessions.py"
+      ],
+      "executionEnvironment": "local + installed",
+      "artifactOrTranscript": "installed imports OK",
+      "evidenceStrength": "moderate",
+      "limitations": "API-only; not harness-operator-facing",
+      "verdict": "PASS-as-API-only"
+    },
+    {
+      "claimId": "C-MG-01",
+      "wording": "Runtime MemoryGovernor (capt_runtime.memory.governor)",
+      "classification": "INTERNAL_RUNTIME_SERVICE",
+      "sourceFiles": [
+        "capt_runtime/memory/governor.py",
+        "capt_runtime/memory/engine.py",
+        "capt_runtime/memory/policy.py"
+      ],
+      "tests": [
+        "tests/test_memory_governor.py",
+        "tests/capt_runtime/test_memory_trigger.py"
+      ],
+      "executionEnvironment": "local",
+      "artifactOrTranscript": "capabilities: memory:True",
+      "evidenceStrength": "full",
+      "limitations": "active by default; queryable via get_memory_policy",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-CP-01",
+      "wording": "ContextPack construction",
+      "classification": "UNIT_TEST_PROVEN",
+      "sourceFiles": [
+        "capt_runtime/memory/contextpack.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_memory_trigger.py"
+      ],
+      "executionEnvironment": "local",
+      "artifactOrTranscript": "-",
+      "evidenceStrength": "full",
+      "limitations": "-",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-CP-02",
+      "wording": "First rotation",
+      "classification": "UNIT_TEST_PROVEN",
+      "sourceFiles": [
+        "capt_runtime/memory/contextpack.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_memory_trigger.py"
+      ],
+      "executionEnvironment": "local",
+      "artifactOrTranscript": "-",
+      "evidenceStrength": "full",
+      "limitations": "-",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-CP-03",
+      "wording": "Second rotation",
+      "classification": "UNIT_TEST_PROVEN",
+      "sourceFiles": [
+        "capt_runtime/memory/contextpack.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_memory_trigger.py"
+      ],
+      "executionEnvironment": "local",
+      "artifactOrTranscript": "-",
+      "evidenceStrength": "full",
+      "limitations": "-",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-CP-04",
+      "wording": "Repeated rotation",
+      "classification": "UNIT_TEST_PROVEN",
+      "sourceFiles": [
+        "capt_runtime/memory/contextpack.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_memory_trigger.py"
+      ],
+      "executionEnvironment": "local",
+      "artifactOrTranscript": "-",
+      "evidenceStrength": "full",
+      "limitations": "-",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-CP-05",
+      "wording": "32K-relative trigger accounting",
+      "classification": "UNIT_TEST_PROVEN / INTERNAL_RUNTIME_SERVICE",
+      "sourceFiles": [
+        "capt_runtime/memory/accounting.py",
+        "capt_runtime/memory/policy.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_memory_trigger.py",
+        "tests/capt_runtime/test_memory_trigger_adversarial.py"
+      ],
+      "executionEnvironment": "local",
+      "artifactOrTranscript": "get_memory_policy: TRIGGER_INTERVAL_TOKENS",
+      "evidenceStrength": "full",
+      "limitations": "-",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-CP-06",
+      "wording": "Memory policy query",
+      "classification": "INTERNAL_RUNTIME_SERVICE",
+      "sourceFiles": [
+        "capt_runtime/memory/policy.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_memory_trigger.py"
+      ],
+      "executionEnvironment": "installed wheel",
+      "artifactOrTranscript": "harness get_memory_policy",
+      "evidenceStrength": "full",
+      "limitations": "queryable",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-CP-07",
+      "wording": "Stale ContextPack rejection",
+      "classification": "UNIT_TEST_PROVEN",
+      "sourceFiles": [
+        "capt_runtime/memory/contextpack.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_memory_trigger_adversarial.py"
+      ],
+      "executionEnvironment": "local",
+      "artifactOrTranscript": "-",
+      "evidenceStrength": "full",
+      "limitations": "-",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-CP-08",
+      "wording": "Budget enforcement",
+      "classification": "UNIT_TEST_PROVEN",
+      "sourceFiles": [
+        "capt_runtime/memory/contextpack.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_memory_trigger.py"
+      ],
+      "executionEnvironment": "local",
+      "artifactOrTranscript": "-",
+      "evidenceStrength": "full",
+      "limitations": "-",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-CP-09",
+      "wording": "Restart continuity of packs",
+      "classification": "UNIT_TEST_PROVEN",
+      "sourceFiles": [
+        "capt_runtime/memory/contextpack.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_memory_trigger.py"
+      ],
+      "executionEnvironment": "local",
+      "artifactOrTranscript": "-",
+      "evidenceStrength": "full",
+      "limitations": "-",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-CP-10",
+      "wording": "Raw-memory exclusion from Hermes context (only ContextPack reference)",
+      "classification": "UNIT_TEST_PROVEN / INTERNAL_RUNTIME_SERVICE",
+      "sourceFiles": [
+        "capt_runtime/drivers/hermes.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_memory_trigger_hermes.py"
+      ],
+      "executionEnvironment": "local",
+      "artifactOrTranscript": "-",
+      "evidenceStrength": "full",
+      "limitations": "prompt embeds ContextPackId/Digest/SelectedRecords only",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-KH-01",
+      "wording": "KHSB in-process bus (publish/subscribe/request/reply)",
+      "classification": "INTERNAL_RUNTIME_SERVICE",
+      "sourceFiles": [
+        "capt_solo/khsb/bus.py",
+        "capt_runtime/session.py"
+      ],
+      "tests": [
+        "tests/test_khsb.py"
+      ],
+      "executionEnvironment": "local + installed",
+      "artifactOrTranscript": "imports OK",
+      "evidenceStrength": "full",
+      "limitations": "in-process only; not cross-process/durable",
+      "verdict": "PASS-as-internal"
+    },
+    {
+      "claimId": "C-CT-01",
+      "wording": "CTP journal (begin/commit/receipts)",
+      "classification": "INTERNAL_RUNTIME_SERVICE",
+      "sourceFiles": [
+        "capt_solo/ctp/journal.py",
+        "capt_runtime/session.py"
+      ],
+      "tests": [
+        "tests/test_ctp.py"
+      ],
+      "executionEnvironment": "local + installed",
+      "artifactOrTranscript": "imports OK",
+      "evidenceStrength": "full",
+      "limitations": "operational journal; distinct from EventStore",
+      "verdict": "PASS-as-internal"
+    },
+    {
+      "claimId": "C-CT-02",
+      "wording": "CTP authority separate from EventStore authority",
+      "classification": "SOURCE_PRESENT",
+      "sourceFiles": [
+        "capt_runtime/session.py",
+        "capt_runtime/store.py"
+      ],
+      "tests": [],
+      "executionEnvironment": "source",
+      "artifactOrTranscript": "-",
+      "evidenceStrength": "diagnostic",
+      "limitations": "EventStore immutable ledger; CTP continuity receipts",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-PK-01",
+      "wording": "All major packages included in wheel (capt_runtime/solo/contracts/desktop/CLI/khsb/ctp)",
+      "classification": "PACKAGED_ONLY / INSTALLED_WHEEL_PROVEN",
+      "sourceFiles": [
+        "pyproject.toml"
+      ],
+      "tests": [
+        "tests/test_v02_coverage.py"
+      ],
+      "executionEnvironment": "installed wheel",
+      "artifactOrTranscript": "final-wheel-manifest.json package-content-checks",
+      "evidenceStrength": "full",
+      "limitations": "all 12 checks pass",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-RM-01",
+      "wording": "Operator-facing reachability (capt harness command)",
+      "classification": "OPERATOR_FACING",
+      "sourceFiles": [
+        "desktop/capt_runtime_service.py"
+      ],
+      "tests": [
+        "tests/capt_runtime/test_desktop_m0.py",
+        "tests/capt_runtime/test_model_operator.py"
+      ],
+      "executionEnvironment": "installed wheel",
+      "artifactOrTranscript": "installed-model-operator/",
+      "evidenceStrength": "full",
+      "limitations": "run_approved_hermes_inspection via CLI",
+      "verdict": "PASS"
+    },
+    {
+      "claimId": "C-RM-02",
+      "wording": "API-only reachability (Memory Engine)",
+      "classification": "API_ONLY",
+      "sourceFiles": [
+        "capt_solo/memory/engine.py"
+      ],
+      "tests": [
+        "tests/test_memory.py"
+      ],
+      "executionEnvironment": "local + installed",
+      "artifactOrTranscript": "-",
+      "evidenceStrength": "moderate",
+      "limitations": "no harness command",
+      "verdict": "PASS-as-API-only"
+    },
+    {
+      "claimId": "C-RM-03",
+      "wording": "Internal-runtime reachability (MemoryGovernor/KHSB/CTP)",
+      "classification": "INTERNAL_RUNTIME_SERVICE",
+      "sourceFiles": [
+        "capt_runtime/memory/",
+        "capt_runtime/session.py"
+      ],
+      "tests": [
+        "tests/test_memory_governor.py",
+        "tests/test_khsb.py",
+        "tests/test_ctp.py"
+      ],
+      "executionEnvironment": "local",
+      "artifactOrTranscript": "-",
+      "evidenceStrength": "full",
+      "limitations": "not directly operator-facing",
+      "verdict": "PASS-as-internal"
+    }
+  ]
+}
