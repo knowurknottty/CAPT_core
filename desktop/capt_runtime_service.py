@@ -46,7 +46,7 @@ from capt_runtime.drivers.registry import DriverRegistry
 from capt_runtime.scenario import build_scenario
 from capt_runtime.services import RuntimeService
 from capt_runtime.store import EventStore
-from capt_runtime.verification import build_verification_result, guard_claim
+from capt_runtime.verification import build_verification_result, guard_claim, build_artifact_hash_evidence
 from capt_runtime.composition import RuntimeComposition, create_runtime
 
 from desktop.m1_command_service import RuntimeCommandService
@@ -710,7 +710,6 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 artifact_path = out["artifactCandidate"]["artifactPath"]
                 artifact_digest = out["artifactCandidate"]["artifactDigest"]
                 before = tree_digest(str(worktree))
-                vr = build_verification_result(str(worktree), before, artifact_path, artifact_digest, "hermes")
                 accepted = guard_claim("Repository inspected in read-only mode.")
                 svc.propose_claim(
                     {"schemaVersion": "1.0.0", "claimId": claim_id, "missionId": mission_id,
@@ -722,6 +721,52 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                                      operation_fingerprint=commands.fingerprint("propose_claim", {"claimId": claim_id}),
                                      correlation_id=command.get("correlationId", "corr-model"),
                                      actor_id="cog-1", actor_kind="cognitive_plane",
+                                     issued_at=now, replay_policy="never"),
+                )
+                # 4b. Record evidence (artifact_hash)
+                ev_id = "ev-" + commands.fingerprint("artifact_hash", {"artifact": artifact_digest})[:16]
+                evidence = build_artifact_hash_evidence(
+                    mission_id=mission_id,
+                    artifact_path=artifact_path,
+                    artifact_digest=artifact_digest,
+                    collected_by={"actorId": "verification_pipeline", "kind": "verification_plane"},
+                    evidence_id=ev_id,
+                    task_id=task_id,
+                    collected_at=now,
+                )
+                svc.record_evidence(claim_id, evidence,
+                    commands.command(command_id=command_id + ":evidence", idempotency_key=key + ":evidence",
+                                     operation_fingerprint=commands.fingerprint("record_evidence", {"evidenceId": ev_id}),
+                                     correlation_id=command.get("correlationId", "corr-model"),
+                                     actor_id="verification_pipeline", actor_kind="verification_plane",
+                                     issued_at=now, replay_policy="never"),
+                )
+                # 4c. Build verification result with cited evidence, then record
+                vr = build_verification_result(str(worktree), before, artifact_path, artifact_digest, "hermes",
+                                                 claim_id=claim_id, supporting_evidence_ids=[ev_id])
+                svc.record_verification(vr,
+                    commands.command(command_id=command_id + ":verify", idempotency_key=key + ":verify",
+                                     operation_fingerprint=commands.fingerprint("record_verification", {"verificationId": vr["verificationId"]}),
+                                     correlation_id=command.get("correlationId", "corr-model"),
+                                     actor_id="verification_pipeline", actor_kind="verification_plane",
+                                     issued_at=now, replay_policy="never"),
+                )
+                # 4d. Decide claim (ClaimGuard)
+                decision = {
+                    "schemaVersion": "1.0.0",
+                    "decisionId": "cgd-" + command_id,
+                    "claimId": claim_id,
+                    "verdict": "accept",
+                    "rationale": "Bounded statement accepted by ClaimGuard; evidence and verification recorded.",
+                    "verificationId": vr["verificationId"],
+                    "decidedBy": {"actorId": "claim-guard", "kind": "claim_authority"},
+                    "decidedAt": now,
+                }
+                svc.decide_claim(decision,
+                    commands.command(command_id=command_id + ":decide", idempotency_key=key + ":decide",
+                                     operation_fingerprint=commands.fingerprint("decide_claim", {"claimId": claim_id}),
+                                     correlation_id=command.get("correlationId", "corr-model"),
+                                     actor_id="claim-guard", actor_kind="claim_authority",
                                      issued_at=now, replay_policy="never"),
                 )
                 # 5. Checkpoint records continuation.
