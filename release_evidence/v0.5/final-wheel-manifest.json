@@ -2,7 +2,7 @@
   "schemaVersion": "1.0.0",
   "repository": "knowurknottty/CAPT_core",
   "branch": "release/capt-standalone-final",
-  "sourceSha": "176186dba64b49311a9f876c315b152e38b16340",
+  "sourceSha": "c015c62be8484435af252eb8d9589bbe9ede8467",
   "wheelFilename": "capt_solo-0.5.0-py3-none-any.whl",
   "wheelSha256": "f70c3a0e9c10c9dff09b1689d400733e12ebb55f7f066db84fef1d3a0acb17f3",
   "wheelByteSize": 311157,
