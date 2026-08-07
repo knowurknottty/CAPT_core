@@ -1,0 +1,152 @@
+{
+  "generatedAt": "2026-08-07T00:50:00Z",
+  "releaseBranch": "release/capt-standalone-final",
+  "releaseHead": "4005809f482ce81762ca5634615024683e4d6158",
+  "mainMergeBase": "9d4fee12bc6147d7fe5da9e5025e8eb32911293a",
+  "branches": [
+    {
+      "branch": "feat/capt-runtime-hermes-execution-driver",
+      "head": "6615646",
+      "mergeBase": "6615646",
+      "ahead": 49,
+      "behind": 0,
+      "disposition": "INCLUDED_IN_RELEASE",
+      "rationale": "All 0 unique commits; merge-base equals branch head. Fully subsumed by release branch."
+    },
+    {
+      "branch": "feat/capt-runtime-external-driver-conformance",
+      "head": "9efe965",
+      "mergeBase": "5fb323d",
+      "ahead": 55,
+      "behind": 5,
+      "disposition": "SEMANTICALLY_SUPERSEDED",
+      "rationale": "5 unique commits are Gate-A OpenHarness adapter work. The release branch already contains a packaged OpenHarnessDriver and HermesDriver. The external-driver-conformance approach was superseded by the canonical DriverHost/DriverRegistry architecture."
+    },
+    {
+      "branch": "feat/capt-desktop-runtime-m1",
+      "head": "6b643f8",
+      "mergeBase": "6b643f8",
+      "ahead": 39,
+      "behind": 0,
+      "disposition": "INCLUDED_IN_RELEASE",
+      "rationale": "All 0 unique commits; merge-base equals branch head. Desktop M1 fully included."
+    },
+    {
+      "branch": "feat/capt-memory-trigger-integration",
+      "head": "52761c4",
+      "mergeBase": "52761c4",
+      "ahead": 33,
+      "behind": 0,
+      "disposition": "INCLUDED_IN_RELEASE",
+      "rationale": "All 0 unique commits. Memory trigger integration fully included."
+    },
+    {
+      "branch": "feature/capt-bootstrap-bridge",
+      "head": "76dd716",
+      "mergeBase": "abeff5c",
+      "ahead": 130,
+      "behind": 104,
+      "disposition": "CLOSE_AS_SUPERSEDED",
+      "rationale": "104 unique commits cover bootstrap bridge with IPC, fencing, and operator workflow. The release branch superseded this with the canonical capt_runtime_service Unix-socket harness, RuntimeCommandService, and authenticated operator path. No unique production code remains relevant."
+    },
+    {
+      "branch": "feature/hermes-capt-core-runtime-skill",
+      "head": "c1f0149",
+      "mergeBase": "abeff5c",
+      "ahead": 130,
+      "behind": 93,
+      "disposition": "REQUIRES_SEPARATE_PRODUCT",
+      "rationale": "93 unique commits cover a Hermes-native CAPT Core runtime skill (capt-core-runtime). This is a Hermes compatibility layer, not part of CAPT Core itself. Should be maintained as a separate Hermes skill."
+    },
+    {
+      "branch": "release/capt-v05-layer-reconciliation",
+      "head": "c0f9340",
+      "mergeBase": "abeff5c",
+      "ahead": 130,
+      "behind": 86,
+      "disposition": "RETAIN_AS_HISTORICAL_EVIDENCE",
+      "rationale": "86 unique commits are prior layer reconciliation work. The release branch is the final reconciliation product. Retain for historical provenance."
+    },
+    {
+      "branch": "integration/full-public-architecture",
+      "head": "973b4ab",
+      "mergeBase": "973b4ab",
+      "ahead": 115,
+      "behind": 0,
+      "disposition": "INCLUDED_IN_RELEASE",
+      "rationale": "0 unique commits. Fully subsumed."
+    },
+    {
+      "branch": "integration/capt-v05-final-audit",
+      "head": "466f0d2",
+      "mergeBase": "abeff5c",
+      "ahead": 130,
+      "behind": 85,
+      "disposition": "RETAIN_AS_HISTORICAL_EVIDENCE",
+      "rationale": "85 unique commits are prior audit work. The release branch contains the final audit evidence. Retain for provenance."
+    },
+    {
+      "branch": "integration/capt-v05-release-corrected",
+      "head": "2d64844",
+      "mergeBase": "abeff5c",
+      "ahead": 130,
+      "behind": 76,
+      "disposition": "RETAIN_AS_HISTORICAL_EVIDENCE",
+      "rationale": "76 unique commits are prior release-correction deliverables. Superseded by the final release branch evidence."
+    }
+  ],
+  "externalRepos": [
+    {
+      "repo": "knowurknottty/capt-workspace-mcp",
+      "disposition": "REQUIRES_SEPARATE_PRODUCT",
+      "rationale": "MCP server integration product. Not part of CAPT Core."
+    },
+    {
+      "repo": "knowurknottty/capt-core-debug",
+      "disposition": "RETAIN_AS_HISTORICAL_EVIDENCE",
+      "rationale": "Provenance/evidence repository for debugging."
+    },
+    {
+      "repo": "knowurknottty/capt_core_engineering",
+      "disposition": "RETAIN_AS_HISTORICAL_EVIDENCE",
+      "rationale": "Coordination repository."
+    },
+    {
+      "repo": "knowurknottty/biocapt-cli-a-preserved",
+      "disposition": "RETAIN_AS_HISTORICAL_EVIDENCE",
+      "rationale": "Historical architecture recovery."
+    }
+  ],
+  "openPRs": [
+    {
+      "pr": "PR #31",
+      "disposition": "CLOSE_AS_SUPERSEDED",
+      "rationale": "Included/superseded after parity check"
+    },
+    {
+      "pr": "PR #32",
+      "disposition": "CLOSE_AS_SUPERSEDED",
+      "rationale": "Included/superseded after parity check"
+    },
+    {
+      "pr": "PR #28",
+      "disposition": "RETAIN_AS_HISTORICAL_EVIDENCE",
+      "rationale": "Unique adversarial tests already covered in release test suite"
+    },
+    {
+      "pr": "PR #22",
+      "disposition": "RETAIN_AS_HISTORICAL_EVIDENCE",
+      "rationale": "Historical proof"
+    },
+    {
+      "pr": "PR #20",
+      "disposition": "CLOSE_AS_SUPERSEDED",
+      "rationale": "Obsolete bootstrap ownership path"
+    },
+    {
+      "pr": "PR #19",
+      "disposition": "REQUIRES_SEPARATE_PRODUCT",
+      "rationale": "Separate Hermes compatibility skill"
+    }
+  ]
+}
