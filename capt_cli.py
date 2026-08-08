@@ -337,13 +337,13 @@ def _cmd_harness(args) -> int:
 
 
 def _cmd_ramp(args, as_json) -> int:
-    """P0 normal-human on-ramp: capt start/status/stop/doctor/evidence.
+    """P0 normal-human on-ramp: capt start/status/stop/checkpoint/resume/doctor/evidence.
 
     Simple convenience wrappers that allocate default local state so a new
     user does not need socket/token/ledger paths. Authority remains in
     RuntimeService; these are caller-side conveniences only.
     """
-    from capt_runtime.cli_ramp import default_paths, default_state_dir  # noqa: F401
+    from capt_runtime.cli_ramp import default_paths
     from desktop.desktop_runtime_client import RuntimeClient
 
     group = args.group
@@ -353,7 +353,6 @@ def _cmd_ramp(args, as_json) -> int:
 
     paths = default_paths()
     if getattr(args, "state_dir", None):
-        from pathlib import Path
         base = Path(args.state_dir).expanduser()
         paths = {
             "state_dir": base,
@@ -398,7 +397,7 @@ def _cmd_ramp(args, as_json) -> int:
             print(_json_or_human(receipt, as_json))
             return 0 if receipt.get("status") in ("accepted", "idempotent") else 1
         if group == "evidence":
-            result = _evidence_view(client, identity, getattr(args, "mission", None))
+            result = _evidence_view(client, getattr(args, "mission", None))
             print(_json_or_human(result, as_json))
             return 0
     except Exception as exc:
@@ -413,7 +412,6 @@ def _cmd_ramp(args, as_json) -> int:
 
 def _cmd_ramp_start(args, paths, as_json) -> int:
     """Start the runtime service with default local state (background)."""
-    import subprocess as _sp
     from capt_runtime.cli_ramp import is_running
     base = paths["state_dir"]
     base.mkdir(parents=True, exist_ok=True)
@@ -434,10 +432,15 @@ def _cmd_ramp_start(args, paths, as_json) -> int:
     if getattr(args, "seed", False):
         argv.append("--seed")
     # Launch detached so `capt start` returns and the runtime keeps running.
+    # The parent closes its copies of the redirected handles after Popen; the
+    # child process inherits and owns its own descriptors.
     devnull = open(os.devnull, "wb")
-    logf = (base / "start.log").open("ab")
-    proc = _sp.Popen(argv, stdout=devnull, stderr=logf, start_new_session=True)
-    logf.close()
+    logf = open(base / "start.log", "ab")
+    try:
+        proc = subprocess.Popen(argv, stdout=devnull, stderr=logf, start_new_session=True)
+    finally:
+        devnull.close()
+        logf.close()
     try:
         paths["pid"].write_text(str(proc.pid))
     except OSError:
@@ -474,7 +477,7 @@ def _status_view(client, identity) -> dict:
     }
 
 
-def _evidence_view(client, identity, mission_id) -> dict:
+def _evidence_view(client, mission_id) -> dict:
     """Human-readable evidence/verification projection."""
     from desktop.desktop_runtime_client import (
         project_evidence, project_claimguard, project_mission_spec,
@@ -566,11 +569,8 @@ def _cmd_doctor() -> int:
         add("runtime.service", "fail", "could not check runtime", str(exc)[:120])
 
     rows = []
-    ok = True
     for cid, status, summary, evidence in checks:
         tag = status.upper()
-        if status != "pass":
-            ok = False
         line = f"[{tag:4}] {cid:<22} {summary}"
         if evidence:
             line += f"  ({evidence})"

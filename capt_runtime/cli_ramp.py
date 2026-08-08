@@ -16,11 +16,9 @@ surface, and authority stays in RuntimeService.
 from __future__ import annotations
 
 import os
-import subprocess
-import sys
-import time
+import socket
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Dict
 
 
 def default_state_dir() -> Path:
@@ -48,28 +46,16 @@ def default_paths() -> Dict[str, Path]:
     }
 
 
-def run_service(argv: List[str], env: Dict[str, str] | None = None) -> int:
-    """Run the runtime service, reusing this interpreter."""
-    return subprocess.call(argv, env=env)
-
-
-def read_pid(pid_file: Path) -> Optional[int]:
-    try:
-        return int(pid_file.read_text().strip())
-    except (OSError, ValueError):
-        return None
-
-
 def is_running(sock: Path) -> bool:
     """Return True if a runtime service is reachable at the socket."""
     if not sock.exists():
         return False
-    _sock = __import__("socket").socket(__import__("socket").AF_UNIX, __import__("socket").SOCK_STREAM)
+    _sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
         _sock.settimeout(0.3)
         _sock.connect(str(sock))
         return True
-    except (OSError, __import__("socket").error):
+    except OSError:
         return False
     finally:
         try:

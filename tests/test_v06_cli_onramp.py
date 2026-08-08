@@ -70,10 +70,14 @@ def test_memory_store_and_search(cli_home):
 
 
 def test_doctor_first_class(cli_home, state_dir):
+    # Controlled env: python3, sqlite3, and CAPT Solo all importable; the state
+    # dir is a non-running temp dir. Doctor should report only pass/warn (no
+    # hard fail) and exit 0. Assert the exact code rather than 0-or-1.
     p = _run("doctor", state_dir=state_dir)
-    assert p.returncode in (0, 1)
+    assert p.returncode == 0, p.stderr
     assert "CAPT doctor" in p.stdout
     assert "env.package" in p.stdout
+    assert "0 fail" in p.stdout
 
 
 def test_start_status_evidence_stop_lifecycle(cli_home, state_dir):
