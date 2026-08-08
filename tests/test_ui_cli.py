@@ -50,3 +50,14 @@ def test_cli_verbosity_roundtrip():
     assert r.returncode == 0
     r2 = _run("verbosity", env=env)
     assert "diagnostic" in r2.stdout
+
+
+def test_cli_memory_store_real():
+    import uuid
+    env = _runtime_env()
+    if not env:
+        pytest.skip("no running runtime for memory store CLI test")
+    content = "cli memory probe %s" % uuid.uuid4().hex[:6]
+    r = _run("memory", "--store", content, env=env)
+    assert r.returncode == 0, r.stderr
+    assert '"ok": true' in r.stdout or "ok:" in r.stdout

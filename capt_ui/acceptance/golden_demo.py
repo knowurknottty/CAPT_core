@@ -101,6 +101,11 @@ class GoldenDemo:
         self._log("evidence", artifacts=len(ev.artifacts),
                   verification=ev.verification.get("status", {}).get("kind", "?"))
 
+        # 7b. Memory (acceptance: store memory)
+        mres = op.store_memory("Golden demo durable memory", provenance="golden_demo")
+        self._log("memory", stored=mres.get("ok", False),
+                  memory_id=(mres.get("memory_id") or "")[:10])
+
         # 8. ClaimGuard
         cg = op.claimguard("The golden demo mission produced evidence under verification.")
         self._log("claimguard", verdict=cg.get("verdict"))

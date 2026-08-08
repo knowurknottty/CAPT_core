@@ -128,6 +128,20 @@ def cmd_verbosity(args) -> int:
     return 0
 
 
+def cmd_memory(args) -> int:
+    op = _op()
+    if args.store:
+        res = op.store_memory(args.store, provenance="cli")
+        _out(res, args.json)
+        return 0 if res.get("ok") else 1
+    if args.list:
+        _out({"note": "use the capt_solo memory API for search/list; runtime exposes policy/state"},
+             args.json)
+        return 0
+    _out({"policy": op.memory_policy(), "state": op.memory_state()}, args.json)
+    return 0
+
+
 def cmd_onramp(args) -> int:
     op = _op()
     res = run_onboarding(op, _cfg())
@@ -163,6 +177,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     vb.add_argument("--set", choices=[v.value for v in Verbosity.all()])
     vb.add_argument("--json", action="store_true")
 
+    mem = sub.add_parser("memory")
+    mem.add_argument("--store", metavar="TEXT")
+    mem.add_argument("--list", action="store_true")
+    mem.add_argument("--json", action="store_true")
+
     on = sub.add_parser("onramp")
     on.add_argument("--json", action="store_true")
 
@@ -170,7 +189,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     handlers = {
         "status": cmd_status, "dashboard": cmd_dashboard,
         "providers": cmd_providers, "models": cmd_models,
-        "verbosity": cmd_verbosity, "onramp": cmd_onramp,
+        "verbosity": cmd_verbosity, "memory": cmd_memory, "onramp": cmd_onramp,
     }
     return handlers[args.cmd](args)
 

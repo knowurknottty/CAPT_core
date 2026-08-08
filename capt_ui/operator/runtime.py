@@ -174,6 +174,31 @@ class Operator:
         except Exception:  # noqa: BLE001
             return {}
 
+    def store_memory(self, content: str, *, namespace: str = "default",
+                     tags: Optional[List[str]] = None, provenance: str = "operator") -> Dict[str, Any]:
+        """Store a durable memory through the supported capt_solo memory API.
+
+        Memory persistence is a capt_solo concern (the same supported API path
+        the CLI uses); it is not a RuntimeService IPC op on this surface. This
+        keeps real durable-memory writes working for onboarding/CLI without
+        fabricating them.
+        """
+        try:
+            from capt_solo.memory.engine import MemoryEngine
+            from capt_solo.core.config import memory_db_path
+            engine = MemoryEngine(memory_db_path())
+            mem = engine.store(content, namespace=namespace, tags=tags or [],
+                               provenance=provenance)
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": str(exc)[:160]}
+        return {
+            "ok": True,
+            "memory_id": getattr(mem, "memory_id", ""),
+            "content": getattr(mem, "content", ""),
+            "namespace": getattr(mem, "namespace", namespace),
+            "tier": getattr(mem, "tier", "durable"),
+        }
+
 
 def _to_approval(a: Dict[str, Any]) -> ApproxRequest:
     return ApproxRequest(

@@ -98,10 +98,12 @@ class Onboarding:
                 "model": active.model_id, "kind": active.kind}
 
     def _step_store_memory(self, text: str = "CAPT keeps durable state outside the model.", **kw: Any) -> Dict[str, Any]:
-        # Memory writes go through the CAPT Solo memory API in the operator
-        # layer if available; otherwise we surface it as a guided action.
-        # (Real durable-memory CLI is a P0 surface; here we record the intent.)
-        return {"ok": True, "next": "run_mission", "stored": text}
+        res = self.op.store_memory(text, provenance="first_run")
+        if not res.get("ok"):
+            return {"ok": True, "next": "run_mission", "stored": False,
+                    "note": "memory store unavailable: %s" % res.get("error")}
+        return {"ok": True, "next": "run_mission", "stored": True,
+                "memory_id": res.get("memory_id")}
 
     def _step_run_mission(self, **kw: Any) -> Dict[str, Any]:
         # A guided demo mission is created against the runtime (governed op).

@@ -22,6 +22,6 @@ def test_golden_demo_runs():
         capture_output=True, text=True, env=env, cwd=REPO, timeout=60)
     assert r.returncode == 0, r.stderr
     for tag in ("model_a", "mission", "checkpoint", "shutdown", "model_b",
-                "resume", "evidence", "claimguard", "done"):
+                "resume", "evidence", "claimguard", "done", "memory"):
         assert ("[%s]" % tag.upper()) in r.stdout, tag
     assert "GOLDEN DEMO SUMMARY" in r.stdout
