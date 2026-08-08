@@ -1,10 +1,66 @@
 # CAPT Core
 
-**Local-first, verifiable cognitive infrastructure for AI agents.**
+**Local-first governed runtime and continuity substrate for AI agents.**
 
-CAPT Core keeps durable memory, governed state, execution evidence, recovery state, and human authority outside any single model session or vendor runtime. The repository ships **CAPT Solo**, the local-first reference implementation, together with the standalone **CAPT Runtime Harness** used for governed execution.
+> **The model becomes stateless. CAPT becomes stateful.**
 
-> The model is a component, not the system.
+A model is a transient, replaceable inference component. CAPT owns the durable
+memory, governed state, evidence, authority, execution history, context policy,
+and recovery around it. This is the one identity CAPT has: a local-first
+governed runtime and continuity substrate for AI agents.
+
+## Start here
+
+**New to CAPT? Read [`START_HERE.md`](START_HERE.md) and follow it — it is the
+only walkthrough you need.** It takes about five minutes: install, verify,
+store memory, start the runtime, inspect evidence, checkpoint, stop, restart,
+resume.
+
+For the mental model, see [`docs/MENTAL_MODEL.md`](docs/MENTAL_MODEL.md) — the
+whole system fits on one screen.
+
+## Quick start
+
+```zsh
+git clone https://github.com/knowurknottty/CAPT_core.git capt-core
+cd capt-core
+./install.sh
+./verify.sh
+```
+
+Then confirm the CLI:
+
+```zsh
+capt --version
+```
+
+Start the governed runtime with defaults and use it:
+
+```zsh
+capt start        # starts the runtime with a default state dir (~/.capt)
+capt status       # runtime health and version
+capt evidence     # human-readable proof / verification view
+capt checkpoint   # save authoritative state
+capt resume       # resume after restart
+capt stop         # stop the runtime
+```
+
+Durable memory, no model required:
+
+```zsh
+capt memory store "CAPT keeps durable state outside the model."
+capt memory search "durable"
+```
+
+`capt start/status/stop/checkpoint/resume` are the recommended normal-human
+entry points. The full expert surface remains available as
+`capt harness start/health/capabilities/stop` for advanced and debug use.
+
+Diagnose the environment any time:
+
+```zsh
+capt doctor
+```
 
 ## What is proven in v0.5
 
@@ -73,7 +129,15 @@ This makes models replaceable inference components rather than the system of rec
 
 ## Two supported public surfaces
 
-CAPT Core currently has two distinct public integration surfaces.
+CAPT has two integration paths. For normal users, the `capt` CLI is the primary
+surface. For developers, the `capt_solo.api` Python API and the `capt harness`
+expert CLI are the integration surfaces.
+
+### `capt` CLI (recommended, v0.6)
+
+`capt start/status/stop/checkpoint/resume/evidence/doctor` plus
+`capt memory ...` are the normal-human surface. See
+[`START_HERE.md`](START_HERE.md) and [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md).
 
 ### CAPT Solo API
 
@@ -90,11 +154,15 @@ memory.store(
 )
 ```
 
-### CAPT Runtime Harness
+### CAPT Runtime Harness (expert)
 
-Use the installed `capt harness` CLI for governed runtime lifecycle and bounded execution. The harness owns authenticated service access, command dispatch, checkpointing, restart continuity, idempotency, EventStore persistence, and driver boundaries.
+Use the installed `capt harness` CLI for governed runtime lifecycle and bounded execution at the full detail level (explicit socket/token/ledger paths). The harness owns authenticated service access, command dispatch, checkpointing, restart continuity, idempotency, EventStore persistence, and driver boundaries.
 
-Hermes and other external callers are compatibility clients. They do not become the CAPT runtime.
+`capt start/status/stop` are thin convenience wrappers over this harness that
+allocate default local state. Authority remains in RuntimeService.
+
+Hermes and other external callers are compatibility clients. They do not become
+the CAPT runtime.
 
 ## Architecture at a glance
 
@@ -144,16 +212,45 @@ Read [Security Boundaries](docs/SECURITY.md) before storing sensitive data or in
 ## Repository layout
 
 ```text
-capt_solo/         CAPT Solo API, memory, CTP, KHSB, and proof-governed services
-capt_runtime/      standalone governed runtime, EventStore, memory policy, drivers
-contracts/         canonical schemas and generated language bindings
-desktop/           local runtime service and desktop client surfaces
-docs/              public architecture, security, API, design, and project guides
-release_evidence/  versioned manifests, matrices, and release proof records
-tests/             automated test suite
+START_HERE.md     **start here** — the only walkthrough you need
+capt_cli.py       the `capt` command-line interface (normal + expert surface)
+capt_solo/        CAPT Solo API, memory, CTP, KHSB, and proof-governed services
+capt_runtime/     standalone governed runtime, EventStore, memory policy, drivers
+contracts/        canonical schemas and generated language bindings
+desktop/          local runtime service and desktop client surfaces
+docs/             user guide, mental model, matrix, demos, troubleshooting, architecture
+release_evidence/ versioned manifests, matrices, and release proof records
+tests/            automated test suite
 ```
 
+Find things by task, not by title:
+
+| I want to... | Read this |
+|---|---|
+| Do the five-minute walkthrough | [`START_HERE.md`](START_HERE.md) |
+| Understand the whole system in one screen | [`docs/MENTAL_MODEL.md`](docs/MENTAL_MODEL.md) |
+| Run realistic workflows | [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) |
+| Run demos | [`docs/DEMOS.md`](docs/DEMOS.md) |
+| Know what actually exists | [`docs/CAPABILITY_MATRIX.md`](docs/CAPABILITY_MATRIX.md) |
+| Fix a problem | [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) |
+| Add/use a model | [`docs/MODEL_PROVIDERS.md`](docs/MODEL_PROVIDERS.md) |
+| Inspect the proof | [`docs/RELEASE_EVIDENCE.md`](docs/RELEASE_EVIDENCE.md) |
+| Deep architecture | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (after first success) |
+| Integrate in Python | [`docs/API.md`](docs/API.md) |
+
 ## Documentation
+
+User path (start here):
+
+- [Start Here](START_HERE.md)
+- [Mental Model](docs/MENTAL_MODEL.md)
+- [User Guide](docs/USER_GUIDE.md)
+- [Demos](docs/DEMOS.md)
+- [Capability Matrix](docs/CAPABILITY_MATRIX.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Model Providers](docs/MODEL_PROVIDERS.md)
+
+Deep path (after first success):
 
 - [Whitepaper](docs/WHITEPAPER.md)
 - [Architecture](docs/ARCHITECTURE.md)
@@ -162,7 +259,8 @@ tests/             automated test suite
 - [API reference](docs/API.md)
 - [Runtime and integration guide](docs/PLUGIN_GUIDE.md)
 - [Roadmap](docs/ROADMAP.md)
-- [v0.5 release evidence](release_evidence/v0.5/release-readiness.md)
+- [v0.6 source of truth](docs/V0_6_PRODUCTIZATION_SOURCE_OF_TRUTH.md)
+- [Release evidence](docs/RELEASE_EVIDENCE.md)
 
 ## Naming
 

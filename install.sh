@@ -89,6 +89,18 @@ if [ -d "$HERMES_CONFIG_DIR" ]; then
   done
 fi
 
+# Install the `capt` CLI entry point so `capt --version`, `capt start`, etc.
+# work on PATH. This is the P0 normal-human install step: without it, a new
+# user cannot run any `capt` command.
+echo "[INFO] Installing the 'capt' command-line interface"
+if python3 -m pip install --disable-pip-version-check --no-input --quiet "$CAPT_SOLO_SRC"; then
+  echo "[OK] 'capt' installed: $(command -v capt || echo 'check your PATH')"
+else
+  echo "[WARN] 'pip install' of the capt CLI failed; try: python3 -m pip install . in $CAPT_SOLO_SRC"
+fi
+
 echo
 echo "Install complete. Run './verify.sh' to validate the installation."
 echo "Uninstall with './uninstall.sh'."
+echo
+echo "Next: type 'capt start' to launch the governed runtime with defaults."
