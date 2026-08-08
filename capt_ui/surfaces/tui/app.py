@@ -123,6 +123,8 @@ class CaptTUI(App):
         Binding("m", "show_mission", "Mission"),
         Binding("p", "show_provider", "Providers"),
         Binding("a", "show_approvals", "Approvals"),
+        Binding("y", "approve", "Approve"),
+        Binding("n", "deny", "Deny"),
         Binding("v", "cyclev", "Verbosity"),
         Binding("f5", "show_evidence", "Evidence"),
         Binding("f6", "show_memory", "Memory"),
@@ -232,6 +234,43 @@ class CaptTUI(App):
             self._verbosity.toggle(1)
             self.notify("CaveCAPT verbosity: %s" % self._verbosity.value.label)
             self.action_refresh()
+
+    # -- governed approval handling (same runtime command as Desktop/CLI) --
+    def _pending_request(self):
+        if not self._op or not self._op.connected:
+            return None
+        try:
+            dash = self._op.dashboard()
+        except Exception:  # noqa: BLE001
+            return None
+        for a in dash.approvals:
+            if a.state in ("pending", "open"):
+                return a
+        return None
+
+    def action_approve(self) -> None:
+        req = self._pending_request()
+        if req is None or self._op is None:
+            self.notify("No pending approval request to approve.")
+            return
+        try:
+            self._op.decide_approval(req.request_id, "approve")
+            self.notify("Approved %s (%s)" % (req.request_id[:8], req.operation))
+        except Exception as exc:  # noqa: BLE001
+            self.notify("Approve failed: %s" % str(exc)[:80], severity="error")
+        self.action_refresh()
+
+    def action_deny(self) -> None:
+        req = self._pending_request()
+        if req is None or self._op is None:
+            self.notify("No pending approval request to deny.")
+            return
+        try:
+            self._op.decide_approval(req.request_id, "deny")
+            self.notify("Denied %s (%s)" % (req.request_id[:8], req.operation))
+        except Exception as exc:  # noqa: BLE001
+            self.notify("Deny failed: %s" % str(exc)[:80], severity="error")
+        self.action_refresh()
 
 
 def main() -> int:

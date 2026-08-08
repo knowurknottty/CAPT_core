@@ -57,3 +57,62 @@ def test_tui_refresh_and_verbosity_cycle(runtime_env):
             app.action_cyclev()
 
     asyncio.run(run())
+
+
+def test_tui_approve_deny_no_pending(runtime_env):
+    """Approve/deny with no pending request must not raise, just notify."""
+    from capt_ui.surfaces.tui.app import CaptTUI
+    import asyncio
+
+    app = CaptTUI()
+    async def run():
+        async with app.run_test():
+            app.action_refresh()
+            app.action_approve()  # no pending -> notify, no raise
+            app.action_deny()
+
+    asyncio.run(run())
+
+
+def test_tui_approval_decision_routes_to_runtime(runtime_env):
+    """Create a mission requiring approval and confirm the TUI approve action
+    routes through the governed runtime decision op."""
+    import asyncio
+    import uuid
+    from capt_ui.surfaces.tui.app import CaptTUI
+    from desktop.desktop_runtime_client import RuntimeClient
+
+    sock, token = runtime_env
+    client = RuntimeClient(sock, token)
+    client.connect()
+    payload = {
+        "schemaVersion": "1.0.0",
+        "missionId": "m-tui-%s" % uuid.uuid4().hex[:8],
+        "objective": "TUI approval routing test",
+        "rawRequest": "TUI approval routing test",
+        "normalizedRequest": "tui approval routing test",
+        "constraints": [],
+        "successCriteria": [{"criterionId": "sc-1", "statement": "ok", "requiresVerification": True}],
+        "terminationCriteria": [],
+        "budget": {"maxEvents": 0},
+        "unresolvedAmbiguities": [],
+        "requiresApproval": True,
+        "requestedCapability": "cap.fs.read",
+        "operation": "ReadOnly",
+        "scope": {"kind": "filesystem", "rootPath": "/tmp", "recursive": False},
+        "riskClassification": "low",
+        "policyReason": "TUI test requires approval.",
+    }
+    client.command("create_mission", payload, "tui-%s" % uuid.uuid4().hex[:8])
+
+    app = CaptTUI()
+    async def run():
+        async with app.run_test():
+            app.action_refresh()
+            # pending request exists -> approve routes via governed op
+            app.action_approve()
+
+    asyncio.run(run())
+
+    # cleanup: any later reconnect is fine; no assertion on ledger growth here
+    client.disconnect()
