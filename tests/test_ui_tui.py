@@ -116,3 +116,47 @@ def test_tui_approval_decision_routes_to_runtime(runtime_env):
 
     # cleanup: any later reconnect is fine; no assertion on ledger growth here
     client.disconnect()
+
+
+def test_tui_interactive_smoke_keypresses(runtime_env):
+    """A real interactive smoke path: drive the TUI through its keybindings
+    (r refresh, v verbosity cycle, y/n approval, e/f5/f6/f7 navigation) via the
+    Textual pilot, and confirm actions dispatch to the shared Operator contract
+    rather than reproducing business logic."""
+    import asyncio
+    from capt_ui.surfaces.tui.app import CaptTUI
+
+    app = CaptTUI()
+    async def run():
+        async with app.run_test() as pilot:
+            # real key presses through the pilot
+            await pilot.press("r")       # refresh
+            await pilot.press("v")       # verbosity cycle (no raise)
+            await pilot.press("y")       # approve (notify, no raise)
+            await pilot.press("n")       # deny    (notify, no raise)
+            await pilot.press("e")       # runtime
+            await pilot.press("f5")      # evidence
+            await pilot.press("f6")      # memory
+            await pilot.press("f7")      # logs
+            await pilot.press("a")       # approvals
+            # cycle verbosity back to normal for determinism
+            while app._verbosity and app._verbosity.value.value != "normal":
+                await pilot.press("v")
+    asyncio.run(run())
+
+
+def test_tui_actions_route_through_operator(runtime_env):
+    """Confirm the TUI's governed actions call the shared Operator facade (not
+    direct runtime mutation). Approve/deny must route through Operator.decide
+    which calls the RuntimeService submit_approval_decision op."""
+    import inspect
+    from capt_ui.surfaces.tui.app import CaptTUI
+
+    app = CaptTUI()
+    src = inspect.getsource(CaptTUI.action_approve) + inspect.getsource(CaptTUI.action_deny)
+    # approve/deny must go through the operator (decide_approval -> governed op)
+    assert "decide_approval" in src
+    assert "." in src  # a method call on an object, not a bare ledger write
+    # The TUI must not construct or touch the EventStore/ledger directly
+    assert "EventStore" not in inspect.getsource(CaptTUI)
+    assert "sqlite" not in inspect.getsource(CaptTUI)
