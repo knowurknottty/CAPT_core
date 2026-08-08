@@ -21,6 +21,10 @@ Homepage = "https://github.com/knowurknottty/CAPT_core"
 
 [project.scripts]
 capt = "capt_cli:main"
+capt-ui = "capt_ui.operator.cli:main"
+
+[project.optional-dependencies]
+ui = ["textual>=0.80"]
 
 [project.entry-points.hermes_plugins]
 capt-solo = "capt_solo.plugin:get_plugin"
@@ -30,7 +34,7 @@ py-modules = ["capt_cli"]
 
 [tool.setuptools.packages.find]
 where = [".", "contracts/generated/python"]
-include = ["capt_solo*", "capt_runtime*", "capt_contracts*", "desktop*"]
+include = ["capt_solo*", "capt_runtime*", "capt_contracts*", "desktop*", "capt_ui*"]
 namespaces = true
 
 [tool.setuptools.package-data]
