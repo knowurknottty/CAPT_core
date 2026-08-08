@@ -1,12 +1,18 @@
 """CAPT Desktop surface (UI Foundation Phase 6) — improve, don't rewrite.
 
-Reuses the existing thin Tk client + RuntimeClient. Adds the v0.6 operator
-layout from the wireframes: sidebar (Sessions/Missions/Memory/Providers/
-Evidence/Settings/Logs/Help), conversation/transcript, dynamic right inspector
-(model/provider/mission/checkpoint/ledger/evidence/verification/memory/context/
-driver/latency), and an always-visible bottom status bar.
+CLASSIFICATION: DESKTOP_OPERATOR_MVP (thin Tk client over RuntimeClient).
 
-Everything renders from cap_ui.operator (shared) — no duplicated runtime logic.
+This is NOT a NATIVE_DESKTOP_PRODUCT. It is a:
+  - reference client,
+  - debugging client,
+  - portable fallback,
+  - view-model/projection proving ground.
+
+The native desktop experience for normal-human use is a SEPARATE track (SwiftUI
+macOS client, see capt_ui/surfaces/desktop_swift/). This surface reuses the
+existing thin Tk client + RuntimeClient and adds the v0.6 operator layout from
+the wireframes (sidebar, conversation/transcript, right inspector, bottom
+status). It renders from cap_ui.operator only - no duplicated runtime logic.
 """
 
 from __future__ import annotations

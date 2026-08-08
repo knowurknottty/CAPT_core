@@ -1,0 +1,223 @@
+{
+  "builtTestProducts" : [
+
+  ],
+  "copyCommands" : {
+
+  },
+  "explicitTargetDependencyImportCheckingMode" : {
+    "none" : {
+
+    }
+  },
+  "generatedSourceTargetSet" : [
+
+  ],
+  "pluginDescriptions" : [
+
+  ],
+  "swiftCommands" : {
+    "C.CAPTCoreDesktop-arm64-apple-macosx-debug.module" : {
+      "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/.build/arm64-apple-macosx/debug/CAPTCoreDesktop.build/sources",
+      "importPath" : "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/.build/arm64-apple-macosx/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/Sources/CAPTCoreDesktop/CAPTCoreDesktop.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/.build/arm64-apple-macosx/debug/CAPTCoreDesktop.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "CAPTCoreDesktop",
+      "moduleOutputPath" : "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/.build/arm64-apple-macosx/debug/Modules/CAPTCoreDesktop.swiftmodule",
+      "objects" : [
+        "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/.build/arm64-apple-macosx/debug/CAPTCoreDesktop.build/CAPTCoreDesktop.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "arm64-apple-macosx13.0",
+        "-incremental",
+        "-enable-batch-mode",
+        "-serialize-diagnostics",
+        "-index-store-path",
+        "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/.build/arm64-apple-macosx/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-j18",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+        "-module-cache-path",
+        "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/.build/arm64-apple-macosx/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-emit-objc-header",
+        "-emit-objc-header-path",
+        "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/.build/arm64-apple-macosx/debug/CAPTCoreDesktop.build/include/CAPTCoreDesktop-Swift.h",
+        "-swift-version",
+        "5",
+        "-plugin-path",
+        "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+        "-sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-I",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "desktop_swift"
+      ],
+      "outputFileMapPath" : "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/.build/arm64-apple-macosx/debug/CAPTCoreDesktop.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/.build/arm64-apple-macosx/debug/CAPTCoreDesktop.build/CAPTCoreDesktop.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/.build/arm64-apple-macosx/debug/Modules/CAPTCoreDesktop.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/Sources/CAPTCoreDesktop/CAPTCoreDesktop.swift"
+      ],
+      "tempsPath" : "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/.build/arm64-apple-macosx/debug/CAPTCoreDesktop.build",
+      "wholeModuleOptimization" : false
+    }
+  },
+  "swiftFrontendCommands" : {
+
+  },
+  "swiftTargetScanArgs" : {
+    "CAPTCoreDesktop" : [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "CAPTCoreDesktop",
+      "-package-name",
+      "desktop_swift",
+      "-c",
+      "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/Sources/CAPTCoreDesktop/CAPTCoreDesktop.swift",
+      "-I",
+      "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/.build/arm64-apple-macosx/debug/Modules",
+      "-target",
+      "arm64-apple-macosx13.0",
+      "-incremental",
+      "-enable-batch-mode",
+      "-serialize-diagnostics",
+      "-index-store-path",
+      "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/.build/arm64-apple-macosx/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-j18",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE",
+      "-module-cache-path",
+      "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/.build/arm64-apple-macosx/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-emit-objc-header",
+      "-emit-objc-header-path",
+      "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/.build/arm64-apple-macosx/debug/CAPTCoreDesktop.build/include/CAPTCoreDesktop-Swift.h",
+      "-swift-version",
+      "5",
+      "-plugin-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing",
+      "-sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-I",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.5.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "desktop_swift",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ]
+  },
+  "targetDependencyMap" : {
+    "CAPTCoreDesktop" : [
+
+    ]
+  },
+  "testDiscoveryCommands" : {
+
+  },
+  "testEntryPointCommands" : {
+
+  },
+  "traitConfiguration" : {
+    "default" : {
+
+    }
+  },
+  "writeCommands" : {
+    "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/.build/arm64-apple-macosx/debug/CAPTCoreDesktop.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/Sources/CAPTCoreDesktop/CAPTCoreDesktop.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/.build/arm64-apple-macosx/debug/CAPTCoreDesktop.build/sources"
+    },
+    "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt" : {
+      "alwaysOutOfDate" : true,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<swift-get-version>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+        }
+      ],
+      "outputFilePath" : "/Users/knowurknot/CAPT_core/capt_ui/surfaces/desktop_swift/.build/arm64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+    }
+  }
+}
