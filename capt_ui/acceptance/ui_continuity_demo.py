@@ -1,16 +1,19 @@
-"""CAPT v0.6 flagship acceptance demonstration (Phase 8).
+"""CAPT v0.6 UI continuity workflow demo (Phase 8).
 
-The canonical end-to-end demo that proves a normal human can operate CAPT:
+NOT a cross-model continuity proof. This demo exercises the operator-surface
+continuity (provider/model selection state, mission, checkpoint, resume,
+evidence) against a live runtime using SYNTHETIC model ids. It demonstrates that
+the UI/operator layer can drive a complete lifecycle with provider switching and
+resume without runtime duplication.
 
-    Model A -> Mission -> Checkpoint -> Shutdown -> Switch provider -> Model B
-      -> Resume -> Evidence -> Verification -> ClaimGuard -> Done
-
-Builds entirely on the shared operator layer and supported runtime commands -
-no runtime authority is duplicated. It is executable and produces observable
-output, so it doubles as the flagship v0.6 demonstration.
+It does NOT prove actual model-generated work or cross-model recovery, because
+no real model execution is performed. The real cross-model acceptance proof
+(Model A -> real model execution -> shutdown -> Model B -> no-repeat recovery)
+is a separate concern that requires real provider/model adapters and is NOT
+claimed here.
 
 Usage:
-    python capt_ui/acceptance/golden_demo.py [--provider-a ollama] [--provider-b lmstudio]
+    python capt_ui/acceptance/ui_continuity_demo.py [--provider-a ollama] [--provider-b lmstudio]
 """
 
 from __future__ import annotations
@@ -31,7 +34,7 @@ from capt_ui.operator.runtime import Operator  # noqa: E402
 from capt_ui.operator.verbosity import CaveCAPT  # noqa: E402
 
 
-class GoldenDemo:
+class UIContinuityDemo:
     def __init__(self, provider_a: str = "ollama", provider_b: str = "lmstudio",
                  model_a: str = "", model_b: str = "") -> None:
         self.pa = provider_a
@@ -71,7 +74,7 @@ class GoldenDemo:
         self._log("model_a", provider=self.pa, model=self.ma)
 
         # 2. Mission (governed op)
-        receipt = op.create_mission(_mission_payload("Golden demo mission"), "golden-demo-%d" % int(time.time()))
+        receipt = op.create_mission(_mission_payload("UI continuity demo mission"), "ui-continuity-%d" % int(time.time()))
         self._log("mission", status=receipt.get("status", "accepted"))
 
         # 3. Checkpoint
@@ -102,12 +105,12 @@ class GoldenDemo:
                   verification=ev.verification.get("status", {}).get("kind", "?"))
 
         # 7b. Memory (acceptance: store memory)
-        mres = op.store_memory("Golden demo durable memory", provenance="golden_demo")
+        mres = op.store_memory("UI continuity durable memory", provenance="ui_continuity_demo")
         self._log("memory", stored=mres.get("ok", False),
                   memory_id=(mres.get("memory_id") or "")[:10])
 
         # 8. ClaimGuard
-        cg = op.claimguard("The golden demo mission produced evidence under verification.")
+        cg = op.claimguard("The UI continuity mission produced evidence under verification.")
         self._log("claimguard", verdict=cg.get("verdict"))
 
         # 9. Done
@@ -117,7 +120,7 @@ class GoldenDemo:
         return 0
 
     def _emit_summary(self) -> None:
-        print("\n=== GOLDEN DEMO SUMMARY ===")
+        print("\n=== UI CONTINUITY DEMO SUMMARY ===")
         print("active model : %s [%s]" % (self.mm.active().model_id, self.mm.active().kind))
         print("verbosity    : %s" % self.v.value.label)
         print("steps        : %d" % len(self.steps_log))
@@ -129,7 +132,7 @@ def _mission_payload(objective: str) -> Dict[str, Any]:
     import uuid
     return {
         "schemaVersion": "1.0.0",
-        "missionId": "m-golden-" + uuid.uuid4().hex[:8],
+        "missionId": "m-uicontinuity-" + uuid.uuid4().hex[:8],
         "objective": objective,
         "rawRequest": objective,
         "normalizedRequest": objective.lower(),
@@ -160,11 +163,11 @@ def trunc(v: Any, n: int = 60) -> str:
 
 def main() -> int:
     import argparse
-    p = argparse.ArgumentParser(description="CAPT golden acceptance demo")
+    p = argparse.ArgumentParser(description="CAPT UI continuity workflow demo")
     p.add_argument("--provider-a", default="ollama")
     p.add_argument("--provider-b", default="lmstudio")
     args = p.parse_args()
-    return GoldenDemo(args.provider_a, args.provider_b).run()
+    return UIContinuityDemo(args.provider_a, args.provider_b).run()
 
 
 if __name__ == "__main__":

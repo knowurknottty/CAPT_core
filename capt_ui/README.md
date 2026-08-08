@@ -35,7 +35,7 @@ capt_ui/
     tui/app.py     # Textual operator console (Phase 5)
     desktop/       # desktop view-model over RuntimeClient (Phase 6)
   acceptance/
-    golden_demo.py # flagship acceptance demo (Phase 8)
+    ui_continuity_demo.py # UI continuity workflow demo (Phase 8)
 ```
 
 ## Commands
@@ -69,8 +69,8 @@ pytest tests/test_ui_operator_layer.py \
        tests/test_ui_desktop_surface.py \
        tests/test_ui_onboarding.py \
        tests/test_ui_cli.py \
-       tests/test_ui_golden_demo.py
+       tests/test_ui_continuity_demo.py
 ```
 
-TUI/desktop/golden tests that need a live runtime skip cleanly when none is
+TUI/desktop/continuity tests that need a live runtime skip cleanly when none is
 running.

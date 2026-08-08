@@ -15,9 +15,6 @@ from __future__ import annotations
 
 import json
 import os
-import time
-import urllib.error
-import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -90,8 +87,8 @@ DEFAULT_PROVIDERS: List[Dict[str, Any]] = [
      "transport": "openai_compatible", "base_url": "https://openrouter.ai/api/v1",
      "context_limit": 128000, "capabilities": ["chat", "tool_use", "vision"]},
     {"id": "ollama", "name": "Ollama", "kind": "local",
-     "transport": "openai_compatible", "base_url": "http://localhost:11434/v1",
-     "context_limit": 8192, "capabilities": ["chat"]},
+     "transport": "ollama", "base_url": "http://localhost:11434/v1",
+     "context_limit": 8192, "capabilities": ["chat", "generate"]},
     {"id": "lmstudio", "name": "LM Studio", "kind": "local",
      "transport": "openai_compatible", "base_url": "http://localhost:1234/v1",
      "context_limit": 32768, "capabilities": ["chat", "tool_use"]},
@@ -212,78 +209,50 @@ class ProviderManager:
 
     # -- health probing ----------------------------------------------------
     def test(self, provider_id: str, api_key: str = "") -> Provider:
-        """Probe provider connectivity (reachable, auth, models, latency)."""
+        """Probe provider connectivity (reachable, auth, models, latency)
+        routed through the provider's TRANSPORT ADAPTER. Native/subprocess
+        providers that lack an HTTP probe are classified honestly."""
         p = self._providers.get(provider_id)
         if p is None:
             raise ValueError("unknown provider: %s" % provider_id)
-        start = time.time()
+        from .adapters import adapter_for, resolve_secret
+
+        adapter = adapter_for(getattr(p, "transport", ""))
+        key = resolve_secret(p, api_key)
         try:
-            models, ctx = self._fetch_models(p, api_key)
-            latency = int((time.time() - start) * 1000)
-            p.reachable = True
-            p.model_list_ok = True
-            p.authenticated = True  # no auth error observed
-            p.latency_ms = latency
+            result = adapter.health(p, key)
+        except Exception as exc:  # noqa: BLE001 - adapter raised unexpectedly
+            result = {"health": ProviderHealth.RED.value, "reachable": False,
+                      "model_list_ok": False, "note": str(exc)[:100]}
+        p.health = ProviderHealth(result.get("health", ProviderHealth.UNKNOWN.value))
+        p.reachable = result.get("reachable")
+        p.authenticated = result.get("authenticated")
+        p.model_list_ok = result.get("model_list_ok", False)
+        p.latency_ms = result.get("latency_ms")
+        p.models = list(result.get("models", []))
+        if result.get("health") == ProviderHealth.GREEN.value:
             p.last_success_at = _now()
-            p.models = models
-            if ctx:
-                p.context_limit = ctx
-            p.health = ProviderHealth.GREEN
-        except urllib.error.HTTPError as exc:
-            p.reachable = True
-            p.model_list_ok = False
-            if exc.code in (401, 403):
-                p.authenticated = False
-                p.health = ProviderHealth.RED
-            else:
-                p.authenticated = True
-                p.health = ProviderHealth.YELLOW
-            p.latency_ms = int((time.time() - start) * 1000)
-        except Exception:  # noqa: BLE001 - unreachable
-            p.reachable = False
-            p.authenticated = None
-            p.model_list_ok = False
-            p.health = ProviderHealth.RED
-            p.latency_ms = int((time.time() - start) * 1000)
         self.save()
         return p
 
     # -- discovery ---------------------------------------------------------
     def discover_local(self) -> List[str]:
-        """Return ids of local providers whose endpoint answered a probe."""
+        """Return ids of local providers whose transport adapter detected a
+        reachable service. Uses the correct adapter per provider - never forces
+        an HTTP probe on a native/subprocess provider."""
+        from .adapters import adapter_for
         found = []
         for pid in ("ollama", "lmstudio", "llamacpp"):
             p = self._providers.get(pid)
-            if not p or not p.base_url:
+            if not p or not p.enabled:
                 continue
+            adapter = adapter_for(getattr(p, "transport", ""))
             try:
-                self._fetch_models(p)
-                found.append(pid)
+                if adapter.discover(p):
+                    found.append(pid)
             except Exception:  # noqa: BLE001
                 continue
         return found
-
-    # -- internals ---------------------------------------------------------
-    def _fetch_models(self, p: Provider, api_key: str = "") -> tuple:
-        """Return (model_names, context_size). Handles OpenAI-compatible servers."""
-        url = p.base_url.rstrip("/") + "/models"
-        headers: Dict[str, str] = {"Accept": "application/json"}
-        key = api_key or os.environ.get("CAPT_PROVIDER_KEY_%s" % p.id.upper(), "")
-        if key:
-            headers["Authorization"] = "Bearer " + key
-        req = urllib.request.Request(url, headers=headers, method="GET")
-        with urllib.request.urlopen(req, timeout=4) as resp:  # noqa: S310 - local/cloud HTTPS ok
-            data = json.loads(resp.read().decode())
-        model_names = [m.get("id", "") for m in data.get("data", []) if m.get("id")]
-        ctx = 0
-        # best-effort context from the largest counted model
-        for m in data.get("data", []):
-            try:
-                c = int((m.get("context_length") or m.get("context_window") or 0))
-                ctx = max(ctx, c)
-            except (TypeError, ValueError):
-                pass
-        return model_names, ctx
 
 
 def _now() -> str:

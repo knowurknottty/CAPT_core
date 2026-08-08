@@ -97,8 +97,15 @@ def cmd_providers(args) -> int:
         p = pm.activate(args.activate)
         _out({"activated": args.activate, "kind": pm.label(p) if p else "?"}, args.json)
         return 0
-    rows = [p.to_dict() for p in pm.list()]
+    from .secrets import safe_to_dict
+    rows = [safe_to_dict(p) for p in pm.list()]
     _out(rows, args.json)
+    return 0
+
+
+def cmd_capabilities(args) -> int:
+    from .provider_support import full_matrix
+    _out(full_matrix(), args.json)
     return 0
 
 
@@ -169,6 +176,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     pr.add_argument("--activate")
     pr.add_argument("--json", action="store_true")
 
+    cap = sub.add_parser("capabilities")
+    cap.add_argument("--json", action="store_true")
+
     mo = sub.add_parser("models")
     mo.add_argument("--set", metavar="provider/model")
     mo.add_argument("--json", action="store_true")
@@ -188,7 +198,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = p.parse_args(argv)
     handlers = {
         "status": cmd_status, "dashboard": cmd_dashboard,
-        "providers": cmd_providers, "models": cmd_models,
+        "providers": cmd_providers, "capabilities": cmd_capabilities,
+        "models": cmd_models,
         "verbosity": cmd_verbosity, "memory": cmd_memory, "onramp": cmd_onramp,
     }
     return handlers[args.cmd](args)
