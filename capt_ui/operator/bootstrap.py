@@ -25,7 +25,8 @@ def resolve_runtime() -> tuple:
 
     Resolution order:
       1. explicit CAPT_SOCK / CAPT_TOKEN env vars
-      2. default state dir (runtime.sock / token.txt)
+      2. default state dir (runtime.sock / runtime.token, matching
+         capt_runtime.cli_ramp.default_paths())
       3. None if not determinable
     """
     sock = os.environ.get("CAPT_SOCK")
@@ -34,7 +35,9 @@ def resolve_runtime() -> tuple:
         return sock, token
     state = default_state_dir()
     sock_path = state / "runtime.sock"
-    token_file = state / "token.txt"
+    # Runtime token is written by the canonical `capt start` on-ramp
+    # (capt_runtime.cli_ramp.default_paths -> state/runtime.token).
+    token_file = state / "runtime.token"
     if sock_path.exists() and token_file.exists():
         return str(sock_path), str(token_file)
     # allow just a sock if token is stored there too
