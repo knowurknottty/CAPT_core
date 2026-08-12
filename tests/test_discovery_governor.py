@@ -377,6 +377,28 @@ def test_case_j_max_directories_independently_enforced(tmp_path: Path):
     assert any(r[1] == "dir_count" for r in sc["rejections"])
 
 
+def test_case_j_pruned_dirs_do_not_exhaust_max_files(tmp_path: Path):
+    # R3-2 regression: pruned/skipped heavy directories must NOT be charged to
+    # max_files (max_files counts FILES only). Many heavy dirs + one real source
+    # file must still admit the source file under a small max_files. Previously
+    # each pruned dir did n_files += 1, so a tree full of heavy dirs exhausted
+    # max_files before the single real file was reached.
+    root = tmp_path / "repo"
+    root.mkdir()
+    for i in range(50):
+        (root / ("heavy_%d" % i)).mkdir()
+    (root / "node_modules").mkdir()
+    (root / "real.py").write_text("x=1\n")
+    lim = ScanLimits(max_files=1, max_directories=10000, max_depth=2)
+    sc = BoundedLocalScanner(limits=lim, allowed_roots=[str(tmp_path)]).scan(
+        str(root))
+    # the single real source file must be counted + admitted despite ~51 heavy
+    # directory names (source files = 1, not exhausted to 0 by dir names)
+    assert sc["n_source_files"] == 1
+    assert any(c.get("path", "").endswith("real.py")
+               for c in sc.get("candidates", []))
+
+
 # ===========================================================================
 # SP3 Pass 2 — adversarial attack
 # ===========================================================================
@@ -493,6 +515,51 @@ def test_evidence_digest_changes_on_classification_difference(tmp_path: Path):
     empty = tmp_path / "empty"; empty.mkdir()
     a = run_discovery(targets=[str(src)], allowed_roots=[str(tmp_path)])
     b = run_discovery(targets=[str(empty)], allowed_roots=[str(tmp_path)])
+    da = to_evidence(a, mission_id="m", collected_by={"actorId": "x", "kind": "human"})
+    db = to_evidence(b, mission_id="m", collected_by={"actorId": "x", "kind": "human"})
+    assert da["evidence"]["artifactDigest"] != db["evidence"]["artifactDigest"]
+
+
+def test_evidence_digest_implicit_defaults_eq_explicit_identical(tmp_path: Path):
+    # R3-1: limits=None (implicit defaults) must be equivalent to an explicitly
+    # identical ScanLimits() in the policy fingerprint -> same digest.
+    from capt_runtime.discovery import to_evidence, run_discovery, ScanLimits
+    src = tmp_path / "src"; src.mkdir()
+    (src / "a.py").write_text("y=2\n")
+    implicit = run_discovery(targets=[str(src)], allowed_roots=[str(tmp_path)])
+    explicit = run_discovery(targets=[str(src)], allowed_roots=[str(tmp_path)],
+                             limits=ScanLimits())
+    di = to_evidence(implicit, mission_id="m",
+                     collected_by={"actorId": "x", "kind": "human"})
+    de = to_evidence(explicit, mission_id="m",
+                     collected_by={"actorId": "x", "kind": "human"})
+    assert di["evidence"]["artifactDigest"] == de["evidence"]["artifactDigest"]
+
+
+def test_evidence_digest_differs_on_expected_markers(tmp_path: Path):
+    # R3-1: differing expected_markers over otherwise identical observation
+    # surface -> different policy fingerprint / digest.
+    from capt_runtime.discovery import to_evidence, run_discovery
+    src = tmp_path / "src"; src.mkdir()
+    (src / "package.json").write_text("{}\n"); (src / "a.js").write_text("x\n")
+    a = run_discovery(targets=[str(src)], allowed_roots=[str(tmp_path)],
+                      expected_markers=["package.json"])
+    b = run_discovery(targets=[str(src)], allowed_roots=[str(tmp_path)],
+                      expected_markers=["pyproject.toml"])
+    da = to_evidence(a, mission_id="m", collected_by={"actorId": "x", "kind": "human"})
+    db = to_evidence(b, mission_id="m", collected_by={"actorId": "x", "kind": "human"})
+    assert da["evidence"]["artifactDigest"] != db["evidence"]["artifactDigest"]
+
+
+def test_evidence_digest_differs_on_effective_limits(tmp_path: Path):
+    # R3-1: materially different effective limits -> different digest.
+    from capt_runtime.discovery import to_evidence, run_discovery, ScanLimits
+    src = tmp_path / "src"; src.mkdir()
+    (src / "a.py").write_text("y=2\n")
+    a = run_discovery(targets=[str(src)], allowed_roots=[str(tmp_path)],
+                      limits=ScanLimits())
+    b = run_discovery(targets=[str(src)], allowed_roots=[str(tmp_path)],
+                      limits=ScanLimits(max_files=4711))
     da = to_evidence(a, mission_id="m", collected_by={"actorId": "x", "kind": "human"})
     db = to_evidence(b, mission_id="m", collected_by={"actorId": "x", "kind": "human"})
     assert da["evidence"]["artifactDigest"] != db["evidence"]["artifactDigest"]
@@ -655,9 +722,15 @@ def test_evidence_persistence_through_record_evidence_and_restart(tree, tmp_path
         runtime2.close()
 
 
-def test_evidence_persistence_duplicate_id_does_not_duplicate_events(tree, tmp_path):
-    """Repeated record_evidence with the same evidence id (idempotent replay)
-    must not create duplicate evidence records on the claim."""
+def test_evidence_attachment_deduplication(tree, tmp_path):
+    """Repeated record_evidence with the same evidence id on the same claim is
+    deduplicated at the AGGREGATE level (evidence attachment), NOT at the ledger
+    level. Per canonical RuntimeService/ClaimAggregate semantics, each
+    record_evidence appends its own EvidenceRecorded event, but the claim's
+    evidenceIds list contains the id exactly once.
+
+    Property name: EVIDENCE_ATTACHMENT_DEDUPLICATION (not persistence idempotency).
+    """
     from capt_runtime.composition import create_runtime
 
     runtime = create_runtime(str(tmp_path / "ledger.db"))
@@ -675,9 +748,23 @@ def test_evidence_persistence_duplicate_id_does_not_duplicate_events(tree, tmp_p
         runtime.service.record_evidence("claim-disc-2", evidence,
                                         _exec_meta(command_id="cmdrec-2b", step="3"))
         after = runtime.store.head_sequence()
-        assert after >= before  # idempotent / no unbounded growth
+        # Ledger advances per record_evidence call (append-only): aggregate-level
+        # dedup is what guarantees the id is attached once, so we assert the
+        # AGGREGATE invariant, not that the ledger is unchanged.
+        assert after > before
+        # Count EvidenceRecorded events for this claim.
+        events = [env for env in runtime.store.read_events()
+                  if ((env.get("payload") or {}).get("eventType")
+                      == "EvidenceRecorded")]
+        n_attached_events = sum(
+            1 for env in events
+            if ((env.get("payload") or {}).get("evidence") or {}).get("evidenceId")
+            == ev_id)
+        # Ledger may hold the event multiple times (append-only), but the
+        # aggregate must attach the id exactly once.
         claim_state = runtime.service.store.require_state("claim-claim-disc-2")
         assert claim_state["evidenceIds"].count(ev_id) == 1, \
-            "same evidence id must not be attached twice"
+            "aggregate must deduplicate the same evidence id to one attachment"
+        assert n_attached_events >= 1
     finally:
         runtime.close()
