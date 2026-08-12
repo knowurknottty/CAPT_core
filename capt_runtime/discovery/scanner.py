@@ -132,7 +132,7 @@ class BoundedLocalScanner:
         rejections: List[Tuple[str, str]] = []
         n_source = n_bundle = n_git = n_marker = 0
         n_expected = 0
-        n_dirs = n_files = n_bytes = 0
+        n_dirs = n_files = n_bytes = n_pruned_dirs = 0
 
         def check_budget():
             if time.monotonic() - started > limits.timeout_seconds:
@@ -143,8 +143,10 @@ class BoundedLocalScanner:
                 return "file_count"
             if n_dirs >= limits.max_directories:
                 return "dir_count"
-            # Separate combined node-count guard (an additional total bound).
-            if n_files + n_dirs >= limits.max_files + limits.max_directories:
+            # Separate combined node-count guard (an additional total bound) that
+            # includes files + descended dirs + pruned (skipped) dirs, so a huge
+            # heavy-dir tree still cannot be walked unboundedly.
+            if n_files + n_dirs + n_pruned_dirs >= limits.max_files + limits.max_directories:
                 return "node_count"
             if n_bytes >= limits.max_total_bytes:
                 return "total_bytes"
@@ -180,8 +182,10 @@ class BoundedLocalScanner:
                     continue
                 if d in (".venv", "venv", "__pycache__", "node_modules",
                          "target", "dist", "build"):
-                    # still record as rejection? no: too heavy to enumerate
-                    n_files += 1
+                    # Too heavy to recurse: count under a SEPARATE pruned-dir
+                    # budget (n_pruned_dirs), never charged to max_files.
+                    # max_files counts FILES only; these are directories.
+                    n_pruned_dirs += 1
                     continue
                 pruned.append(d)
                 n_dirs += 1
