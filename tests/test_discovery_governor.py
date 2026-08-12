@@ -363,6 +363,20 @@ def test_case_j_limits_enforced(tmp_path: Path):
     assert "limits" in sc
 
 
+def test_case_j_max_directories_independently_enforced(tmp_path: Path):
+    # Regression for the bounds audit (SP3 D-R4): max_directories must be an
+    # independent bound on DIRECTORIES, not only a combined node-count guard.
+    root = tmp_path / "wide"
+    root.mkdir()
+    for i in range(30):
+        (root / ("d%d" % i)).mkdir()
+    lim = ScanLimits(max_directories=5, max_depth=2)
+    sc = BoundedLocalScanner(limits=lim, allowed_roots=[str(tmp_path)]).scan(
+        str(root))
+    # a single wide level must be capped at max_directories, not walked fully
+    assert any(r[1] == "dir_count" for r in sc["rejections"])
+
+
 # ===========================================================================
 # SP3 Pass 2 — adversarial attack
 # ===========================================================================

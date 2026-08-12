@@ -137,8 +137,15 @@ class BoundedLocalScanner:
         def check_budget():
             if time.monotonic() - started > limits.timeout_seconds:
                 return "timeout"
-            if n_files + n_dirs >= limits.max_files + limits.max_directories:
+            # Independent hard count guards: max_files means FILES, max_directories
+            # means DIRECTORIES (each enforced on its own metric).
+            if n_files >= limits.max_files:
                 return "file_count"
+            if n_dirs >= limits.max_directories:
+                return "dir_count"
+            # Separate combined node-count guard (an additional total bound).
+            if n_files + n_dirs >= limits.max_files + limits.max_directories:
+                return "node_count"
             if n_bytes >= limits.max_total_bytes:
                 return "total_bytes"
             if len(candidates) >= limits.max_candidates:
@@ -178,6 +185,11 @@ class BoundedLocalScanner:
                     continue
                 pruned.append(d)
                 n_dirs += 1
+                # Independent dir-count cap: stop descending once max_directories
+                # directories have been admitted, so a single wide level cannot
+                # exceed the directory bound.
+                if n_dirs >= limits.max_directories:
+                    break
             dirnames[:] = pruned
             for fn in filenames:
                 budget = check_budget()
