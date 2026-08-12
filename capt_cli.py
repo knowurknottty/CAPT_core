@@ -41,7 +41,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import time
 import uuid
 import subprocess
 from datetime import datetime, timezone
@@ -111,6 +113,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     m = sub.add_parser("memory")
     ms = m.add_subparsers(dest="action")
     p = ms.add_parser("list"); p.add_argument("--namespace", default=None)
+    p = ms.add_parser("store"); p.add_argument("text"); p.add_argument("--namespace", default="default"); p.add_argument("--tag", action="append", default=None); p.add_argument("--provenance", default="cli")
     p = ms.add_parser("inspect"); p.add_argument("id")
     p = ms.add_parser("search"); p.add_argument("query")
     ms.add_parser("candidates")
@@ -191,7 +194,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--objective", required=True)
     p.add_argument("--operator", default="cli-operator")
 
-    harness = sub.add_parser("harness", help="headless canonical CAPT runtime service")
+    harness = sub.add_parser("harness", help="headless canonical CAPT runtime service (expert/debug surface)")
     hs = harness.add_subparsers(dest="action")
     p = hs.add_parser("start")
     p.add_argument("--ledger", required=True)
@@ -221,12 +224,42 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--sock", required=True)
     p.add_argument("--token-file", required=True)
 
+    # --- P0 normal-human on-ramp (thin convenience over the harness) -----
+    # `capt start` / `capt status` / `capt stop` allocate default local state
+    # (~/.capt by default) so a new user does not need socket/token/ledger
+    # paths. `capt harness ...` remains the full expert surface.
+    p = sub.add_parser("start", help="start the governed runtime with sensible defaults")
+    p.add_argument("--state-dir", default=None, help="state directory (default: ~/.capt or $CAPT_STATE_DIR)")
+    p.add_argument("--seed", action="store_true", help="seed a demo mission (for first-run demonstration)")
+
+    p = sub.add_parser("status", help="report runtime health and version")
+    p.add_argument("--state-dir", default=None)
+
+    p = sub.add_parser("stop", help="stop the running runtime")
+    p.add_argument("--state-dir", default=None)
+
+    p = sub.add_parser("checkpoint", help="checkpoint the running runtime")
+    p.add_argument("--state-dir", default=None)
+    p.add_argument("--idempotency-key", default=None)
+
+    p = sub.add_parser("resume", help="resume a check-pointed runtime")
+    p.add_argument("--state-dir", default=None)
+    p.add_argument("--idempotency-key", default=None)
+
+    p = sub.add_parser("doctor", help="diagnose the local environment")
+
+    p = sub.add_parser("evidence", help="show a human-readable evidence/verification view")
+    p.add_argument("--state-dir", default=None)
+    p.add_argument("--mission", default=None, help="mission id to inspect (default: most recent)")
+
     args = parser.parse_args(argv)
     if not args.group:
         parser.print_help()
         return 1
 
     as_json = args.json
+    if args.group in ("start", "status", "stop", "checkpoint", "resume", "doctor", "evidence"):
+        return _cmd_ramp(args, as_json)
     if args.group == "runtime":
         return _cmd_runtime(args, as_json)
     if args.group == "harness":
@@ -259,7 +292,13 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 
 def _cmd_harness(args) -> int:
-    if args.action in ("health", "capabilities"):
+    if args.action == "start":
+        argv = [sys.executable, "-m", "desktop.capt_runtime_service", "--ledger", args.ledger,
+                "--sock", args.sock, "--token-file", args.token_file]
+        if args.seed:
+            argv.append("--seed")
+        return subprocess.call(argv)
+    if args.action == "health" or args.action == "capabilities":
         from desktop.desktop_runtime_client import RuntimeClient
         client = RuntimeClient(args.sock, args.token_file)
         try:
@@ -294,13 +333,260 @@ def _cmd_harness(args) -> int:
             return 0 if receipt.get("status") in ("accepted", "idempotent") else 1
         finally:
             client.disconnect()
-    if args.action != "start":
-        return _fail("harness action required")
-    argv = [sys.executable, "-m", "desktop.capt_runtime_service", "--ledger", args.ledger,
-            "--sock", args.sock, "--token-file", args.token_file]
-    if args.seed:
+    return _fail("harness action required")
+
+
+def _cmd_ramp(args, as_json) -> int:
+    """P0 normal-human on-ramp: capt start/status/stop/checkpoint/resume/doctor/evidence.
+
+    Simple convenience wrappers that allocate default local state so a new
+    user does not need socket/token/ledger paths. Authority remains in
+    RuntimeService; these are caller-side conveniences only.
+    """
+    from capt_runtime.cli_ramp import default_paths
+    from desktop.desktop_runtime_client import RuntimeClient
+
+    group = args.group
+
+    if group == "doctor":
+        return _cmd_doctor()
+
+    paths = default_paths()
+    if getattr(args, "state_dir", None):
+        base = Path(args.state_dir).expanduser()
+        paths = {
+            "state_dir": base,
+            "ledger": base / "runtime.db",
+            "sock": base / "runtime.sock",
+            "token": base / "runtime.token",
+            "pid": base / "runtime.pid",
+        }
+
+    if group == "start":
+        return _cmd_ramp_start(args, paths, as_json)
+
+    # status / stop / evidence all need a running service
+    from capt_runtime.cli_ramp import is_running
+    if not paths["sock"].exists() or not is_running(paths["sock"]):
+        return _fail(
+            "CAPT runtime is not running. Start it first with: capt start\n"
+            f"  (expected socket: {paths['sock']})"
+        )
+    if not paths["token"].exists():
+        return _fail("token file missing: %s" % paths["token"])
+
+    client = RuntimeClient(str(paths["sock"]), str(paths["token"]))
+    try:
+        identity = client.connect()
+        if group == "status":
+            result = _status_view(client, identity)
+            print(_json_or_human(result, as_json))
+            return 0 if identity.get("integrity") == "ok" else 1
+        if group == "checkpoint":
+            idek = getattr(args, "idempotency_key", None) or "cli-checkpoint-" + uuid.uuid4().hex
+            receipt = client.command("checkpoint_runtime", {}, idek)
+            print(_json_or_human(receipt, as_json))
+            return 0 if receipt.get("status") in ("accepted", "idempotent") else 1
+        if group == "resume":
+            idek = getattr(args, "idempotency_key", None) or "cli-resume-" + uuid.uuid4().hex
+            receipt = client.command("resume_runtime", {}, idek)
+            print(_json_or_human(receipt, as_json))
+            return 0 if receipt.get("status") in ("accepted", "idempotent") else 1
+        if group == "stop":
+            receipt = client.command("shutdown", {}, "cli-stop-" + uuid.uuid4().hex)
+            print(_json_or_human(receipt, as_json))
+            return 0 if receipt.get("status") in ("accepted", "idempotent") else 1
+        if group == "evidence":
+            result = _evidence_view(client, getattr(args, "mission", None))
+            print(_json_or_human(result, as_json))
+            return 0
+    except Exception as exc:
+        return _fail(f"{type(exc).__name__}: {exc}")
+    finally:
+        try:
+            client.disconnect()
+        except Exception:
+            pass
+    return 1
+
+
+def _cmd_ramp_start(args, paths, as_json) -> int:
+    """Start the runtime service with default local state (background)."""
+    from capt_runtime.cli_ramp import is_running
+    base = paths["state_dir"]
+    base.mkdir(parents=True, exist_ok=True)
+    # If already running, just report status.
+    if paths["sock"].exists() and is_running(paths["sock"]):
+        from desktop.desktop_runtime_client import RuntimeClient
+        client = RuntimeClient(str(paths["sock"]), str(paths["token"]))
+        try:
+            identity = client.connect()
+            print(_json_or_human(_status_view(client, identity), as_json))
+            return 0
+        finally:
+            client.disconnect()
+    argv = [sys.executable, "-m", "desktop.capt_runtime_service",
+            "--ledger", str(paths["ledger"]),
+            "--sock", str(paths["sock"]),
+            "--token-file", str(paths["token"])]
+    if getattr(args, "seed", False):
         argv.append("--seed")
-    return subprocess.call(argv)
+    # Launch detached so `capt start` returns and the runtime keeps running.
+    # The parent closes its copies of the redirected handles after Popen; the
+    # child process inherits and owns its own descriptors.
+    devnull = open(os.devnull, "wb")
+    logf = open(base / "start.log", "ab")
+    try:
+        proc = subprocess.Popen(argv, stdout=devnull, stderr=logf, start_new_session=True)
+    finally:
+        devnull.close()
+        logf.close()
+    try:
+        paths["pid"].write_text(str(proc.pid))
+    except OSError:
+        pass
+    # Wait for the service to become healthy (bounded).
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        if paths["sock"].exists() and is_running(paths["sock"]):
+            from desktop.desktop_runtime_client import RuntimeClient
+            client = RuntimeClient(str(paths["sock"]), str(paths["token"]))
+            try:
+                identity = client.connect()
+                print(_json_or_human(_status_view(client, identity), as_json))
+                return 0
+            finally:
+                client.disconnect()
+        time.sleep(0.25)
+    return _fail("runtime start timed out before becoming healthy")
+
+
+def _status_view(client, identity) -> dict:
+    """Small human/operator status projection."""
+    caps = client.capabilities()
+    return {
+        "status": "HEALTHY" if identity.get("integrity") == "ok" else "UNHEALTHY",
+        "runtimeVersion": identity.get("runtimeVersion"),
+        "ledgerPath": identity.get("ledgerPath"),
+        "headSequence": identity.get("headSequence"),
+        "ledgerDigest": identity.get("ledgerChainDigest"),
+        "capabilities": {
+            "queryOperations": caps.get("queryOperations", [])[:5],
+            "commandOperations": caps.get("commandOperations", [])[:8],
+        },
+    }
+
+
+def _evidence_view(client, mission_id) -> dict:
+    """Human-readable evidence/verification projection."""
+    from desktop.desktop_runtime_client import (
+        project_evidence, project_claimguard, project_mission_spec,
+    )
+    missions = client.list_aggregates()
+    mission = mission_id
+    if mission is None:
+        # pick the first mission aggregate stream to inspect
+        for agg in missions:
+            if agg["kind"] == "mission":
+                sid = agg["streamId"]
+                mission = sid[len("mission-"):] if sid.startswith("mission-") else sid
+                break
+    evidence = []
+    verification = client.verification()
+    claimguard = None
+    claim_statement = None
+    spec = None
+    if mission:
+        evidence = project_evidence(client, mission)
+        spec = project_mission_spec(client, mission)
+        # Calculate ClaimGuard only against a real claim statement if a claim
+        # aggregate exists; do not fabricate a statement.
+        for agg in missions:
+            if agg["kind"] == "claim":
+                st = client.get_state(agg["streamId"])
+                if st and st.get("statement"):
+                    claim_statement = st["statement"]
+                    break
+        if claim_statement:
+            try:
+                claimguard = project_claimguard(client, claim_statement)
+            except Exception:
+                claimguard = None
+    return {
+        "mission": mission,
+        "missionSpec": spec,
+        "evidence": evidence,
+        "verification": verification,
+        "claimGuardDisposition": claimguard,
+        "hint": "Evidence and verification are authoritative CAPT state; run `capt --json evidence` for the full record.",
+    }
+
+
+def _cmd_doctor() -> int:
+    """First-class diagnostics surface (works from source and installed wheel).
+
+    Pure-Python checks so `capt doctor` is a normal-human support surface that
+    does not depend on repo-relative shell scripts.
+    """
+    import sys as _sys
+    from capt_runtime.cli_ramp import default_paths, is_running
+    checks = []
+
+    def add(cid, status, summary, evidence=""):
+        checks.append((cid, status, summary, evidence))
+
+    paths = {}
+    # environment
+    add("env.python3", "pass" if _sys.executable else "warn",
+        "python interpreter", _sys.version.split()[0])
+    try:
+        import sqlite3  # noqa: F401
+        add("env.sqlite3", "pass", "sqlite3 stdlib importable")
+    except Exception:
+        add("env.sqlite3", "fail", "sqlite3 stdlib missing")
+
+    # package importability
+    try:
+        import capt_solo  # noqa: F401
+        add("env.package", "pass", "CAPT Solo package importable")
+    except Exception as exc:
+        add("env.package", "fail", "CAPT Solo package not importable", str(exc)[:120])
+
+    # runtime state dir
+    try:
+        paths = default_paths()
+        add("runtime.state_dir", "pass" if paths["state_dir"].exists() else "warn",
+            "runtime state dir", str(paths["state_dir"]))
+    except Exception as exc:
+        add("runtime.state_dir", "fail", "could not resolve state dir", str(exc)[:120])
+
+    # running runtime?
+    try:
+        running = bool(paths) and paths["sock"].exists() and is_running(paths["sock"])
+        add("runtime.service", "pass" if running else "warn",
+            "runtime service", "running" if running else "not running (start with `capt start`)")
+    except Exception as exc:
+        add("runtime.service", "fail", "could not check runtime", str(exc)[:120])
+
+    rows = []
+    for cid, status, summary, evidence in checks:
+        tag = status.upper()
+        line = f"[{tag:4}] {cid:<22} {summary}"
+        if evidence:
+            line += f"  ({evidence})"
+        rows.append(line)
+    print("== CAPT doctor ==")
+    print("\n".join(rows))
+    # `warn` is not a hard failure for this surface; only the sys.exit code
+    # reflects hard failures (fail). Warnings still print but return 0-ish.
+    hard_fail = any(c[1] == "fail" for c in checks)
+    print("\nDoctor complete: %d checks, %d pass, %d warn, %d fail." % (
+        len(checks),
+        sum(c[1] == "pass" for c in checks),
+        sum(c[1] == "warn" for c in checks),
+        sum(c[1] == "fail" for c in checks),
+    ))
+    return 1 if hard_fail else 0
 
 
 def _cmd_runtime(args, as_json) -> int:
@@ -342,6 +628,14 @@ def _cmd_memory(mgr, args, as_json) -> int:
     if args.action == "list":
         rows = mgr._eng.list()
         return _ok([r.to_dict() for r in rows], as_json)
+    if args.action == "store":
+        record = mgr._eng.store(
+            args.text,
+            namespace=args.namespace,
+            provenance=args.provenance,
+            tags=args.tag,
+        )
+        return _ok({"memory_id": record.memory_id, "namespace": args.namespace}, as_json)
     if args.action == "inspect":
         m = mgr._eng.get(args.id)
         if m is None:
