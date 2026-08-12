@@ -110,10 +110,12 @@ def run_discovery(
         limits=_limits_dict(limits), policy_name="capt_runtime.discovery.policy")
 
     strategy = governor.current_strategy()  # KNOWN_PATH
+    run_id = result.provenance.get("run_id", "")
 
     # (A) Direct-guess phase over the provided targets (KNOWN_PATH).
     for tgt in targets:
-        scan = scanner.scan(str(tgt), strategy=strategy)
+        scan = scanner.scan(str(tgt), strategy=strategy,
+                            run_id=run_id, request_id=req_id)
         classification = scan.get("classification", UNKNOWN)
         redactions = []
         for c in scan.get("candidates", []):
@@ -147,7 +149,8 @@ def run_discovery(
     #     enum_root is honored only when explicitly provided.
     if enumeration_root:
         es = scanner.with_roots(allowed_roots or [enumeration_root])
-        scan = es.scan(enumeration_root, strategy="FILESYSTEM_ENUMERATION")
+        scan = es.scan(enumeration_root, strategy="FILESYSTEM_ENUMERATION",
+                       run_id=run_id, request_id=req_id)
         result.strategy_trace.append({
             "strategy": "FILESYSTEM_ENUMERATION",
             "target": normalize_path(enumeration_root),
@@ -216,14 +219,64 @@ def to_evidence(result: DiscoveryResult, *, mission_id: str,
 
 
 def _canonical_payload(result: DiscoveryResult) -> str:
-    """Deterministic canonical serialization for evidence hashing."""
+    """Deterministic canonical serialization for evidence hashing.
+
+    Hashes OBSERVATION CONTENT only (reproducible): redacted normalized paths,
+    classification, confidence, strategy, evidence, accepted/rejection state,
+    plus a stable policy fingerprint. It deliberately EXCLUDES volatile
+    execution metadata (request_id, run_id, candidate_id, timestamps,
+    collectedBy) so identical observation content hashes identically across
+    runs (SP3 DecisionRecord D-003).
+    """
     import json as _json
+
+    def _candidate_content(c: dict) -> dict:
+        # provenance (run linkage) is metadata, not observation content
+        return {
+            "path": c.get("path"),
+            "classification": c.get("classification"),
+            "confidence": c.get("confidence"),
+            "strategy": c.get("strategy"),
+            "kind": c.get("kind"),
+            "evidence": sorted(c.get("evidence", [])),
+            "accepted": c.get("accepted"),
+        }
+
+    class_terms = {t.get("classification") for t in result.strategy_trace}
     return _json.dumps({
-        "request_id": result.request_id,
         "termination": result.termination,
         "stop_reason": result.stop_reason,
-        "candidates": result.candidates,
-        "rejections": result.rejections,
+        "recommended_next": result.recommended_next,
+        "source_location_confidence": result.source_location_confidence,
+        "candidates": sorted(
+            (_candidate_content(c) for c in result.candidates),
+            key=lambda c: str(c.get("path"))),
+        "rejections": sorted(
+            (r.get("path"), r.get("reason"), r.get("strategy"))
+            for r in result.rejections if isinstance(r, dict)),
+        "negative_evidence": sorted(
+            (n.get("target"), n.get("classification"))
+            for n in result.negative_evidence if isinstance(n, dict)),
+        "strategy_classes": sorted(cls for cls in class_terms if cls),
+        "policy_fingerprint": _policy_fingerprint(result),
+    }, sort_keys=True, default=str)
+
+
+def _policy_fingerprint(result: DiscoveryResult) -> str:
+    """Stable fingerprint of the discovery run's configured policy/limits.
+
+    Included so a policy or bounds change invalidates prior evidence rather than
+    being silently treated as identical content.
+    """
+    import json as _json
+    p = result.provenance or {}
+    allowed_roots = sorted(str(r) for r in p.get("allowed_roots", []))
+    limits = {k: v for k, v in (p.get("limits") or {}).items()}
+    return _json.dumps({
+        "policy": p.get("policy"),
+        "allowed_roots": allowed_roots,
+        "limits": {k: limits[k] for k in sorted(limits)},
+        "three_guess_rule": p.get("three_guess_rule"),
     }, sort_keys=True, default=str)
 
 
