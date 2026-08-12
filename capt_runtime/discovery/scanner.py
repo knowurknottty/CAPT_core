@@ -28,11 +28,14 @@ from .models import (
     COMPILED_ARTIFACT_ONLY,
     NOT_FOUND,
     PERMISSION_DENIED,
+    PROJECT_MARKER_PRESENT,
     REJECTED,
+    SOURCE_FILE_PRESENT,
     SOURCE_PRESENT,
     ScanLimits,
 )
 from .policy import DEFAULT_POLICY, ClassificationPolicy
+from .provenance import observation_provenance
 from .redaction import normalize_path, redact_text
 
 
@@ -76,9 +79,14 @@ class BoundedLocalScanner:
                                    self._expected_markers)
 
     def scan(self, root: str, *, strategy: str = "KNOWN_PATH",
-             boundaries: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+             boundaries: Optional[Dict[str, Any]] = None,
+             run_id: str = "", request_id: str = "") -> Dict[str, Any]:
         """Scan a root within allowlisted roots (or, if none configured, the
-        single explicit root only). Returns a deterministic bounded result."""
+        single explicit root only). Returns a deterministic bounded result.
+
+        ``run_id``/``request_id`` (optional) are threaded into per-candidate
+        provenance so each observation is traceable to its parent run.
+        """
         started = time.monotonic()
         bounds = dict(boundaries or {})
         limits = self._limits if "limits" not in bounds else bounds["limits"]
@@ -91,7 +99,8 @@ class BoundedLocalScanner:
             if err:
                 return self._base_result(
                     REJECTED, "outside_allowed_root", root_p, started,
-                    rejections=[(root_p, "outside_allowed_root")])
+                    rejections=[(root_p, "outside_allowed_root")], run_id=run_id,
+                    request_id=request_id)
         else:
             # Explicit single root acts as its own allowlist; still resolve it.
             resolved_root = str(Path(root_p).resolve(strict=False))
@@ -99,22 +108,26 @@ class BoundedLocalScanner:
         # existence / readability
         if not Path(root_p).exists():
             return self._base_result(NOT_FOUND, "path does not exist", root_p,
-                                     started)
+                                     started, run_id=run_id, request_id=request_id)
         if not os.access(root_p, os.R_OK):
             return self._base_result(PERMISSION_DENIED, "path not readable",
-                                     root_p, started)
+                                     root_p, started, run_id=run_id,
+                                     request_id=request_id)
         # symlink-escape: resolved root must remain within allowlist
         if allowed:
             rr, err = _resolve_under_root(root_p, allowed)
             if err:
                 return self._base_result(REJECTED, "symlink_escape", root_p,
                                          started,
-                                         rejections=[(root_p, err)])
+                                         rejections=[(root_p, err)],
+                                         run_id=run_id, request_id=request_id)
 
-        return self._walk(root_p, allowed, limits, std_strategy=strategy, started=started)
+        return self._walk(root_p, allowed, limits, std_strategy=strategy,
+                          started=started, run_id=run_id, request_id=request_id)
 
     # ---- internals --------------------------------------------------------
-    def _walk(self, root, allowed, limits, *, std_strategy, started):
+    def _walk(self, root, allowed, limits, *, std_strategy, started, run_id="",
+              request_id=""):
         candidates: List[Dict[str, Any]] = []
         rejections: List[Tuple[str, str]] = []
         n_source = n_bundle = n_git = n_marker = 0
@@ -151,7 +164,8 @@ class BoundedLocalScanner:
                     candidates.append(self._candidate(
                         full, strategy=std_strategy,
                         classification=COMPILED_ARTIFACT_ONLY, kind="dir",
-                        confidence="low", allowed=allowed))
+                        confidence="low", allowed=allowed, root=root,
+                        run_id=run_id, request_id=request_id))
                     continue
                 if d in (".git",):
                     n_git += 1
@@ -195,22 +209,32 @@ class BoundedLocalScanner:
                 n_files += 1
                 if self._policy.is_source_file(fn):
                     n_source += 1
-                    if fn in ("pyproject.toml", "setup.py", "setup.cfg",
-                              "package.json", "go.mod", "Cargo.toml",
-                              "Makefile", "AGENTS.md", "README.md"):
+                    is_marker = fn in ("pyproject.toml", "setup.py", "setup.cfg",
+                                       "package.json", "go.mod", "Cargo.toml",
+                                       "Makefile", "AGENTS.md", "README.md")
+                    if is_marker:
                         n_marker += 1
                     if self._expected_markers and fn in self._expected_markers:
                         n_expected += 1
+                    # Candidate-level observation vocabulary: a source FILE or a
+                    # project MARKER is present (WHAT was observed). Target-match
+                    # is a SEPARATE aggregate-level conclusion (SOURCE_PRESENT)
+                    # gated by expected_markers, so a candidate never overstates
+                    # target identity on its own.
+                    cand_class = (PROJECT_MARKER_PRESENT if is_marker
+                                  else SOURCE_FILE_PRESENT)
                     candidates.append(self._candidate(
-                        fp, strategy=std_strategy, classification=SOURCE_PRESENT,
+                        fp, strategy=std_strategy, classification=cand_class,
                         kind="file", confidence="high", allowed=allowed,
+                        root=root, run_id=run_id, request_id=request_id,
                         evidence=["%s present" % fn]))
                 elif self._policy.is_bundle_file(fn):
                     n_bundle += 1
                     candidates.append(self._candidate(
                         fp, strategy=std_strategy,
                         classification=COMPILED_ARTIFACT_ONLY, kind="bundle",
-                        confidence="low", allowed=allowed))
+                        confidence="low", allowed=allowed, root=root,
+                        run_id=run_id, request_id=request_id))
                 else:
                     rejections.append((fp, "not_source_tree"))
 
@@ -252,8 +276,13 @@ class BoundedLocalScanner:
         }
 
     def _candidate(self, fp, *, strategy, classification, kind, confidence,
-                   allowed, evidence=None) -> Dict[str, Any]:
+                   allowed, root, run_id, request_id, evidence=None) -> Dict[str, Any]:
         resolved = str(Path(fp).resolve(strict=False))
+        prov = observation_provenance(
+            run_id=run_id or "(standalone)",
+            strategy=strategy, root=normalize_path(root),
+            classification=classification, confidence=confidence,
+            redactions=[], accepted=True)
         return {
             "candidate_id": "cand-" + uuid.uuid4().hex[:12],
             "path": normalize_path(fp),
@@ -264,11 +293,19 @@ class BoundedLocalScanner:
             "confidence": confidence,
             "evidence": [redact_text(e) for e in (evidence or [])],
             "redactions": [],
+            "provenance": prov,
             "accepted": True,
         }
 
     def _base_result(self, classification, stop_reason, root, started,
-                     rejections=None) -> Dict[str, Any]:
+                     rejections=None, run_id="", request_id="") -> Dict[str, Any]:
+        if run_id:
+            prov = observation_provenance(
+                run_id=run_id, strategy="KNOWN_PATH", root=normalize_path(root),
+                classification=classification, confidence=self._confidence(classification),
+                redactions=[], accepted=False)
+        else:
+            prov = {}
         return {
             "root": normalize_path(root),
             "strategy": "KNOWN_PATH",
@@ -281,6 +318,7 @@ class BoundedLocalScanner:
             "termination": ("rejected" if classification == REJECTED
                             else classification),
             "stop_reason": stop_reason,
+            "run_provenance": prov if run_id else None,
             "elapsed_ms": int((time.monotonic() - started) * 1000),
             "limits": {k: getattr(self._limits, k) for k in
                        ("max_depth", "max_files", "max_directories",
