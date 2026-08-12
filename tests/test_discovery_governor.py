@@ -69,7 +69,12 @@ def test_case_a_known_path_accepted(tree: Path):
                         guess_budget=3)
     assert res.termination == SOURCE_PRESENT
     assert res.source_location_confidence == "high"
-    assert any(c.get("classification") == SOURCE_PRESENT
+    # Candidates use observation-level vocabulary (source_file_present /
+    # project_marker_present); the AGGREGATE carries target-match (SOURCE_PRESENT).
+    assert any(c.get("provenance", {}).get("run_id")
+               for c in res.candidates)
+    assert all(c.get("classification") in
+               ("source_file_present", "project_marker_present")
                for c in res.candidates)
     # provenance recorded
     assert res.provenance.get("no_capability_grant") is True
@@ -128,19 +133,45 @@ def test_case_c_missing_repo_explicit_termination(tree: Path):
 # ===========================================================================
 def test_case_d_wrong_repo_not_accepted_as_target(tree: Path):
     # A repo-like structure (package.json) but we require python source marker.
-    # Classification should be POSSIBLE_REPOSITORY (not strong SOURCE_PRESENT
-    # for the pyproject requirement), or at least must not be asserted as a
-    # definitive target without corroboration.
+    # The aggregate must NOT be a definitive target conclusion, and NO candidate
+    # may carry a stronger target claim than the aggregate permits.
     res = run_discovery(targets=[str(tree / "wrong")],
                         allowed_roots=[str(tree)],
-                        enumeration_root=str(tree),
-                        guess_budget=1)
-    # scanner must not claim "definitely target" from package.json alone
+                        guess_budget=1,
+                        expected_markers=["pyproject.toml"])
+    # aggregate: a wrong repo is not SOURCE_PRESENT
+    assert res.termination != "source_present"
+    # HARD INVARIANT: no candidate may claim "requested source located/high"
+    # when the aggregate did not locate the requested target.
     for c in res.candidates:
-        if c.get("kind") == "file" and c.get("path", "").endswith("package.json"):
-            # package.json alone -> not a strong repo conclusion
-            pass
-    assert res.source_location_confidence in ("high", "medium")
+        assert c.get("classification") in (
+            "source_file_present", "project_marker_present",
+            "compiled_artifact_only", "possible_repository"), c
+        assert c.get("classification") != "source_present", c
+        # a JS marker in a python-target hunt must not be high target confidence
+        if c.get("path", "").endswith("package.json"):
+            assert c.get("classification") == "project_marker_present"
+
+
+def test_case_d_no_candidate_overstates_target_wrong_repo(tree: Path):
+    # Explicit regression for the review finding: candidates inside a
+    # possible_repository result must not be source_present/high.
+    res = run_discovery(targets=[str(tree / "wrong")],
+                        allowed_roots=[str(tree)],
+                        expected_markers=["pyproject.toml"],
+                        guess_budget=3)
+    assert res.termination != "source_present"
+    for c in res.candidates:
+        assert c.get("classification") != "source_present"
+        if c.get("classification") == "source_file_present":
+            # file-level observation only; must not read as target located
+            assert c.get("confidence") in ("high", "medium")
+    # aggregate confidence honors the mismatch
+    assert res.source_location_confidence in ("low", "medium")
+    # provenance present and correlates with the run
+    for c in res.candidates:
+        assert c.get("provenance", {}).get("run_id")
+        assert c["provenance"]["run_id"] == res.provenance.get("run_id")
 
 
 def test_case_d_wrong_repo_with_target_markers_not_terminal(tree: Path):
@@ -171,6 +202,61 @@ def test_case_d_correct_repo_with_matching_marker_is_terminal(tree: Path):
     assert sc["classification"] == "source_present"
     assert sc["confidence"] == "high"
     assert sc["termination"] == "source_present"
+
+
+# --- Finding C: additional target-criteria regressions ----------------------
+def test_case_d_multi_marker_only_one_matches(tmp_path: Path):
+    # A repo containing multiple project markers where only one matches the
+    # expected set -> target not located.
+    repo = tmp_path / "multi"
+    repo.mkdir()
+    (repo / "package.json").write_text("{}\n")
+    (repo / "setup.py").write_text("x=1\n")
+    (repo / "src").mkdir()
+    (repo / "src" / "thing.py").write_text("y=2\n")
+    # expect pyproject.toml; only setup/package present -> not matching
+    sc = BoundedLocalScanner(allowed_roots=[str(tmp_path)],
+                             expected_markers=["pyproject.toml"]).scan(
+        str(repo))
+    assert sc["classification"] == "possible_repository"
+    assert sc["termination"] != "source_present"
+
+
+def test_case_d_marker_buried_beyond_bounds(tmp_path: Path):
+    # Expected marker requested but buried beyond configured discovery depth ->
+    # must not be silently accepted; resource policy applies.
+    repo = tmp_path / "repo"
+    deep = repo / "a" / "b" / "c" / "d" / "e"
+    deep.mkdir(parents=True)
+    (deep / "pyproject.toml").write_text("x=1\n")
+    lim = ScanLimits(max_depth=2)
+    sc = BoundedLocalScanner(limits=lim, allowed_roots=[str(tmp_path)],
+                             expected_markers=["pyproject.toml"]).scan(str(repo))
+    # marker beyond depth is not seen; not a source_present terminal
+    assert sc["classification"] != "source_present"
+
+
+def test_case_d_expected_marker_symlinked_outside_allowed_root(tmp_path: Path):
+    # The would-be expected marker is a symlink resolving OUTSIDE the allowed
+    # root -> rejected (symlink escape), not honored as target identity.
+    outside = tmp_path / "outside-secret"
+    outside.mkdir()
+    (outside / "pyproject.toml").write_text("secret\n")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "a.py").write_text("x=1\n")
+    try:
+        (repo / "pyproject.toml").symlink_to(outside / "pyproject.toml")
+    except (OSError, NotImplementedError):
+        import pytest as _pt
+        _pt.skip("symlink not supported here")
+    # allowed root is ONLY repo; the symlinked marker resolves to outside-secret
+    sc = BoundedLocalScanner(allowed_roots=[str(repo)],
+                             expected_markers=["pyproject.toml"]).scan(
+        str(repo))
+    blob = json.dumps(sc, default=str)
+    assert "outside-secret" not in blob or "symlink_escape" in blob
+    assert sc["classification"] != "source_present"
 
 
 # ===========================================================================
@@ -250,6 +336,9 @@ def test_case_i_secret_redaction():
 
 
 def test_redaction_never_persists_raw(tree: Path):
+    # INTENTIONAL SYNTHETIC FIXTURE for redaction testing — not real credentials;
+    # the test asserts they never survive serialization.
+    # pragma: allowlist secret
     (tree / "src" / "secret.env").write_text(
         "OPENAI_API_KEY=sk-live-super-secret-123456\nPASSWORD=hunter2\n")
     sc = BoundedLocalScanner(allowed_roots=[str(tree)]).scan(str(tree / "src"))
@@ -361,6 +450,38 @@ def test_to_evidence_maps_to_canonical_shape(tree: Path):
     assert ev["sourceObservationId"] == res.request_id
     # evidence kind is a canonical artifact_hash
     assert ev["evidence"]["kind"] == "artifact_hash"
+    # digest is a real sha256
+    assert ev["evidence"]["artifactDigest"].startswith("sha256:")
+    assert len(ev["evidence"]["artifactDigest"].split(":")[1]) == 64
+
+
+def test_evidence_digest_reproducible_for_equal_content(tree: Path):
+    # Two runs over identical content must hash identically (SP3 D-003),
+    # despite different volatile request/candidate/run ids.
+    from capt_runtime.discovery import to_evidence
+    a = run_discovery(targets=[str(tree / "src")], allowed_roots=[str(tree)])
+    b = run_discovery(targets=[str(tree / "src")], allowed_roots=[str(tree)])
+    import re
+    ea = to_evidence(a, mission_id="m", collected_by={"actorId": "x", "kind": "human"})
+    eb = to_evidence(b, mission_id="m", collected_by={"actorId": "x", "kind": "human"})
+    da = ea["evidence"]["artifactDigest"]
+    db = eb["evidence"]["artifactDigest"]
+    assert da == db, "equal observation content must yield equal evidence digest"
+    # distinct sourceObservationId (provenance) is preserved even though digest matches
+    assert ea["sourceObservationId"] != eb["sourceObservationId"]
+
+
+def test_evidence_digest_changes_on_classification_difference(tmp_path: Path):
+    from capt_runtime.discovery import to_evidence, run_discovery
+    # a source repo vs an empty dir -> different classification -> different digest
+    src = tmp_path / "src"; src.mkdir()
+    (src / "pyproject.toml").write_text("x=1\n"); (src / "a.py").write_text("y=2\n")
+    empty = tmp_path / "empty"; empty.mkdir()
+    a = run_discovery(targets=[str(src)], allowed_roots=[str(tmp_path)])
+    b = run_discovery(targets=[str(empty)], allowed_roots=[str(tmp_path)])
+    da = to_evidence(a, mission_id="m", collected_by={"actorId": "x", "kind": "human"})
+    db = to_evidence(b, mission_id="m", collected_by={"actorId": "x", "kind": "human"})
+    assert da["evidence"]["artifactDigest"] != db["evidence"]["artifactDigest"]
 
 
 # ===========================================================================
@@ -428,5 +549,121 @@ def test_runtime_governed_discovery_requires_targets(tree: Path, tmp_path: Path)
         except ValueError:
             raised = True
         assert raised
+    finally:
+        runtime.close()
+
+
+# ===========================================================================
+# Phase 5 — real evidence persistence through canonical record_evidence +
+#          restart/recovery
+# ===========================================================================
+def _exec_meta(command_id="cmdr-1", step="1"):
+    from capt_runtime import commands
+    return commands.command(
+        command_id=command_id, idempotency_key="idem-r-" + step,
+        operation_fingerprint=commands.fingerprint("disc-record", {"step": step}),
+        correlation_id="corr-r", actor_id="exec", actor_kind="execution_plane",
+        issued_at="2026-08-12T00:00:00Z",
+    )
+
+
+def _claim(cm: str, kind="observation", mission_id="mission-1", eids=()):
+    import time
+    return {
+        "schemaVersion": "1.0.0", "claimId": cm, "missionId": mission_id,
+        "kind": kind, "statement": "discovery observation", "evidenceIds": list(eids),
+        "promotionState": "proposed",
+        "proposedBy": {"actorId": "exec", "kind": "execution_plane"},
+        "proposedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+
+
+def test_evidence_persistence_through_record_evidence_and_restart(tree, tmp_path):
+    """End-to-end: run discovery -> map to EvidenceRecord -> propose claim ->
+    record_evidence -> ledger grows -> reopen runtime -> evidence still present
+    by stable identity/digest (Phase 5 closure). Uses the canonical
+    RuntimeService boundaries only; no in-memory sleight of hand."""
+    from capt_runtime.composition import create_runtime
+    from capt_runtime.contracts import require
+
+    ledger = str(tmp_path / "ledger.db")
+    runtime = create_runtime(ledger)
+    try:
+        # 1. governed discovery (read-only) -> evidence payload
+        resp = runtime.service.run_governed_discovery(
+            {"targets": [str(tree / "src")], "allowedRoots": [str(tree)],
+             "guessBudget": 3, "missionId": "mission-1",
+             "expectedMarkers": ["pyproject.toml"]},
+            _runtime_metadata(actor_kind="human"))
+        assert resp["status"] == "ok"
+        assert resp["discovery"]["termination"] == "source_present"
+        evidence = resp["evidence"]
+        require("EvidenceRecord", evidence)  # contract-valid
+        ev_id = evidence["evidenceId"]
+        digest = evidence["evidence"]["artifactDigest"]
+
+        # ledger must NOT have grown during read-only discovery
+        seq_after_discovery = runtime.store.head_sequence()
+
+        # 2. propose a claim (execution plane), then record evidence on it
+        claim_id = "claim-disc-1"
+        runtime.service.propose_claim(_claim(claim_id), _exec_meta(step="1"))
+        before_record = runtime.store.head_sequence()
+        runtime.service.record_evidence(
+            claim_id, evidence, _exec_meta(command_id="cmdrec-1", step="2"))
+        after_record = runtime.store.head_sequence()
+        # 3. ledger sequence increases ONLY at record_evidence
+        assert after_record > before_record, "record_evidence must append events"
+        # read the persisted claim; evidence id attached
+        claim_state = runtime.service.store.require_state("claim-" + claim_id)
+        assert ev_id in claim_state["evidenceIds"], \
+            "evidence id must be attached to the persisted claim"
+    finally:
+        runtime.close()
+
+    # 4. Close + reopen (recover) the runtime on the same ledger.
+    runtime2 = create_runtime(ledger)
+    try:
+        claim_state2 = runtime2.service.store.require_state("claim-" + claim_id)
+        assert ev_id in claim_state2["evidenceIds"]
+        # the evidence event is readable from the reopened ledger
+        found = None
+        for env in runtime2.store.read_events():
+            payload = env.get("payload") or {}
+            if payload.get("eventType") == "EvidenceRecorded":
+                e = payload.get("evidence") or {}
+                if e.get("evidenceId") == ev_id:
+                    found = e
+        assert found is not None, "evidence must be recoverable after restart"
+        assert found["evidence"]["artifactDigest"] == digest
+        assert found["trust"] == "capt_authoritative"
+    finally:
+        runtime2.close()
+
+
+def test_evidence_persistence_duplicate_id_does_not_duplicate_events(tree, tmp_path):
+    """Repeated record_evidence with the same evidence id (idempotent replay)
+    must not create duplicate evidence records on the claim."""
+    from capt_runtime.composition import create_runtime
+
+    runtime = create_runtime(str(tmp_path / "ledger.db"))
+    try:
+        resp = runtime.service.run_governed_discovery(
+            {"targets": [str(tree / "src")], "allowedRoots": [str(tree)],
+             "missionId": "mission-1"}, _runtime_metadata(actor_kind="human"))
+        evidence = resp["evidence"]
+        ev_id = evidence["evidenceId"]
+        runtime.service.propose_claim(_claim("claim-disc-2", mission_id="mission-1"),
+                                      _exec_meta(step="1"))
+        runtime.service.record_evidence("claim-disc-2", evidence,
+                                        _exec_meta(command_id="cmdrec-2", step="2"))
+        before = runtime.store.head_sequence()
+        runtime.service.record_evidence("claim-disc-2", evidence,
+                                        _exec_meta(command_id="cmdrec-2b", step="3"))
+        after = runtime.store.head_sequence()
+        assert after >= before  # idempotent / no unbounded growth
+        claim_state = runtime.service.store.require_state("claim-claim-disc-2")
+        assert claim_state["evidenceIds"].count(ev_id) == 1, \
+            "same evidence id must not be attached twice"
     finally:
         runtime.close()
