@@ -985,3 +985,55 @@ class RuntimeService(object):
         return self._commit(
             [AppendRequest(stream, TaskAggregate.KIND, expected, event, state)], metadata
         )
+
+    # -- governed discovery (v0.7, additive read-only) ---------------------
+    def run_governed_discovery(
+        self, request: dict, metadata: dict
+    ) -> dict:
+        """Run a bounded, read-only discovery as a governed operation.
+
+        Additive and NON-MUTATING: it performs no aggregate transition, writes
+        no event, and does not create or enlarge any capability. It only admits
+        the request, validates admission authority, runs the Discovery Governor
+        + Bounded SEAL scanner, and returns the DiscoveryResult plus an
+        evidence-shaped payload that the caller must route through the
+        canonical ``record_evidence`` path for authoritative persistence.
+
+        Authority: admission requires a human or system actor (read intent).
+        The discovery subsystem itself never grants.
+        """
+        from .discovery import run_discovery, to_evidence
+
+        require_authority("create_mission", metadata["actor"]["kind"])
+        if metadata["actor"]["kind"] not in ("human", "system"):
+            raise AuthorityViolation(
+                "governed discovery must be requested by human or system, got %r"
+                % metadata["actor"]["kind"]
+            )
+
+        targets = request.get("targets")
+        if not isinstance(targets, list) or not targets:
+            raise ValueError("request.targets must be a non-empty list of paths")
+        allowed_roots = request.get("allowedRoots")
+        enumeration_root = request.get("enumerationRoot")
+        guess_budget = int(request.get("guessBudget", 3))
+
+        result = run_discovery(
+            targets=targets,
+            allowed_roots=allowed_roots,
+            enumeration_root=enumeration_root,
+            guess_budget=guess_budget,
+            requester=str(metadata["actor"].get("actorId", metadata["actor"]["kind"])),
+            request_id=metadata.get("commandId", ""),
+        )
+        mission_id = request.get("missionId", "mission-unknown")
+        evidence_id = request.get("evidenceId")
+        evidence = to_evidence(
+            result, mission_id=mission_id,
+            collected_by=metadata["actor"], evidence_id=evidence_id)
+        return {
+            "status": "ok",
+            "requestId": result.request_id,
+            "discovery": result.to_dict(),
+            "evidence": evidence,
+        }
