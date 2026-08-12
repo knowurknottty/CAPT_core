@@ -100,14 +100,22 @@ def run_discovery(
         request_id = new_run_id()
     req_id = request_id
     governor = DiscoveryGovernor(guess_budget=guess_budget)
-    scanner = BoundedLocalScanner(limits=limits,
+    # One effective limits object used for BOTH scanner execution and provenance,
+    # so the evidence digest binds the real bounds even when limits=None.
+    effective_limits = limits or ScanLimits()
+    scanner = BoundedLocalScanner(limits=effective_limits,
                                   allowed_roots=allowed_roots or None,
                                   expected_markers=expected_markers)
     result = DiscoveryResult(request_id=req_id)
     result.provenance = build_run_provenance(
         requester=requester, request_id=req_id,
         allowed_roots=list(allowed_roots or []) or [str(t) for t in targets],
-        limits=_limits_dict(limits), policy_name="capt_runtime.discovery.policy")
+        limits=_limits_dict(effective_limits),
+        policy_name="capt_runtime.discovery.policy",
+        extra={
+            "expected_markers": list(expected_markers or []),
+            "guess_budget": guess_budget,
+        })
 
     strategy = governor.current_strategy()  # KNOWN_PATH
     run_id = result.provenance.get("run_id", "")
@@ -263,10 +271,11 @@ def _canonical_payload(result: DiscoveryResult) -> str:
 
 
 def _policy_fingerprint(result: DiscoveryResult) -> str:
-    """Stable fingerprint of the discovery run's configured policy/limits.
+    """Stable fingerprint of the discovery run's effective policy/bounds.
 
-    Included so a policy or bounds change invalidates prior evidence rather than
-    being silently treated as identical content.
+    Included so a policy, bounds, or target-criteria change invalidates prior
+    evidence rather than being silently treated as identical content. Hashes
+    only content-stable policy fields (never run IDs/timestamps).
     """
     import json as _json
     p = result.provenance or {}
@@ -274,6 +283,9 @@ def _policy_fingerprint(result: DiscoveryResult) -> str:
     limits = {k: v for k, v in (p.get("limits") or {}).items()}
     return _json.dumps({
         "policy": p.get("policy"),
+        "policy_version": 1,
+        "expected_markers": sorted(str(m) for m in p.get("expected_markers", [])),
+        "guess_budget": p.get("guess_budget"),
         "allowed_roots": allowed_roots,
         "limits": {k: limits[k] for k in sorted(limits)},
         "three_guess_rule": p.get("three_guess_rule"),
