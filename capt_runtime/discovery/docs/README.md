@@ -72,19 +72,52 @@ post-force calls cannot re-enter the guess phase. Tested in
 
 ## Candidate vs rejection semantics
 
-- **Candidate** = an observation with conservative `classification`
-  (`source_present`, `possible_repository`, `compiled_artifact_only`, ...),
-  `confidence`, `evidence`, `provenance`, `redactions`. Never a conclusion.
+- **Candidate** = an OBSERVATION with conservative, observation-level
+  `classification` (`source_file_present`, `project_marker_present`,
+  `compiled_artifact_only`, ...), `confidence`, `evidence`, `provenance`,
+  `redactions`, `accepted`. A candidate says WHAT was observed — it never
+  claims the requested target repository is located. Target-match is a
+  SEPARATE aggregate-level conclusion (`source_present` /
+  `possible_repository`). HARD INVARIANT: no candidate observation makes a
+  stronger target claim than the aggregate supports.
+- Each candidate carries durable **provenance**: run_id, strategy, scanned root,
+  classification, confidence, accepted — so a candidate removed from the
+  enclosing result still answers which run/strategy/root produced it.
 - **Rejection** = deterministic serializable reason (`outside_allowed_root`,
   `symlink_escape`, `size_limit`, `depth_limit`, `file_count`, `not_source_tree`,
   `unreadable`...). Both are produced as deterministic JSONL-style ledgers.
+
+## Target criteria (`expected_markers`)
+
+`expected_markers` is **target-corroboration evidence, NOT repository identity
+proof.** Conservative v0.7 contract: "any listed exact filename found within the
+approved bounded scan (any depth, case-sensitive, subject to ALL bounds)". If
+none of the listed markers is observed, a repo-like dir is classified
+`possible_repository`/low (Case D) rather than a terminal `source_present`.
+
+Limitations (documented, not silent): monorepos with multiple same-name markers,
+markers in vendored / node_modules / dist / nested projects, and symlinked
+markers all resolve to the same filename-coincidence test — none implies
+identity. A marker beyond discovery bounds is never seen, and a marker symlinked
+outside an allowed root is rejected (symlink_escape). Do not treat the marker
+mechanism as proof of repository identity.
+
+## Evidence trust semantics
+
+`to_evidence` sets `trust = "capt_authoritative"`. Per the frozen EvidenceRecord
+contract this is the ONLY permitted value and means: **CAPT authoritatively
+records/holds this evidence** — NOT that the observed claim is verified-true.
+Discovery observations are converted to evidence shape (with `sourceObservationId`
+retained) and are not themselves verification. Discovery ≠ conclusion; a project
+marker ≠ repository identity; consensus/heuristic ≠ proof.
 
 ## Redaction
 
 All serialized evidence passes through `redact_text` / `redact_json` which marks
 credential-shaped patterns (API keys, Bearer, private keys, password-like
 assignments, `*_TOKEN`/`*_KEY`, GitHub/OpenAI/AWS tokens). Classified as
-"redacted potential secret", never "all secrets removed".
+**BEST_EFFORT_REDACTION** — "redacted potential secret", never "all secrets
+removed". Discovery never reads or persists file bodies.
 
 ## No-remote-upload
 
