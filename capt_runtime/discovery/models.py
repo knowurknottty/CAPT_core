@@ -34,6 +34,14 @@ POSSIBLE_REPOSITORY = "possible_repository"
 CONTAINER_METADATA_PRESENT = "container_metadata_present"
 UNKNOWN = "unknown"
 
+# ---- candidate-level (observation) classification -------------------------
+# Distinct from the tree/target vocabulary above. A single file is observed as a
+# source file or project marker WITHOUT claiming the requested source tree is
+# located. HARD INVARIANT: a candidate observation never implies the requested
+# target repository is found with higher confidence than the aggregate supports.
+SOURCE_FILE_PRESENT = "source_file_present"
+PROJECT_MARKER_PRESENT = "project_marker_present"
+
 
 @dataclass
 class ScanLimits:
