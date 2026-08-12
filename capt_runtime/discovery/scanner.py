@@ -60,15 +60,20 @@ class BoundedLocalScanner:
 
     def __init__(self, policy: Optional[ClassificationPolicy] = None,
                  limits: Optional[ScanLimits] = None,
-                 allowed_roots: Optional[Sequence[str]] = None) -> None:
+                 allowed_roots: Optional[Sequence[str]] = None,
+                 expected_markers: Optional[Sequence[str]] = None) -> None:
         self._policy = policy or DEFAULT_POLICY
         self._limits = limits or ScanLimits()
         self._allowed_roots = tuple(str(Path(r).expanduser())
                                     for r in (allowed_roots or []))
+        # Target-criteria gate: if set, terminal SOURCE_PRESENT requires at
+        # least one of these markers actually present (Case-D wrong-repo guard).
+        self._expected_markers = tuple(expected_markers or ())
 
     # ---- public API -------------------------------------------------------
     def with_roots(self, allowed_roots: Sequence[str]) -> "BoundedLocalScanner":
-        return BoundedLocalScanner(self._policy, self._limits, allowed_roots)
+        return BoundedLocalScanner(self._policy, self._limits, allowed_roots,
+                                   self._expected_markers)
 
     def scan(self, root: str, *, strategy: str = "KNOWN_PATH",
              boundaries: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -113,6 +118,7 @@ class BoundedLocalScanner:
         candidates: List[Dict[str, Any]] = []
         rejections: List[Tuple[str, str]] = []
         n_source = n_bundle = n_git = n_marker = 0
+        n_expected = 0
         n_dirs = n_files = n_bytes = 0
 
         def check_budget():
@@ -193,6 +199,8 @@ class BoundedLocalScanner:
                               "package.json", "go.mod", "Cargo.toml",
                               "Makefile", "AGENTS.md", "README.md"):
                         n_marker += 1
+                    if self._expected_markers and fn in self._expected_markers:
+                        n_expected += 1
                     candidates.append(self._candidate(
                         fp, strategy=std_strategy, classification=SOURCE_PRESENT,
                         kind="file", confidence="high", allowed=allowed,
@@ -211,17 +219,30 @@ class BoundedLocalScanner:
             has_git=(n_git > 0), has_project_marker=(n_marker > 0),
             has_only_bundle=(n_bundle > 0 and n_source == 0))
 
+        # Target-criteria gate (Case D): if expected markers were requested and
+        # none matched, do NOT emit a terminal SOURCE_PRESENT conclusion.
+        if self._expected_markers and classification == SOURCE_PRESENT:
+            if n_expected == 0:
+                classification = "possible_repository"
+                confidence = "low"
+            else:
+                confidence = "high"
+        else:
+            confidence = self._confidence(classification)
+
         return {
             "root": normalize_path(root),
             "strategy": std_strategy,
             "classification": classification,
-            "confidence": self._confidence(classification),
+            "confidence": confidence,
             "n_source_files": n_source,
             "n_bundle_artifacts": n_bundle,
             "candidates": candidates,
             "rejections": rejections,
-            "termination": "source_present" if n_source > 0 else (
-                "compiled_artifact_only" if n_bundle > 0 else "not_found"),
+            "termination": "source_present" if classification == SOURCE_PRESENT
+            else ("compiled_artifact_only" if n_bundle > 0 and n_source == 0
+                  else ("possible_repository" if classification == "possible_repository"
+                        else "not_found")),
             "stop_reason": None,
             "elapsed_ms": int((time.monotonic() - started) * 1000),
             "limits": {k: getattr(limits, k) for k in

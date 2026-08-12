@@ -1025,6 +1025,7 @@ class RuntimeService(object):
             guess_budget=guess_budget,
             requester=str(metadata["actor"].get("actorId", metadata["actor"]["kind"])),
             request_id=metadata.get("commandId", ""),
+            expected_markers=request.get("expectedMarkers"),
         )
         mission_id = request.get("missionId", "mission-unknown")
         evidence_id = request.get("evidenceId")

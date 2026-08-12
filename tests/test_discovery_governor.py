@@ -143,6 +143,36 @@ def test_case_d_wrong_repo_not_accepted_as_target(tree: Path):
     assert res.source_location_confidence in ("high", "medium")
 
 
+def test_case_d_wrong_repo_with_target_markers_not_terminal(tree: Path):
+    # Hunt a PYTHON repo (pyproject.toml); the dir is a JS repo (package.json).
+    # With expected_markers=pyproject.toml, the JS repo must NOT be a terminal
+    # SOURCE_PRESENT — it must be classified possible_repository (Case D).
+    sc = BoundedLocalScanner(allowed_roots=[str(tree)],
+                             expected_markers=["pyproject.toml"]).scan(
+        str(tree / "wrong"))
+    assert sc["classification"] == "possible_repository"
+    assert sc["confidence"] == "low"
+    assert sc["termination"] != "source_present"
+
+    res = run_discovery(targets=[str(tree / "wrong")],
+                        allowed_roots=[str(tree)],
+                        expected_markers=["pyproject.toml"],
+                        guess_budget=3)
+    assert res.termination != "source_present"
+    assert res.termination in ("possible_repository", "not_found", "exhausted")
+
+
+def test_case_d_correct_repo_with_matching_marker_is_terminal(tree: Path):
+    # A PYTHON repo (pyproject.toml) with expected_markers=pyproject.toml IS
+    # a valid terminal source.
+    sc = BoundedLocalScanner(allowed_roots=[str(tree)],
+                             expected_markers=["pyproject.toml"]).scan(
+        str(tree / "src"))
+    assert sc["classification"] == "source_present"
+    assert sc["confidence"] == "high"
+    assert sc["termination"] == "source_present"
+
+
 # ===========================================================================
 # Case E — compiled bundle only -> compiled_artifact_only, source_not_proven
 # ===========================================================================

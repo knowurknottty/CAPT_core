@@ -82,11 +82,16 @@ def run_discovery(
     guess_budget: int = 3,
     requester: str = "operator",
     request_id: str = "",
+    expected_markers: Optional[Sequence[str]] = None,
 ) -> DiscoveryResult:
     """Governed discovery over an ordered set of direct path hypotheses.
 
     Read-only. Records candidates/rejections/negative evidence and an explicit
     termination. Stops (never infinite-retries). Returns a DiscoveryResult.
+
+    ``expected_markers`` (optional) is the target-criteria gate: when set, a
+    scan is only a terminal SOURCE_PRESENT if at least one marker is present;
+    a repo-like dir lacking them is classified possible_repository (Case D).
 
     The escalation ladder is simulated for unsupported remote strategies (they
     yield an explicit bounded result) so discovery always terminates.
@@ -96,7 +101,8 @@ def run_discovery(
     req_id = request_id
     governor = DiscoveryGovernor(guess_budget=guess_budget)
     scanner = BoundedLocalScanner(limits=limits,
-                                  allowed_roots=allowed_roots or None)
+                                  allowed_roots=allowed_roots or None,
+                                  expected_markers=expected_markers)
     result = DiscoveryResult(request_id=req_id)
     result.provenance = build_run_provenance(
         requester=requester, request_id=req_id,
