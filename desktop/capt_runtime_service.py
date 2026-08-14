@@ -61,6 +61,77 @@ from desktop.m1_command_service import RuntimeCommandService
 RUNTIME_VERSION = getattr(capt_runtime, "RUNTIME_VERSION", "0.1.0")
 CONTRACT_SCHEMA_VERSION = "1.0.0"
 
+
+def _test_fault(point: str) -> None:
+    """Test-only crash seam for durable lifecycle boundary proof.
+
+    It is inert unless a test explicitly supplies the exact environment value.
+    A hard exit models process death: no exception handler is allowed to turn a
+    missing persistence step into a fabricated outcome.
+    """
+    if os.environ.get("CAPT_TEST_OUROBOROS_CRASH_AFTER") == point:
+        os._exit(86)
+
+
+def _reconcile_stranded_driver_runs(runtime: RuntimeComposition, now: str) -> None:
+    """Conservatively recover durable pre-restart DriverRun state.
+
+    This is CAPT Core reconciliation over the existing EventStore, never a
+    driver invocation. It gives a crashed command a durable exit path before a
+    duplicate request can observe its idempotency admission.
+    """
+    store, svc = runtime.store, runtime.service
+    for stream_id, kind, _version in store.all_aggregates():
+        if kind != "driverrun":
+            continue
+        run = store.load_state(stream_id)
+        if not run or run.get("state") not in ("created", "submitted", "running", "suspended", "completed"):
+            continue
+        run_id, task_id = run["driverRunId"], run["taskId"]
+        def recovery_meta(step: str) -> Dict[str, Any]:
+            return commands.command(
+                command_id="cmd-recovery-" + run_id + ":" + step,
+                idempotency_key="idem-recovery-" + run_id + ":" + step,
+                operation_fingerprint=commands.fingerprint("recover_driver_run", {"driverRunId": run_id, "step": step}),
+                correlation_id="corr-recovery-" + run_id, actor_id="exec-recovery",
+                actor_kind="execution_plane", issued_at=now, replay_policy="never",
+            )
+        # A created run has not reached submission. Every later non-terminal
+        # state is ambiguous: consume any open reservation and forbid replay.
+        if run["state"] == "created":
+            svc.transition_driver_run(run_id, "failed", recovery_meta("created-failed"))
+            task = store.load_state("task-" + task_id)
+            if task and task.get("state") in ("assigned", "running"):
+                svc.transition_task(task_id, "failed", "restart before driver submission", recovery_meta("created-task-failed"))
+            continue
+        for cap_stream, cap_kind, _ in store.all_aggregates():
+            if cap_kind != "capability":
+                continue
+            capability = store.load_state(cap_stream)
+            if capability is None:
+                continue
+            lease = capability.get("lease")
+            if not lease or lease.get("missionId") != run.get("missionId") or lease.get("taskId") != task_id:
+                continue
+            for reservation in capability.get("reservations", []):
+                if reservation.get("state") != "open":
+                    continue
+                consumption = {
+                    "schemaVersion": "1.0.0",
+                    "consumptionId": "con-recovery-" + reservation["reservationId"],
+                    "reservationId": reservation["reservationId"], "leaseId": reservation["leaseId"],
+                    "outcome": "indeterminate", "sideEffectIdentity": run_id, "finalizedAt": now,
+                }
+                svc.finalize_use(capability["grantId"], consumption, recovery_meta("finalize-" + reservation["reservationId"]))
+        if run["state"] == "submitted":
+            svc.transition_driver_run(run_id, "lost", recovery_meta("submitted-lost"))
+        elif run["state"] == "running":
+            svc.transition_driver_run(run_id, "lost", recovery_meta("running-lost"))
+        task = store.load_state("task-" + task_id)
+        if task and task.get("state") == "running":
+            svc.transition_task(task_id, "suspended", "restart requires governed reconciliation", recovery_meta("task-suspended"))
+
+
 DEMO_MISSION_ID = "m-desktop-m0-demo"
 DEMO_TASK_ID = "t-desktop-m0-demo"
 DEMO_DRIVER_RUN_ID = "dr-desktop-m0-demo"
@@ -540,6 +611,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             probe.close()
 
     runtime = create_runtime(str(ledger_path))
+    _reconcile_stranded_driver_runs(runtime, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     store = runtime.store
     svc = runtime.service
     demo = None
@@ -610,16 +682,11 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 # owns admission. A same-key caller gets the durable original
                 # outcome (or an explicit in-progress state) without touching any
                 # lifecycle aggregate.
-                if admission.get("replayed") and admission.get("status") != "in_progress":
-                    return {**admission, "_idempotent": True}
-                if admission.get("replayed") and admission.get("status") == "in_progress":
-                    # Continue only where a persisted DriverRun gives Core a
-                    # truthful recovery subject; otherwise ownership was admitted
-                    # but lifecycle creation never committed (T0).
-                    prospective_run_id = payload.get("driverRunId") or ("dr-model-" + command["commandId"])
-                    if store.load_state("driverrun-" + prospective_run_id) is None:
-                        return {"commandId": command["commandId"], "status": "in_progress",
-                                "recovery": "command_admitted_lifecycle_not_created"}
+                if admission.get("replayed"):
+                    # A duplicate never resumes lifecycle work. Startup
+                    # reconciliation owns recovery of a crashed in-progress
+                    # command before this socket accepts callers.
+                    return {**admission, "_idempotent": admission.get("status") != "in_progress"}
                 objective = payload.get("objective")
                 target_root = payload.get("targetRoot")
                 if not objective or not target_root:
@@ -831,6 +898,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     "idempotencyKey": key + ":dispatch", "state": "open", "reservedAt": now,
                 }
                 svc.reserve_use(grant_id, reservation, exec_meta("reserve"))
+                _test_fault("reservation")
                 try:
                     out = host.dispatch(wo, ctx, {"state": "running"}, now=now, lease=dispatch_lease)
                 except Exception:
@@ -850,7 +918,9 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     svc.transition_driver_run(run_id, "lost", exec_meta("drlost"))
                     svc.transition_task(task_id, "suspended", "external dispatch outcome indeterminate; reconciliation required", exec_meta("tasksuspended"))
                     raise
+                _test_fault("dispatch")
                 svc.transition_driver_run(run_id, "completed", exec_meta("drcomplete"))
+                _test_fault("driver_completed")
                 # A returned driver result proves this invocation completed. Its
                 # capability use is therefore consumed before any downstream claim
                 # verification, which may still reject the result.
@@ -861,6 +931,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     "finalizedAt": now,
                 }
                 svc.finalize_use(grant_id, consumption, exec_meta("finalize"))
+                _test_fault("capability_finalized")
                 # 4. Verification + ClaimGuard (CAPT-authored).
                 artifact_path = out["artifactCandidate"]["artifactPath"]
                 artifact_digest = out["artifactCandidate"]["artifactDigest"]
@@ -897,6 +968,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                                      actor_id="verification_pipeline", actor_kind="verification_plane",
                                      issued_at=now, replay_policy="never"),
                 )
+                _test_fault("evidence_recorded")
                 try:
                     vr = build_verification_result(
                         str(worktree), before, artifact_path, artifact_digest, "hermes",
@@ -914,6 +986,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     store.complete_claimed_command(key, command_fingerprint, receipt)
                     return receipt
                 svc.record_verification(vr, verification_meta("verify", vr["verificationId"]))
+                _test_fault("verification_recorded")
                 decision = {
                     "schemaVersion": "1.0.0", "decisionId": "cgd-" + command_id,
                     "claimId": claim_id, "verdict": "accept",
@@ -928,7 +1001,9 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                                      actor_id="claim-guard", actor_kind="claim_authority",
                                      issued_at=now, replay_policy="never"),
                 )
+                _test_fault("claim_decided")
                 svc.transition_task(task_id, "succeeded", "verification and ClaimGuard accepted", exec_meta("tasksucceeded"))
+                _test_fault("task_terminal")
                 create_checkpoint(store, "cp-model-" + command_id, now,
                                   contracts.digest({"policyBundle": "model-operator", "version": 1}))
                 receipt = {

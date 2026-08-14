@@ -14,6 +14,7 @@ import hashlib
 import json
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
@@ -114,9 +115,23 @@ class EventStore(object):
         if path != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
-        self._conn = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
+        self._conn = sqlite3.connect(
+            path, isolation_level=None, check_same_thread=False, timeout=5.0
+        )
+        self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.row_factory = sqlite3.Row
-        self._conn.executescript(SCHEMA_SQL)
+        # Two runtime processes can open an empty ledger concurrently before
+        # one has installed WAL/schema. SQLite serializes this initialization;
+        # retry only the transient lock, never a SQL/schema failure.
+        for attempt in range(20):
+            try:
+                self._conn.executescript(SCHEMA_SQL)
+                break
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower() or attempt == 19:
+                    self._conn.close()
+                    raise
+                time.sleep(0.05 * (attempt + 1))
         self._subscribers: List[Callable[[Dict[str, Any]], None]] = []
 
     # -- lifecycle ---------------------------------------------------------

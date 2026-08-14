@@ -1,6 +1,7 @@
 """Regression coverage for the governed post-driver lifecycle boundary."""
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -23,7 +24,7 @@ from desktop.desktop_runtime_client import (
 )
 
 
-def _start_runtime(tmp: Path):
+def _start_runtime(tmp: Path, *, env: dict | None = None):
     tmp.mkdir(parents=True, exist_ok=True)
     ledger, token = tmp / "runtime.db", tmp / "token"
     sock = Path("/tmp") / ("capt-ouro-%s-%s.sock" % (os.getpid(), time.time_ns()))
@@ -33,6 +34,7 @@ def _start_runtime(tmp: Path):
          "import runpy; runpy.run_path('desktop/capt_runtime_service.py', run_name='__main__')",
          "--ledger", str(ledger), "--sock", str(sock), "--token-file", str(token)],
         cwd=root, stdout=__import__("subprocess").PIPE, stderr=__import__("subprocess").PIPE,
+        env={**os.environ, **(env or {})},
     )
     for _ in range(100):
         if sock.exists():
@@ -68,11 +70,13 @@ def _git_repo(tmp: Path, *, dirty: bool = False) -> Path:
     return repo
 
 
-def _fake_hermes(tmp: Path, *, mutate: bool = False, fail: bool = False) -> Path:
+def _fake_hermes(tmp: Path, *, mutate: bool = False, fail: bool = False, marker: Path | None = None) -> Path:
     exe = tmp / ("fake-hermes-fail" if fail else ("fake-hermes-mutate" if mutate else "fake-hermes"))
     body = "#!/bin/sh\n"
     if mutate:
         body += "printf driver-created > driver-created.txt\n"
+    if marker is not None:
+        body += "printf invoked >> %s\n" % str(marker)
     if fail:
         body += "exit 1\n"
     body += "printf 'OBSERVATION: bounded inspection completed\\n'\n"
@@ -242,6 +246,78 @@ def test_indeterminate_dispatch_is_lost_suspended_and_consumed(tmp_path: Path) -
         assert _state(client, "capability-g", suffix)["usesConsumed"] == 1
     finally:
         _stop_runtime(client, proc)
+
+
+
+@pytest.mark.parametrize("point", [
+    "reservation", "dispatch", "driver_completed", "capability_finalized",
+    "evidence_recorded", "verification_recorded", "claim_decided", "task_terminal",
+])
+def test_crash_boundary_restart_never_replays_or_leaves_running(tmp_path: Path, point: str) -> None:
+    """Each named durable cut survives a real runtime-process death/restart."""
+    repo, suffix = _git_repo(tmp_path), "crash-" + point
+    marker = tmp_path / "external-invocations"
+    exe = _fake_hermes(tmp_path, marker=marker)
+    root = tmp_path / "runtime"
+    payload = _payload(repo, exe, suffix)
+    client, _ledger, proc = _start_runtime(
+        root, env={"CAPT_TEST_OUROBOROS_CRASH_AFTER": point}
+    )
+    try:
+        with pytest.raises(Exception):
+            client.command("run_approved_hermes_inspection", payload, "idem-ouro-" + suffix)
+        proc.wait(timeout=5)
+        assert proc.returncode == 86
+    finally:
+        try:
+            client.disconnect()
+        except Exception:
+            pass
+    client, _ledger, proc = _start_runtime(root)
+    try:
+        receipt = client.command("run_approved_hermes_inspection", payload, "idem-ouro-" + suffix)
+        assert receipt["status"] in ("accepted", "idempotent"), receipt
+        task = _state(client, "t", suffix)
+        assert task["state"] != "running"
+        run = _state(client, "driverrun", suffix)
+        assert run["state"] in ("lost", "completed")
+        lease = _state(client, "capability-g", suffix)
+        if point != "reservation":
+            assert marker.read_text().splitlines() == ["invoked"]
+        else:
+            assert not marker.exists()
+        if lease is not None and lease.get("reservations"):
+            assert all(r["state"] != "open" for r in lease["reservations"])
+            assert lease["usesConsumed"] == 1
+    finally:
+        _stop_runtime(client, proc)
+
+
+
+
+def test_multiprocess_command_admission_has_one_durable_owner(tmp_path: Path) -> None:
+    """Two OS processes contend on the actual SQLite idempotency authority."""
+    db = tmp_path / "admission.db"
+    program = (
+        "import json,sys; from capt_runtime.store import EventStore; "
+        "s=EventStore(sys.argv[1]); "
+        "print(json.dumps(s.claim_command('idem-shared','sha256:'+'a'*64,'cmd-shared'))); s.close()"
+    )
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[2])}
+    children = [
+        subprocess.Popen([os.environ.get("CAPT_TEST_PYTHON", sys.executable), "-c", program, str(db)],
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+        for _ in range(2)
+    ]
+    replies = []
+    for child in children:
+        stdout, stderr = child.communicate(timeout=10)
+        assert child.returncode == 0, stderr
+        replies.append(json.loads(stdout))
+    assert sum(not reply["replayed"] for reply in replies) == 1
+    assert sum(reply["replayed"] for reply in replies) == 1
+    assert all(reply["status"] == "in_progress" for reply in replies)
+
 
 def test_same_key_replays_durably_and_rejects_different_payload(tmp_path: Path) -> None:
     repo, exe, suffix = _git_repo(tmp_path), _fake_hermes(tmp_path), "idem"
