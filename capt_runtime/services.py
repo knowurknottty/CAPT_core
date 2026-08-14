@@ -756,7 +756,20 @@ class RuntimeService(object):
                 "targetId": task_id,
                 "state": current["state"] if current else None,
             }
-        return self.transition_task(task_id, "cancelled", reason, metadata)
+        expected = self.store.aggregate_version(stream)
+        current = self.store.require_state(stream)
+        state = TaskAggregate.transition(current, "cancelled")
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type="TaskTransitioned",
+            payload={"eventType": "TaskTransitioned", "taskId": task_id,
+                     "fromState": current["state"], "toState": "cancelled", "reason": reason},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+            mission_id=current["missionId"], task_id=task_id,
+        )
+        return self._commit(
+            [AppendRequest(stream, TaskAggregate.KIND, expected, event, state)], metadata
+        )
 
     def cancel_driver_run(
         self, driver_run_id: str, reason: str, metadata: Dict[str, Any]

@@ -16,7 +16,11 @@ from capt_runtime.verification import (
     build_verification_result,
     capture_git_status,
 )
-from desktop.desktop_runtime_client import RuntimeClient, project_evidence
+from desktop.desktop_runtime_client import (
+    RuntimeClient,
+    project_authoritative_state,
+    project_evidence,
+)
 
 
 def _start_runtime(tmp: Path):
@@ -64,11 +68,13 @@ def _git_repo(tmp: Path, *, dirty: bool = False) -> Path:
     return repo
 
 
-def _fake_hermes(tmp: Path, *, mutate: bool = False) -> Path:
-    exe = tmp / ("fake-hermes-mutate" if mutate else "fake-hermes")
+def _fake_hermes(tmp: Path, *, mutate: bool = False, fail: bool = False) -> Path:
+    exe = tmp / ("fake-hermes-fail" if fail else ("fake-hermes-mutate" if mutate else "fake-hermes"))
     body = "#!/bin/sh\n"
     if mutate:
         body += "printf driver-created > driver-created.txt\n"
+    if fail:
+        body += "exit 1\n"
     body += "printf 'OBSERVATION: bounded inspection completed\\n'\n"
     exe.write_text(body)
     exe.chmod(0o755)
@@ -184,8 +190,8 @@ def test_restart_does_not_repeat_completed_external_work(tmp_path: Path) -> None
     client, _ledger, proc = _start_runtime(root)
     try:
         second = client.command("run_approved_hermes_inspection", payload, "idem-ouro-restart")
-        assert second["status"] == "accepted", second
-        assert second["result"]["recovery"] == "persisted_driver_run_not_repeated"
+        assert second["status"] == "idempotent", second
+        assert second["result"]["driverRunId"] == "dr-ouro-" + suffix
         assert _state(client, "driverrun", suffix)["state"] == "completed"
         assert _state(client, "capability-g", suffix)["usesConsumed"] == 1
     finally:
@@ -201,3 +207,57 @@ def test_full_digest_ids_are_contract_valid_and_noncolliding(tmp_path: Path) -> 
     require("VerificationResult", {k: v for k, v in one.items() if k != "_view"})
     assert one["verificationId"] != two["verificationId"]
     assert len(one["verificationId"]) > 32
+
+
+def test_global_projection_preserves_committed_contradiction(tmp_path: Path) -> None:
+    repo, exe, suffix = _git_repo(tmp_path), _fake_hermes(tmp_path, mutate=True), "projection"
+    client, _ledger, proc = _start_runtime(tmp_path / "runtime")
+    try:
+        client.command("run_approved_hermes_inspection", _payload(repo, exe, suffix), "idem-ouro-projection")
+        view = project_authoritative_state(client)
+        verification = view["verificationsByClaim"]["cl-ouro-" + suffix]
+        assert verification["committed"] is True
+        assert verification["status"]["kind"] == "contradicted"
+    finally:
+        _stop_runtime(client, proc)
+
+
+def test_indeterminate_dispatch_is_lost_suspended_and_consumed(tmp_path: Path) -> None:
+    repo, exe, suffix = _git_repo(tmp_path), _fake_hermes(tmp_path, fail=True), "indeterminate"
+    client, _ledger, proc = _start_runtime(tmp_path / "runtime")
+    try:
+        receipt = client.command("run_approved_hermes_inspection", _payload(repo, exe, suffix), "idem-ouro-indeterminate")
+        assert receipt["status"] == "rejected", receipt
+        assert _state(client, "driverrun", suffix)["state"] == "lost"
+        assert _state(client, "driverrun", suffix)["reconciliationStatus"] == "required"
+        assert _state(client, "t", suffix)["state"] == "suspended"
+        lease = _state(client, "capability-g", suffix)
+        assert lease["usesConsumed"] == 1
+        assert lease["reservations"][0]["state"] == "awaiting_reconciliation"
+        # Existing Core governed operator path gives suspended work a durable,
+        # explicit terminal disposition without reviving the consumed lease.
+        cancelled = client.command("cancel_task", {"taskId": "t-ouro-" + suffix, "reason": "operator reconciled indeterminate boundary"}, "idem-ouro-indeterminate-cancel")
+        assert cancelled["status"] == "accepted"
+        assert _state(client, "t", suffix)["state"] == "cancelled"
+        assert _state(client, "capability-g", suffix)["usesConsumed"] == 1
+    finally:
+        _stop_runtime(client, proc)
+
+def test_same_key_replays_durably_and_rejects_different_payload(tmp_path: Path) -> None:
+    repo, exe, suffix = _git_repo(tmp_path), _fake_hermes(tmp_path), "idem"
+    client, _ledger, proc = _start_runtime(tmp_path / "runtime")
+    try:
+        payload = _payload(repo, exe, suffix)
+        first = client.command("run_approved_hermes_inspection", payload, "idem-ouro-durable")
+        replay = client.command("run_approved_hermes_inspection", payload, "idem-ouro-durable")
+        assert first["status"] == "accepted"
+        assert replay["status"] == "idempotent"
+        states = client.get_stream_events("driverrun-dr-ouro-" + suffix)
+        assert [event["payload"]["toState"] for event in states if event["eventType"] == "DriverRunStateChanged"].count("running") == 1
+        changed = dict(payload)
+        changed["objective"] = "A different bounded objective."
+        conflict = client.command("run_approved_hermes_inspection", changed, "idem-ouro-durable")
+        assert conflict["status"] == "rejected"
+        assert conflict["classification"] == "idempotency"
+    finally:
+        _stop_runtime(client, proc)

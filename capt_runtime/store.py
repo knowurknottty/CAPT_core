@@ -204,6 +204,54 @@ class EventStore(object):
             "SELECT * FROM idempotency WHERE idempotency_key = ?", (key,)
         ).fetchone()
 
+    def claim_command(self, idempotency_key: str, operation_fingerprint: str,
+                      command_id: str) -> Dict[str, Any]:
+        """Durably admit one long-running command before its external boundary.
+
+        The idempotency table is Core's existing command authority.  Long-running
+        commands cannot wait until their final event transaction to claim a key:
+        a duplicate arriving during execution must discover the durable admission,
+        not race aggregate creation.  A claim is intentionally an in-progress
+        receipt, never proof of external completion.
+        """
+        with self.transaction() as conn:
+            prior = conn.execute(
+                "SELECT * FROM idempotency WHERE idempotency_key = ?", (idempotency_key,)
+            ).fetchone()
+            if prior is not None:
+                if prior["operation_fingerprint"] != operation_fingerprint:
+                    raise IdempotencyConflict(
+                        "idempotency key %r reused with a different operation fingerprint"
+                        % idempotency_key
+                    )
+                result = json.loads(prior["result_json"])
+                result["status"] = "idempotent" if result.get("status") != "in_progress" else "in_progress"
+                result["replayed"] = True
+                return result
+            result = {
+                "commandId": command_id, "status": "in_progress", "replayed": False,
+                "eventIds": [], "globalSequences": [], "streamVersions": [],
+            }
+            conn.execute(
+                "INSERT INTO idempotency (idempotency_key, operation_fingerprint, command_id, result_json, global_sequence) VALUES (?,?,?,?,NULL)",
+                (idempotency_key, operation_fingerprint, command_id, canonical_json(result)),
+            )
+            return result
+
+    def complete_claimed_command(self, idempotency_key: str, operation_fingerprint: str,
+                                 result: Dict[str, Any]) -> None:
+        """Replace an admitted command's provisional receipt with its outcome."""
+        with self.transaction() as conn:
+            prior = conn.execute(
+                "SELECT operation_fingerprint FROM idempotency WHERE idempotency_key = ?", (idempotency_key,)
+            ).fetchone()
+            if prior is None or prior["operation_fingerprint"] != operation_fingerprint:
+                raise IdempotencyConflict("cannot complete an unowned command admission")
+            conn.execute(
+                "UPDATE idempotency SET result_json = ? WHERE idempotency_key = ?",
+                (canonical_json(result), idempotency_key),
+            )
+
     # -- the single write path --------------------------------------------
 
     def commit_command(

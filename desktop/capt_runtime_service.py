@@ -603,10 +603,23 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             # the resolved authoritative task (TaskResolver) inside CAPT.
             def _run_approved_hermes(command: Dict[str, Any]):
                 key = command["idempotencyKey"]
-                prior = hermes_work_receipts.get(key)
-                if prior is not None:
-                    return {**prior, "_idempotent": True}
                 payload = command.get("payload", {})
+                command_fingerprint = commands.fingerprint("run_approved_hermes_inspection", payload)
+                admission = store.claim_command(key, command_fingerprint, command["commandId"])
+                # The existing Core idempotency table, not a daemon-local receipt,
+                # owns admission. A same-key caller gets the durable original
+                # outcome (or an explicit in-progress state) without touching any
+                # lifecycle aggregate.
+                if admission.get("replayed") and admission.get("status") != "in_progress":
+                    return {**admission, "_idempotent": True}
+                if admission.get("replayed") and admission.get("status") == "in_progress":
+                    # Continue only where a persisted DriverRun gives Core a
+                    # truthful recovery subject; otherwise ownership was admitted
+                    # but lifecycle creation never committed (T0).
+                    prospective_run_id = payload.get("driverRunId") or ("dr-model-" + command["commandId"])
+                    if store.load_state("driverrun-" + prospective_run_id) is None:
+                        return {"commandId": command["commandId"], "status": "in_progress",
+                                "recovery": "command_admitted_lifecycle_not_created"}
                 objective = payload.get("objective")
                 target_root = payload.get("targetRoot")
                 if not objective or not target_root:
@@ -630,29 +643,53 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         actor_id="exec-1", actor_kind="execution_plane",
                         issued_at=now, replay_policy="never",
                     )
-                # Restart/replay safety: a persisted DriverRun is the authority on
-                # whether this external work may be dispatched again. A completed
-                # run is never re-submitted from a fresh daemon process.
+                # Restart/replay safety: persisted DriverRun is CAPT authority.
+                # `running` is not proof that dispatch did or did not cross the
+                # boundary. It is converted durably to lost/reconciliation-required,
+                # its open reservation is consumed indeterminately, and its task is
+                # suspended for the existing governed cancellation/reconciliation
+                # command path. No branch re-dispatches an extant run.
                 prior_run = store.load_state("driverrun-" + run_id)
                 if prior_run is not None:
-                    if prior_run.get("state") == "completed":
-                        capability = store.load_state("capability-" + grant_id)
-                        reservation_id = "res-" + command_id
-                        if capability and reservation_id in [r["reservationId"] for r in capability.get("reservations", []) if r["state"] == "open"]:
-                            consumption = {
-                                "schemaVersion": "1.0.0", "consumptionId": "con-" + command_id,
-                                "reservationId": reservation_id, "leaseId": lease_id,
-                                "outcome": "indeterminate", "sideEffectIdentity": run_id,
-                                "finalizedAt": now,
-                            }
-                            svc.finalize_use(grant_id, consumption, recovery_meta("recover-finalize"))
-                        task_state = store.load_state("task-" + task_id)
+                    capability = store.load_state("capability-" + grant_id)
+                    reservation_id = "res-" + command_id
+                    open_reservation = bool(capability and reservation_id in [
+                        r["reservationId"] for r in capability.get("reservations", [])
+                        if r["state"] == "open"
+                    ])
+                    if open_reservation:
+                        consumption = {
+                            "schemaVersion": "1.0.0", "consumptionId": "con-" + command_id,
+                            "reservationId": reservation_id, "leaseId": lease_id,
+                            "outcome": "indeterminate", "sideEffectIdentity": run_id,
+                            "finalizedAt": now,
+                        }
+                        svc.finalize_use(grant_id, consumption, recovery_meta("recover-finalize"))
+                    prior_state = prior_run.get("state")
+                    task_state = store.load_state("task-" + task_id)
+                    if prior_state in ("created", "submitted"):
+                        # Dispatch is provably not yet entered in this runner's
+                        # ordering. Preserve authority: no consumption is invented.
+                        svc.transition_driver_run(run_id, "failed", recovery_meta("recover-no-dispatch"))
+                        if task_state and task_state.get("state") in ("assigned", "running"):
+                            svc.transition_task(task_id, "failed", "dispatch not entered before restart", recovery_meta("recover-task-failed"))
+                        recovery = "persisted_pre_dispatch_run_failed"
+                    elif prior_state in ("running", "suspended"):
+                        if prior_state == "running":
+                            svc.transition_driver_run(run_id, "lost", recovery_meta("recover-lost"))
                         if task_state and task_state.get("state") == "running":
-                            svc.transition_task(task_id, "suspended",
-                                                "completed external work requires governed recovery",
-                                                recovery_meta("recover-suspend"))
-                    return {"missionId": mission_id, "taskId": task_id, "driverRunId": run_id,
-                            "claimId": claim_id, "recovery": "persisted_driver_run_not_repeated"}
+                            svc.transition_task(task_id, "suspended", "external boundary indeterminate; governed reconciliation required", recovery_meta("recover-suspend"))
+                        recovery = "persisted_indeterminate_requires_reconciliation"
+                    else:
+                        # Completed/terminal runs are immutable evidence. Only an
+                        # open reservation may be conservatively reconciled above.
+                        if prior_state == "completed" and task_state and task_state.get("state") == "running":
+                            svc.transition_task(task_id, "suspended", "completed external work requires governed reconciliation", recovery_meta("recover-suspend"))
+                        recovery = "persisted_driver_run_not_repeated"
+                    receipt = {"missionId": mission_id, "taskId": task_id, "driverRunId": run_id,
+                               "claimId": claim_id, "recovery": recovery}
+                    store.complete_claimed_command(key, command_fingerprint, receipt)
+                    return receipt
                 # 1. Authoritative mission/task state (objective persisted in
                 # the Task aggregate by RuntimeService planning).
                 intent = {
@@ -806,8 +843,12 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         "outcome": "indeterminate", "sideEffectIdentity": run_id, "finalizedAt": now,
                     }
                     svc.finalize_use(grant_id, consumption, exec_meta("finalize-indeterminate"))
-                    svc.transition_driver_run(run_id, "failed", exec_meta("drfailed"))
-                    svc.transition_task(task_id, "failed", "external dispatch outcome indeterminate", exec_meta("taskfailed"))
+                    # A dispatch exception after the boundary is not evidence of
+                    # failure. Preserve the unknown as lost + suspended so the
+                    # existing governed cancellation/reconciliation path, not an
+                    # automatic retry, decides the terminal disposition.
+                    svc.transition_driver_run(run_id, "lost", exec_meta("drlost"))
+                    svc.transition_task(task_id, "suspended", "external dispatch outcome indeterminate; reconciliation required", exec_meta("tasksuspended"))
                     raise
                 svc.transition_driver_run(run_id, "completed", exec_meta("drcomplete"))
                 # A returned driver result proves this invocation completed. Its
@@ -870,7 +911,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     receipt = {"missionId": mission_id, "taskId": task_id, "driverRunId": run_id,
                                "claimId": claim_id, "verificationId": vr["verificationId"],
                                "outcome": "verification_rejected", "driver": "hermes"}
-                    hermes_work_receipts[key] = receipt
+                    store.complete_claimed_command(key, command_fingerprint, receipt)
                     return receipt
                 svc.record_verification(vr, verification_meta("verify", vr["verificationId"]))
                 decision = {
@@ -897,7 +938,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     "targetPath": str(worktree), "beforeDigest": before,
                     "observations": out.get("observations", []), "driver": "hermes",
                 }
-                hermes_work_receipts[key] = receipt
+                store.complete_claimed_command(key, command_fingerprint, receipt)
                 return receipt
             cmd_svc.approved_hermes_runner = _run_approved_hermes
             def _runtime_checkpoint(command: Dict[str, Any]):

@@ -287,6 +287,13 @@ def project_authoritative_state(client: RuntimeClient) -> Dict[str, Any]:
             driver_runs.append(st)
         elif agg["kind"] == "claim":
             claims.append(st)
+    # Verification is claim-owned: a global scalar would hide coexistence of
+    # accepted and contradicted claims. Preserve every committed claim result;
+    # only claims without one expose their explicitly advisory fallback.
+    verifications = {
+        claim["claimId"]: client.verification(claim["claimId"])
+        for claim in claims if claim.get("claimId")
+    }
     return {
         "missions": missions,
         "tasks": tasks,
@@ -294,7 +301,7 @@ def project_authoritative_state(client: RuntimeClient) -> Dict[str, Any]:
         "driverRuns": driver_runs,
         "claims": claims,
         "eventTimeline": client.event_timeline(),
-        "verification": client.verification(),
+        "verificationsByClaim": verifications,
         "identity": client.identity(),
     }
 
