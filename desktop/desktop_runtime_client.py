@@ -102,11 +102,17 @@ class RuntimeClient:
     def event_timeline(self, after: int = 0) -> List[Dict[str, Any]]:
         return self._query({"op": "event_timeline", "after": after})["result"]
 
-    def claimguard_disposition(self, statement: str) -> Dict[str, Any]:
-        return self._query({"op": "claimguard", "statement": statement})["result"]
+    def claimguard_disposition(self, statement: str, claim_id: Optional[str] = None) -> Dict[str, Any]:
+        request = {"op": "claimguard", "statement": statement}
+        if claim_id is not None:
+            request["claimId"] = claim_id
+        return self._query(request)["result"]
 
-    def verification(self) -> Dict[str, Any]:
-        return self._query({"op": "verification"})["result"]
+    def verification(self, claim_id: Optional[str] = None) -> Dict[str, Any]:
+        request = {"op": "verification"}
+        if claim_id is not None:
+            request["claimId"] = claim_id
+        return self._query(request)["result"]
 
     # -- command API (governed operator actions, M1) ----------------------
 
@@ -215,8 +221,8 @@ def project_mission_view(client: RuntimeClient, mission_id: str = DEMO_MISSION_I
         "missionEvents": mission_events,
         "claim": claim_state,
         "claimGuardDisposition": claimguard,
-        "evidence": _extract_evidence(mission_events),
-        "verification": client.verification(),
+        "evidence": project_evidence(client, mission_id),
+        "verification": client.verification(claim_state.get("claimId") if claim_state else None),
     }
 
 
@@ -309,9 +315,20 @@ def project_driver_run(client: RuntimeClient, driver_run_id: str) -> Optional[Di
 
 
 def project_evidence(client: RuntimeClient, mission_id: str) -> List[Dict[str, Any]]:
-    """Return evidence recorded for a mission (read-only projection)."""
-    events = client.get_stream_events("mission-" + mission_id)
-    return _extract_evidence(events)
+    """Return evidence attached to claims for a mission.
+
+    EvidenceRecorded is authoritative on the claim stream, not the mission
+    stream; this projection deliberately follows that ownership boundary.
+    """
+    evidence: List[Dict[str, Any]] = []
+    for aggregate in client.list_aggregates():
+        if aggregate["kind"] != "claim":
+            continue
+        state = client.get_state(aggregate["streamId"])
+        if not state or state.get("missionId") != mission_id:
+            continue
+        evidence.extend(_extract_evidence(client.get_stream_events(aggregate["streamId"])))
+    return evidence
 
 
 def project_claimguard(client: RuntimeClient, statement: str) -> Dict[str, Any]:

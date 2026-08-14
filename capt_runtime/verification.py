@@ -80,8 +80,15 @@ def _tree_digest(path: str) -> str:
     return "sha256:" + h.hexdigest()
 
 
-def verify_no_git_mutation(target_path: str) -> bool:
-    """Confirm no uncommitted Git mutation in the target repository."""
+_GIT_BASELINE_NOT_CAPTURED = object()
+
+
+def capture_git_status(target_path: str) -> Optional[str]:
+    """Capture porcelain status before a driver dispatch.
+
+    ``None`` means the target is not readable as a Git repository.  An empty
+    string is a real clean-repository baseline, not an absent baseline.
+    """
     try:
         res = subprocess.run(
             ["git", "status", "--porcelain"],
@@ -90,12 +97,26 @@ def verify_no_git_mutation(target_path: str) -> bool:
             text=True,
         )
     except FileNotFoundError:
-        # No git available; treat as "not a git repo / nothing to mutate".
-        return True
-    if res.returncode != 0:
-        # Not a git repo (or git error) — for M0-B read-only proof we accept.
-        return True
-    return res.stdout.strip() == ""
+        return None
+    return res.stdout if res.returncode == 0 else None
+
+
+def verify_no_git_mutation(
+    target_path: str, before_status: Any = _GIT_BASELINE_NOT_CAPTURED
+) -> bool:
+    """Confirm that dispatch introduced no Git-status delta.
+
+    A supplied pre-dispatch baseline makes existing operator dirt harmless;
+    only a state change after that baseline is a driver-attributable mutation.
+    The omitted-baseline behavior remains the legacy absolute-cleanliness check
+    for existing callers that do not own a dispatch boundary.
+    """
+    after = capture_git_status(target_path)
+    if before_status is _GIT_BASELINE_NOT_CAPTURED:
+        return after is None or after.strip() == ""
+    if before_status is None:
+        return after is None
+    return after is not None and after == before_status
 
 
 def verify_artifact(path: str, expected_digest: str) -> bool:
@@ -204,6 +225,7 @@ def build_verification_result(
     claim_id: Optional[str] = None,
     supporting_evidence_ids: Optional[list] = None,
     verified_at: Optional[str] = None,
+    before_git_status: Any = _GIT_BASELINE_NOT_CAPTURED,
 ) -> Dict[str, Any]:
     """Independently verify and return a VerificationResult-shaped record.
 
@@ -220,17 +242,19 @@ def build_verification_result(
     """
     import time as _time
     repo_unchanged = verify_repository_unchanged(target_path, before_digest)
-    no_git = verify_no_git_mutation(target_path)
+    no_git = verify_no_git_mutation(target_path, before_git_status)
     artifact_ok = verify_artifact(artifact_path, artifact_digest)
     if not (repo_unchanged and no_git and artifact_ok):
         raise VerificationFailure(
             "verification failed: repo_unchanged=%s no_git=%s artifact_ok=%s"
             % (repo_unchanged, no_git, artifact_ok)
         )
-    evidence_ids = supporting_evidence_ids or ["ev-" + digest({"artifact": artifact_digest})[:16]]
+    evidence_ids = supporting_evidence_ids or ["ev-" + digest({"artifact": artifact_digest})]
     record: Dict[str, Any] = {
         "schemaVersion": "1.0.0",
-        "verificationId": "vr-" + digest({"t": target_path, "a": artifact_digest})[:16],
+        "verificationId": "vr-" + digest(
+            {"claim": claim_id, "target": target_path, "artifact": artifact_digest}
+        ),
         "claimId": claim_id,
         "strategy": "artifact_hashing",
         "status": {"kind": "verified", "supportingEvidenceIds": evidence_ids},
@@ -245,6 +269,44 @@ def build_verification_result(
             "artifactPresent": artifact_ok,
         },
         "trust": "capt_authoritative",
+    }
+    return record
+
+
+def build_contradicted_verification_result(
+    claim_id: str,
+    contradicting_evidence_ids: list,
+    observed_by: str,
+    verified_at: Optional[str] = None,
+    reason: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Build a contract-valid persisted negative verification.
+
+    Contradiction requires already-recorded, real evidence.  The human-readable
+    reason is deliberately view metadata because the frozen status contract only
+    carries stable evidence identifiers.
+    """
+    import time as _time
+    if not contradicting_evidence_ids:
+        raise VerificationFailure("contradicted verification requires evidence")
+    record: Dict[str, Any] = {
+        "schemaVersion": "1.0.0",
+        "verificationId": "vr-" + digest(
+            {"claim": claim_id, "contradicting": sorted(contradicting_evidence_ids)}
+        ),
+        "claimId": claim_id,
+        "strategy": "invariant_check",
+        "status": {
+            "kind": "contradicted",
+            "contradictingEvidenceIds": list(contradicting_evidence_ids),
+        },
+        "verifiedBy": {"actorId": "verification_pipeline", "kind": "verification_plane"},
+        "verifiedAt": verified_at or _time.strftime("%Y-%m-%dT%H:%M:%SZ", _time.gmtime()),
+    }
+    record["_view"] = {
+        "observedBy": observed_by,
+        "trust": "capt_authoritative",
+        "reason": reason,
     }
     return record
 

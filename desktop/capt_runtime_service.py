@@ -46,7 +46,14 @@ from capt_runtime.drivers.registry import DriverRegistry
 from capt_runtime.scenario import build_scenario
 from capt_runtime.services import RuntimeService
 from capt_runtime.store import EventStore
-from capt_runtime.verification import build_verification_result, guard_claim, build_artifact_hash_evidence
+from capt_runtime.verification import (
+    VerificationFailure,
+    build_artifact_hash_evidence,
+    build_contradicted_verification_result,
+    build_verification_result,
+    capture_git_status,
+    guard_claim,
+)
 from capt_runtime.composition import RuntimeComposition, create_runtime
 
 from desktop.m1_command_service import RuntimeCommandService
@@ -348,15 +355,45 @@ class RuntimeQueryService:
     def event_timeline(self, after: int = 0) -> List[Dict[str, Any]]:
         return self.store.read_events(after)
 
-    def claimguard_disposition(self, statement: str) -> Dict[str, Any]:
-        """Return ClaimGuard's verdict for a statement WITHOUT mutating state."""
+    def _claim_id_for_statement(self, statement: str) -> Optional[str]:
+        """Find the most recent claim with this exact statement, if any."""
+        matches = []
+        for stream_id, kind, version in self.store.all_aggregates():
+            if kind != "claim":
+                continue
+            state = self.store.load_state(stream_id)
+            if state and state.get("statement") == statement:
+                matches.append((version, state.get("claimId")))
+        return max(matches)[1] if matches else None
+
+    def claimguard_disposition(
+        self, statement: str, claim_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Project a committed ClaimGuard decision before advisory recomputation."""
+        selected = claim_id or self._claim_id_for_statement(statement)
+        if selected:
+            state = self.store.load_state("claim-" + selected)
+            if state and state.get("guardVerdict"):
+                for env in reversed(self.store.read_stream("claim-" + selected)):
+                    payload = env.get("payload", {})
+                    if payload.get("eventType") == "ClaimGuardDecided":
+                        decision = payload["decision"]
+                        return {
+                            "statement": state["statement"],
+                            "verdict": "accepted" if decision["verdict"] == "accept" else "rejected",
+                            "claimId": selected,
+                            "decisionId": decision["decisionId"],
+                            "committed": True,
+                            "advisory": False,
+                        }
         try:
             accepted = guard_claim(statement)
-            return {"statement": accepted, "verdict": "accepted"}
+            return {"statement": accepted, "verdict": "accepted", "committed": False, "advisory": True}
         except Exception as exc:  # noqa: BLE001
-            return {"statement": statement, "verdict": "rejected", "reason": str(exc)[:160]}
+            return {"statement": statement, "verdict": "rejected", "reason": str(exc)[:160],
+                    "committed": False, "advisory": True}
 
-    def verification(self) -> Dict[str, Any]:
+    def verification(self, claim_id: Optional[str] = None) -> Dict[str, Any]:
         """Recompute the CAPT-authored verification result for the demo artifact.
 
         This is a read-only computation over authoritative state (the artifact
@@ -367,6 +404,11 @@ class RuntimeQueryService:
         The desktop view flattens _view into the top-level response so consumers
         that expect vr['trust']/vr['checks'] keep working.
         """
+        if claim_id:
+            for env in reversed(self.store.read_stream("claim-" + claim_id)):
+                payload = env.get("payload", {})
+                if payload.get("eventType") == "ClaimVerified":
+                    return {**payload["verification"], "committed": True, "advisory": False}
         if not self.demo.get("artifactPath"):
             return {"status": {"kind": "not_tested"}, "trust": "capt_authoritative"}
         try:
@@ -380,10 +422,11 @@ class RuntimeQueryService:
             # Flatten _view annotations into the top-level for GUI consumers.
             view = vr.pop("_view", {})
             vr.update(view)
+            vr.update({"committed": False, "advisory": True})
             return vr
         except Exception as exc:  # noqa: BLE001
             return {"status": {"kind": "failed"}, "error": str(exc)[:200],
-                    "trust": "capt_authoritative"}
+                    "trust": "capt_authoritative", "committed": False, "advisory": True}
 
     def handle(self, request: Dict[str, Any]) -> Dict[str, Any]:
         op = request.get("op")
@@ -410,9 +453,11 @@ class RuntimeQueryService:
             if op == "event_timeline":
                 return {"ok": True, "result": self.event_timeline(int(request.get("after", 0)))}
             if op == "claimguard":
-                return {"ok": True, "result": self.claimguard_disposition(request["statement"])}
+                return {"ok": True, "result": self.claimguard_disposition(
+                    request["statement"], request.get("claimId")
+                )}
             if op == "verification":
-                return {"ok": True, "result": self.verification()}
+                return {"ok": True, "result": self.verification(request.get("claimId"))}
             if op == "get_memory_policy":
                 if self.memory_engine is None:
                     return {"ok": False, "error": "memory engine not active"}
@@ -576,6 +621,38 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 claim_id = payload.get("claimId") or ("cl-model-" + command_id)
                 policy_id = payload.get("policyDecisionId") or ("pd-model-" + command_id)
                 executable = payload.get("executable") or None
+                def recovery_meta(step: str) -> Dict[str, Any]:
+                    return commands.command(
+                        command_id=command_id + ":" + step,
+                        idempotency_key=key + ":" + step,
+                        operation_fingerprint=commands.fingerprint(step, {"driverRunId": run_id}),
+                        correlation_id=command.get("correlationId", "corr-model"),
+                        actor_id="exec-1", actor_kind="execution_plane",
+                        issued_at=now, replay_policy="never",
+                    )
+                # Restart/replay safety: a persisted DriverRun is the authority on
+                # whether this external work may be dispatched again. A completed
+                # run is never re-submitted from a fresh daemon process.
+                prior_run = store.load_state("driverrun-" + run_id)
+                if prior_run is not None:
+                    if prior_run.get("state") == "completed":
+                        capability = store.load_state("capability-" + grant_id)
+                        reservation_id = "res-" + command_id
+                        if capability and reservation_id in [r["reservationId"] for r in capability.get("reservations", []) if r["state"] == "open"]:
+                            consumption = {
+                                "schemaVersion": "1.0.0", "consumptionId": "con-" + command_id,
+                                "reservationId": reservation_id, "leaseId": lease_id,
+                                "outcome": "indeterminate", "sideEffectIdentity": run_id,
+                                "finalizedAt": now,
+                            }
+                            svc.finalize_use(grant_id, consumption, recovery_meta("recover-finalize"))
+                        task_state = store.load_state("task-" + task_id)
+                        if task_state and task_state.get("state") == "running":
+                            svc.transition_task(task_id, "suspended",
+                                                "completed external work requires governed recovery",
+                                                recovery_meta("recover-suspend"))
+                    return {"missionId": mission_id, "taskId": task_id, "driverRunId": run_id,
+                            "claimId": claim_id, "recovery": "persisted_driver_run_not_repeated"}
                 # 1. Authoritative mission/task state (objective persisted in
                 # the Task aggregate by RuntimeService planning).
                 intent = {
@@ -704,12 +781,48 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 )
                 svc.transition_driver_run(run_id, "submitted", exec_meta("drsubmit"))
                 svc.transition_driver_run(run_id, "running", exec_meta("drrun"))
-                out = host.dispatch(wo, ctx, {"state": "running"}, now=now, lease=dispatch_lease)
+                # The integrity baseline is CAPT-side evidence captured before the
+                # external process.  Existing operator dirt is part of the
+                # baseline; only a delta is attributed to the driver.
+                before = tree_digest(str(worktree))
+                before_git_status = capture_git_status(str(worktree))
+                reservation_id = "res-" + command_id
+                reservation = {
+                    "schemaVersion": "1.0.0", "reservationId": reservation_id,
+                    "leaseId": lease_id, "operation": "repository.read",
+                    "operationFingerprint": commands.fingerprint("hermes.dispatch", {"driverRunId": run_id}),
+                    "idempotencyKey": key + ":dispatch", "state": "open", "reservedAt": now,
+                }
+                svc.reserve_use(grant_id, reservation, exec_meta("reserve"))
+                try:
+                    out = host.dispatch(wo, ctx, {"state": "running"}, now=now, lease=dispatch_lease)
+                except Exception:
+                    # Dispatch reached an external boundary after reservation. The
+                    # absence of a result is not proof that no side effect occurred:
+                    # consume indeterminately and require recovery rather than retry.
+                    consumption = {
+                        "schemaVersion": "1.0.0", "consumptionId": "con-" + command_id,
+                        "reservationId": reservation_id, "leaseId": lease_id,
+                        "outcome": "indeterminate", "sideEffectIdentity": run_id, "finalizedAt": now,
+                    }
+                    svc.finalize_use(grant_id, consumption, exec_meta("finalize-indeterminate"))
+                    svc.transition_driver_run(run_id, "failed", exec_meta("drfailed"))
+                    svc.transition_task(task_id, "failed", "external dispatch outcome indeterminate", exec_meta("taskfailed"))
+                    raise
                 svc.transition_driver_run(run_id, "completed", exec_meta("drcomplete"))
+                # A returned driver result proves this invocation completed. Its
+                # capability use is therefore consumed before any downstream claim
+                # verification, which may still reject the result.
+                consumption = {
+                    "schemaVersion": "1.0.0", "consumptionId": "con-" + command_id,
+                    "reservationId": reservation_id, "leaseId": lease_id,
+                    "outcome": "succeeded", "sideEffectIdentity": out.get("externalRunId") or run_id,
+                    "finalizedAt": now,
+                }
+                svc.finalize_use(grant_id, consumption, exec_meta("finalize"))
                 # 4. Verification + ClaimGuard (CAPT-authored).
                 artifact_path = out["artifactCandidate"]["artifactPath"]
                 artifact_digest = out["artifactCandidate"]["artifactDigest"]
-                before = tree_digest(str(worktree))
                 accepted = guard_claim("Repository inspected in read-only mode.")
                 svc.propose_claim(
                     {"schemaVersion": "1.0.0", "claimId": claim_id, "missionId": mission_id,
@@ -723,16 +836,18 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                                      actor_id="cog-1", actor_kind="cognitive_plane",
                                      issued_at=now, replay_policy="never"),
                 )
-                # 4b. Record evidence (artifact_hash)
-                ev_id = "ev-" + commands.fingerprint("artifact_hash", {"artifact": artifact_digest})[:16]
+                ev_id = "ev-" + commands.fingerprint("artifact_hash", {"artifact": artifact_digest})
                 evidence = build_artifact_hash_evidence(
-                    mission_id=mission_id,
-                    artifact_path=artifact_path,
-                    artifact_digest=artifact_digest,
+                    mission_id=mission_id, artifact_path=artifact_path, artifact_digest=artifact_digest,
                     collected_by={"actorId": "verification_pipeline", "kind": "verification_plane"},
-                    evidence_id=ev_id,
-                    task_id=task_id,
-                    collected_at=now,
+                    evidence_id=ev_id, task_id=task_id, collected_at=now,
+                )
+                verification_meta = lambda step, verification_id: commands.command(
+                    command_id=command_id + ":" + step, idempotency_key=key + ":" + step,
+                    operation_fingerprint=commands.fingerprint("record_verification", {"verificationId": verification_id}),
+                    correlation_id=command.get("correlationId", "corr-model"),
+                    actor_id="verification_pipeline", actor_kind="verification_plane",
+                    issued_at=now, replay_policy="never",
                 )
                 svc.record_evidence(claim_id, evidence,
                     commands.command(command_id=command_id + ":evidence", idempotency_key=key + ":evidence",
@@ -741,26 +856,29 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                                      actor_id="verification_pipeline", actor_kind="verification_plane",
                                      issued_at=now, replay_policy="never"),
                 )
-                # 4c. Build verification result with cited evidence, then record
-                vr = build_verification_result(str(worktree), before, artifact_path, artifact_digest, "hermes",
-                                                 claim_id=claim_id, supporting_evidence_ids=[ev_id])
-                svc.record_verification(vr,
-                    commands.command(command_id=command_id + ":verify", idempotency_key=key + ":verify",
-                                     operation_fingerprint=commands.fingerprint("record_verification", {"verificationId": vr["verificationId"]}),
-                                     correlation_id=command.get("correlationId", "corr-model"),
-                                     actor_id="verification_pipeline", actor_kind="verification_plane",
-                                     issued_at=now, replay_policy="never"),
-                )
-                # 4d. Decide claim (ClaimGuard)
+                try:
+                    vr = build_verification_result(
+                        str(worktree), before, artifact_path, artifact_digest, "hermes",
+                        claim_id=claim_id, supporting_evidence_ids=[ev_id], before_git_status=before_git_status,
+                    )
+                except VerificationFailure as exc:
+                    vr = build_contradicted_verification_result(
+                        claim_id, [ev_id], "hermes", verified_at=now, reason=str(exc),
+                    )
+                    svc.record_verification(vr, verification_meta("verify-contradicted", vr["verificationId"]))
+                    svc.transition_task(task_id, "failed", "verification contradicted", exec_meta("taskfailed"))
+                    receipt = {"missionId": mission_id, "taskId": task_id, "driverRunId": run_id,
+                               "claimId": claim_id, "verificationId": vr["verificationId"],
+                               "outcome": "verification_rejected", "driver": "hermes"}
+                    hermes_work_receipts[key] = receipt
+                    return receipt
+                svc.record_verification(vr, verification_meta("verify", vr["verificationId"]))
                 decision = {
-                    "schemaVersion": "1.0.0",
-                    "decisionId": "cgd-" + command_id,
-                    "claimId": claim_id,
-                    "verdict": "accept",
+                    "schemaVersion": "1.0.0", "decisionId": "cgd-" + command_id,
+                    "claimId": claim_id, "verdict": "accept",
                     "rationale": "Bounded statement accepted by ClaimGuard; evidence and verification recorded.",
                     "verificationId": vr["verificationId"],
-                    "decidedBy": {"actorId": "claim-guard", "kind": "claim_authority"},
-                    "decidedAt": now,
+                    "decidedBy": {"actorId": "claim-guard", "kind": "claim_authority"}, "decidedAt": now,
                 }
                 svc.decide_claim(decision,
                     commands.command(command_id=command_id + ":decide", idempotency_key=key + ":decide",
@@ -769,17 +887,15 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                                      actor_id="claim-guard", actor_kind="claim_authority",
                                      issued_at=now, replay_policy="never"),
                 )
-                # 5. Checkpoint records continuation.
+                svc.transition_task(task_id, "succeeded", "verification and ClaimGuard accepted", exec_meta("tasksucceeded"))
                 create_checkpoint(store, "cp-model-" + command_id, now,
                                   contracts.digest({"policyBundle": "model-operator", "version": 1}))
                 receipt = {
-                    "missionId": mission_id, "taskId": task_id,
-                    "driverRunId": run_id, "claimId": claim_id,
-                    "verificationId": vr["verificationId"],
+                    "missionId": mission_id, "taskId": task_id, "driverRunId": run_id,
+                    "claimId": claim_id, "verificationId": vr["verificationId"],
                     "artifactPath": artifact_path, "artifactDigest": artifact_digest,
                     "targetPath": str(worktree), "beforeDigest": before,
-                    "observations": out.get("observations", []),
-                    "driver": "hermes",
+                    "observations": out.get("observations", []), "driver": "hermes",
                 }
                 hermes_work_receipts[key] = receipt
                 return receipt
