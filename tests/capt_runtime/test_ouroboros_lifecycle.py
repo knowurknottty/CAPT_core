@@ -276,7 +276,7 @@ def test_crash_boundary_restart_never_replays_or_leaves_running(tmp_path: Path, 
     client, _ledger, proc = _start_runtime(root)
     try:
         receipt = client.command("run_approved_hermes_inspection", payload, "idem-ouro-" + suffix)
-        assert receipt["status"] in ("accepted", "idempotent"), receipt
+        assert receipt["status"] == "in_progress", receipt
         task = _state(client, "t", suffix)
         assert task["state"] != "running"
         run = _state(client, "driverrun", suffix)

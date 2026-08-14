@@ -81,6 +81,19 @@ def test_governed_hermes_op_routes_to_runner_and_is_idempotent(tmp_path: Path) -
         runtime.close()
 
 
+
+def test_governed_hermes_in_progress_is_not_presented_as_accepted(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "ledger.db"))
+    try:
+        svc = RuntimeCommandService(runtime.store, "operator-x", "sess-1", runtime_service=runtime.service)
+        svc.approved_hermes_runner = lambda _cmd: {"status": "in_progress", "commandId": "cmd-model-1"}
+        receipt = svc.execute(_envelope("run_approved_hermes_inspection", {"objective": "x", "targetRoot": "/tmp"}))
+        assert receipt["status"] == "in_progress"
+        assert receipt["classification"] == "in_progress"
+    finally:
+        runtime.close()
+
+
 def test_governed_hermes_op_rejected_when_runner_unset(tmp_path: Path) -> None:
     runtime = create_runtime(str(tmp_path / "ledger.db"))
     try:

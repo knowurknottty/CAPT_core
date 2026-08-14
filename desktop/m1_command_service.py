@@ -263,6 +263,8 @@ class RuntimeCommandService:
                 if runner is None:
                     return self._receipt(cmd, status="rejected", classification="internal_failure", error=self._error_envelope(cmd, "internal_failure", "HERMES_DRIVER_UNAVAILABLE"))
                 result = runner(cmd)
+                if result.get("status") == "in_progress":
+                    return self._receipt(cmd, status="in_progress", classification="in_progress", result=result)
                 status = "idempotent" if result.pop("_idempotent", False) else "accepted"
                 return self._receipt(cmd, status=status, classification="duplicate" if status == "idempotent" else "accepted", result=result)
             elif op == "checkpoint_runtime":

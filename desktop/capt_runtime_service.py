@@ -639,7 +639,6 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
     srv.settimeout(0.2)
     shutdown_requested = threading.Event()
     fixed_work_receipts: Dict[str, Dict[str, Any]] = {}
-    hermes_work_receipts: Dict[str, Dict[str, Any]] = {}
     checkpoint_receipts: Dict[str, Dict[str, Any]] = {}
     print("CAPT_RUNTIME_SERVICE_READY sock=%s ledger=%s pid=%d" % (sock_path, ledger_path, os.getpid()))
 
