@@ -14,28 +14,29 @@ Controls present now:
 
 | Control | What it does |
 |---|---|
-| Provider select | Selects `ollama` or `openrouter` for the next requested governed inference |
-| Model select | Live Ollama inventory or explicitly resolved OpenRouter text models |
-| Prompt field | Objective sent to RuntimeService as the governed task objective |
-| RUN | Invokes `run_approved_hermes_inspection` with provider/model/objective/target root; current name is historical, path chooses ProviderDriver when `provider` is present |
-| CHECKPOINT | Sends `checkpoint_runtime` to RuntimeService |
-| Output panel | Displays untrusted provider observation summary returned in command receipt |
-| Runtime/mission/evidence panels | Runtime dashboard projections, not a second state store |
-| Provider panel | Provider health/state summary |
-| Approvals panel | Pending governed approval projections |
-| Logs panel | Recent runtime events projection |
-| `Ctrl+Q` | Quit |
-| `r` | Refresh |
-| `F5` | Evidence refresh |
+| Provider select (`p`) | Focuses provider selection. Provider change immediately invalidates incompatible model state. |
+| Model filter (`/`) | Focuses text filter for the scoped model inventory. |
+| Model select (`m`) | Focuses provider-scoped model selection. |
+| Prompt (`F6`) | Focuses the governed task objective editor. Printable keys remain prompt input while it is focused. |
+| RUN (`Ctrl+Enter`) | Invokes `run_approved_hermes_inspection` with provider/model/objective/target root from one current selection state. The historical operation name routes to ProviderDriver when `provider` is present. |
+| CHECKPOINT (`c`) | Sends `checkpoint_runtime` to RuntimeService. |
+| Current Run | Shows the current receipt’s provider/model, status, mission and DriverRun correlation IDs. |
+| Output | Displays an untrusted provider observation summary or a safe error result. |
+| `r` / `F5` | Refreshes authoritative projections. |
+| `F7` | Focuses the Logs projection. |
+| `v` | Cycles local CaveCAPT verbosity. |
+| `Ctrl+Q` | Quits. |
 
 The selector and prompt are not proof of execution. Proof is the resulting DriverRun/evidence/verification state.
 
-### Current interaction limits
+### Current interaction contract
 
-- `m` only rings the terminal bell; it does not focus/open a mission view.
-- `p`, `a`, `F5`, `F6`, `F7`, and `e` refresh projections rather than navigate to separately focused pages.
-- `y` approves and `n` denies the first pending/open approval request. The Approval panel’s historical text says `[a]pprove / [d]eny`; that legend is stale — use `y` / `n`.
-- TUI operation is live-runtime dependent. If it cannot connect to socket/token state, it shows a connection failure rather than becoming authority itself.
+- `Tab` / `Shift+Tab` use Textual’s focus traversal. `Enter` / `Space` activate focused controls using native widget behavior.
+- Provider is the scope boundary for the model list. Provider switches clear a stale model filter and invalidate a model that does not belong to the new provider.
+- Model refreshes are generation-guarded. An obsolete refresh cannot write options after the active provider changed.
+- RUN uses a Textual worker so the interface remains responsive while RuntimeService performs bounded work. Every worker exit path releases the busy state and re-enables RUN.
+- Current Run identifies the receipt from the operator action. Evidence/verification are labeled as latest authoritative projections and must be correlated by DriverRun ID, never presumed current merely because they are visible.
+- The console contains no direct provider dispatch, EventStore writes, secret value, or lifecycle authority.
 
 ## `capt-ui` command surface
 
