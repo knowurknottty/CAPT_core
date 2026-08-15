@@ -8,6 +8,7 @@ version = "0.5.0"
 description = "Local-first cognitive runtime for individual developers, integrating with Hermes."
 readme = "README.md"
 requires-python = ">=3.8"
+dependencies = ["textual>=0.80"]
 license = { text = "MIT" }
 keywords = ["capt", "hermes", "memory", "cognitive", "local-first"]
 classifiers = [
