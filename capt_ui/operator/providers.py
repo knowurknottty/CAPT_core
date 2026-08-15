@@ -15,11 +15,14 @@ from __future__ import annotations
 
 import json
 import os
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
 
 from .contract import ProviderHealth, ProviderKind
+from .secrets import is_reference
 
 
 @dataclass
@@ -107,6 +110,25 @@ DEFAULT_PROVIDERS: List[Dict[str, Any]] = [
 ]
 
 
+def _validate_provider_config(provider: Provider) -> None:
+    """Reject unsafe persisted config before a health probe can consume it.
+
+    Provider config is an operator preference, not RuntimeService authority, but
+    it still must never persist a raw secret or an ambiguous endpoint.
+    """
+    if provider.key_ref and not is_reference(provider.key_ref):
+        raise ValueError("provider key_ref must be an env: or keychain: reference")
+    if not provider.base_url:
+        return
+    parsed = urlsplit(provider.base_url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise ValueError("provider base_url must be an absolute http(s) URL")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("provider base_url must not contain credentials")
+    if parsed.query or parsed.fragment:
+        raise ValueError("provider base_url must not contain query or fragment")
+
+
 class ProviderManager:
     """Persisted provider registry + health probing (thin client)."""
 
@@ -129,6 +151,7 @@ class ProviderManager:
                 data = json.loads(self._file.read_text())
                 for pd in data.get("providers", []):
                     p = Provider.from_dict(pd)
+                    _validate_provider_config(p)
                     self._providers[p.id] = p
                 return
             except Exception:  # noqa: BLE001 - corrupt file: fall back to defaults
@@ -150,6 +173,7 @@ class ProviderManager:
         return self._providers.get(provider_id)
 
     def add(self, provider: Provider) -> None:
+        _validate_provider_config(provider)
         self._providers[provider.id] = provider
         self.save()
 
@@ -157,6 +181,7 @@ class ProviderManager:
         p = self._providers.get(provider_id)
         if p is None:
             return None
+        candidate = deepcopy(p)
         for k, v in changes.items():
             if k in ("id",):
                 continue
@@ -164,9 +189,11 @@ class ProviderManager:
                 v = ProviderKind(v)
             elif k == "health":
                 v = ProviderHealth(v)
-            setattr(p, k, v)
+            setattr(candidate, k, v)
+        _validate_provider_config(candidate)
+        self._providers[provider_id] = candidate
         self.save()
-        return p
+        return candidate
 
     def remove(self, provider_id: str) -> Optional[Provider]:
         p = self._providers.pop(provider_id, None)
