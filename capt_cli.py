@@ -252,12 +252,25 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--state-dir", default=None)
     p.add_argument("--mission", default=None, help="mission id to inspect (default: most recent)")
 
+    p = sub.add_parser("run", help="run a governed provider inference")
+    p.add_argument("--provider", required=True, choices=["ollama", "openrouter"])
+    p.add_argument("--model", required=True)
+    p.add_argument("--prompt", required=True)
+    p.add_argument("--state-dir", default=None)
+    p.add_argument("--idempotency-key", default=None)
+    sub.add_parser("tui", help="launch the interactive CAPT operator console")
+
     args = parser.parse_args(argv)
     if not args.group:
         parser.print_help()
         return 1
 
     as_json = args.json
+    if args.group == "run":
+        return _cmd_run(args, as_json)
+    if args.group == "tui":
+        from capt_ui.surfaces.tui.app import main as tui_main
+        return tui_main()
     if args.group in ("start", "status", "stop", "checkpoint", "resume", "doctor", "evidence"):
         return _cmd_ramp(args, as_json)
     if args.group == "runtime":
@@ -334,6 +347,23 @@ def _cmd_harness(args) -> int:
         finally:
             client.disconnect()
     return _fail("harness action required")
+
+
+def _cmd_run(args, as_json: bool) -> int:
+    from capt_runtime.cli_ramp import default_paths, is_running
+    from desktop.desktop_runtime_client import RuntimeClient
+    paths=default_paths()
+    if args.state_dir:
+        base=Path(args.state_dir).expanduser(); paths={"state_dir":base,"ledger":base/"runtime.db","sock":base/"runtime.sock","token":base/"runtime.token","pid":base/"runtime.pid"}
+    if not paths["sock"].exists() or not is_running(paths["sock"]):
+        return _fail("CAPT runtime is not running. Run: capt start")
+    client=RuntimeClient(str(paths["sock"]),str(paths["token"]))
+    try:
+        client.connect()
+        receipt=client.command("run_approved_hermes_inspection", {"provider":args.provider,"model":args.model,"objective":args.prompt,"targetRoot":str(Path.cwd())}, args.idempotency_key)
+        print(_json_or_human(receipt,as_json))
+        return 0 if receipt.get("status") in ("accepted","idempotent") else 1
+    finally: client.disconnect()
 
 
 def _cmd_ramp(args, as_json) -> int:
