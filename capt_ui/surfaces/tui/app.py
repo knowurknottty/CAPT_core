@@ -15,7 +15,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical
 from textual.reactive import reactive
-from textual.widgets import DataTable, Footer, Header, Label, Static
+from textual.widgets import Button, Footer, Header, Input, Select, Static, TextArea
 
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO))
@@ -150,6 +150,14 @@ class CaptTUI(App):
                     yield MemoryPanel(id="memory")
                     yield EvidencePanel(id="evidence")
                 with Vertical(id="center", classes="panel-col"):
+                    yield Static("Run a governed provider inference", id="run-title")
+                    yield Select([( "Ollama", "ollama"), ("OpenRouter", "openrouter")], value="ollama", id="provider-select")
+                    yield Select([], id="model-select")
+                    yield TextArea("", id="prompt", language=None)
+                    with Horizontal():
+                        yield Button("RUN", id="run", variant="success")
+                        yield Button("CHECKPOINT", id="checkpoint")
+                    yield Static("Output\n──────\n<none>", id="output")
                     yield ProviderPanel(id="provider")
                     yield ApprovalPanel(id="approvals")
                 with Vertical(id="right", classes="panel-col"):
@@ -202,7 +210,60 @@ class CaptTUI(App):
                 mark, p.name, self._providers.label(p), p.health.value))
         self.query_one("#provider", ProviderPanel).text = (
             "Providers\n─────────\n" + "\n".join(prov_lines[:8]))
+        self._refresh_models("ollama")
         self.update_status("connected")
+
+    def _refresh_models(self, provider_id: str) -> None:
+        if not self._providers:
+            return
+        provider = self._providers.get(provider_id)
+        models = []
+        try:
+            if provider_id == "ollama":
+                provider = self._providers.test("ollama")
+                models = provider.models
+            else:
+                from capt_ui.operator.openrouter_models import available_text_models
+                models = [entry.model_id for entry in available_text_models()]
+        except Exception as exc:  # noqa: BLE001
+            self.query_one("#output", Static).update("Output\n──────\nProvider unavailable: %s" % str(exc)[:120])
+        select = self.query_one("#model-select", Select)
+        options = [(m, m) for m in models] or [("<unavailable>", "")]
+        select.set_options(options)
+        select.value = options[0][1]
+
+    def on_select_changed(self, event: Select.Changed) -> None:
+        if event.select.id == "provider-select":
+            self._refresh_models(str(event.value))
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "checkpoint":
+            if self._op:
+                try:
+                    self._op.client.command("checkpoint_runtime", {}, "tui-checkpoint")
+                    self.notify("Checkpoint accepted")
+                except Exception as exc:  # noqa: BLE001
+                    self.notify("Checkpoint failed: %s" % str(exc)[:120], severity="error")
+            return
+        if event.button.id != "run" or not self._op:
+            return
+        provider = str(self.query_one("#provider-select", Select).value)
+        model = str(self.query_one("#model-select", Select).value)
+        prompt = self.query_one("#prompt", TextArea).text.strip()
+        if not prompt or not model:
+            self.notify("Select an available model and enter a prompt.", severity="error")
+            return
+        try:
+            import uuid
+            receipt = self._op.client.command("run_approved_hermes_inspection", {"provider": provider, "model": model, "objective": prompt, "targetRoot": str(Path.cwd())}, "tui-run-" + uuid.uuid4().hex)
+            result = receipt.get("result", {})
+            observation = (result.get("observations") or [{}])[0].get("summary", "")
+            self.query_one("#output", Static).update("Output\n──────\n%s" % observation)
+            self.notify("Run %s" % receipt.get("status", "unknown"))
+            self.action_refresh()
+        except Exception as exc:  # noqa: BLE001
+            self.query_one("#output", Static).update("Output\n──────\nRun failed: %s" % str(exc)[:240])
+
 
     def update_status(self, msg: str) -> None:
         self.query_one("#status", StatusBar).status = {"health": msg}

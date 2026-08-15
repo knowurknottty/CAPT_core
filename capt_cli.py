@@ -269,6 +269,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.group == "run":
         return _cmd_run(args, as_json)
     if args.group == "tui":
+        from capt_runtime.cli_ramp import default_paths
+        if _cmd_ramp_start(args, default_paths(), False) != 0:
+            return 1
         from capt_ui.surfaces.tui.app import main as tui_main
         return tui_main()
     if args.group in ("start", "status", "stop", "checkpoint", "resume", "doctor", "evidence"):

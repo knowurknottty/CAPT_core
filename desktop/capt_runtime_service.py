@@ -997,7 +997,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     svc.transition_task(task_id, "failed", "verification contradicted", exec_meta("taskfailed"))
                     receipt = {"missionId": mission_id, "taskId": task_id, "driverRunId": run_id,
                                "claimId": claim_id, "verificationId": vr["verificationId"],
-                               "outcome": "verification_rejected", "driver": "hermes"}
+                               "outcome": "verification_rejected", "driver": "provider" if provider is not None else "hermes"}
                     store.complete_claimed_command(key, command_fingerprint, receipt)
                     return receipt
                 svc.record_verification(vr, verification_meta("verify", vr["verificationId"]))
@@ -1026,7 +1026,8 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     "claimId": claim_id, "verificationId": vr["verificationId"],
                     "artifactPath": artifact_path, "artifactDigest": artifact_digest,
                     "targetPath": str(worktree), "beforeDigest": before,
-                    "observations": out.get("observations", []), "driver": "hermes",
+                    "observations": out.get("observations", []), "driver": "provider" if provider is not None else "hermes",
+                    "providerProvenance": out.get("diagnostics", {}) if provider is not None else {},
                 }
                 store.complete_claimed_command(key, command_fingerprint, receipt)
                 return receipt
