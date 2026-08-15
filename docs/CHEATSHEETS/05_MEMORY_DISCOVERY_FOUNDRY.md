@@ -21,7 +21,7 @@ capt memory restore ID [--reason TEXT]
 capt memory explain ID
 ```
 
-Memory operations are CAPT Solo’s memory-engine surface. They are distinct from RuntimeService provider work and do not give a provider permission to access raw memory. `capt_runtime/context_pipeline.py` and `context_slice.py` create bounded context for governed drivers.
+Memory operations are CAPT Solo’s memory-engine surface. They are distinct from RuntimeService provider work and do not give a provider permission to access raw memory. `capt_runtime/context_pipeline.py` and `context_slice.py` create bounded context for governed drivers. Current caveat: `capt memory list --namespace NS` accepts the option but the current handler lists without applying that namespace filter.
 
 ### Sessions
 
@@ -63,7 +63,7 @@ Implementation: `capt_solo/foundry/`.
 | `list-bubbles`, `bubble-validate ID`, `bubble-approve ID --approver NAME`, `bubble-install ID [--ctp PATH]` | knowledge-bubble workflow |
 | `curate`, `audit` | curator/audit actions |
 
-Foundry is proof-governed; it is not a provider-model selection mechanism.
+Foundry is proof-governed; it is not a provider-model selection mechanism. `validate`, `review`, `approve`, `publish`, capability proving/governing, and bubble approval/install are state-changing expert workflows; inspect their individual help and evidence state before invoking them in a production CAPT home.
 
 ## Discovery subsystem
 

@@ -30,6 +30,13 @@ Controls present now:
 
 The selector and prompt are not proof of execution. Proof is the resulting DriverRun/evidence/verification state.
 
+### Current interaction limits
+
+- `m` only rings the terminal bell; it does not focus/open a mission view.
+- `p`, `a`, `F5`, `F6`, `F7`, and `e` refresh projections rather than navigate to separately focused pages.
+- `y` approves and `n` denies the first pending/open approval request. The Approval panel’s historical text says `[a]pprove / [d]eny`; that legend is stale — use `y` / `n`.
+- TUI operation is live-runtime dependent. If it cannot connect to socket/token state, it shows a connection failure rather than becoming authority itself.
+
 ## `capt-ui` command surface
 
 ```zsh
