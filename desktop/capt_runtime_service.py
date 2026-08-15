@@ -864,7 +864,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 dispatch_lease["scope"] = {**lease["scope"], "allowedPaths": [target_root]}
                 # 3. DriverHost dispatch with the resolved authoritative task.
                 worktree = Path(target_root)
-                staging = worktree.parent / (worktree.name + "-model-staging")
+                staging = Path(ledger_path).parent / "staging" / run_id
                 staging.mkdir(parents=True, exist_ok=True)
                 if provider is not None:
                     host = runtime.provider_host(target_repo=str(worktree), staging_root=str(staging), provider_id=provider.id, model=str(provider_model), base_url=provider.base_url, api_key=provider_key)
