@@ -115,6 +115,30 @@ verification.schema.json
 
 `driver.schema.json` is especially relevant to provider/Hermes work: ContextSlice and ExecutionDriverWorkOrder reject extra fields and freeze the driver isolation boundary.
 
+## Generated full function catalog
+
+`docs/API.md` is the repository’s generated Python API reference. It is the exhaustive machine-maintained companion to this cheat-sheet atlas; use it when you need an individual method signature rather than an operator workflow. Refresh/check it with the repository generator when source APIs change:
+
+```zsh
+python3 scripts/generate_api_reference.py --check
+python3 scripts/generate_api_reference.py docs/API.md
+```
+
+The command uses existing repository functionality. It does not replace tests or contract validation.
+
+## Existing primary references
+
+| Need | Existing reference |
+|---|---|
+| Quick orientation | `README.md`, `START_HERE.md` |
+| Installation/CLI | `docs/INSTALLATION.md`, `docs/CLI.md`, `docs/USER_GUIDE.md` |
+| UI/TUI | `docs/TUI.md`, `docs/V0_6_UI_UX_PRODUCTIZATION.md` |
+| Provider history/limits | `docs/PROVIDERS.md`, `docs/MODEL_PROVIDERS.md` |
+| Contracts | `contracts/README.md`, `contracts/schema/` |
+| Runtime architecture/ADRs | `docs/architecture/`, `CAPT_DESKTOP_RUNTIME_ARCHITECTURE.md` |
+| Security | `docs/SECURITY.md`, `.gitleaks.toml`, `doctor.sh` |
+| Release evidence | `docs/RELEASE_EVIDENCE.md`, `verify.sh`, `verify_runtime.py` |
+
 ## Tests as executable map
 
 Useful current regression groups:
