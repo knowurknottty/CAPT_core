@@ -136,6 +136,18 @@ def test_printable_input_is_not_stolen_by_global_navigation(monkeypatch):
     asyncio.run(run())
 
 
+def test_mouse_to_keyboard_recovery_focuses_provider(monkeypatch):
+    app = _app(monkeypatch)
+
+    async def run():
+        async with app.run_test() as pilot:
+            await pilot.click("#current-run")
+            await pilot.press("p")
+            assert app.focused is app.query_one("#provider-select")
+
+    asyncio.run(run())
+
+
 def test_failure_releases_busy_with_visible_safe_error(monkeypatch):
     app = _app(monkeypatch)
 
