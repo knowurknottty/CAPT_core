@@ -69,6 +69,14 @@ class RuntimeComposition:
                                         task_resolver=self.task_resolver()))
         return host
 
+    def provider_host(self, *, target_repo: str, staging_root: str, provider_id: str, model: str, base_url: str, api_key: str = "") -> DriverHost:
+        from .drivers.provider import DESCRIPTOR as PROVIDER_DESCRIPTOR, ProviderDriver
+        if not self.registry.is_registered(PROVIDER_DESCRIPTOR["driverId"]):
+            self.registry.register(PROVIDER_DESCRIPTOR)
+        host = DriverHost(self.registry, staging_root, target_repo)
+        host.select_driver(ProviderDriver(staging_root, provider_id=provider_id, model=model, base_url=base_url, api_key=api_key, task_resolver=self.task_resolver()))
+        return host
+
     def task_resolver(self) -> TaskResolver:
         """Return CAPT's authoritative task-reference resolver."""
         return TaskResolver(self.store)

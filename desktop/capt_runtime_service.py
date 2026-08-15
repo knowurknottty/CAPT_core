@@ -700,6 +700,19 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 claim_id = payload.get("claimId") or ("cl-model-" + command_id)
                 policy_id = payload.get("policyDecisionId") or ("pd-model-" + command_id)
                 executable = payload.get("executable") or None
+                provider_id = payload.get("provider")
+                provider_model = payload.get("model")
+                provider = None
+                provider_key = ""
+                if provider_id:
+                    from capt_ui.operator.providers import ProviderManager
+                    from capt_ui.operator.secrets import resolve
+                    provider = ProviderManager(Path(ledger_path).parent / "ui").get(str(provider_id))
+                    if provider is None or not provider_model:
+                        raise ValueError("PROVIDER_OR_MODEL_UNAVAILABLE")
+                    provider_key = resolve(provider.id, provider.key_ref)
+                    if provider.id != "ollama" and not provider_key:
+                        raise ValueError("PROVIDER_CREDENTIAL_UNAVAILABLE")
                 def recovery_meta(step: str) -> Dict[str, Any]:
                     return commands.command(
                         command_id=command_id + ":" + step,
@@ -853,10 +866,13 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 worktree = Path(target_root)
                 staging = worktree.parent / (worktree.name + "-model-staging")
                 staging.mkdir(parents=True, exist_ok=True)
-                host = runtime.hermes_host(
-                    target_repo=str(worktree), staging_root=str(staging),
-                    executable=executable, enforce_memory=False,
-                )
+                if provider is not None:
+                    host = runtime.provider_host(target_repo=str(worktree), staging_root=str(staging), provider_id=provider.id, model=str(provider_model), base_url=provider.base_url, api_key=provider_key)
+                else:
+                    host = runtime.hermes_host(
+                        target_repo=str(worktree), staging_root=str(staging),
+                        executable=executable, enforce_memory=False,
+                    )
                 ctx = host.build_context(
                     {"leaseId": lease["leaseId"], "operations": lease["operations"],
                      "scope": lease["scope"], "validFrom": lease["validFrom"],
@@ -866,13 +882,13 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     {"onUnexpectedWrite": "fail"},
                 )
                 wo = {
-                    "schemaVersion": "1.0.0", "driverRunId": run_id, "driverId": "hermes",
+                    "schemaVersion": "1.0.0", "driverRunId": run_id, "driverId": "provider" if provider is not None else "hermes",
                     "missionId": mission_id, "taskId": task_id, "workOrderVersion": 1,
                     "contextSlice": ctx,
                     "operations": ["RepositoryRead", "FilesystemRead", "ArtifactCreate", "AnalysisOnly"],
                 }
                 svc.create_driver_run(
-                    {"schemaVersion": "1.0.0", "driverRunId": run_id, "driverId": "hermes",
+                    {"schemaVersion": "1.0.0", "driverRunId": run_id, "driverId": "provider" if provider is not None else "hermes",
                      "missionId": mission_id, "taskId": task_id, "workOrderVersion": 1,
                      "externalRunId": None, "state": "created", "reconciliationStatus": "not_required",
                      "createdAt": now},
