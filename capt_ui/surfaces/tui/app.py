@@ -437,6 +437,7 @@ class CaptTUI(App):
                 "missionId": result.get("missionId", ""),
                 "taskId": result.get("taskId", ""),
                 "outcome": result.get("outcome", ""),
+                "cognitiveProvenance": result.get("cognitiveProvenance", {}),
             }
             self._show_output(observation or ("Run %s. %s" % (status, result.get("outcome", "No output observation."))))
             self.notify("Run %s" % status, severity="information" if status == "accepted" else "warning")
@@ -452,6 +453,13 @@ class CaptTUI(App):
             text += "\nDriverRun: %s\nMission: %s" % (current["driverRunId"], current.get("missionId", ""))
         if current.get("outcome"):
             text += "\nOutcome: %s" % current["outcome"]
+        provenance = current.get("cognitiveProvenance") or {}
+        if provenance:
+            text += "\nContext: requested %sk / effective %sk" % (
+                int(provenance.get("requestedContextBudget", 0)) // 1000,
+                int(provenance.get("effectiveContextBudget", 0)) // 1000,
+            )
+            text += "\nPromptAssembly: %s" % provenance.get("promptAssemblyDigest", "unknown")[:20]
         self.query_one("#current-run", Static).update(text)
 
 

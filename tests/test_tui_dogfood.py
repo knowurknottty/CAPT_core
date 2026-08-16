@@ -42,6 +42,8 @@ class _Client:
                 "taskId": "t-ui",
                 "driverRunId": "dr-ui",
                 "observations": [{"summary": "CAPT TEST"}],
+                "cognitiveProvenance": {"requestedContextBudget": 32000, "effectiveContextBudget": 8192,
+                                       "promptAssemblyDigest": "sha256:test-assembly"},
             },
         }
 
@@ -121,6 +123,7 @@ def test_run_receipt_releases_busy_and_payload_matches_visible_selection(monkeyp
             assert payload["model"] == "muse-glimmer:30b-mlx"
             assert "CAPT TEST" in str(app.query_one("#output").render())
             assert "dr-ui" in str(app.query_one("#current-run").render())
+            assert "requested 32k / effective 8k" in str(app.query_one("#current-run").render())
 
     asyncio.run(run())
 
