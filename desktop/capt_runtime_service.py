@@ -45,6 +45,7 @@ from capt_runtime.drivers.openharness import OpenHarnessDriver, DESCRIPTOR as RE
 from capt_runtime.drivers.registry import DriverRegistry
 from capt_runtime.scenario import build_scenario
 from capt_runtime.services import RuntimeService
+from capt_runtime.errors import AuthorityViolation
 from capt_runtime.store import EventStore
 from capt_runtime.verification import (
     VerificationFailure,
@@ -679,16 +680,6 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 key = command["idempotencyKey"]
                 payload = command.get("payload", {})
                 command_fingerprint = commands.fingerprint("run_approved_hermes_inspection", payload)
-                admission = store.claim_command(key, command_fingerprint, command["commandId"])
-                # The existing Core idempotency table, not a daemon-local receipt,
-                # owns admission. A same-key caller gets the durable original
-                # outcome (or an explicit in-progress state) without touching any
-                # lifecycle aggregate.
-                if admission.get("replayed"):
-                    # A duplicate never resumes lifecycle work. Startup
-                    # reconciliation owns recovery of a crashed in-progress
-                    # command before this socket accepts callers.
-                    return {**admission, "_idempotent": admission.get("status") != "in_progress"}
                 objective = payload.get("objective")
                 target_root = payload.get("targetRoot")
                 if not objective or not target_root:
@@ -728,6 +719,19 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     context_pack_digest=contracts.digest({"context": "not-selected-at-admission"}),
                     tool_schema_digest=contracts.digest({"operations": ["RepositoryRead", "FilesystemRead", "ArtifactCreate", "AnalysisOnly"]}),
                 )
+                # Runtime authority binds human approval to the exact
+                # model-visible assembly. Client booleans are provenance only;
+                # no client can use OFF/no-transform as a governance bypass.
+                approval_request_id = payload.get("approvalRequestId")
+                if not approval_request_id:
+                    raise AuthorityViolation("MODEL_PROMPT_APPROVAL_RECEIPT_REQUIRED")
+                svc.require_approved_prompt_assembly(
+                    str(approval_request_id), prompt_assembly["promptAssemblyDigest"],
+                    "ModelOperatorInspection",
+                )
+                admission = store.claim_command(key, command_fingerprint, command["commandId"])
+                if admission.get("replayed"):
+                    return {**admission, "_idempotent": admission.get("status") != "in_progress"}
                 model_visible_objective = prompt_assembly["modelVisiblePrompt"]
                 cognitive_provenance = build_cognitive_provenance(
                     assembly=prompt_assembly, provider_id=provider.id if provider is not None else "hermes",

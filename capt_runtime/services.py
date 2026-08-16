@@ -738,6 +738,23 @@ class RuntimeService(object):
             metadata,
         )
 
+    def require_approved_prompt_assembly(
+        self, request_id: str, prompt_assembly_digest: str, operation: str
+    ) -> Dict[str, Any]:
+        """Fail closed unless durable human approval binds this exact assembly.
+
+        This read-only RuntimeService check trusts neither a UI boolean nor a
+        client-supplied approval state. OFF is no transform, not no governance.
+        """
+        state = self.store.require_state(HumanApprovalAggregate.stream_id(request_id))
+        if state.get("state") != "approved":
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_NOT_APPROVED")
+        if state.get("operation") != operation:
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_OPERATION_MISMATCH")
+        if state.get("promptAssemblyDigest") != prompt_assembly_digest:
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_DIGEST_MISMATCH")
+        return state
+
     # -- cancellation (M1) ------------------------------------------------
 
     def cancel_task(
