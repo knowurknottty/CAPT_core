@@ -331,7 +331,8 @@
         "expiresAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
         "remainingUses": { "type": ["integer", "null"], "minimum": 1 },
         "correlationId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "createdAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+        "createdAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "promptAssemblyDigest": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" }
       }
     },
     "HumanApprovalDecision": {

@@ -72,6 +72,7 @@ class HumanApprovalAggregate(object):
             "remainingUses": request.get("remainingUses"),
             "correlationId": request["correlationId"],
             "createdAt": request["createdAt"],
+            "promptAssemblyDigest": request.get("promptAssemblyDigest"),
             "state": "requested",
             "decision": None,
             "operatorId": None,
