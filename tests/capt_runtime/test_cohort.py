@@ -89,6 +89,25 @@ def test_silence_quorum_is_current_round_only_and_cap_does_not_mask_success():
         success.next_round()
 
 
+def test_admitted_optional_participant_debt_is_material_under_contract_a():
+    """Required controls PASS quorum; every admitted participant may block."""
+    epoch = DeliberationEpoch("m", "t")
+    cohort = BoundedCohort({"planner", "critic"}, {"planner", "critic", "watchdog"}, 3, 2)
+    cohort.record(c("planner", ContributionOutcome.PASS))
+    cohort.record(c("critic", ContributionOutcome.PASS))
+    cohort.record(c("watchdog", ContributionOutcome.ESCALATE, escalation=EscalationCategory.SAFETY_BOUNDARY))
+    assert cohort.stopping_reason(epoch) is None
+
+
+def test_admitted_optional_participant_without_debt_does_not_block_quorum():
+    epoch = DeliberationEpoch("m", "t")
+    cohort = BoundedCohort({"planner", "critic"}, {"planner", "critic", "watchdog"}, 3, 2)
+    cohort.record(c("planner", ContributionOutcome.PASS))
+    cohort.record(c("critic", ContributionOutcome.PASS))
+    cohort.record(c("watchdog", ContributionOutcome.CONTRIBUTE))
+    assert cohort.stopping_reason(epoch) == "SILENCE_QUORUM"
+
+
 def test_material_debt_at_final_round_closes_bounded_incomplete():
     epoch = DeliberationEpoch("m", "t")
     cohort = BoundedCohort({"planner"}, {"planner"}, 1, 2)
