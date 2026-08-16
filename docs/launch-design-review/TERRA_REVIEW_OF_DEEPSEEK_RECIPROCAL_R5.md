@@ -1,8 +1,10 @@
 # Terra review of DeepSeek reciprocal R5
 
-Status: PARTIAL — Passes 1–3 performed read-only; reciprocal completion awaits
-DeepSeek's inbound Terra review artifact. This file is evidence, not CAPT
-runtime authority.
+Status: PRE-PASS REVIEW ONLY — all five reciprocal passes remain OPEN under the
+referee acceptance matrix. The earlier read-only checks are preliminary evidence,
+not closure of Passes 1–3: the required outbound attack → owner fix →
+cross-verification → ledger sequence has not completed. This file is evidence,
+not CAPT runtime authority.
 
 ## Scope and source identity
 
@@ -95,11 +97,13 @@ None. Terra made no CAPT code change from this read-only review.
   `CAPT_SOLO_HOME=$(mktemp -d)/home /Users/knowurknot/CAPT_core/.venv/bin/python -m pytest -q tests/capt_runtime/test_cohort.py tests/capt_runtime/test_operator_provenance.py`
   → `19 passed in 0.07s` at `870c05c...`.
 
-## BLOCKED
+## Referee-matrix gate
 
-Passes 4–5 cannot reach reciprocal closure until DeepSeek publishes an inbound
-review/finding ledger at a fetchable exact SHA. This is not a CAPT Core defect,
-and no DeepSeek branch was modified by Terra.
+The referee matrix at workflow head
+`849efb2b1d660c32a2172ad15c3b9973a936df45` records every Pass 1–5 as OPEN.
+This preliminary evidence does not close a pass: no DeepSeek inbound artifact,
+owner response, or cross-verification exists at the reviewed head. All pass
+gates therefore remain OPEN.
 
 ## NOT CLAIMED
 
@@ -112,14 +116,14 @@ and no DeepSeek branch was modified by Terra.
 ## Compact handoff
 
 ```text
-PASS: 1-3 partial
+PASS: PRE-PASS ONLY; referee Passes 1-5 OPEN
 MY_HEAD: 870c05c0ee5818c9f15c41dbc3f5a1086b4ee994
 OTHER_HEAD_REVIEWED: a361ee08de4f4a2e1dcabdcd569c48ff008c8500
-NEW_FINDINGS: 0 substantiated; T2D-P1-01/P2-01/P3-01 rejected with evidence
+NEW_FINDINGS: 0 substantiated; preliminary T2D observations only
 ACCEPTED_INBOUND: none; inbound artifact absent
 FIX_SHAS: none
 TESTS_AT_MY_HEAD: 19 passed in 0.07s
-UNRESOLVED_CRITICAL_HIGH: none observed in reviewed DeepSeek files
-BLOCKERS: missing DeepSeek inbound reciprocal artifact
+UNRESOLVED_CRITICAL_HIGH: no preliminary observation; not a pass closure
+BLOCKERS: required reciprocal owner-fix/cross-verification sequence not begun
 NEXT_PASS_ALLOWED: no
 ```
