@@ -20,6 +20,18 @@ Starting/final SHA for this pass: `9ab722e3f637358d5b82acb98ce125bc612aba9d`
   `test_replay.py`, `test_desktop_m0.py`, `test_memory_trigger.py`, and
   `test_memory_trigger_hermes.py`.
 
+## Final-mile installed-runtime attempt
+
+An installed-wheel runtime was started at `/private/tmp/capt-final-mile-state`
+with `capt start --state-dir ... --seed`. `capt status` reported `HEALTHY`,
+`runtimeVersion: 0.1.0`, the installed runtime database path, and the governed
+command surface. Installed `capt tui` connected and rendered the cockpit in a
+PTY. The automated PTY key sequence did **not** produce a new RuntimeService
+command: the ledger head remained `13` and `capt evidence` showed only the
+seeded demonstration state. The UI process and runtime were then explicitly
+stopped. This is a failed interaction-automation attempt, not provider
+acceptance and not evidence of a governed dispatch.
+
 ## Exact workflow terminal statuses
 
 | Workflow | Status | Evidence / remaining gap | Falsifier |
