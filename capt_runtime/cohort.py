@@ -49,8 +49,10 @@ class DeliberationEpoch:
 
 @dataclass(frozen=True)
 class Contribution:
+    contribution_id: str
     participant: str
     epoch: int
+    round: int
     outcome: ContributionOutcome
     cursor: int
     source_sequences: tuple[int, ...] = ()
@@ -70,7 +72,7 @@ class ParticipantCursor:
     last_sequence: int = 0
 
     def delta(self, events: Iterable[Dict[str, object]]) -> List[Dict[str, object]]:
-        return [event for event in events if int(event["sequence"]) > self.last_sequence]
+        return [event for event in events if int(event["globalSequence"]) > self.last_sequence]
 
     def consume_through(self, sequence: int) -> None:
         if sequence < self.last_sequence:
@@ -81,14 +83,19 @@ class ParticipantCursor:
 @dataclass
 class BoundedCohort:
     required: Set[str]
+    roster: Set[str]
     participant_cap: int
     round_cap: int
     rounds: int = 0
     contributions: List[Contribution] = field(default_factory=list)
 
     def record(self, contribution: Contribution) -> None:
-        if contribution.participant not in self.required and len(self.required) >= self.participant_cap:
+        if not self.required <= self.roster:
+            raise ValueError("COHORT_REQUIRED_NOT_IN_ROSTER")
+        if len(self.roster) > self.participant_cap:
             raise ValueError("COHORT_PARTICIPANT_CAP")
+        if contribution.participant not in self.roster:
+            raise ValueError("COHORT_PARTICIPANT_NOT_ADMITTED")
         self.contributions.append(contribution)
 
     def next_round(self) -> None:
