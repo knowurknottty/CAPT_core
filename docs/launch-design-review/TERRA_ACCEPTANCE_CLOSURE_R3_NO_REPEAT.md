@@ -5,7 +5,14 @@ Workflow prompt provenance: Treasure Chest
 `527b535703a902b2e15ea98ffebe0593597129e9`.
 
 CAPT Core branch: `terra/operator-prompt-contract-r5`
-Starting/final SHA for this pass: `9ab722e3f637358d5b82acb98ce125bc612aba9d`
+Implementation SHA reviewed by the initial no-repeat pass:
+`9ab722e3f637358d5b82acb98ce125bc612aba9d`.
+
+Provenance note: this artifact was subsequently extended by the final-mile
+installed-runtime attempt below. Its own evolving commit SHA is Git metadata
+and is intentionally not embedded here as a self-referential "final SHA."
+No CAPT source or test file changed between the reviewed implementation SHA
+and the docs-only closure extensions recorded in this artifact.
 
 ## New acceptance evidence
 
