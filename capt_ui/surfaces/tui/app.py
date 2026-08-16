@@ -18,7 +18,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.reactive import reactive
-from textual.widgets import Button, Footer, Header, Input, Select, Static, TextArea
+from textual.widgets import Button, Checkbox, Footer, Header, Input, Select, Static, TextArea
 
 REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO))
@@ -27,6 +27,9 @@ from capt_ui.operator.bootstrap import resolve_runtime  # noqa: E402
 from capt_ui.operator.providers import ProviderManager  # noqa: E402
 from capt_ui.operator.runtime import Operator  # noqa: E402
 from capt_ui.operator.verbosity import CaveCAPT  # noqa: E402
+from capt_ui.operator.prompt_intelligence import (  # noqa: E402
+    CONTEXT_BUDGETS, ENGINES, RESPONSE_MODES, PromptPreferences, inspect_prompt,
+)
 
 
 class StatusBar(Static):
@@ -126,6 +129,8 @@ class CaptTUI(App):
         self._model_generation = 0
         self._current_run: dict[str, Any] = {}
         self._run_busy = False
+        self._prompt_preferences: PromptPreferences | None = None
+        self._proposal_approved = False
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -139,9 +144,16 @@ class CaptTUI(App):
                     yield Static("Governed provider run", id="run-title")
                     yield Select([("Ollama", "ollama"), ("OpenRouter", "openrouter")], value="ollama", id="provider-select")
                     yield Input(placeholder="Filter models. Tab selects the model list.", id="model-filter")
-                    yield Select([], id="model-select")
+                    with Horizontal():
+                        yield Select([], id="model-select")
+                        yield Select([(mode, mode) for mode in RESPONSE_MODES], value="SPOCK", id="response-mode")
+                        yield Select([("%sk" % (budget // 1000), str(budget)) for budget in CONTEXT_BUDGETS], value="32000", id="context-budget")
+                        yield Select([(engine, engine) for engine in ENGINES], value="AUTO", id="enhancement-select")
+                        yield Checkbox("Human verification", value=True, id="human-verification")
                     yield TextArea("", id="prompt")
                     with Horizontal():
+                        yield Button("ENHANCE", id="enhance")
+                        yield Button("APPROVE", id="approve")
                         yield Button("RUN", id="run", variant="success")
                         yield Button("CHECKPOINT", id="checkpoint")
                     yield Static("Current run\n-----------\nNo run submitted.", id="current-run")
@@ -170,6 +182,10 @@ class CaptTUI(App):
         if self._providers is None:
             self._providers = ProviderManager()
             self._verbosity = CaveCAPT()
+            self._prompt_preferences = PromptPreferences()
+            self.query_one("#response-mode", Select).value = self._prompt_preferences.response_mode
+            self.query_one("#context-budget", Select).value = str(self._prompt_preferences.context_budget)
+            self.query_one("#human-verification", Checkbox).value = self._prompt_preferences.human_verification_required
         try:
             dashboard = self._op.dashboard()
         except Exception as exc:  # noqa: BLE001
@@ -273,16 +289,37 @@ class CaptTUI(App):
             if model:
                 self._selected_model = model
                 self._set_status("connected" if self._op and self._op.connected else "unknown")
+        elif event.select.id in ("response-mode", "context-budget"):
+            self._persist_prompt_preferences()
+        elif event.select.id == "enhancement-select":
+            self._proposal_approved = False
 
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id == "model-filter":
             self._apply_model_filter()
+
+    def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
+        if event.checkbox.id == "human-verification":
+            self._persist_prompt_preferences()
+
+    def _persist_prompt_preferences(self) -> None:
+        if self._prompt_preferences is None:
+            return
+        self._prompt_preferences.set(
+            response_mode=str(self.query_one("#response-mode", Select).value),
+            context_budget=int(str(self.query_one("#context-budget", Select).value)),
+            human_verification_required=self.query_one("#human-verification", Checkbox).value,
+        )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "run":
             self.action_run()
         elif event.button.id == "checkpoint":
             self.action_checkpoint()
+        elif event.button.id == "enhance":
+            self.action_enhance()
+        elif event.button.id == "approve":
+            self.action_approve_prompt()
 
     def action_focus_provider(self) -> None:
         self.query_one("#provider-select", Select).focus()
@@ -303,6 +340,22 @@ class CaptTUI(App):
         if self._verbosity:
             self._verbosity.toggle(1)
             self.notify("CaveCAPT verbosity: %s" % self._verbosity.value.label)
+
+    def action_enhance(self) -> None:
+        proposal = inspect_prompt(
+            self.query_one("#prompt", TextArea).text,
+            str(self.query_one("#enhancement-select", Select).value),
+        )
+        self._proposal_approved = False
+        if proposal.questions:
+            self._show_output("Clarification required before optimization:\n- " + "\n- ".join(proposal.questions))
+            return
+        self.query_one("#prompt", TextArea).text = proposal.optimized_prompt
+        self._show_output("Proposed %s enhancement: %s\nReview then APPROVE before RUN." % (proposal.engine, proposal.rationale))
+
+    def action_approve_prompt(self) -> None:
+        self._proposal_approved = True
+        self.notify("Optimized prompt approved by operator.")
 
     def action_checkpoint(self) -> None:
         if not self._op:
@@ -327,15 +380,26 @@ class CaptTUI(App):
             self._show_output("Run rejected locally: select an available model and enter a prompt.")
             self.notify("Select an available model and enter a prompt.", severity="error")
             return
+        engine = str(self.query_one("#enhancement-select", Select).value)
+        verification_required = self.query_one("#human-verification", Checkbox).value
+        if engine != "OFF" and verification_required and not self._proposal_approved:
+            self._show_output("Run blocked locally: inspect/ENHANCE and APPROVE the optimized prompt first, or select OFF.")
+            self.notify("Human approval required for optimized prompt.", severity="warning")
+            return
         self._run_busy = True
         self.query_one("#run", Button).disabled = True
         self._current_run = {"provider": self._selected_provider, "model": self._selected_model, "status": "submitting"}
         self._show_current_run()
         self._set_status("connected")
-        self._dispatch_run(self._selected_provider, self._selected_model, prompt)
+        self._dispatch_run(
+            self._selected_provider, self._selected_model, prompt, engine,
+            str(self.query_one("#response-mode", Select).value),
+            int(str(self.query_one("#context-budget", Select).value)), verification_required,
+        )
 
     @work(thread=True, exclusive=True)
-    def _dispatch_run(self, provider: str, model: str, prompt: str) -> None:
+    def _dispatch_run(self, provider: str, model: str, prompt: str, engine: str,
+                      response_mode: str, context_budget: int, verification_required: bool) -> None:
         """The blocking socket operation runs off the Textual event loop."""
         receipt: dict[str, Any] | None = None
         error = ""
@@ -343,7 +407,9 @@ class CaptTUI(App):
             assert self._op is not None
             receipt = self._op.client.command(
                 "run_approved_hermes_inspection",
-                {"provider": provider, "model": model, "objective": prompt, "targetRoot": str(Path.cwd())},
+                {"provider": provider, "model": model, "objective": prompt, "targetRoot": str(Path.cwd()),
+                 "promptEnhancement": engine, "responseMode": response_mode,
+                 "requestedContextBudget": context_budget, "humanVerificationRequired": verification_required},
                 "tui-run-" + uuid.uuid4().hex,
             )
         except Exception as exc:  # noqa: BLE001

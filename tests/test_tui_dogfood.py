@@ -106,6 +106,7 @@ def test_run_receipt_releases_busy_and_payload_matches_visible_selection(monkeyp
         async with app.run_test():
             app._selected_provider = "ollama"
             app._refresh_models("ollama", preserve_model=False)
+            app.query_one("#enhancement-select").value = "OFF"
             app.query_one("#prompt").text = "exact prompt"
             app.action_run()
             for _ in range(10):
