@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "capt-core-local-runtime",
+  "description": "CAPT Core local-first Python runtime release profile. Web/SaaS-only controls are not applicable unless those capabilities are added.",
+  "capabilities": [
+    "local_runtime",
+    "ipc",
+    "database",
+    "local_state",
+    "ai",
+    "prompt_processing",
+    "cli",
+    "record_store"
+  ]
+}
