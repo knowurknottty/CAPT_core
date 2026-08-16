@@ -2,5 +2,5 @@
   "schemaVersion": "1.0.0",
   "profile": "capt-core-local-runtime",
   "evidence": [],
-  "note": "Intentionally empty baseline. PASS/FAIL evidence must be generated or attested at the exact source SHA; missing applicable controls block release."
+  "note": "Fail-closed local baseline only. Release CI MUST generate an ephemeral exact-head evidence bundle after checks execute; committed evidence cannot attest its own commit SHA without self-invalidating."
 }
