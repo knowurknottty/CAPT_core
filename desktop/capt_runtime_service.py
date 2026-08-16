@@ -55,6 +55,9 @@ from capt_runtime.verification import (
     guard_claim,
 )
 from capt_runtime.composition import RuntimeComposition, create_runtime
+from capt_runtime.operator_provenance import (
+    build_cognitive_provenance, build_prompt_assembly, effective_context_budget,
+)
 
 from desktop.m1_command_service import RuntimeCommandService
 
@@ -713,6 +716,27 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     provider_key = resolve(provider.id, provider.key_ref)
                     if provider.id != "ollama" and not provider_key:
                         raise ValueError("PROVIDER_CREDENTIAL_UNAVAILABLE")
+                requested_context_budget = int(payload.get("requestedContextBudget", 32_000))
+                effective_budget = effective_context_budget(
+                    requested_context_budget, provider.context_limit if provider is not None else 0)
+                response_mode = str(payload.get("responseMode", "SPOCK"))
+                enhancement_engine = str(payload.get("promptEnhancement", "OFF"))
+                human_verification_required = bool(payload.get("humanVerificationRequired", True))
+                prompt_assembly = build_prompt_assembly(
+                    human_prompt=str(objective), response_mode=response_mode,
+                    enhancement_engine=enhancement_engine,
+                    context_pack_digest=contracts.digest({"context": "not-selected-at-admission"}),
+                    tool_schema_digest=contracts.digest({"operations": ["RepositoryRead", "FilesystemRead", "ArtifactCreate", "AnalysisOnly"]}),
+                )
+                model_visible_objective = prompt_assembly["modelVisiblePrompt"]
+                cognitive_provenance = build_cognitive_provenance(
+                    assembly=prompt_assembly, provider_id=provider.id if provider is not None else "hermes",
+                    model=str(provider_model or "hermes"), requested_context_budget=requested_context_budget,
+                    effective_context_budget_value=effective_budget,
+                    human_verification_required=human_verification_required,
+                    correlation={"missionId": mission_id, "taskId": task_id, "driverRunId": run_id,
+                                 "policyDecisionId": policy_id, "grantId": grant_id, "leaseId": lease_id},
+                )
                 def recovery_meta(step: str) -> Dict[str, Any]:
                     return commands.command(
                         command_id=command_id + ":" + step,
@@ -774,7 +798,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 intent = {
                     "schemaVersion": "1.0.0",
                     "missionId": mission_id,
-                    "objective": objective,
+                    "objective": model_visible_objective,
                     "scope": {"kind": "filesystem", "rootPath": target_root, "recursive": True},
                     "requiresApproval": False,
                     "constraints": [{"kind": "resource_boundary", "constraintId": "con-model-1",
@@ -1028,6 +1052,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     "targetPath": str(worktree), "beforeDigest": before,
                     "observations": out.get("observations", []), "driver": "provider" if provider is not None else "hermes",
                     "providerProvenance": out.get("diagnostics", {}) if provider is not None else {},
+                    "cognitiveProvenance": cognitive_provenance,
                 }
                 store.complete_claimed_command(key, command_fingerprint, receipt)
                 return receipt
