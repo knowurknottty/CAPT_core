@@ -1,0 +1,47 @@
+name: Terra Apply Approval Hardening
+
+on:
+  push:
+    branches:
+      - verify/terra-pr47-approval-hardening-r1
+    paths:
+      - tools/terra_apply_approval_hardening.py
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-prove:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test tooling
+        run: python -m pip install --upgrade pip pytest jsonschema
+      - name: Apply exact-source hardening patch
+        run: python tools/terra_apply_approval_hardening.py
+      - name: Regenerate contract bindings
+        run: python contracts/tools/generate.py
+      - name: Check contract drift
+        run: python contracts/tools/check_drift.py
+      - name: Run Terra security regressions
+        run: python -m pytest -q tests/capt_runtime/test_prompt_approval_security.py
+      - name: Run focused prompt approval regressions
+        run: python -m pytest -q tests/capt_runtime/test_prompt_approval_binding.py tests/capt_runtime/test_prompt_approval_command.py tests/capt_runtime/test_operator_provenance.py
+      - name: Validate patch whitespace
+        run: git diff --check
+      - name: Commit verified hardening
+        run: |
+          if git diff --quiet; then
+            echo "No production diff to commit."
+            exit 0
+          fi
+          git config user.name "knowurknot"
+          git config user.email "knowurknottty@gmail.com"
+          git add capt_runtime desktop capt_ui contracts tests
+          git commit -m "fix: harden prompt approval authority [patched]"
+          git push origin HEAD:verify/terra-pr47-approval-hardening-r1
