@@ -1,0 +1,45 @@
+name: Terra PR47 Broad Suite Verification
+
+on:
+  push:
+    branches:
+      - verify/terra-pr47-approval-hardening-r1
+    paths:
+      - .github/workflows/terra-pr47-broad-suite-verification.yml
+      - tests/capt_runtime/test_ouroboros_lifecycle.py
+
+permissions:
+  contents: read
+
+jobs:
+  broad-verification:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package and test tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . pytest jsonschema
+      - name: Contract drift
+        run: python contracts/tools/check_drift.py
+      - name: CAPT runtime suite
+        id: runtime
+        continue-on-error: true
+        run: python -m pytest -q tests/capt_runtime
+      - name: Full repository suite
+        id: full
+        continue-on-error: true
+        run: python -m pytest -q
+      - name: Enforce both suites
+        env:
+          RUNTIME_OUTCOME: ${{ steps.runtime.outcome }}
+          FULL_OUTCOME: ${{ steps.full.outcome }}
+        run: |
+          echo "runtime=${RUNTIME_OUTCOME} full=${FULL_OUTCOME}"
+          test "${RUNTIME_OUTCOME}" = success
+          test "${FULL_OUTCOME}" = success
