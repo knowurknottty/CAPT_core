@@ -215,6 +215,9 @@ Severity: **medium** by current direct-TUI impact; release-blocking only togethe
 
 - TUI local receipt invalidation covers prompt, provider, model, response mode, context budget, enhancement engine, and human-verification checkbox. This is useful UX safety, not authoritative enforcement against a direct client.
 - `humanVerificationRequired` is semantically separated from the authorization decision in the UI and provenance. Its value nevertheless influences execution/provenance and is currently unbound, which is D-01.
+- `CaptTUI._dispatch_run` bypasses the `Operator` facade and calls `self._op.client.command(...)` directly (`capt_ui/surfaces/tui/app.py:607-624`) because the facade has no `run_approved_hermes_inspection` method. This does not bypass RuntimeService approval, but it is a maintainability/consistency risk: future facade policy/telemetry/validation would be silently skipped.
+- `commandOperations` also unconditionally advertises injected runner commands. A standalone `RuntimeCommandService` can reject `run_approved_hermes_inspection` as `HERMES_DRIVER_UNAVAILABLE`; normal `serve()` wires it. This is a second self-description precision weakness, not evidence the normal socket server lacks the runner.
+- `Operator.store_memory` directly instantiates and mutates `MemoryEngine` (`capt_ui/operator/runtime.py:172-196`), contradicting the facade module claim that all mutations route through governed command operations. It is outside the prompt-approval path but should be separately reviewed as an authority-boundary claim defect.
 - The exact provided PR head contains no temporary workflow file. Historical Actions exists, but its recorded SHA differs from the supplied claimed temporary commit; it cannot independently prove e104 without a tree/diff equivalence demonstration.
 
 ## 10. Remaining Gates
