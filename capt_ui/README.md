@@ -42,11 +42,11 @@ The current TUI integration lane adds:
 - requested/effective context provenance and prompt digest;
 - bounded ProviderDriver execution for Ollama native and OpenAI-compatible endpoints.
 
-These features remain active integration until the stack merges and terminal acceptance is recorded.
+These features remain active integration until the stack merges. PR #47 head `4334657a919f74803e65d9b01aa5054d6d7b9a61` has clean source/editable full-suite verification, but installed-artifact, live-provider, terminal cumulative-stack, and cross-model restart acceptance remain separate gates.
 
-## Hermes TUI workspace evidence
+## Hermes TUI workspace metadata
 
-The dedicated `HERMES_LOCAL_002_COMPLETE` evidence branch records the faithful Hermes Agent TUI workspace/state map with 98/0/0 focused and 174/0/2 broader test results and no product/state-map blocker. It does not close the destructive external-provider/tool-kill rollback E2E gap.
+The previously documented `HERMES_LOCAL_002_COMPLETE` workspace/state-map result is currently **unverified operator-supplied metadata**. Terra could not retrieve `evidence/hermes-local-002-r6`, `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`, or `reports/local-evidence/HERMES_AGENT_TUI_WORKSPACE_TESTS_AND_STATE_MAP_8F97AE9_2026-08-17.md` from the current GitHub remote/API. The supplied 98/0/0 and 174/0/2 counts and no-blocker statement must not be used as evidence unless the record is restored and independently verified.
 
 ## Authority invariant
 

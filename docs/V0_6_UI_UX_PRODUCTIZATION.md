@@ -29,7 +29,7 @@
 
 PR #47 advances the TUI into a richer cognition/operator cockpit with response modes, requested context budgets, prompt-enhancement engines, explicit review/approval, cognitive provenance, and bounded provider generation.
 
-The dedicated `HERMES_LOCAL_002_COMPLETE` evidence branch further maps/tests the Hermes Agent TUI workspace integration state with no product/state-map blocker, while leaving a destructive rollback E2E gap.
+Later documentation recorded operator-supplied LOCAL-002 metadata for `evidence/hermes-local-002-r6` / `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04` and described `HERMES_LOCAL_002_COMPLETE`; Terra subsequently found the branch, commit, and named report absent from the current GitHub remote/API. That later metadata is **not part of this historical planning baseline's verified evidence** and remains quarantined unless restored and independently checked.
 
 ## Still-open product goals
 

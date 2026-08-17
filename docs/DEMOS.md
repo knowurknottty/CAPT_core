@@ -50,9 +50,9 @@ capt --json evidence
 
 Use the output to distinguish recorded evidence, verification result, ClaimGuard disposition, and authoritative mission/task state.
 
-## Hermes local TUI/workspace evidence
+## Hermes local TUI/workspace metadata
 
-The `HERMES_LOCAL_002_COMPLETE` branch/report is a focused integration evidence record rather than a normal-user demo. It records the faithful Hermes Agent TUI workspace state map and its 98/0/0 and 174/0/2 test results. See [`CURRENT_STATE.md`](CURRENT_STATE.md).
+LOCAL-002 was previously described as a focused Hermes workspace/state-map evidence record. Terra could not retrieve `evidence/hermes-local-002-r6`, `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`, or `reports/local-evidence/HERMES_AGENT_TUI_WORKSPACE_TESTS_AND_STATE_MAP_8F97AE9_2026-08-17.md` from the current remote/API, so `HERMES_LOCAL_002_COMPLETE` and the supplied 98/0/0 and 174/0/2 counts are currently **unverified metadata**, not a demo or acceptance artifact. See [`CURRENT_STATE.md`](CURRENT_STATE.md).
 
 ## Acceptance target — real provider execution
 

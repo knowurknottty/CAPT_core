@@ -41,11 +41,11 @@ The active cumulative branch adds a bounded, read-only provider execution driver
 
 Controlled local HTTP servers exercise the real request/response protocol shape in tests. That establishes transport/lifecycle behavior, **not** live-provider release acceptance.
 
-## Hermes local workspace evidence
+## Hermes LOCAL-002 workspace metadata
 
-`HERMES_LOCAL_002_COMPLETE` is recorded on the dedicated evidence branch `evidence/hermes-local-002-r6` at pushed HEAD `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`. The report records 98/0/0 focused tests and 174/0/2 broader tests under the faithful Hermes TUI workspace npm path, with no product/state-map blocker. See [`CURRENT_STATE.md`](CURRENT_STATE.md) and [`RELEASE_EVIDENCE.md`](RELEASE_EVIDENCE.md) for the exact boundary and remaining gaps.
+The operator supplied `HERMES_LOCAL_002_COMPLETE` metadata for `evidence/hermes-local-002-r6` / `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04` with reported 98/0/0 focused and 174/0/2 broader tests and npm environment details. Terra could not retrieve that branch, commit, or `reports/local-evidence/HERMES_AGENT_TUI_WORKSPACE_TESTS_AND_STATE_MAP_8F97AE9_2026-08-17.md` from the current GitHub remote/API.
 
-That evidence strengthens the Hermes/TUI workspace state map. It does **not** erase the separate need for destructive external-provider/tool-kill rollback proof or general live-provider release acceptance.
+Accordingly, LOCAL-002 is **currently unverified metadata, not provider evidence**. Historical v0.5 Hermes proof remains separate. The missing LOCAL-002 record cannot close destructive rollback, general live-provider acceptance, installed-runtime acceptance, or any PR #47 proof boundary. See [`CURRENT_STATE.md`](CURRENT_STATE.md) and [`RELEASE_EVIDENCE.md`](RELEASE_EVIDENCE.md).
 
 ## TUI integration
 

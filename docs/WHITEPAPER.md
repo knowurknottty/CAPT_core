@@ -75,7 +75,7 @@ Provider registration, discovery, model listing, execution, and release proof ar
 
 Hermes remains a compatibility/execution client. CAPT does not transfer runtime authority to Hermes.
 
-In addition to historical v0.5 Hermes evidence and active lifecycle hardening, the dedicated `HERMES_LOCAL_002_COMPLETE` evidence branch records a faithful local Hermes Agent TUI workspace/state-map run with 98/0/0 focused and 174/0/2 broader test results and no product/state-map blocker. A destructive external-provider/tool-kill rollback E2E case remains outside that proof.
+Historical v0.5 Hermes evidence and active lifecycle hardening remain distinct evidence classes. A later operator-supplied LOCAL-002 record referenced `evidence/hermes-local-002-r6` / `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04` and claimed `HERMES_LOCAL_002_COMPLETE` with 98/0/0 focused and 174/0/2 broader results, but Terra could not retrieve the branch, commit, or named report from the current GitHub remote/API. Those LOCAL-002 statements are therefore **currently unverified metadata**. Destructive external-provider/tool-kill rollback remains independently unproven.
 
 ## Multi-perspective cognition
 

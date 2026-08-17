@@ -53,7 +53,7 @@ Registered as a local/native provider class, but native generation parity is sti
 
 ### Hermes
 
-Hermes remains a compatibility/execution client path, not CAPT runtime authority. Historical v0.5 evidence proves bounded installed-wheel interaction; newer lifecycle hardening lives in PR #46. The dedicated `HERMES_LOCAL_002_COMPLETE` evidence branch additionally records the local Hermes Agent TUI workspace/state-map test result described in `CURRENT_STATE.md`.
+Hermes remains a compatibility/execution client path, not CAPT runtime authority. Historical v0.5 evidence proves bounded installed-wheel interaction; newer lifecycle hardening lives in PR #46. The separately supplied LOCAL-002 identifiers (`evidence/hermes-local-002-r6` / `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`) are currently absent from the GitHub remote/API, so `HERMES_LOCAL_002_COMPLETE` and its supplied workspace results are **unverified metadata**, not provider evidence. See `CURRENT_STATE.md`.
 
 ## Choosing a model
 

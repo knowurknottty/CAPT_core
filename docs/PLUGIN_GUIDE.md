@@ -28,9 +28,9 @@ The current evidence story has multiple layers:
 
 - historical v0.5 installed-wheel bounded Hermes proof;
 - active #46 lifecycle hardening;
-- `HERMES_LOCAL_002_COMPLETE` local Hermes Agent TUI workspace/state-map evidence on `evidence/hermes-local-002-r6` at `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`.
+- operator-supplied LOCAL-002 metadata for `evidence/hermes-local-002-r6` at `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`.
 
-LOCAL-002 reports 98/0/0 focused and 174/0/2 broader tests with no product/state-map blocker. It explicitly does not close the destructive external-provider/tool-kill rollback E2E gap.
+Terra could not retrieve the LOCAL-002 branch, commit, or named report from the current GitHub remote/API. Its `HERMES_LOCAL_002_COMPLETE`, 98/0/0, 174/0/2, and no-blocker statements are therefore **currently unverified** and must not be used to certify a compatibility client. Destructive external-provider/tool-kill rollback remains separately unproven.
 
 ## Building a compatibility client
 

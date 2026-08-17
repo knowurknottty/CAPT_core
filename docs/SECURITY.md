@@ -55,9 +55,11 @@ Do not persist raw API keys in memory, evidence, diagnostics, or prompt payloads
 
 Remote/cloud provider selection should be visibly distinguished from local inference.
 
-## Hermes workspace evidence
+## Hermes workspace metadata boundary
 
-The `HERMES_LOCAL_002_COMPLETE` evidence record reports no product/state-map blocker in the local Hermes Agent TUI workspace test. It explicitly leaves a destructive external-provider/tool-kill rollback E2E test unproven. That residual gap remains security/recovery-relevant and must not be papered over by the successful non-destructive suites.
+Operator-supplied LOCAL-002 metadata described `HERMES_LOCAL_002_COMPLETE`, successful non-destructive workspace suites, and no product/state-map blocker while leaving destructive external-provider/tool-kill rollback unproven. Terra could not retrieve `evidence/hermes-local-002-r6`, `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`, or the named report from the current GitHub remote/API, so those LOCAL-002 security/recovery statements are **currently unverified and must not close any control**.
+
+The destructive rollback/reconciliation gate remains open independently of whether LOCAL-002 is later restored.
 
 ## Data at rest
 

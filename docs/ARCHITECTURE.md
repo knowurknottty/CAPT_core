@@ -70,11 +70,11 @@ The merged TUI is an operator MVP. PR #47 adds prompt assembly/cognitive provena
 
 Merged `main` contains provider registration, health/model discovery where supported, and model-selection foundations.
 
-PR #47 adds a bounded ProviderDriver for Ollama native generation and OpenAI-compatible chat-completions transport. Controlled HTTP tests establish protocol/lifecycle behavior; intended live-provider installed-runtime acceptance remains a separate proof class.
+PR #47 adds a bounded ProviderDriver for Ollama native generation and OpenAI-compatible chat-completions transport. Exact head `4334657a919f74803e65d9b01aa5054d6d7b9a61` has clean source/editable full-suite verification, including the governed approval/dispatch path; intended live-provider and installed-runtime acceptance remain separate proof classes.
 
 ## Hermes boundary
 
-Hermes is a compatibility/execution client, not CAPT authority. Historical v0.5 evidence established bounded installed-wheel behavior. The `HERMES_LOCAL_002_COMPLETE` evidence branch adds a current local Hermes Agent TUI workspace/state-map result with no product/state-map blocker, while preserving bounded residual gaps.
+Hermes is a compatibility/execution client, not CAPT authority. Historical v0.5 evidence established bounded installed-wheel behavior. Separately, operator-supplied LOCAL-002 metadata referenced `evidence/hermes-local-002-r6` / `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`, but Terra could not retrieve that branch, commit, or report from the current GitHub remote/API. `HERMES_LOCAL_002_COMPLETE` and its supplied workspace counts/no-blocker statement are therefore currently unverified and are not architectural evidence.
 
 ## Discovery
 

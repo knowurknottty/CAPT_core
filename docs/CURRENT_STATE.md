@@ -30,43 +30,34 @@ These merged surfaces do **not** by themselves prove a real cross-model release 
 |---|---|---|
 | #44 | Discovery Governor + bounded scanner | implemented/local integration evidence; unmerged |
 | #46 | Ouroboros/Hermes lifecycle | hardened lifecycle/recovery; unmerged |
-| #47 | prompt/cognitive provenance + TUI cockpit + ProviderDriver | near-complete integration slice; unmerged |
+| #47 | prompt/cognitive provenance + TUI cockpit + ProviderDriver | exact-head source/editable full-suite verified; unmerged; installed/live-provider proof still open |
 | #48 | Cohort coordination | bounded coordination contracts; durable runtime integration still later |
 | #49 | security gate | draft and intentionally blocked pending closure evidence |
 
 PR #47 adds the most visible operator delta: `MAX/SPOCK/CAVE CAPT/MIN` response modes, 32K–256K requested context budgets, `OFF/AUTO/OMNI/META/FORGE/SIGMA` prompt-enhancement selection, explicit human review/approval, prompt-assembly provenance, and a bounded provider execution driver.
 
-The active ProviderDriver has real Ollama and OpenAI-compatible HTTP transport code and controlled HTTP protocol tests. That is **not yet equivalent to exact-head live-provider installed-runtime acceptance**.
+The active ProviderDriver has real Ollama and OpenAI-compatible HTTP transport code and controlled HTTP protocol tests. At PR #47 head `4334657a919f74803e65d9b01aa5054d6d7b9a61`, clean verification passed 8 approval-security tests, 31 focused prompt/provider/TUI/operator tests, 18 Ouroboros lifecycle tests, 387 `capt_runtime` tests, and 861 full-repository tests. That is **exact-head source/editable proof**, not live-provider or installed-runtime acceptance.
 
 ### 4. Release proof
 
 A capability becomes release-proven only when the exact relevant source, execution path, evidence, and release artifact agree. Historical v0.5 evidence stays historical; PR-local focused tests stay PR-local.
 
-## Hermes local workspace evidence — `HERMES_LOCAL_002_COMPLETE`
+## Hermes LOCAL-002 metadata — currently unverifiable
 
-The operator has published the dedicated evidence branch `evidence/hermes-local-002-r6` at HEAD `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04` with report:
+The operator previously supplied:
 
-`reports/local-evidence/HERMES_AGENT_TUI_WORKSPACE_TESTS_AND_STATE_MAP_8F97AE9_2026-08-17.md`
+- branch `evidence/hermes-local-002-r6`;
+- HEAD `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`;
+- report `reports/local-evidence/HERMES_AGENT_TUI_WORKSPACE_TESTS_AND_STATE_MAP_8F97AE9_2026-08-17.md`;
+- classification `HERMES_LOCAL_002_COMPLETE`;
+- Node `v22.22.2`, system npm `11.14.1` engine-incompatible, workspace npm `11.17.0` via `npx`;
+- focused 98 passed / 0 failed / 0 skipped;
+- broader 174 passed / 0 failed / 2 skipped;
+- no product/state-map blocker.
 
-Reported test/runtime evidence:
+Terra independently checked the current remote/API and found the supplied branch, commit, and named report absent. The metadata above is therefore **operator-supplied and currently unverified**. The earlier connector-lag explanation is withdrawn; current repository state does not support treating LOCAL-002 as published evidence.
 
-- Node `v22.22.2`;
-- system npm `11.14.1` is engine-incompatible for the faithful workspace path;
-- faithful workspace npm `11.17.0` was used via `npx`;
-- focused suite: **98 passed / 0 failed / 0 skipped**;
-- broader suite: **174 passed / 0 failed / 2 skipped**;
-- classification: **`HERMES_LOCAL_002_COMPLETE`**;
-- no product blocker and no state-map blocker.
-
-Remaining bounded gaps in that evidence record:
-
-- no destructive end-to-end external-provider/tool-kill rollback test;
-- two pytest skips remain;
-- an unrelated macOS case-insensitive contributor-email checkout collision remains outside the product/state-map result.
-
-The operator also supplied related identities `46e7162dfa2bfb28ced981881e5dded0e74f078e` and `8f97ae9aec729bcbbad17da462115e1ec1398421`; this document does not infer roles for those hashes beyond the evidence report until the repository record itself provides their labels.
-
-At documentation-write time, the GitHub connector had not yet propagated the just-pushed branch even though the operator's `git ls-remote` showed the exact remote ref. Therefore this section records the exact pushed evidence metadata without fabricating connector retrieval. Once GitHub indexing catches up, the report itself is the authority.
+This quarantine does not alter preserved historical v0.5 Hermes proof. If LOCAL-002 is restored, the report must be independently retrieved and reconciled before its claims are promoted. Even then it would remain adjacent workspace evidence, not proof of PR #47 exact-head correctness, an installed wheel, a live provider, destructive rollback, process-boundary restart continuity, or release readiness.
 
 ## Current highest-value unresolved gates
 

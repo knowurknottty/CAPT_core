@@ -23,17 +23,17 @@ Package metadata remains `0.5.0`; these merged changes have not yet been represe
 
 - PR #44: bounded Discovery Governor/SEAL scanner;
 - PR #46: Ouroboros/Hermes lifecycle and recovery hardening;
-- PR #47: prompt assembly/cognitive provenance, TUI cockpit, bounded ProviderDriver;
+- PR #47: prompt assembly/cognitive provenance, TUI cockpit, bounded ProviderDriver; exact source/editable head `4334657a919f74803e65d9b01aa5054d6d7b9a61` passed clean security, focused, lifecycle, runtime, and full-repository verification;
 - PR #48: bounded Cohort coordination;
 - PR #49: fail-closed security gate, intentionally blocked pending closure evidence.
 
 ### Evidence
 
-- `HERMES_LOCAL_002_COMPLETE` pushed on `evidence/hermes-local-002-r6` at `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`;
-- reported 98 passed / 0 failed / 0 skipped focused;
-- reported 174 passed / 0 failed / 2 skipped broader;
-- no product/state-map blocker;
-- destructive external-provider/tool-kill rollback E2E remains unproven.
+- Terra audit evidence is persisted at `evidence/terra-pr47-prompt-approval-verification-r1` / `90e459917e238669caed2b0895f48b48e9ac2ad0`;
+- PR #47 clean head `4334657a919f74803e65d9b01aa5054d6d7b9a61` passed 8 approval-security, 31 focused, 18 Ouroboros lifecycle, 387 `capt_runtime`, and 861 full-repository tests in the source/editable proof class;
+- earlier documentation recorded operator-supplied `HERMES_LOCAL_002_COMPLETE` metadata for `evidence/hermes-local-002-r6` / `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04` with reported 98/0/0 and 174/0/2 counts;
+- Terra later confirmed the LOCAL-002 branch, commit, and named report are absent from the current GitHub remote/API, so those Hermes values are currently **unverified metadata, not evidence**;
+- installed-artifact/live-provider, true cross-model restart continuity, and destructive external-provider/tool-kill rollback remain separate proof classes.
 
 ## v0.5.0 — Standalone governed runtime release lineage
 

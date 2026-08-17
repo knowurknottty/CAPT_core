@@ -22,12 +22,12 @@ Then check the exact surface you are using.
 | approval blocks run | governed action requires operator approval | approve/deny through TUI or supported runtime operation; do not bypass |
 | checkpoint/resume rejected | runtime state/idempotency/recovery conflict | inspect `capt status`, evidence, and logs before retrying |
 | indeterminate external execution | runtime cannot prove whether dispatch occurred | expect suspension/manual reconciliation; CAPT should not silently redispatch |
-| Hermes workspace uses wrong npm | system npm may violate Hermes workspace engine requirement | use the faithful workspace npm path recorded by the Hermes evidence report |
+| Hermes workspace uses wrong npm | system npm may violate the workspace's declared engine requirement | follow the checked-out Hermes workspace's own engine/package-manager declaration; do not rely on the currently unavailable LOCAL-002 report |
 | Windows failure | platform remains unverified | use a proven macOS/Linux path or produce separate Windows evidence |
 
 ## Hermes workspace note
 
-The `HERMES_LOCAL_002_COMPLETE` evidence used Node `v22.22.2`; system npm `11.14.1` was engine-incompatible, while npm `11.17.0` via `npx` produced the faithful workspace run. This is an environment fidelity distinction, not a CAPT product blocker.
+The operator-supplied LOCAL-002 metadata stated Node `v22.22.2`, system npm `11.14.1` engine-incompatible, and npm `11.17.0` via `npx` for the faithful workspace run. Terra could not retrieve `evidence/hermes-local-002-r6`, `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`, or the report from the current GitHub remote/API. Treat those version details as **unverified historical metadata**, not as current troubleshooting authority; inspect the actual checked-out Hermes workspace requirements instead.
 
 ## Security-related failures
 

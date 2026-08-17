@@ -27,26 +27,26 @@ Implemented in the active stacked branch:
 - bounded ProviderDriver for Ollama native and OpenAI-compatible generation;
 - protocol/lifecycle/provenance/secret-handling tests against controlled HTTP servers.
 
-Still outside the focused PR proof:
+Current PR #47 source/editable proof at `4334657a919f74803e65d9b01aa5054d6d7b9a61`:
 
-- exact terminal stacked-head acceptance;
-- installed-wheel/live-provider acceptance;
-- full restart/process-boundary cross-model continuity.
+- 8 approval-security regressions passed;
+- 31 focused prompt/provider/TUI/operator tests passed;
+- 18 Ouroboros lifecycle tests passed;
+- `tests/capt_runtime`: 387 passed / 10 skipped / 12 deselected;
+- full repository: 861 passed / 67 skipped / 12 deselected.
 
-## Hermes Agent workspace/TUI evidence
+Still outside that proof class:
 
-`HERMES_LOCAL_002_COMPLETE` is recorded on pushed branch `evidence/hermes-local-002-r6`, HEAD `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`, report `reports/local-evidence/HERMES_AGENT_TUI_WORKSPACE_TESTS_AND_STATE_MAP_8F97AE9_2026-08-17.md`.
+- installed non-editable wheel/live-provider acceptance;
+- terminal cumulative-stack acceptance beyond this PR head;
+- full restart/process-boundary cross-model continuity;
+- destructive external-provider/tool-kill rollback E2E.
 
-Reported:
+## Hermes Agent workspace/TUI metadata — currently unverified
 
-- Node `v22.22.2`;
-- system npm `11.14.1` engine-incompatible;
-- faithful workspace npm `11.17.0` via `npx`;
-- 98 passed / 0 failed / 0 skipped;
-- 174 passed / 0 failed / 2 skipped;
-- no product/state-map blocker.
+The operator supplied LOCAL-002 metadata for `evidence/hermes-local-002-r6` / `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04` / `reports/local-evidence/HERMES_AGENT_TUI_WORKSPACE_TESTS_AND_STATE_MAP_8F97AE9_2026-08-17.md`, including `HERMES_LOCAL_002_COMPLETE`, Node/npm details, 98/0/0 focused, 174/0/2 broader, and a no-product/state-map-blocker statement.
 
-Remaining bounded gaps: destructive external-provider/tool-kill rollback E2E unproven; two pytest skips; unrelated macOS case-insensitive contributor-email checkout collision.
+Terra could not retrieve the branch, commit, or report from the current GitHub remote/API. Those LOCAL-002 values are therefore **not accepted evidence at this checkpoint**. Historical v0.5 Hermes evidence remains separate and intact. If LOCAL-002 is restored, its claims must be re-read from the repository record before they are promoted back into acceptance status.
 
 ## Cross-model continuity
 

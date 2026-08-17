@@ -14,45 +14,24 @@ Later productization tests establish the normal CLI/TUI/operator/provider-config
 
 ## Active PR evidence
 
-Each active stacked PR has its own focused/full-suite evidence boundary. In particular, PR #47 reports focused prompt/provider/TUI/operator tests but explicitly leaves installed-wheel/live-provider/restart acceptance outside that focused proof.
+Each active stacked PR has its own evidence boundary. PR #47 now has clean exact-head **source/editable-runtime** verification at `4334657a919f74803e65d9b01aa5054d6d7b9a61`:
 
-## Hermes local evidence — LOCAL-002
+- approval-security regressions: 8 passed;
+- focused prompt/provider/TUI/operator suite: 31 passed;
+- Ouroboros lifecycle: 18 passed;
+- `tests/capt_runtime`: 387 passed / 10 skipped / 12 deselected;
+- full repository: 861 passed / 67 skipped / 12 deselected;
+- contract drift and `git diff --check`: passed.
 
-Dedicated branch:
+That proof does not convert the source tree into an installed-wheel, live-provider, process-boundary cross-model, destructive rollback, or release artifact proof.
 
-`evidence/hermes-local-002-r6`
+## Hermes LOCAL-002 metadata — quarantined pending retrieval
 
-Pushed HEAD:
+The operator supplied branch `evidence/hermes-local-002-r6`, HEAD `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`, report `reports/local-evidence/HERMES_AGENT_TUI_WORKSPACE_TESTS_AND_STATE_MAP_8F97AE9_2026-08-17.md`, classification `HERMES_LOCAL_002_COMPLETE`, and reported 98/0/0 focused plus 174/0/2 broader results with Node/npm environment notes and a no-product/state-map-blocker statement.
 
-`5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`
+Terra later verified that the branch, commit, and named report are absent from the current GitHub remote/API. These values are therefore **not independently usable evidence**. The prior explanation that GitHub retrieval was merely lagging is superseded by the later remote/API audit.
 
-Report:
-
-`reports/local-evidence/HERMES_AGENT_TUI_WORKSPACE_TESTS_AND_STATE_MAP_8F97AE9_2026-08-17.md`
-
-Reported environment:
-
-- Node `v22.22.2`;
-- npm `11.14.1` system path: engine-incompatible;
-- npm `11.17.0` via `npx`: faithful workspace path.
-
-Reported results:
-
-- **98 passed / 0 failed / 0 skipped**;
-- **174 passed / 0 failed / 2 skipped**;
-- verdict **`HERMES_LOCAL_002_COMPLETE`**;
-- no product blocker;
-- no state-map blocker.
-
-Bounded residual gaps:
-
-- destructive external-provider/tool-kill rollback E2E not yet run/proven;
-- two pytest skips;
-- unrelated macOS case-insensitive contributor-email checkout collision.
-
-Related supplied identities: `46e7162dfa2bfb28ced981881e5dded0e74f078e` and `8f97ae9aec729bcbbad17da462115e1ec1398421`. This summary intentionally does not invent semantic labels for those hashes that are not present in the retrieved report.
-
-At the moment of this documentation update, the GitHub connector lagged the just-pushed remote ref even though the operator supplied `git ls-remote` output showing `5c8cbf5... refs/heads/evidence/hermes-local-002-r6`. The branch/report itself becomes authoritative as soon as normal GitHub retrieval propagates.
+Historical v0.5 Hermes evidence remains authoritative for its own bounded release lineage. If LOCAL-002 is restored, its report must be retrieved and reviewed before any of its claims re-enter the release ledger. Even a restored LOCAL-002 record would remain adjacent Hermes workspace evidence rather than proof of PR #47 exact head, installed-wheel behavior, live-provider execution, destructive rollback, restart continuity, or release readiness.
 
 ## What still requires separate proof
 

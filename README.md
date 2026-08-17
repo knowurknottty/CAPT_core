@@ -27,24 +27,19 @@ A branch implementation is not described as shipped merely because the code exis
 |---|---|---|
 | #44 | Discovery Governor + bounded local scanner | implemented/local evidence; not yet merged |
 | #46 | governed Hermes/Ouroboros execution lifecycle | hardened lifecycle/recovery; not yet merged |
-| #47 | prompt assembly, cognitive provenance, TUI cockpit, ProviderDriver | **near-complete integration slice; not yet merged** |
+| #47 | prompt assembly, cognitive provenance, TUI cockpit, ProviderDriver | **exact-head source/editable full-suite verified; not yet merged; installed/live-provider proof remains separate** |
 | #48 | bounded Cohort coordination | coordination contracts; durable runtime integration later |
 | #49 | fail-closed SecurityGate | draft; intentionally blocked until applicable controls close |
 
-### Latest Hermes local integration evidence
+### Hermes LOCAL-002 metadata status
 
-The dedicated pushed branch `evidence/hermes-local-002-r6` at HEAD `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04` records `HERMES_LOCAL_002_COMPLETE` for the Hermes Agent TUI workspace/state-map exercise.
+On 2026-08-17, Terra independently attempted to resolve the operator-supplied LOCAL-002 identifiers. The expected branch `evidence/hermes-local-002-r6`, supplied HEAD `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`, and named report `reports/local-evidence/HERMES_AGENT_TUI_WORKSPACE_TESTS_AND_STATE_MAP_8F97AE9_2026-08-17.md` are absent from the current GitHub remote/API.
 
-Reported environment/result:
+The previously stated `HERMES_LOCAL_002_COMPLETE`, 98/0/0 focused result, 174/0/2 broader result, npm-version notes, and no-blocker statement are therefore **operator-supplied, currently unverified metadata**, not independently usable evidence.
 
-- Node `v22.22.2`;
-- system npm `11.14.1` was engine-incompatible;
-- faithful workspace npm `11.17.0` was used via `npx`;
-- **98 passed / 0 failed / 0 skipped** focused;
-- **174 passed / 0 failed / 2 skipped** broader;
-- **no product blocker and no state-map blocker**.
+This does **not** invalidate preserved historical v0.5 Hermes evidence. If LOCAL-002 is later restored and independently verified, it would still be adjacent Hermes workspace evidence only; it would not by itself prove PR #47 exact-head correctness, installed-wheel behavior, live-provider execution, destructive rollback, restart continuity, or release readiness.
 
-Bounded residual gaps remain: no destructive external-provider/tool-kill rollback E2E proof, two pytest skips, and an unrelated macOS case-insensitive contributor-email checkout collision.
+PR #47 itself now has separate clean source/editable proof at `4334657a919f74803e65d9b01aa5054d6d7b9a61`: 8 approval-security tests, 31 focused prompt/provider/TUI/operator tests, 18 Ouroboros lifecycle tests, 387 `capt_runtime` passes, and 861 full-repository passes. Installed-artifact/live-provider/restart/destructive proof remains separate.
 
 See [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md) and [`docs/RELEASE_EVIDENCE.md`](docs/RELEASE_EVIDENCE.md) for the exact evidence boundary.
 
@@ -148,7 +143,7 @@ PR #47 adds:
 - enhancement engines `OFF`, `AUTO`, `OMNI`, `META`, `FORGE`, `SIGMA`;
 - inspectable enhancement rather than invisible prompt rewriting;
 - clarification when the input is underspecified;
-- explicit **ENHANCE -> REVIEW -> APPROVE -> RUN** when human verification is required;
+- explicit **ENHANCE -> REVIEW -> APPROVE -> RUN** for transformed prompts, with durable RuntimeService approval required for RUN even when enhancement is `OFF`;
 - persisted non-secret prompt preferences;
 - requested/effective context provenance;
 - prompt-assembly digest and cognitive provenance.

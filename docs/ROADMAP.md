@@ -25,16 +25,15 @@ Completed on `main` beyond the original v0.5 experience:
 
 - [ ] **#44 Discovery** — merge bounded Discovery Governor/SEAL scanning.
 - [ ] **#46 Ouroboros/Hermes lifecycle** — merge hardened dispatch/idempotency/lease/recovery semantics.
-- [ ] **#47 TUI cognition + ProviderDriver** — merge prompt assembly/provenance, cockpit controls, and bounded Ollama/OpenAI-compatible generation.
+- [ ] **#47 TUI cognition + ProviderDriver** — merge prompt assembly/provenance, cockpit controls, and bounded Ollama/OpenAI-compatible generation; exact source/editable head `4334657a919f74803e65d9b01aa5054d6d7b9a61` is full-suite verified, while installed/live-provider proof remains separate.
 - [ ] **#48 Cohorts** — merge bounded coordination contracts while keeping durable claims deferred.
 - [ ] **#49 SecurityGate** — close applicable controls with exact-head evidence; remain blocked until then.
 
-## Hermes local evidence checkpoint
+## Hermes LOCAL-002 evidence checkpoint
 
-- [x] `HERMES_LOCAL_002_COMPLETE` evidence branch pushed for the Hermes Agent TUI workspace/state map: 98/0/0 focused and 174/0/2 broader results; no product/state-map blocker.
-- [ ] destructive external-provider/tool-kill rollback E2E remains to be proven.
-- [ ] investigate/resolve or explicitly quarantine the two pytest skips as appropriate.
-- [ ] keep unrelated macOS case-insensitive contributor-email checkout collision separated from product-state claims.
+- [ ] restore/publish an independently retrievable LOCAL-002 branch/commit/report if this evidence record is intended to remain part of the public ledger;
+- [ ] independently verify the **currently unverified** operator-supplied `evidence/hermes-local-002-r6` / `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04` metadata and the reported 98/0/0, 174/0/2, skip, npm, and no-blocker claims before promoting them back to evidence;
+- [ ] destructive external-provider/tool-kill rollback E2E remains separately unproven regardless of LOCAL-002 restoration.
 
 ## Release-critical acceptance still open
 
