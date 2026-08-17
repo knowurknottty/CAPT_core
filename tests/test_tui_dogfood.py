@@ -38,12 +38,15 @@ class _Client:
         return {
             "status": "accepted",
             "result": {
-                "missionId": "m-ui",
-                "taskId": "t-ui",
-                "driverRunId": "dr-ui",
+                "missionId": payload.get("missionId", "m-ui"),
+                "taskId": payload.get("taskId", "t-ui"),
+                "driverRunId": payload.get("driverRunId", "dr-ui"),
                 "observations": [{"summary": "CAPT TEST"}],
-                "cognitiveProvenance": {"requestedContextBudget": 32000, "effectiveContextBudget": 8192,
-                                       "promptAssemblyDigest": "sha256:test-assembly"},
+                "cognitiveProvenance": {
+                    "requestedContextBudget": 32000,
+                    "effectiveContextBudget": 8192,
+                    "promptAssemblyDigest": "sha256:test-assembly",
+                },
             },
         }
 
@@ -52,9 +55,25 @@ class _Operator:
     def __init__(self):
         self.client = _Client()
         self.connected = True
+        self.approval_requests = []
+        self.approval_decisions = []
 
     def dashboard(self):
         return Dashboard(status=OperatorStatus(health=RuntimeHealth.HEALTHY), verification={})
+
+    def request_prompt_approval(self, payload):
+        self.approval_requests.append(dict(payload))
+        return {
+            "requestId": "approval-ui",
+            "missionId": "m-ui",
+            "taskId": "t-ui",
+            "driverRunId": "dr-ui",
+            "promptAssemblyDigest": "sha256:" + "d" * 64,
+        }
+
+    def decide_approval(self, request_id, decision, note=None):
+        self.approval_decisions.append((request_id, decision, note))
+        return {"status": "accepted", "result": {"requestId": request_id, "state": "approved"}}
 
 
 def _app(monkeypatch):
@@ -101,7 +120,7 @@ def test_model_filter_cannot_change_command_selection_to_other_provider(monkeypa
     asyncio.run(run())
 
 
-def test_run_receipt_releases_busy_and_payload_matches_visible_selection(monkeypatch):
+def test_off_still_requires_durable_prompt_approval_before_run(monkeypatch):
     app = _app(monkeypatch)
 
     async def run():
@@ -109,21 +128,72 @@ def test_run_receipt_releases_busy_and_payload_matches_visible_selection(monkeyp
             app._selected_provider = "ollama"
             app._refresh_models("ollama", preserve_model=False)
             app.query_one("#enhancement-select").value = "OFF"
-            app.query_one("#prompt").text = "exact prompt"
+            app.query_one("#prompt").text = "Inspect code and report findings."
+            app.action_run()
+            await asyncio.sleep(0.05)
+            assert not app._run_busy
+            assert not app._op.client.calls
+            assert "approval" in str(app.query_one("#output").render()).lower()
+
+    asyncio.run(run())
+
+
+def test_approve_binds_runtime_receipt_and_run_carries_exact_ids(monkeypatch):
+    app = _app(monkeypatch)
+
+    async def run():
+        async with app.run_test():
+            app._selected_provider = "ollama"
+            app._refresh_models("ollama", preserve_model=False)
+            app.query_one("#enhancement-select").value = "OFF"
+            app.query_one("#prompt").text = "Inspect code and report findings."
+
+            app.action_approve_prompt()
+            assert app._approval_receipt["requestId"] == "approval-ui"
+            assert app._op.approval_requests[-1]["objective"] == "Inspect code and report findings."
+            assert app._op.approval_decisions[-1][:2] == ("approval-ui", "approve")
+
             app.action_run()
             for _ in range(10):
                 await asyncio.sleep(0.05)
                 if not app._run_busy:
                     break
-            assert app._run_busy is False
-            assert app.query_one("#run").disabled is False
+
             operation, payload, _ = app._op.client.calls[-1]
             assert operation == "run_approved_hermes_inspection"
+            assert payload["approvalRequestId"] == "approval-ui"
+            assert payload["missionId"] == "m-ui"
+            assert payload["taskId"] == "t-ui"
+            assert payload["driverRunId"] == "dr-ui"
             assert payload["provider"] == "ollama"
             assert payload["model"] == "muse-glimmer:30b-mlx"
             assert "CAPT TEST" in str(app.query_one("#output").render())
             assert "dr-ui" in str(app.query_one("#current-run").render())
             assert "requested 32k / effective 8k" in str(app.query_one("#current-run").render())
+
+    asyncio.run(run())
+
+
+def test_edit_after_approval_invalidates_receipt_and_blocks_run(monkeypatch):
+    app = _app(monkeypatch)
+
+    async def run():
+        async with app.run_test() as pilot:
+            app._selected_provider = "ollama"
+            app._refresh_models("ollama", preserve_model=False)
+            app.query_one("#enhancement-select").value = "OFF"
+            app.query_one("#prompt").text = "Inspect code and report findings."
+            app.action_approve_prompt()
+            assert app._approval_receipt
+
+            app.query_one("#prompt").text = "Inspect code and report different findings."
+            await pilot.pause()
+            assert not app._approval_receipt
+
+            app.action_run()
+            await pilot.pause()
+            assert not app._op.client.calls
+            assert "approval" in str(app.query_one("#output").render()).lower()
 
     asyncio.run(run())
 
