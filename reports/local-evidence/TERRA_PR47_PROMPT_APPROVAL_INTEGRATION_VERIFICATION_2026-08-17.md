@@ -238,6 +238,15 @@ Severity: **medium** by current direct-TUI impact; release-blocking only togethe
 - Impact: authenticated callers that know a request ID can at least reset/replace its projected approval state; exact exploitability depends on ingress authorization, but the aggregate creation lacks a first-create guard.
 - Recommended correction: reject existing request IDs unless the durable command fingerprint/idempotency proves a replay; add terminal-state and concurrent-create tests.
 
+### D-09 — MEDIUM — living documentation asserts unavailable Hermes evidence is a pushed branch
+
+- Files/symbols: `README.md`, `docs/CURRENT_STATE.md`, `docs/RELEASE_EVIDENCE.md`, `docs/TUI.md`, and `docs/PROVIDERS.md` at main `ffdc41e...` name `evidence/hermes-local-002-r6`, `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`, and the requested report as a dedicated pushed record.
+- Reproduction: `git ls-remote origin refs/heads/evidence/hermes-local-002-r6` returned no ref; local object lookup and GitHub commit/branch API returned missing/404; the named report is absent from PR head and main.
+- Expected: present-tense public evidence claims resolve to a remote ref/object/report, or are explicitly marked unavailable/pending propagation.
+- Observed: current remote state contradicts the public “dedicated pushed branch” availability assertion.
+- Impact: `HERMES_LOCAL_002_COMPLETE` cannot currently be independently inspected; its stated test counts are documentation assertions, not usable evidence.
+- Recommended correction: restore/publish the exact evidence branch and report, or amend living docs to label the evidence unavailable and keep its scope adjacent to—not proof of—PR #47.
+
 ## 9. Non-Blocking Observations
 
 - TUI local receipt invalidation covers prompt, provider, model, response mode, context budget, enhancement engine, and human-verification checkbox. This is useful UX safety, not authoritative enforcement against a direct client.
