@@ -5,7 +5,7 @@ on:
     branches:
       - verify/terra-pr47-approval-hardening-r1
     paths:
-      - tools/terra_apply_ouroboros_approval_migration.py
+      - tools/terra_apply_ouroboros_approval_migration_r2.py
 
 permissions:
   contents: write
@@ -24,8 +24,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e . pytest jsonschema
-      - name: Apply lifecycle migration and fifth-pass refinements
-        run: python tools/terra_apply_ouroboros_approval_migration.py
+      - name: Apply lifecycle migration and checkpoint integration
+        run: python tools/terra_apply_ouroboros_approval_migration_r2.py
+      - name: Regenerate contract bindings
+        run: python contracts/tools/generate.py
       - name: Contract drift
         run: python contracts/tools/check_drift.py
       - name: Security regressions
@@ -46,6 +48,6 @@ jobs:
           fi
           git config user.name "knowurknot"
           git config user.email "knowurknottty@gmail.com"
-          git add desktop/m1_command_service.py desktop/desktop_runtime_client.py tests/capt_runtime/test_ouroboros_lifecycle.py
-          git commit -m "test: migrate Ouroboros lifecycle to governed approval"
+          git add capt_runtime desktop contracts tests
+          git commit -m "fix: integrate prompt approval with checkpoint lifecycle"
           git push origin HEAD:verify/terra-pr47-approval-hardening-r1
