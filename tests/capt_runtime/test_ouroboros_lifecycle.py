@@ -100,6 +100,32 @@ def _payload(repo: Path, executable: Path, suffix: str) -> dict:
     }
 
 
+def _authorize_model_run(client: RuntimeClient, payload: dict, suffix: str) -> dict:
+    request = client.command(
+        "request_model_prompt_approval",
+        payload,
+        "idem-ouro-approval-" + suffix,
+    )
+    assert request["status"] == "accepted", request
+    planned = request["result"]
+    decision = client.command(
+        "submit_approval_decision",
+        {"requestId": planned["requestId"], "decision": "approve"},
+        "idem-ouro-approval-decision-" + suffix,
+    )
+    assert decision["status"] == "accepted", decision
+    authoritative = client.get_state("human_approval-" + planned["requestId"])
+    assert authoritative["state"] == "approved"
+    assert authoritative["remainingUses"] == 1
+    return {
+        **payload,
+        "approvalRequestId": planned["requestId"],
+        "missionId": planned["missionId"],
+        "taskId": planned["taskId"],
+        "driverRunId": planned["driverRunId"],
+    }
+
+
 def _state(client: RuntimeClient, prefix: str, suffix: str) -> dict:
     stream_prefix = {"driverrun": "driverrun-dr", "t": "task-t", "cl": "claim-cl"}.get(prefix, prefix)
     return client.get_state(stream_prefix + "-ouro-" + suffix)
@@ -128,7 +154,8 @@ def test_happy_driver_lifecycle_is_terminal_and_consumed(tmp_path: Path) -> None
     repo, exe, suffix = _git_repo(tmp_path, dirty=True), _fake_hermes(tmp_path), "happy"
     client, _ledger, proc = _start_runtime(tmp_path / "runtime")
     try:
-        receipt = client.command("run_approved_hermes_inspection", _payload(repo, exe, suffix), "idem-ouro-happy")
+        payload = _authorize_model_run(client, _payload(repo, exe, suffix), suffix)
+        receipt = client.command("run_approved_hermes_inspection", payload, "idem-ouro-happy")
         assert receipt["status"] == "accepted", receipt
         assert _state(client, "driverrun", suffix)["state"] == "completed"
         assert _state(client, "t", suffix)["state"] == "succeeded"
@@ -149,7 +176,8 @@ def test_post_driver_mutation_persists_negative_state_and_consumes_lease(tmp_pat
     repo, exe, suffix = _git_repo(tmp_path), _fake_hermes(tmp_path, mutate=True), "failure"
     client, _ledger, proc = _start_runtime(tmp_path / "runtime")
     try:
-        receipt = client.command("run_approved_hermes_inspection", _payload(repo, exe, suffix), "idem-ouro-failure")
+        payload = _authorize_model_run(client, _payload(repo, exe, suffix), suffix)
+        receipt = client.command("run_approved_hermes_inspection", payload, "idem-ouro-failure")
         assert receipt["status"] == "accepted", receipt
         assert receipt["result"]["outcome"] == "verification_rejected"
         assert _state(client, "driverrun", suffix)["state"] == "completed"
@@ -172,7 +200,8 @@ def test_unavailable_driver_before_dispatch_does_not_consume_lease(tmp_path: Pat
     client, _ledger, proc = _start_runtime(tmp_path / "runtime")
     try:
         missing = tmp_path / "not-an-executable"
-        receipt = client.command("run_approved_hermes_inspection", _payload(repo, missing, suffix), "idem-ouro-nodispatch")
+        payload = _authorize_model_run(client, _payload(repo, missing, suffix), suffix)
+        receipt = client.command("run_approved_hermes_inspection", payload, "idem-ouro-nodispatch")
         assert receipt["status"] == "rejected", receipt
         lease = _state(client, "capability-g", suffix)
         assert lease["usesConsumed"] == 0
@@ -187,6 +216,7 @@ def test_restart_does_not_repeat_completed_external_work(tmp_path: Path) -> None
     client, ledger, proc = _start_runtime(root)
     payload = _payload(repo, exe, suffix)
     try:
+        payload = _authorize_model_run(client, payload, suffix)
         first = client.command("run_approved_hermes_inspection", payload, "idem-ouro-restart")
         assert first["status"] == "accepted", first
     finally:
@@ -217,7 +247,8 @@ def test_global_projection_preserves_committed_contradiction(tmp_path: Path) -> 
     repo, exe, suffix = _git_repo(tmp_path), _fake_hermes(tmp_path, mutate=True), "projection"
     client, _ledger, proc = _start_runtime(tmp_path / "runtime")
     try:
-        client.command("run_approved_hermes_inspection", _payload(repo, exe, suffix), "idem-ouro-projection")
+        payload = _authorize_model_run(client, _payload(repo, exe, suffix), suffix)
+        client.command("run_approved_hermes_inspection", payload, "idem-ouro-projection")
         view = project_authoritative_state(client)
         verification = view["verificationsByClaim"]["cl-ouro-" + suffix]
         assert verification["committed"] is True
@@ -230,7 +261,8 @@ def test_indeterminate_dispatch_is_lost_suspended_and_consumed(tmp_path: Path) -
     repo, exe, suffix = _git_repo(tmp_path), _fake_hermes(tmp_path, fail=True), "indeterminate"
     client, _ledger, proc = _start_runtime(tmp_path / "runtime")
     try:
-        receipt = client.command("run_approved_hermes_inspection", _payload(repo, exe, suffix), "idem-ouro-indeterminate")
+        payload = _authorize_model_run(client, _payload(repo, exe, suffix), suffix)
+        receipt = client.command("run_approved_hermes_inspection", payload, "idem-ouro-indeterminate")
         assert receipt["status"] == "rejected", receipt
         assert _state(client, "driverrun", suffix)["state"] == "lost"
         assert _state(client, "driverrun", suffix)["reconciliationStatus"] == "required"
@@ -264,6 +296,7 @@ def test_crash_boundary_restart_never_replays_or_leaves_running(tmp_path: Path, 
         root, env={"CAPT_TEST_OUROBOROS_CRASH_AFTER": point}
     )
     try:
+        payload = _authorize_model_run(client, payload, suffix)
         with pytest.raises(Exception):
             client.command("run_approved_hermes_inspection", payload, "idem-ouro-" + suffix)
         proc.wait(timeout=5)
@@ -323,7 +356,7 @@ def test_same_key_replays_durably_and_rejects_different_payload(tmp_path: Path) 
     repo, exe, suffix = _git_repo(tmp_path), _fake_hermes(tmp_path), "idem"
     client, _ledger, proc = _start_runtime(tmp_path / "runtime")
     try:
-        payload = _payload(repo, exe, suffix)
+        payload = _authorize_model_run(client, _payload(repo, exe, suffix), suffix)
         first = client.command("run_approved_hermes_inspection", payload, "idem-ouro-durable")
         replay = client.command("run_approved_hermes_inspection", payload, "idem-ouro-durable")
         assert first["status"] == "accepted"

@@ -12,7 +12,7 @@ import json
 from typing import Any, Dict, Optional
 
 from capt_runtime import commands
-from capt_runtime.errors import CaptRuntimeError
+from capt_runtime.errors import CaptRuntimeError, IdempotencyConflict
 from capt_runtime.approval_dispatch import register_expected_prompt_digest
 from capt_runtime.model_approval_binding import (
     build_bound_model_operator_approval,
@@ -267,6 +267,18 @@ class RuntimeCommandService:
                         ),
                     )
                 p = cmd["payload"]
+                run_fingerprint = commands.fingerprint(
+                    "run_approved_hermes_inspection", p
+                )
+                prior_run_command = self.store.find_idempotent(cmd["idempotencyKey"])
+                if (
+                    prior_run_command is not None
+                    and prior_run_command["operation_fingerprint"] != run_fingerprint
+                ):
+                    raise IdempotencyConflict(
+                        "idempotency key %r reused with a different operation fingerprint"
+                        % cmd["idempotencyKey"]
+                    )
                 approval_request_id = str(p.get("approvalRequestId", ""))
                 if not approval_request_id:
                     from capt_runtime.errors import AuthorityViolation

@@ -5,6 +5,7 @@ from copy import deepcopy
 import pytest
 
 from capt_runtime import commands
+from capt_runtime.checkpoint import create_checkpoint
 from capt_runtime.errors import AuthorityViolation
 from capt_runtime.prompt_approval import request_model_prompt_approval
 from capt_runtime.services import RuntimeService
@@ -159,6 +160,28 @@ def test_planner_persists_one_use_execution_binding_and_exact_dispatch_digest(tm
         assert binding["executable"] == "/opt/hermes/bin/hermes"
         assert binding["dispatchPromptDigest"] == result["dispatchPromptDigest"]
         assert result["dispatchPromptDigest"].startswith("sha256:")
+    finally:
+        store.close()
+
+
+def test_checkpoint_accounts_for_durable_human_approval_stream(tmp_path):
+    store = EventStore(str(tmp_path / "checkpoint-approval.db"))
+    try:
+        svc = RuntimeService(store)
+        result = request_model_prompt_approval(
+            svc,
+            approval_intent(requestId="approval-checkpoint"),
+            meta("cmd-checkpoint-request", "human", "idem-checkpoint-request"),
+        )
+        manifest = create_checkpoint(
+            store,
+            "cp-approval-security",
+            "2026-08-17T00:00:00Z",
+            "sha256:" + "c" * 64,
+        )
+        assert manifest["humanApprovalVersions"] == [
+            {"streamId": "human_approval-" + result["requestId"], "version": 1}
+        ]
     finally:
         store.close()
 

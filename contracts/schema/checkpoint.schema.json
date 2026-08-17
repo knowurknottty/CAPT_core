@@ -106,6 +106,7 @@
         "capabilityVersions": { "type": "array", "maxItems": 4096, "items": { "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry" } },
         "driverRunVersions": { "type": "array", "maxItems": 4096, "items": { "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry" } },
         "claimVersions": { "type": "array", "maxItems": 4096, "items": { "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry" } },
+        "humanApprovalVersions": { "type": "array", "maxItems": 4096, "items": { "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry" } },
         "activeLeaseIds": { "type": "array", "maxItems": 4096, "items": { "$ref": "common.schema.json#/$defs/Identifier" } },
         "activeReservationIds": { "type": "array", "maxItems": 4096, "items": { "$ref": "common.schema.json#/$defs/Identifier" } },
         "pendingOutboxEventIds": { "type": "array", "maxItems": 8192, "items": { "$ref": "common.schema.json#/$defs/Identifier" } },
