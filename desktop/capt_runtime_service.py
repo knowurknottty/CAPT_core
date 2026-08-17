@@ -572,27 +572,24 @@ class RuntimeQueryService:
             return {"ok": False, "error": "%s: %s" % (type(exc).__name__, exc)[:300]}
 
 
+from capt_runtime.ipc_framing import recv_json, send_json, FrameProtocolError
+
 # --------------------------------------------------------------------------
 # Authenticated Unix-domain-socket server
 # --------------------------------------------------------------------------
 
 def _recv_json(sock: socket.socket) -> Optional[Dict[str, Any]]:
-    header = sock.recv(4)
-    if not header:
+    try:
+        return recv_json(sock)
+    except (FrameProtocolError, ValueError):
         return None
-    length = int.from_bytes(header, "big")
-    buf = b""
-    while len(buf) < length:
-        chunk = sock.recv(length - len(buf))
-        if not chunk:
-            return None
-        buf += chunk
-    return json.loads(buf.decode("utf-8"))
 
 
 def _send_json(sock: socket.socket, payload: Dict[str, Any]) -> None:
-    data = json.dumps(payload).encode("utf-8")
-    sock.sendall(len(data).to_bytes(4, "big") + data)
+    try:
+        send_json(sock, payload)
+    except (FrameProtocolError, ValueError):
+        pass
 
 
 def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> None:
