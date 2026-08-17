@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
 import threading
 import time
@@ -113,11 +114,19 @@ class EventStore(object):
     def __init__(self, path: str) -> None:
         self.path = path
         if path != ":memory:":
-            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            p = Path(path)
+            if not p.parent.exists():
+                p.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    os.chmod(p.parent, 0o700)
+                except OSError:
+                    pass
         self._lock = threading.RLock()
         self._conn = sqlite3.connect(
             path, isolation_level=None, check_same_thread=False, timeout=5.0
         )
+        if path != ":memory:":
+            self._harden_permissions()
         self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.row_factory = sqlite3.Row
         # Two runtime processes can open an empty ledger concurrently before
@@ -132,7 +141,21 @@ class EventStore(object):
                     self._conn.close()
                     raise
                 time.sleep(0.05 * (attempt + 1))
+        if path != ":memory:":
+            self._harden_permissions()
         self._subscribers: List[Callable[[Dict[str, Any]], None]] = []
+
+    def _harden_permissions(self) -> None:
+        """Enforce strict 0o600 file permissions on SQLite database, WAL, and SHM files."""
+        if self.path == ":memory:":
+            return
+        p = Path(self.path)
+        for target in (p, p.with_name(p.name + "-wal"), p.with_name(p.name + "-shm")):
+            if target.exists():
+                try:
+                    os.chmod(target, 0o600)
+                except OSError:
+                    pass
 
     # -- lifecycle ---------------------------------------------------------
 
