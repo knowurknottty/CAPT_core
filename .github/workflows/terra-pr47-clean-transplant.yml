@@ -1,0 +1,62 @@
+name: Terra PR47 Clean Hardening Transplant
+
+on:
+  push:
+    branches:
+      - verify/terra-pr47-approval-hardening-r1
+    paths:
+      - tools/terra_pr47_clean_transplant.trigger
+
+permissions:
+  contents: write
+
+jobs:
+  clean-transplant:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Reconstruct verified diff on exact PR47 head
+        run: |
+          git checkout -B verify/pr47-clean-hardening-r1 e104c4a56dd77604b4396f4e12d62a91864670bc
+          git diff --binary e104c4a56dd77604b4396f4e12d62a91864670bc 3627f80b9c9da93e932a78ccfe19c9ae00005b0e -- capt_runtime desktop capt_ui contracts tests | git apply --index
+          if git diff --cached --name-only | grep -E '^(\.github/|tools/)'; then
+            echo "temporary verification debris entered clean transplant" >&2
+            exit 1
+          fi
+          git diff --cached --check
+      - name: Install package and test tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . pytest jsonschema
+      - name: Regenerate and verify contracts
+        run: |
+          python contracts/tools/generate.py
+          python contracts/tools/check_drift.py
+          git diff --check
+      - name: Approval security regressions
+        run: python -m pytest -q tests/capt_runtime/test_prompt_approval_security.py
+      - name: Focused PR47 regressions
+        run: python -m pytest -q tests/capt_runtime/test_prompt_approval_binding.py tests/capt_runtime/test_prompt_approval_command.py tests/capt_runtime/test_operator_provenance.py tests/capt_runtime/test_model_operator.py tests/capt_runtime/test_provider_driver.py tests/test_prompt_intelligence.py tests/test_tui_dogfood.py
+      - name: Ouroboros lifecycle
+        run: python -m pytest -q tests/capt_runtime/test_ouroboros_lifecycle.py
+      - name: CAPT runtime suite
+        run: python -m pytest -q tests/capt_runtime
+      - name: Full repository suite
+        run: python -m pytest -q
+      - name: Assert clean source scope and commit
+        run: |
+          git add capt_runtime desktop capt_ui contracts tests
+          if git diff --cached --name-only | grep -E '^(\.github/|tools/)'; then
+            echo "temporary verification debris staged" >&2
+            exit 1
+          fi
+          git diff --cached --check
+          git config user.name "knowurknot"
+          git config user.email "knowurknottty@gmail.com"
+          git commit -m "fix: harden governed prompt approval lifecycle"
+          git push --force-with-lease origin HEAD:verify/pr47-clean-hardening-r1
