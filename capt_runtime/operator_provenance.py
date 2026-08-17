@@ -1,7 +1,7 @@
 """CAPT-native model-visible request assembly and provenance.
 
 This module builds deterministic, secret-free projections over existing CAPT
-authority.  It does not grant capability, dispatch providers, or create an
+authority. It does not grant capability, dispatch providers, or create an
 alternate store.
 """
 from __future__ import annotations
@@ -13,6 +13,10 @@ from .contracts import digest
 RESPONSE_MODES = ("MAX", "SPOCK", "CAVE CAPT", "MIN")
 ENHANCEMENT_ENGINES = ("OFF", "AUTO", "OMNI", "META", "FORGE", "SIGMA")
 CONTEXT_BUDGETS = tuple(range(32_000, 256_001, 32_000))
+_MODEL_OPERATOR_CONTEXT_REFERENCE = digest({"context": "not-selected-at-admission"})
+_MODEL_OPERATOR_TOOL_SCHEMA = digest(
+    {"operations": ["RepositoryRead", "FilesystemRead", "ArtifactCreate", "AnalysisOnly"]}
+)
 
 
 def _section(identity: str, order: int, text: str, source: str) -> Dict[str, Any]:
@@ -78,19 +82,36 @@ def build_prompt_assembly(
         "[%s]\n%s" % (section["identity"], section["text"])
         for section in sections
     )
+    assembly_digest = digest(
+        [
+            {key: section[key] for key in ("identity", "order", "source", "digest")}
+            for section in sections
+        ]
+    )
     return {
         "schemaVersion": "1.0.0",
         "sections": sections,
-        "assemblyDigest": digest(
-            [
-                {key: section[key] for key in ("identity", "order", "source", "digest")}
-                for section in sections
-            ]
-        ),
+        "assemblyDigest": assembly_digest,
+        # Explicit alias used by approval/evidence contracts. Keeping both
+        # names preserves compatibility while eliminating a runtime KeyError.
+        "promptAssemblyDigest": assembly_digest,
         "modelVisiblePrompt": rendered,
         "modelVisiblePromptDigest": digest(rendered),
         "enhancementEngine": enhancement_engine,
     }
+
+
+def build_model_operator_prompt_assembly(
+    *, human_prompt: str, response_mode: str, enhancement_engine: str
+) -> Dict[str, Any]:
+    """Build the canonical assembly used for model-operator approval and run."""
+    return build_prompt_assembly(
+        human_prompt=human_prompt,
+        response_mode=response_mode,
+        enhancement_engine=enhancement_engine,
+        context_pack_digest=_MODEL_OPERATOR_CONTEXT_REFERENCE,
+        tool_schema_digest=_MODEL_OPERATOR_TOOL_SCHEMA,
+    )
 
 
 def build_cognitive_provenance(

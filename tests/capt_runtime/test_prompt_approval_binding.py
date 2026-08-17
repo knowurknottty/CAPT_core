@@ -4,6 +4,7 @@ import pytest
 
 from capt_runtime import commands
 from capt_runtime.errors import AuthorityViolation
+from capt_runtime.prompt_approval import request_model_prompt_approval
 from capt_runtime.services import RuntimeService
 from capt_runtime.store import EventStore
 
@@ -88,7 +89,7 @@ def test_unapproved_and_stale_or_wrong_digest_receipts_fail_closed(tmp_path):
     store.close()
 
 
-def test_runtime_builds_prompt_approval_receipt_for_exact_model_assembly(tmp_path):
+def test_runtime_planner_builds_prompt_approval_receipt_for_exact_model_assembly(tmp_path):
     store = EventStore(str(tmp_path / "ledger.db"))
     svc = RuntimeService(store)
     intent = {
@@ -98,10 +99,13 @@ def test_runtime_builds_prompt_approval_receipt_for_exact_model_assembly(tmp_pat
         "driverRunId": "dr-model-1",
         "objective": "Inspect the repository and report concrete findings.",
         "targetRoot": "/tmp/project",
+        "provider": "ollama",
+        "model": "qwen",
         "responseMode": "SPOCK",
         "promptEnhancement": "OFF",
     }
-    result = svc.request_model_prompt_approval(
+    result = request_model_prompt_approval(
+        svc,
         intent,
         meta("prompt-request-1", "human", "prompt-request-1"),
     )
@@ -116,6 +120,7 @@ def test_runtime_builds_prompt_approval_receipt_for_exact_model_assembly(tmp_pat
     assert state["state"] == "requested"
     assert state["operation"] == "ModelOperatorInspection"
     assert state["promptAssemblyDigest"] == result["promptAssemblyDigest"]
+    assert state["remainingUses"] == 1
 
     approve(svc, "r-model-1")
     approved = svc.require_approved_prompt_assembly(

@@ -50,7 +50,6 @@ class Operator:
         self._identity: Dict[str, Any] = {}
         self._connected = False
 
-    # -- connection -------------------------------------------------------
     @property
     def client(self) -> Any:
         return self._client
@@ -74,13 +73,12 @@ class Operator:
         finally:
             self._connected = False
 
-    # -- status -----------------------------------------------------------
     def status(self) -> OperatorStatus:
         if not self._connected:
             return OperatorStatus(health=RuntimeHealth.STOPPED)
         ident = self._client.identity()
         caps = self._client.capabilities()
-        st = OperatorStatus(
+        return OperatorStatus(
             health=health_of(ident, True),
             runtime_version=ident.get("runtimeVersion", ""),
             integrity=ident.get("integrity", ""),
@@ -91,9 +89,7 @@ class Operator:
                 "command_ops": caps.get("commandOperations", []),
             },
         )
-        return st
 
-    # -- dashboard (no hidden state) --------------------------------------
     def dashboard(self) -> Dashboard:
         if not self._connected:
             return Dashboard()
@@ -109,18 +105,21 @@ class Operator:
             verification=st.get("verification", {}),
             ledger_chain_digest=st.get("identity", {}).get("ledgerChainDigest", ""),
         )
-        # fill top-line status from authoritative state
         dash.status.head_sequence = st.get("identity", {}).get("headSequence", 0) or 0
         dash.status.integrity = st.get("identity", {}).get("integrity", "")
         dash.status.approvals_pending = len(dash.approvals)
-        dash.evidence = EvidenceView(
-            verification=dash.verification,
-        )
+        dash.evidence = EvidenceView(verification=dash.verification)
         return dash
 
     # -- governed controls ------------------------------------------------
     def create_mission(self, payload: Dict[str, Any], idempotency_key: Optional[str] = None) -> Dict[str, Any]:
         return self._client.command("create_mission", payload, idempotency_key)
+
+    def request_prompt_approval(
+        self, payload: Dict[str, Any], idempotency_key: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Request a runtime-owned approval receipt for the exact prompt assembly."""
+        return self._client.command("request_model_prompt_approval", payload, idempotency_key)
 
     def decide_approval(self, request_id: str, decision: str, note: Optional[str] = None) -> Dict[str, Any]:
         payload: Dict[str, Any] = {"requestId": request_id, "decision": decision}
@@ -138,7 +137,6 @@ class Operator:
         return self._client.command("update_memory_trigger_policy", payload, idempotency_key)
 
     def checkpoint(self) -> Dict[str, Any]:
-        """Request an authoritative runtime checkpoint."""
         return self._client.command("checkpoint_runtime", {})
 
     def resume(self) -> Dict[str, Any]:
@@ -147,7 +145,6 @@ class Operator:
     def shutdown(self) -> Dict[str, Any]:
         return self._client.command("shutdown", {})
 
-    # -- evidence / claimguard --------------------------------------------
     def evidence(self, mission_id: str = "") -> EvidenceView:
         if not self._connected:
             return EvidenceView()
@@ -155,13 +152,11 @@ class Operator:
             artifacts = project_evidence(self._client, mission_id)  # type: ignore
         except Exception:  # noqa: BLE001
             artifacts = []
-        verification = self.dashboard().verification
-        return EvidenceView(artifacts=artifacts, verification=verification)
+        return EvidenceView(artifacts=artifacts, verification=self.dashboard().verification)
 
     def claimguard(self, statement: str) -> Dict[str, Any]:
         return project_claimguard(self._client, statement)  # type: ignore
 
-    # -- memory -----------------------------------------------------------
     def memory_policy(self) -> Dict[str, Any]:
         try:
             return self._client._query({"op": "get_memory_policy"})["result"]  # type: ignore
@@ -174,21 +169,22 @@ class Operator:
         except Exception:  # noqa: BLE001
             return {}
 
-    def store_memory(self, content: str, *, namespace: str = "default",
-                     tags: Optional[List[str]] = None, provenance: str = "operator") -> Dict[str, Any]:
-        """Store a durable memory through the supported capt_solo memory API.
-
-        Memory persistence is a capt_solo concern (the same supported API path
-        the CLI uses); it is not a RuntimeService IPC op on this surface. This
-        keeps real durable-memory writes working for onboarding/CLI without
-        fabricating them.
-        """
+    def store_memory(
+        self,
+        content: str,
+        *,
+        namespace: str = "default",
+        tags: Optional[List[str]] = None,
+        provenance: str = "operator",
+    ) -> Dict[str, Any]:
         try:
             from capt_solo.memory.engine import MemoryEngine
             from capt_solo.core.config import memory_db_path
+
             engine = MemoryEngine(memory_db_path())
-            mem = engine.store(content, namespace=namespace, tags=tags or [],
-                               provenance=provenance)
+            mem = engine.store(
+                content, namespace=namespace, tags=tags or [], provenance=provenance
+            )
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "error": str(exc)[:160]}
         return {
@@ -215,9 +211,7 @@ def _to_approval(a: Dict[str, Any]) -> ApproxRequest:
 
 
 def _human(exc: Exception) -> str:
-    """Best-effort human-readable error, avoiding raw exception dumps."""
     msg = str(exc).strip()
     if not msg:
         return exc.__class__.__name__
-    # Trim to first line and any 'error' detail already present.
     return (msg.splitlines() or [msg])[0][:200]
