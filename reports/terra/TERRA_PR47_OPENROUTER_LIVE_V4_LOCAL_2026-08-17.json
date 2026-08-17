@@ -1,0 +1,46 @@
+{
+  "schema": "capt-terra-openrouter-live-v4/1.0",
+  "classification": "CAPT_OPENROUTER_LIVE_ACCEPTED",
+  "scope": "local evidence only; no source, wheel, remote, or pull-request mutation",
+  "candidate": {
+    "head": "10854b5a2b9835788478ee7770fcaa17bb4e1156",
+    "wheel": "capt_solo-0.5.0-py3-none-any.whl",
+    "wheelSha256": "db3ee232320e4a1cd63556c03813285dab24429e9c590e2712a7242145fc05e1"
+  },
+  "runtime": {
+    "freshNonEditableVenv": true,
+    "isolatedInterpreter": true,
+    "provider": "openrouter",
+    "model": "@preset/inversion-labs-mimo2-5",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "externalDispatches": 1
+  },
+  "journaledGate": {
+    "approvalRequest": "durably receipted then EventStore-confirmed requested",
+    "approvalDecision": "durably receipted then EventStore-confirmed approved with remainingUses=1; no consumption or driver dispatch before pre-dispatch snapshot",
+    "credential": "raw-line presence only; no value persisted or disclosed",
+    "preDispatchSnapshot": "durably recorded"
+  },
+  "result": {
+    "responseReturned": true,
+    "driverRun": "completed",
+    "task": "awaiting_verification",
+    "approval": "consumed once, remainingUses=0",
+    "autoPromotion": false,
+    "verificationRecorded": false,
+    "claimGuardDecisionRecorded": false,
+    "exactReplay": "idempotent; event delta 0",
+    "differentUse": "rejected with MODEL_PROMPT_APPROVAL_DIGEST_MISMATCH; event delta 0"
+  },
+  "secretScan": {
+    "scope": "all durable evidence files including replay receipts",
+    "secretBytesFoundInEvidence": false
+  },
+  "artifacts": {
+    "durableEvidenceDir": "/tmp/terra-pr47-openrouter-live-v4/evidence",
+    "finalReceipt": "/tmp/terra-pr47-openrouter-live-v4/evidence/99-final.json",
+    "directEventStoreProjection": "/tmp/terra-pr47-openrouter-live-v4/evidence/12-direct-eventstore-final.json"
+  },
+  "remoteMutation": false,
+  "pullRequestMutation": false
+}
