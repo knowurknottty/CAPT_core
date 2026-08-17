@@ -1,0 +1,28 @@
+name: Terra Main Hermes Doc Scan
+
+on:
+  push:
+    branches:
+      - verify/terra-pr47-approval-hardening-r1
+    paths:
+      - tools/terra_main_hermes_doc_scan.trigger
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Pin exact main and scan living docs
+        run: |
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "ffdc41e6b579291b120dc1a23b5d3d0f1461321c"
+          git checkout --detach origin/main
+          echo '=== HERMES LOCAL-002 IDENTIFIER MATCHES ==='
+          git grep -n -E 'hermes-local-002-r6|5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04|HERMES_LOCAL_002_COMPLETE|HERMES_AGENT_TUI_WORKSPACE_TESTS_AND_STATE_MAP' -- README.md START_HERE.md docs capt_ui || true
+          echo '=== SUSPICIOUS EVIDENCE CLAIM PHRASES ==='
+          git grep -n -E 'dedicated pushed branch|operator has published|Pushed HEAD|connector lagged|GitHub connector had not yet propagated|just-pushed remote ref' -- README.md START_HERE.md docs capt_ui || true
