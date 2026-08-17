@@ -8,7 +8,8 @@ import threading
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+from capt_runtime.resource_governor import TokenCostGovernor, BudgetCeilingExceeded
 
 DRIVER_ID = "provider"
 DESCRIPTOR = {
@@ -36,6 +37,7 @@ class ProviderDriver:
         base_url: str,
         api_key: str = "",
         task_resolver=None,
+        governor: Optional[TokenCostGovernor] = None,
     ):
         self.root = Path(staging_root)
         self.root.mkdir(parents=True, exist_ok=True)
@@ -44,6 +46,7 @@ class ProviderDriver:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.task_resolver = task_resolver
+        self.governor = governor or TokenCostGovernor()
         self.runs: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.RLock()
 
@@ -120,6 +123,15 @@ class ProviderDriver:
             if self.task_resolver
             else "Provide a bounded evidence-backed observation."
         )
+        # Pre-dispatch budget check (estimated tokens ~ len(prompt) // 4)
+        est_tokens = max(1, len(prompt) // 4)
+        try:
+            self.governor.check_pre_dispatch(estimated_prompt_tokens=est_tokens)
+        except BudgetCeilingExceeded as exc:
+            with self._lock:
+                self.runs[rid]["state"] = "failed"
+            raise ProviderDriverFailure(f"budget ceiling exceeded: {exc}") from exc
+
         prompt_digest = "sha256:" + hashlib.sha256(prompt.encode()).hexdigest()
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
         if self.api_key:
@@ -165,6 +177,15 @@ class ProviderDriver:
             with self._lock:
                 self.runs[rid]["state"] = "failed"
             raise ProviderDriverFailure("provider returned no content")
+        usage = data.get("usage", {})
+        prompt_tokens = usage.get("prompt_tokens", est_tokens)
+        completion_tokens = usage.get("completion_tokens", len(text) // 4)
+        self.governor.record_usage(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cost_usd=0.0,
+        )
+
         response_digest = "sha256:" + hashlib.sha256(text.encode()).hexdigest()
         artifact = (
             "# CAPT Provider Observation\n\n"
