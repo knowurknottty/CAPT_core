@@ -262,6 +262,18 @@ class RuntimeCommandService:
                             cmd, "internal_failure", "HERMES_DRIVER_UNAVAILABLE"
                         ),
                     )
+                # Admission owns the original command's idempotency key. Check it
+                # before preparation so a consumed one-use approval is never read
+                # or reconstructed on a retry/crash replay.
+                prior_admission = self.store.find_idempotent(cmd["idempotencyKey"])
+                if prior_admission is not None:
+                    if prior_admission["command_id"] != cmd["commandId"]:
+                        raise IdempotencyConflict(
+                            "idempotency key %r reused by a different command" % cmd["idempotencyKey"])
+                    return self._receipt(
+                        cmd, status="idempotent", classification="duplicate",
+                        result=self.store.idempotent_result(cmd["idempotencyKey"]) or {},
+                    )
                 run_fingerprint = commands.fingerprint(
                     "run_approved_hermes_inspection", cmd["payload"]
                 )
@@ -278,30 +290,19 @@ class RuntimeCommandService:
                 # precede one-use approval consumption.
                 prepared = runner.prepare(cmd)
                 identity = prepared.approval_identity
-                use_meta = commands.command(
-                    command_id="cmd-approval-use-" + commands.fingerprint(
-                        "approval-use", {"idempotencyKey": cmd["idempotencyKey"]}
-                    ).split(":", 1)[1][:24],
-                    idempotency_key="idem-approval-use-" + commands.fingerprint(
-                        "approval-use", {"idempotencyKey": cmd["idempotencyKey"]}
-                    ).split(":", 1)[1][:24],
+                # The original command idempotency record is committed with the
+                # approval consumption and DriverRun intent, bound to the exact
+                # credential-free prepared digest.
+                admission_meta = commands.command(
+                    command_id=prepared.command_id,
+                    idempotency_key=prepared.idempotency_key,
                     operation_fingerprint=commands.fingerprint(
-                        "consume_human_approval",
-                        {
-                            "requestId": prepared.approval_request_id,
-                            "promptAssemblyDigest": identity["promptAssemblyDigest"],
-                            "missionId": identity["missionId"],
-                            "taskId": identity["taskId"],
-                            "driverRunId": identity["driverRunId"],
-                            "resource": identity["resource"],
-                            "useId": cmd["idempotencyKey"],
-                        },
+                        "admit_approved_model_execution",
+                        {"preparedExecutionDigest": prepared.prepared_execution_digest},
                     ),
-                    correlation_id=cmd["correlationId"],
-                    actor_id="exec-1",
-                    actor_kind="execution_plane",
-                    issued_at=cmd.get("timestamp") or _now_rfc3339(),
-                    replay_policy="never",
+                    correlation_id=prepared.correlation_id,
+                    actor_id="exec-1", actor_kind="execution_plane",
+                    issued_at=prepared.issued_at, replay_policy="never",
                 )
                 admission = self.svc.admit_approved_model_execution(
                     prepared.approval_request_id,
@@ -311,14 +312,28 @@ class RuntimeCommandService:
                     task_id=identity["taskId"],
                     driver_run_id=identity["driverRunId"],
                     resource=identity["resource"],
-                    use_id=cmd["idempotencyKey"],
-                    now=cmd.get("timestamp") or _now_rfc3339(),
-                    metadata=use_meta,
+                    use_id=prepared.idempotency_key,
+                    now=prepared.issued_at,
+                    metadata=admission_meta,
+                    driver_id="provider" if prepared.provider_id else "hermes",
+                    prepared_execution_digest=prepared.prepared_execution_digest,
                 )
+                if admission.get("status") == "idempotent":
+                    # An admission record survives crashes. Never reconstruct
+                    # command data or re-dispatch a durable intent on replay.
+                    return self._receipt(
+                        cmd, status="idempotent", classification="duplicate",
+                        result={"driverRunId": prepared.driver_run_id,
+                                "preparedExecutionDigest": prepared.prepared_execution_digest},
+                    )
                 register_expected_prompt_digest(
                     identity["driverRunId"], prepared.dispatch_prompt_digest
                 )
                 result = runner.execute(prepared)
+                # The durable admission receipt is updated only after execution
+                # returns; a crash before this line still replays as no-dispatch.
+                self.store.complete_claimed_command(
+                    prepared.idempotency_key, admission_meta["operationFingerprint"], result)
                 if admission.get("status") == "idempotent":
                     result["_idempotent"] = True
                 if result.get("status") == "in_progress":

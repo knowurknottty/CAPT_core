@@ -219,6 +219,11 @@ class EventStore(object):
             "SELECT * FROM idempotency WHERE idempotency_key = ?", (key,)
         ).fetchone()
 
+    def idempotent_result(self, key: str) -> Optional[Dict[str, Any]]:
+        """Return a defensive copy of a durable command receipt."""
+        row = self.find_idempotent(key)
+        return json.loads(row["result_json"]) if row is not None else None
+
     def claim_command(self, idempotency_key: str, operation_fingerprint: str,
                       command_id: str) -> Dict[str, Any]:
         """Durably admit one long-running command before its external boundary.

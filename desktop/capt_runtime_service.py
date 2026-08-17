@@ -746,13 +746,19 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     str(approval_request_id), bound_assembly["promptAssemblyDigest"],
                     "ModelOperatorInspection")
                 return PreparedApprovedModelExecution(
-                    command=freeze(command), approval_request_id=str(approval_request_id),
+                    command_id=str(command_id), idempotency_key=str(command["idempotencyKey"]),
+                    correlation_id=str(command.get("correlationId", "corr-model")), issued_at=str(now),
+                    approval_request_id=str(approval_request_id),
                     prompt_assembly_digest=bound_assembly["promptAssemblyDigest"],
                     dispatch_prompt_digest=bound_assembly["dispatchPromptDigest"],
                     mission_id=str(mission_id), task_id=str(task_id), driver_run_id=str(run_id),
-                    resource=str(target_root), data=freeze({
-                        "provider": provider, "providerKey": provider_key,
-                        "providerModel": provider_model, "executable": executable,
+                    resource=str(target_root), objective=str(objective),
+                    provider_id=str(provider_id) if provider_id else None,
+                    provider_model=str(provider_model) if provider_model else None,
+                    executable=str(executable) if executable else None,
+                    data=freeze({
+                        "grantId": str(grant_id), "leaseId": str(lease_id),
+                        "claimId": str(claim_id), "policyDecisionId": str(policy_id),
                         "requestedContextBudget": requested_context_budget,
                         "effectiveBudget": effective_budget,
                         "responseMode": response_mode,
@@ -763,30 +769,38 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 )
 
             def _execute_approved_hermes(prepared: PreparedApprovedModelExecution):
-                command = prepared.command
-                payload = command["payload"]
-                key = command["idempotencyKey"]
-                command_fingerprint = commands.fingerprint("run_approved_hermes_inspection", payload)
-                objective = payload["objective"]
+                # Dispatch consumes only the immutable prepared object. It never
+                # reconstructs fields from the original raw command.
+                key = prepared.idempotency_key
+                command_fingerprint = commands.fingerprint(
+                    "admit_approved_model_execution",
+                    {"preparedExecutionDigest": prepared.prepared_execution_digest})
+                objective = prepared.objective
                 target_root = prepared.resource
-                command_id = command["commandId"]
-                now = command.get("timestamp") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                command_id, now = prepared.command_id, prepared.issued_at
+                correlation_id = prepared.correlation_id
                 mission_id, task_id, run_id = prepared.mission_id, prepared.task_id, prepared.driver_run_id
-                grant_id = payload.get("grantId") or ("g-model-" + command_id)
-                lease_id = payload.get("leaseId") or ("l-model-" + command_id)
-                claim_id = payload.get("claimId") or ("cl-model-" + command_id)
-                policy_id = payload.get("policyDecisionId") or ("pd-model-" + command_id)
-                provider, provider_key = prepared.data["provider"], prepared.data["providerKey"]
-                provider_model, executable = prepared.data["providerModel"], prepared.data["executable"]
+                grant_id, lease_id = prepared.data["grantId"], prepared.data["leaseId"]
+                claim_id, policy_id = prepared.data["claimId"], prepared.data["policyDecisionId"]
+                provider_id, provider_model = prepared.provider_id, prepared.provider_model
+                executable = prepared.executable
+                provider = None
+                provider_key = ""
+                if provider_id:
+                    from capt_ui.operator.providers import ProviderManager
+                    from capt_ui.operator.secrets import resolve
+                    provider = ProviderManager(Path(ledger_path).parent / "ui").get(provider_id)
+                    if provider is None or not provider_model:
+                        raise ValueError("PROVIDER_OR_MODEL_UNAVAILABLE")
+                    provider_key = resolve(provider.id, provider.key_ref)
+                    if provider.id != "ollama" and not provider_key:
+                        raise ValueError("PROVIDER_CREDENTIAL_UNAVAILABLE")
                 requested_context_budget = prepared.data["requestedContextBudget"]
                 effective_budget = prepared.data["effectiveBudget"]
                 response_mode = prepared.data["responseMode"]
                 enhancement_engine = prepared.data["enhancementEngine"]
                 human_verification_required = prepared.data["humanVerificationRequired"]
                 prompt_assembly = prepared.data["promptAssembly"]
-                admission = store.claim_command(key, command_fingerprint, command["commandId"])
-                if admission.get("replayed"):
-                    return {**admission, "_idempotent": admission.get("status") != "in_progress"}
                 model_visible_objective = prompt_assembly["modelVisiblePrompt"]
                 cognitive_provenance = build_cognitive_provenance(
                     assembly=prompt_assembly, provider_id=provider.id if provider is not None else "hermes",
@@ -801,7 +815,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         command_id=command_id + ":" + step,
                         idempotency_key=key + ":" + step,
                         operation_fingerprint=commands.fingerprint(step, {"driverRunId": run_id}),
-                        correlation_id=command.get("correlationId", "corr-model"),
+                        correlation_id=correlation_id,
                         actor_id="exec-1", actor_kind="execution_plane",
                         issued_at=now, replay_policy="never",
                     )
@@ -812,7 +826,10 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 # suspended for the existing governed cancellation/reconciliation
                 # command path. No branch re-dispatches an extant run.
                 prior_run = store.load_state("driverrun-" + run_id)
-                if prior_run is not None:
+                # An immediately-created ``created`` run is this invocation's
+                # durable admission intent. Any later state is restart evidence
+                # and must follow recovery, never re-dispatch.
+                if prior_run is not None and prior_run.get("state") != "created":
                     capability = store.load_state("capability-" + grant_id)
                     reservation_id = "res-" + command_id
                     open_reservation = bool(capability and reservation_id in [
@@ -879,7 +896,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     command_id=command_id + ":mission",
                     idempotency_key=key + ":mission",
                     operation_fingerprint=commands.fingerprint("create_mission", intent),
-                    correlation_id=command.get("correlationId", "corr-model"),
+                    correlation_id=correlation_id,
                     actor_id=cmd_svc.operator_id,
                     actor_kind="human",
                     issued_at=now,
@@ -890,7 +907,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     command_id=command_id + ":" + step,
                     idempotency_key=key + ":" + step,
                     operation_fingerprint=commands.fingerprint("transition_task", {"taskId": task_id, "to": step}),
-                    correlation_id=command.get("correlationId", "corr-model"),
+                    correlation_id=correlation_id,
                     actor_id="exec-1", actor_kind="execution_plane",
                     issued_at=now, replay_policy="never",
                 )
@@ -902,7 +919,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     command_id=command_id + ":" + step,
                     idempotency_key=key + ":" + step,
                     operation_fingerprint=commands.fingerprint(step, {"missionId": mission_id, "taskId": task_id}),
-                    correlation_id=command.get("correlationId", "corr-model"),
+                    correlation_id=correlation_id,
                     actor_id="gk-1", actor_kind="governance_kernel",
                     issued_at=now, replay_policy="never",
                 )
@@ -970,17 +987,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     "contextSlice": ctx,
                     "operations": ["RepositoryRead", "FilesystemRead", "ArtifactCreate", "AnalysisOnly"],
                 }
-                svc.create_driver_run(
-                    {"schemaVersion": "1.0.0", "driverRunId": run_id, "driverId": "provider" if provider is not None else "hermes",
-                     "missionId": mission_id, "taskId": task_id, "workOrderVersion": 1,
-                     "externalRunId": None, "state": "created", "reconciliationStatus": "not_required",
-                     "createdAt": now},
-                    commands.command(command_id=command_id + ":drcreate", idempotency_key=key + ":drcreate",
-                                     operation_fingerprint=commands.fingerprint("create_driver_run", {"driverRunId": run_id}),
-                                     correlation_id=command.get("correlationId", "corr-model"),
-                                     actor_id="exec-1", actor_kind="execution_plane",
-                                     issued_at=now, replay_policy="never"),
-                )
+                # DriverRunCreated was committed atomically with approval use.
                 svc.transition_driver_run(run_id, "submitted", exec_meta("drsubmit"))
                 svc.transition_driver_run(run_id, "running", exec_meta("drrun"))
                 # The integrity baseline is CAPT-side evidence captured before the
@@ -1042,7 +1049,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                      "proposedAt": now, "sourceProposalId": None},
                     commands.command(command_id=command_id + ":claim", idempotency_key=key + ":claim",
                                      operation_fingerprint=commands.fingerprint("propose_claim", {"claimId": claim_id}),
-                                     correlation_id=command.get("correlationId", "corr-model"),
+                                     correlation_id=correlation_id,
                                      actor_id="cog-1", actor_kind="cognitive_plane",
                                      issued_at=now, replay_policy="never"),
                 )
@@ -1055,14 +1062,14 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 verification_meta = lambda step, verification_id: commands.command(
                     command_id=command_id + ":" + step, idempotency_key=key + ":" + step,
                     operation_fingerprint=commands.fingerprint("record_verification", {"verificationId": verification_id}),
-                    correlation_id=command.get("correlationId", "corr-model"),
+                    correlation_id=correlation_id,
                     actor_id="verification_pipeline", actor_kind="verification_plane",
                     issued_at=now, replay_policy="never",
                 )
                 svc.record_evidence(claim_id, evidence,
                     commands.command(command_id=command_id + ":evidence", idempotency_key=key + ":evidence",
                                      operation_fingerprint=commands.fingerprint("record_evidence", {"evidenceId": ev_id}),
-                                     correlation_id=command.get("correlationId", "corr-model"),
+                                     correlation_id=correlation_id,
                                      actor_id="verification_pipeline", actor_kind="verification_plane",
                                      issued_at=now, replay_policy="never"),
                 )

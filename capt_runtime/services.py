@@ -781,10 +781,24 @@ class RuntimeService(object):
         use_id: str,
         now: str,
         metadata: Dict[str, Any],
+        driver_id: str = "hermes",
+        prepared_execution_digest: str = "sha256:" + "0" * 64,
     ) -> Dict[str, Any]:
-        """Atomically bind and consume one approved model execution admission."""
+        """Atomically consume approval and persist a DriverRun dispatch intent.
+
+        This is the irreversible admission boundary. The approval consumption,
+        durable DriverRunCreated intent, and caller command idempotency record
+        are one ``EventStore.commit_command`` transaction. A crash after return
+        is never permission to reconstruct or redispatch work.
+        """
         require("CommandMetadata", metadata)
         require_authority("consume_human_approval", metadata["actor"]["kind"])
+        if not prepared_execution_digest.startswith("sha256:"):
+            raise AuthorityViolation("PREPARED_EXECUTION_DIGEST_REQUIRED")
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            return {"status": "idempotent", "driverRunId": driver_run_id,
+                    "preparedExecutionDigest": prepared_execution_digest}
         stream = HumanApprovalAggregate.stream_id(request_id)
         current = self.store.require_state(stream)
         if current.get("operation") != operation:
@@ -839,11 +853,34 @@ class RuntimeService(object):
             mission_id=mission_id,
             task_id=task_id,
         )
+        run = {
+            "schemaVersion": "1.0.0", "driverRunId": driver_run_id,
+            "driverId": driver_id, "missionId": mission_id, "taskId": task_id,
+            "workOrderVersion": 1, "externalRunId": None, "state": "created",
+            "reconciliationStatus": "not_required", "createdAt": now,
+        }
+        require("DriverRun", run)
+        run_stream = DriverRunAggregate.stream_id(driver_run_id)
+        if self.store.aggregate_version(run_stream) != 0:
+            raise AuthorityViolation("MODEL_DRIVER_RUN_ALREADY_EXISTS")
+        run_event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev2", stream_id=run_stream,
+            event_type="DriverRunCreated",
+            payload={"eventType": "DriverRunCreated", "driverRun": run},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+            mission_id=mission_id, task_id=task_id,
+        )
         committed = self._commit(
-            [AppendRequest(stream, HumanApprovalAggregate.KIND, expected, event, state)],
+            [
+                AppendRequest(stream, HumanApprovalAggregate.KIND, expected, event, state),
+                AppendRequest(run_stream, DriverRunAggregate.KIND, 0, run_event,
+                              DriverRunAggregate.create(run)),
+            ],
             metadata,
         )
-        return {**state, "status": committed.get("status", "applied")}
+        return {**state, "status": committed.get("status", "applied"),
+                "driverRunId": driver_run_id,
+                "preparedExecutionDigest": prepared_execution_digest}
 
     # -- cancellation (M1) ------------------------------------------------
 

@@ -73,10 +73,11 @@ def _approved_run_payload(
 
 
 class _PreparedRunner:
-    def __init__(self, svc, *, prepare_error=None, result=None):
-        self.svc, self.prepare_error = svc, prepare_error
+    def __init__(self, svc, *, prepare_error=None, execute_error=None, result=None):
+        self.svc, self.prepare_error, self.execute_error = svc, prepare_error, execute_error
         self.result = result or {"missionId": "m-model-1", "taskId": "t-model-1", "driverRunId": "dr-model-1"}
         self.prepared = self.executed = None
+        self.execute_calls = 0
 
     def prepare(self, command):
         if self.prepare_error:
@@ -84,17 +85,83 @@ class _PreparedRunner:
         payload = command["payload"]
         approval = self.svc.store.require_state("human_approval-" + payload["approvalRequestId"])
         self.prepared = PreparedApprovedModelExecution(
-            command=freeze(command), approval_request_id=payload["approvalRequestId"],
+            command_id=command["commandId"], idempotency_key=command["idempotencyKey"],
+            correlation_id=command["correlationId"], issued_at=command["timestamp"],
+            approval_request_id=payload["approvalRequestId"],
             prompt_assembly_digest=approval["promptAssemblyDigest"],
             dispatch_prompt_digest="sha256:" + "a" * 64,
             mission_id=payload["missionId"], task_id=payload["taskId"],
-            driver_run_id=payload["driverRunId"], resource=payload["targetRoot"], data=freeze({}),
+            driver_run_id=payload["driverRunId"], resource=payload["targetRoot"],
+            objective=payload["objective"], provider_id=None, provider_model=None,
+            executable=None, data=freeze({}),
         )
         return self.prepared
 
     def execute(self, prepared):
+        self.execute_calls += 1
         self.executed = prepared
+        if self.execute_error:
+            raise self.execute_error
         return dict(self.result)
+
+
+def test_prepared_execution_digest_is_deterministic_and_frozen(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "ledger.db"))
+    try:
+        svc = RuntimeCommandService(runtime.store, "operator-x", "sess-1", runtime_service=runtime.service)
+        payload = _approved_run_payload(svc, {"objective": "x", "targetRoot": "/tmp"}, "digest")
+        runner = _PreparedRunner(svc)
+        prepared = runner.prepare(_envelope("run_approved_hermes_inspection", payload, key="digest-run"))
+        first = prepared.prepared_execution_digest
+        assert first == prepared.prepared_execution_digest
+        assert not hasattr(prepared, "command")
+        assert "providerKey" not in repr(prepared)
+        try:
+            prepared.data["objective"] = "tampered"
+        except TypeError:
+            pass
+        else:
+            raise AssertionError("prepared data was mutable")
+        assert first == prepared.prepared_execution_digest
+    finally:
+        runtime.close()
+
+
+def test_atomic_admission_creates_driver_intent_before_dispatch(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "ledger.db"))
+    try:
+        svc = RuntimeCommandService(runtime.store, "operator-x", "sess-1", runtime_service=runtime.service)
+        payload = _approved_run_payload(svc, {"objective": "x", "targetRoot": "/tmp"}, "atomic")
+        runner = _PreparedRunner(svc)
+        svc.approved_hermes_runner = runner
+        receipt = svc.execute(_envelope("run_approved_hermes_inspection", payload, key="atomic-run"))
+        assert receipt["status"] == "accepted"
+        approval = svc.store.require_state("human_approval-" + payload["approvalRequestId"])
+        run = svc.store.require_state("driverrun-" + payload["driverRunId"])
+        assert approval["state"] == "consumed"
+        assert run["state"] == "created"
+        assert runner.executed is runner.prepared  # same prepared object, no raw reconstruction
+    finally:
+        runtime.close()
+
+
+def test_crash_after_admission_never_redispatches(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "ledger.db"))
+    try:
+        svc = RuntimeCommandService(runtime.store, "operator-x", "sess-1", runtime_service=runtime.service)
+        payload = _approved_run_payload(svc, {"objective": "x", "targetRoot": "/tmp"}, "crash")
+        runner = _PreparedRunner(svc, execute_error=RuntimeError("simulated crash after admission"))
+        svc.approved_hermes_runner = runner
+        command = _envelope("run_approved_hermes_inspection", payload, key="crash-run")
+        assert svc.execute(command)["status"] == "rejected"
+        assert runner.execute_calls == 1
+        replay = svc.execute(command)
+        assert replay["status"] == "idempotent"
+        assert runner.execute_calls == 1
+        assert svc.store.require_state("human_approval-" + payload["approvalRequestId"])["state"] == "consumed"
+        assert svc.store.require_state("driverrun-" + payload["driverRunId"])["state"] == "created"
+    finally:
+        runtime.close()
 
 
 def test_composition_hermes_host_registers_and_wires_resolver(tmp_path: Path) -> None:
