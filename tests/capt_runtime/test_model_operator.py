@@ -11,6 +11,7 @@ from pathlib import Path
 from capt_runtime.composition import create_runtime
 from capt_runtime.drivers.hermes import DESCRIPTOR as HERMES_DESCRIPTOR
 from capt_runtime.drivers.hermes import HermesDriver, build_prompt
+from capt_runtime.prepared_execution import PreparedApprovedModelExecution, freeze
 from capt_runtime.task_resolver import TaskResolver
 from desktop.m1_command_service import RuntimeCommandService
 
@@ -71,6 +72,31 @@ def _approved_run_payload(
     }
 
 
+class _PreparedRunner:
+    def __init__(self, svc, *, prepare_error=None, result=None):
+        self.svc, self.prepare_error = svc, prepare_error
+        self.result = result or {"missionId": "m-model-1", "taskId": "t-model-1", "driverRunId": "dr-model-1"}
+        self.prepared = self.executed = None
+
+    def prepare(self, command):
+        if self.prepare_error:
+            raise self.prepare_error
+        payload = command["payload"]
+        approval = self.svc.store.require_state("human_approval-" + payload["approvalRequestId"])
+        self.prepared = PreparedApprovedModelExecution(
+            command=freeze(command), approval_request_id=payload["approvalRequestId"],
+            prompt_assembly_digest=approval["promptAssemblyDigest"],
+            dispatch_prompt_digest="sha256:" + "a" * 64,
+            mission_id=payload["missionId"], task_id=payload["taskId"],
+            driver_run_id=payload["driverRunId"], resource=payload["targetRoot"], data=freeze({}),
+        )
+        return self.prepared
+
+    def execute(self, prepared):
+        self.executed = prepared
+        return dict(self.result)
+
+
 def test_composition_hermes_host_registers_and_wires_resolver(tmp_path: Path) -> None:
     target = tmp_path / "target"
     target.mkdir()
@@ -96,17 +122,8 @@ def test_governed_hermes_op_routes_to_runner_and_is_idempotent(tmp_path: Path) -
     try:
         svc = RuntimeCommandService(runtime.store, "operator-x", "sess-1",
                                     runtime_service=runtime.service)
-        seen = {"calls": 0, "prior": None}
-
-        def stub_runner(command):
-            seen["calls"] += 1
-            if seen["prior"] is not None:
-                return {**seen["prior"], "_idempotent": True}
-            seen["prior"] = {"missionId": "m-model-1", "taskId": "t-model-1",
-                             "driverRunId": "dr-model-1"}
-            return seen["prior"]
-
-        svc.approved_hermes_runner = stub_runner
+        runner = _PreparedRunner(svc)
+        svc.approved_hermes_runner = runner
         payload = _approved_run_payload(
             svc, {"objective": "x", "targetRoot": "/tmp"}, "route"
         )
@@ -116,12 +133,10 @@ def test_governed_hermes_op_routes_to_runner_and_is_idempotent(tmp_path: Path) -
         first = svc.execute(cmd)
         assert first["status"] == "accepted"
         assert first["result"]["missionId"] == "m-model-1"
-        assert seen["calls"] == 1
-        # Same idempotency key -> receipt is idempotent and the runner
-        # re-emits the prior receipt (no new work, no reinference).
+        assert runner.executed is runner.prepared
+        # Same idempotency key is idempotent at the one-use admission boundary.
         second = svc.execute(cmd)
         assert second["status"] == "idempotent"
-        assert seen["calls"] == 2
         assert second["result"]["missionId"] == "m-model-1"
     finally:
         runtime.close()
@@ -132,7 +147,8 @@ def test_governed_hermes_in_progress_is_not_presented_as_accepted(tmp_path: Path
     runtime = create_runtime(str(tmp_path / "ledger.db"))
     try:
         svc = RuntimeCommandService(runtime.store, "operator-x", "sess-1", runtime_service=runtime.service)
-        svc.approved_hermes_runner = lambda _cmd: {"status": "in_progress", "commandId": "cmd-model-1"}
+        svc.approved_hermes_runner = _PreparedRunner(
+            svc, result={"status": "in_progress", "commandId": "cmd-model-1"})
         payload = _approved_run_payload(
             svc, {"objective": "x", "targetRoot": "/tmp"}, "progress"
         )
@@ -158,6 +174,48 @@ def test_governed_hermes_op_rejected_when_runner_unset(tmp_path: Path) -> None:
         assert receipt["status"] == "rejected"
         assert receipt["classification"] == "internal_failure"
         assert receipt["error"]["code"] == "HERMES_DRIVER_UNAVAILABLE"
+    finally:
+        runtime.close()
+
+
+def test_invalid_context_preparation_does_not_consume_approval(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "ledger.db"))
+    try:
+        svc = RuntimeCommandService(runtime.store, "operator-x", "sess-1", runtime_service=runtime.service)
+        payload = _approved_run_payload(svc, {"objective": "x", "targetRoot": "/tmp"}, "invalid-context")
+        svc.approved_hermes_runner = _PreparedRunner(svc, prepare_error=ValueError("MODEL_TASK_OBJECTIVE_OR_TARGET_MISSING"))
+        receipt = svc.execute(_envelope("run_approved_hermes_inspection", payload, key="invalid-context-run"))
+        assert receipt["status"] == "rejected"
+        assert svc.store.require_state("human_approval-" + payload["approvalRequestId"])["state"] == "approved"
+    finally:
+        runtime.close()
+
+
+def test_title_preparation_failure_does_not_consume_approval(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "ledger.db"))
+    try:
+        svc = RuntimeCommandService(runtime.store, "operator-x", "sess-1", runtime_service=runtime.service)
+        payload = _approved_run_payload(svc, {"objective": "x", "targetRoot": "/tmp"}, "title")
+        svc.approved_hermes_runner = _PreparedRunner(svc, prepare_error=ValueError("MODEL_VISIBLE_PROMPT_TITLE_TOO_LONG"))
+        receipt = svc.execute(_envelope("run_approved_hermes_inspection", payload, key="title-run"))
+        assert receipt["status"] == "rejected"
+        assert svc.store.require_state("human_approval-" + payload["approvalRequestId"])["state"] == "approved"
+    finally:
+        runtime.close()
+
+
+def test_prepared_identity_is_admitted_then_same_object_is_dispatched(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "ledger.db"))
+    try:
+        svc = RuntimeCommandService(runtime.store, "operator-x", "sess-1", runtime_service=runtime.service)
+        payload = _approved_run_payload(svc, {"objective": "x", "targetRoot": "/tmp"}, "identity")
+        runner = _PreparedRunner(svc)
+        svc.approved_hermes_runner = runner
+        receipt = svc.execute(_envelope("run_approved_hermes_inspection", payload, key="identity-run"))
+        assert receipt["status"] == "accepted"
+        assert runner.executed is runner.prepared
+        assert runner.executed.approval_identity["driverRunId"] == payload["driverRunId"]
+        assert svc.store.require_state("human_approval-" + payload["approvalRequestId"])["state"] == "consumed"
     finally:
         runtime.close()
 

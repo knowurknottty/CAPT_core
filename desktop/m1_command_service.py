@@ -14,10 +14,6 @@ from typing import Any, Dict, Optional
 from capt_runtime import commands
 from capt_runtime.errors import CaptRuntimeError, IdempotencyConflict
 from capt_runtime.approval_dispatch import register_expected_prompt_digest
-from capt_runtime.model_approval_binding import (
-    build_bound_model_operator_approval,
-    staging_root_for_ledger,
-)
 from capt_runtime.prompt_approval import request_model_prompt_approval
 from capt_runtime.services import RuntimeService
 from capt_runtime.store import EventStore
@@ -74,7 +70,7 @@ class RuntimeCommandService:
         self.session_id = session_id
         self.memory_engine = memory_engine
         self.fixed_openharness_runner = None
-        self.approved_hermes_runner = None
+        self.approved_hermes_runner: Any = None
         self.runtime_checkpoint_runner = None
         self.shutdown_runner = None
         self.resume_runner = None
@@ -257,7 +253,7 @@ class RuntimeCommandService:
 
             elif op == "run_approved_hermes_inspection":
                 runner = getattr(self, "approved_hermes_runner", None)
-                if runner is None:
+                if runner is None or not callable(getattr(runner, "prepare", None)) or not callable(getattr(runner, "execute", None)):
                     return self._receipt(
                         cmd,
                         status="rejected",
@@ -266,9 +262,8 @@ class RuntimeCommandService:
                             cmd, "internal_failure", "HERMES_DRIVER_UNAVAILABLE"
                         ),
                     )
-                p = cmd["payload"]
                 run_fingerprint = commands.fingerprint(
-                    "run_approved_hermes_inspection", p
+                    "run_approved_hermes_inspection", cmd["payload"]
                 )
                 prior_run_command = self.store.find_idempotent(cmd["idempotencyKey"])
                 if (
@@ -279,34 +274,10 @@ class RuntimeCommandService:
                         "idempotency key %r reused with a different operation fingerprint"
                         % cmd["idempotencyKey"]
                     )
-                approval_request_id = str(p.get("approvalRequestId", ""))
-                if not approval_request_id:
-                    from capt_runtime.errors import AuthorityViolation
-                    raise AuthorityViolation("MODEL_PROMPT_APPROVAL_RECEIPT_REQUIRED")
-                mission_id = str(p.get("missionId") or ("m-model-" + cmd["commandId"]))
-                task_id = str(p.get("taskId") or (mission_id + "-task-1"))
-                driver_run_id = str(p.get("driverRunId") or ("dr-model-" + cmd["commandId"]))
-                target_root = str(p.get("targetRoot", ""))
-                assembly = build_bound_model_operator_approval(
-                    human_prompt=str(p.get("objective", "")),
-                    response_mode=str(p.get("responseMode", "SPOCK")),
-                    enhancement_engine=str(p.get("promptEnhancement", "OFF")),
-                    mission_id=mission_id,
-                    task_id=task_id,
-                    driver_run_id=driver_run_id,
-                    target_root=target_root,
-                    provider=str(p.get("provider", "") or ""),
-                    model=str(p.get("model", "") or ""),
-                    requested_context_budget=int(p.get("requestedContextBudget", 32_000)),
-                    human_verification_required=bool(p.get("humanVerificationRequired", True)),
-                    executable=str(p.get("executable", "") or ""),
-                    staging_root=staging_root_for_ledger(self.store.path, driver_run_id),
-                )
-                # Deterministic local preflight precedes irreversible one-use
-                # admission.  The runner persists this exact prompt as TaskNode.title;
-                # a schema rejection here proves external dispatch cannot occur.
-                if len(assembly["modelVisiblePrompt"]) > 512:
-                    raise ValueError("MODEL_VISIBLE_PROMPT_TITLE_TOO_LONG")
+                # Preparation is deterministic and side-effect-free. It must
+                # precede one-use approval consumption.
+                prepared = runner.prepare(cmd)
+                identity = prepared.approval_identity
                 use_meta = commands.command(
                     command_id="cmd-approval-use-" + commands.fingerprint(
                         "approval-use", {"idempotencyKey": cmd["idempotencyKey"]}
@@ -317,12 +288,12 @@ class RuntimeCommandService:
                     operation_fingerprint=commands.fingerprint(
                         "consume_human_approval",
                         {
-                            "requestId": approval_request_id,
-                            "promptAssemblyDigest": assembly["promptAssemblyDigest"],
-                            "missionId": mission_id,
-                            "taskId": task_id,
-                            "driverRunId": driver_run_id,
-                            "resource": target_root,
+                            "requestId": prepared.approval_request_id,
+                            "promptAssemblyDigest": identity["promptAssemblyDigest"],
+                            "missionId": identity["missionId"],
+                            "taskId": identity["taskId"],
+                            "driverRunId": identity["driverRunId"],
+                            "resource": identity["resource"],
                             "useId": cmd["idempotencyKey"],
                         },
                     ),
@@ -332,22 +303,24 @@ class RuntimeCommandService:
                     issued_at=cmd.get("timestamp") or _now_rfc3339(),
                     replay_policy="never",
                 )
-                self.svc.admit_approved_model_execution(
-                    approval_request_id,
-                    assembly["promptAssemblyDigest"],
-                    "ModelOperatorInspection",
-                    mission_id=mission_id,
-                    task_id=task_id,
-                    driver_run_id=driver_run_id,
-                    resource=target_root,
+                admission = self.svc.admit_approved_model_execution(
+                    prepared.approval_request_id,
+                    identity["promptAssemblyDigest"],
+                    prepared.operation,
+                    mission_id=identity["missionId"],
+                    task_id=identity["taskId"],
+                    driver_run_id=identity["driverRunId"],
+                    resource=identity["resource"],
                     use_id=cmd["idempotencyKey"],
                     now=cmd.get("timestamp") or _now_rfc3339(),
                     metadata=use_meta,
                 )
                 register_expected_prompt_digest(
-                    driver_run_id, assembly["dispatchPromptDigest"]
+                    identity["driverRunId"], prepared.dispatch_prompt_digest
                 )
-                result = runner(cmd)
+                result = runner.execute(prepared)
+                if admission.get("status") == "idempotent":
+                    result["_idempotent"] = True
                 if result.get("status") == "in_progress":
                     return self._receipt(
                         cmd,

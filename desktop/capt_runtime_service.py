@@ -59,6 +59,10 @@ from capt_runtime.composition import RuntimeComposition, create_runtime
 from capt_runtime.operator_provenance import (
     build_cognitive_provenance, build_prompt_assembly, effective_context_budget,
 )
+from capt_runtime.model_approval_binding import (
+    build_bound_model_operator_approval, staging_root_for_ledger,
+)
+from capt_runtime.prepared_execution import PreparedApprovedModelExecution, freeze
 
 from desktop.m1_command_service import RuntimeCommandService
 
@@ -676,10 +680,9 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             # mission/task state; the frozen work order carries only the
             # missionId/taskId references; HermesDriver derives its prompt from
             # the resolved authoritative task (TaskResolver) inside CAPT.
-            def _run_approved_hermes(command: Dict[str, Any]):
-                key = command["idempotencyKey"]
+            def _prepare_approved_hermes(command: Dict[str, Any]) -> PreparedApprovedModelExecution:
+                """Validate and freeze every deterministic dispatch input."""
                 payload = command.get("payload", {})
-                command_fingerprint = commands.fingerprint("run_approved_hermes_inspection", payload)
                 objective = payload.get("objective")
                 target_root = payload.get("targetRoot")
                 if not objective or not target_root:
@@ -725,10 +728,62 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 approval_request_id = payload.get("approvalRequestId")
                 if not approval_request_id:
                     raise AuthorityViolation("MODEL_PROMPT_APPROVAL_RECEIPT_REQUIRED")
-                svc.require_approved_prompt_assembly(
-                    str(approval_request_id), prompt_assembly["promptAssemblyDigest"],
-                    "ModelOperatorInspection",
+                bound_assembly = build_bound_model_operator_approval(
+                    human_prompt=str(objective), response_mode=response_mode,
+                    enhancement_engine=enhancement_engine, mission_id=str(mission_id),
+                    task_id=str(task_id), driver_run_id=str(run_id), target_root=str(target_root),
+                    provider=str(provider_id or ""), model=str(provider_model or ""),
+                    requested_context_budget=requested_context_budget,
+                    human_verification_required=human_verification_required,
+                    executable=str(executable or ""),
+                    staging_root=staging_root_for_ledger(store.path, str(run_id)),
                 )
+                if len(bound_assembly["modelVisiblePrompt"]) > 512:
+                    raise ValueError("MODEL_VISIBLE_PROMPT_TITLE_TOO_LONG")
+                # This read-only check catches a mismatched approval before the
+                # command service consumes the one-use receipt.
+                svc.require_approved_prompt_assembly(
+                    str(approval_request_id), bound_assembly["promptAssemblyDigest"],
+                    "ModelOperatorInspection")
+                return PreparedApprovedModelExecution(
+                    command=freeze(command), approval_request_id=str(approval_request_id),
+                    prompt_assembly_digest=bound_assembly["promptAssemblyDigest"],
+                    dispatch_prompt_digest=bound_assembly["dispatchPromptDigest"],
+                    mission_id=str(mission_id), task_id=str(task_id), driver_run_id=str(run_id),
+                    resource=str(target_root), data=freeze({
+                        "provider": provider, "providerKey": provider_key,
+                        "providerModel": provider_model, "executable": executable,
+                        "requestedContextBudget": requested_context_budget,
+                        "effectiveBudget": effective_budget,
+                        "responseMode": response_mode,
+                        "enhancementEngine": enhancement_engine,
+                        "humanVerificationRequired": human_verification_required,
+                        "promptAssembly": prompt_assembly,
+                    }),
+                )
+
+            def _execute_approved_hermes(prepared: PreparedApprovedModelExecution):
+                command = prepared.command
+                payload = command["payload"]
+                key = command["idempotencyKey"]
+                command_fingerprint = commands.fingerprint("run_approved_hermes_inspection", payload)
+                objective = payload["objective"]
+                target_root = prepared.resource
+                command_id = command["commandId"]
+                now = command.get("timestamp") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                mission_id, task_id, run_id = prepared.mission_id, prepared.task_id, prepared.driver_run_id
+                grant_id = payload.get("grantId") or ("g-model-" + command_id)
+                lease_id = payload.get("leaseId") or ("l-model-" + command_id)
+                claim_id = payload.get("claimId") or ("cl-model-" + command_id)
+                policy_id = payload.get("policyDecisionId") or ("pd-model-" + command_id)
+                provider, provider_key = prepared.data["provider"], prepared.data["providerKey"]
+                provider_model, executable = prepared.data["providerModel"], prepared.data["executable"]
+                requested_context_budget = prepared.data["requestedContextBudget"]
+                effective_budget = prepared.data["effectiveBudget"]
+                response_mode = prepared.data["responseMode"]
+                enhancement_engine = prepared.data["enhancementEngine"]
+                human_verification_required = prepared.data["humanVerificationRequired"]
+                prompt_assembly = prepared.data["promptAssembly"]
                 admission = store.claim_command(key, command_fingerprint, command["commandId"])
                 if admission.get("replayed"):
                     return {**admission, "_idempotent": admission.get("status") != "in_progress"}
@@ -1030,7 +1085,11 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 }
                 store.complete_claimed_command(key, command_fingerprint, receipt)
                 return receipt
-            cmd_svc.approved_hermes_runner = _run_approved_hermes
+            class _PreparedApprovedHermesRunner:
+                prepare = staticmethod(_prepare_approved_hermes)
+                execute = staticmethod(_execute_approved_hermes)
+
+            cmd_svc.approved_hermes_runner = _PreparedApprovedHermesRunner()
             def _runtime_checkpoint(command: Dict[str, Any]):
                 from capt_runtime.checkpoint import create_checkpoint
                 from capt_runtime.contracts import digest
