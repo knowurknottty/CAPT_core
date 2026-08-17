@@ -31,7 +31,7 @@ def _start_runtime(tmp: Path, *, env: dict | None = None):
     root = Path(__file__).resolve().parents[2]
     proc = __import__("subprocess").Popen(
         [os.environ.get("CAPT_TEST_PYTHON", sys.executable), "-c",
-         "import runpy; runpy.run_path('desktop/capt_runtime_service.py', run_name='__main__')",
+         "import runpy; runpy.run_module('desktop.capt_runtime_service', run_name='__main__')",
          "--ledger", str(ledger), "--sock", str(sock), "--token-file", str(token)],
         cwd=root, stdout=__import__("subprocess").PIPE, stderr=__import__("subprocess").PIPE,
         env={**os.environ, **(env or {})},
