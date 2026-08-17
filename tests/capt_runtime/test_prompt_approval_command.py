@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 from desktop.m1_command_service import RuntimeCommandService
 from capt_runtime.services import RuntimeService
 from capt_runtime.store import EventStore
@@ -13,7 +15,7 @@ def _command(op, payload, command_id="cmd-prompt-approval"):
         "schemaVersion": "1.0.0",
         "correlationId": "corr-prompt-approval",
         "idempotencyKey": command_id + "-idem",
-        "timestamp": "2026-08-16T00:00:00Z",
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "op": op,
         "payload": payload,
     }

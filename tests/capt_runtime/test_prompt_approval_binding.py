@@ -120,7 +120,6 @@ def test_runtime_planner_builds_prompt_approval_receipt_for_exact_model_assembly
     assert state["state"] == "requested"
     assert state["operation"] == "ModelOperatorInspection"
     assert state["promptAssemblyDigest"] == result["promptAssemblyDigest"]
-    assert state["remainingUses"] == 1
 
     approve(svc, "r-model-1")
     approved = svc.require_approved_prompt_assembly(

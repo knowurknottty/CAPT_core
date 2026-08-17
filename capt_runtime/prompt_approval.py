@@ -36,8 +36,8 @@ def request_model_prompt_approval(
 
     The authenticated outer command must be human-authored. The resulting
     HumanApprovalRequest is authored by the execution plane, as required by the
-    existing runtime authority matrix. IDs are deterministic from the outer
-    command unless the caller supplies explicit planned run IDs.
+    existing runtime authority matrix. Planned run IDs are stable for an exact
+    command envelope retry and distinct for a new operator approval attempt.
     """
     require("CommandMetadata", operator_metadata)
     actor_kind = operator_metadata.get("actor", {}).get("kind")
@@ -59,7 +59,10 @@ def request_model_prompt_approval(
         enhancement_engine=enhancement_engine,
     )
 
-    suffix = operator_metadata["commandId"]
+    # RuntimeClient gives every operator command envelope a fresh correlation
+    # id. Exact envelope retries retain it; a deliberate new approval attempt
+    # gets a new one even when the prompt payload is unchanged.
+    suffix = operator_metadata["correlationId"]
     request_id = str(intent.get("requestId") or ("approval-model-" + suffix))
     mission_id = str(intent.get("missionId") or ("m-model-" + suffix))
     task_id = str(intent.get("taskId") or (mission_id + "-task-1"))
@@ -81,14 +84,13 @@ def request_model_prompt_approval(
         ),
         "requestedBy": {"actorId": "exec-1", "kind": "execution_plane"},
         "expiresAt": str(intent.get("expiresAt") or _expiry_from(operator_metadata["issuedAt"])),
-        "remainingUses": 1,
         "correlationId": operator_metadata["correlationId"],
         "createdAt": operator_metadata["issuedAt"],
         "promptAssemblyDigest": assembly["promptAssemblyDigest"],
     }
     inner_metadata = commands.command(
-        command_id=operator_metadata["commandId"] + ":approval",
-        idempotency_key=operator_metadata["idempotencyKey"] + ":approval",
+        command_id=(operator_metadata["commandId"] + ":" + suffix + ":approval"),
+        idempotency_key=(operator_metadata["idempotencyKey"] + ":" + suffix + ":approval"),
         operation_fingerprint=commands.fingerprint("request_human_approval", request),
         correlation_id=operator_metadata["correlationId"],
         actor_id="exec-1",
