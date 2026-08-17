@@ -5,7 +5,7 @@ on:
     branches:
       - verify/terra-pr47-approval-hardening-r1
     paths:
-      - tools/terra_apply_approval_hardening_r4.py
+      - tools/terra_apply_approval_hardening_r5.py
 
 permissions:
   contents: write
@@ -22,8 +22,8 @@ jobs:
           python-version: "3.12"
       - name: Install test tooling
         run: python -m pip install --upgrade pip pytest jsonschema textual
-      - name: Apply exact-source hardening patch
-        run: python tools/terra_apply_approval_hardening_r4.py
+      - name: Apply fifth-pass hardening patch
+        run: python tools/terra_apply_approval_hardening_r5.py
       - name: Regenerate contract bindings
         run: python contracts/tools/generate.py
       - name: Check contract drift
