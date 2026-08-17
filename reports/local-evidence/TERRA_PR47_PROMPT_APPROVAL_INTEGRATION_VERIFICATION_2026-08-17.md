@@ -128,7 +128,7 @@ The unavailable Hermes report cannot support `HERMES_LOCAL_002_COMPLETE` in this
 
 ### Pass 5 — Release-gate re-review
 
-Fresh re-review preserved these independent conclusions: (1) runtime durable approval exists; (2) the digest correctly protects fields that the current canonical builder actually includes; (3) the digest does not bind several execution-relevant fields; (4) expiry and run identity are not checked at use; (5) the command surface accepts but does not advertise the new operation; and (6) full regression is red. No source was changed.
+Fresh re-review preserved these independent conclusions: (1) runtime durable approval exists; (2) the digest correctly protects fields that the current canonical builder actually includes; (3) the digest does not bind several execution-relevant fields; (4) expiry and run identity are not checked at use; (5) normal RuntimeClient retries create new approval requests rather than idempotent replay because correlation changes; (6) Hermes dispatches a larger unbound prompt; (7) the command surface accepts but does not advertise the new operation; and (8) full regression is red. No authoritative source was changed.
 
 ## 5. Approval / Digest Binding Analysis
 
@@ -210,6 +210,33 @@ Severity: **medium** by current direct-TUI impact; release-blocking only togethe
 - Observed: omitted.
 - Impact: discovery/onboarding/external clients honoring capabilities fail closed incorrectly.
 - Recommended correction: mechanical list update plus socket-level regression.
+
+### D-06 — HIGH — normal RuntimeClient approval retry is not idempotent
+
+- File/symbol: `capt_runtime/prompt_approval.py:62-69,91-101`; `desktop/desktop_runtime_client.py:119-144`.
+- Reproduction: send `request_model_prompt_approval` twice through the real RuntimeClient with identical payload and idempotency key. Live result: both receipts `accepted`; `approval-model-corr-ffc4...` and `approval-model-corr-dbda...` were distinct.
+- Expected: an exact retry returns the same durable request / idempotent receipt, as planner comments claim.
+- Observed: RuntimeClient creates a fresh random correlation per invocation, while planner derives request and inner idempotency identities from correlation. The outer approval command itself is not durably claimed.
+- Impact: retry produces duplicate approval requests instead of stable replay, undermining audit correlation and the stated retry contract.
+- Recommended correction: preserve correlation across an exact idempotency retry, or derive approval identity from a durable command identity and claim the outer command before planning; add an actual RuntimeClient retry regression.
+
+### D-07 — HIGH for Hermes / MEDIUM for provider — approved text is not the actual Hermes dispatch prompt
+
+- File/symbol: `desktop/capt_runtime_service.py:716-735`; `capt_runtime/drivers/hermes.py:167-229,345-380`; `capt_runtime/drivers/provider.py:115-136`.
+- Reproduction: trace the runner: it persists `modelVisiblePrompt` as task objective, then Hermes wraps that objective with target/path/tool/budget/read-only instructions using `build_prompt` before external dispatch.
+- Expected: approval binds a digest of the actual model prompt admitted at the external boundary, or explicitly limits its claim to the smaller objective projection.
+- Observed: Hermes has a distinct larger prompt without an actual-prompt digest or equality check. Provider diagnostics hashes submitted text, but that digest is not persisted/compared to the approval’s `modelVisiblePromptDigest`.
+- Impact: the PR claim “exact model-visible PromptAssembly” is false for Hermes and only dataflow-inferred for provider.
+- Recommended correction: construct and approve the complete driver-specific prompt at admission, or bind a canonical immutable prompt manifest and record/compare the exact dispatched prompt digest per driver.
+
+### D-08 — MEDIUM — caller-supplied request ID can recreate an existing approval aggregate
+
+- File/symbol: `capt_runtime/prompt_approval.py:65-69`; `capt_runtime/services.py:668-696`.
+- Reproduction: submit an intent containing a pre-existing `requestId` under a new correlation/derived inner idempotency key.
+- Expected: an existing approval stream is rejected or idempotently replayed; terminal approved state cannot be recreated as requested.
+- Observed: planner accepts caller request ID; `_append_request_human_approval` uses the current aggregate version and unconditionally applies `HumanApprovalAggregate.create`, which produces `state="requested"`.
+- Impact: authenticated callers that know a request ID can at least reset/replace its projected approval state; exact exploitability depends on ingress authorization, but the aggregate creation lacks a first-create guard.
+- Recommended correction: reject existing request IDs unless the durable command fingerprint/idempotency proves a replay; add terminal-state and concurrent-create tests.
 
 ## 9. Non-Blocking Observations
 
