@@ -5,7 +5,7 @@ on:
     branches:
       - verify/terra-pr47-approval-hardening-r1
     paths:
-      - tools/terra_apply_d09_living_docs.py
+      - tools/terra_apply_d09_living_docs_r2.py
 
 permissions:
   contents: write
@@ -20,11 +20,12 @@ jobs:
       - name: Pin main and preserve applicator
         run: |
           cp tools/terra_apply_d09_living_docs.py /tmp/terra_apply_d09_living_docs.py
+          cp tools/terra_apply_d09_living_docs_r2.py /tmp/terra_apply_d09_living_docs_r2.py
           git fetch origin main
           test "$(git rev-parse origin/main)" = "ffdc41e6b579291b120dc1a23b5d3d0f1461321c"
           git checkout -B main origin/main
       - name: Apply five-pass living-doc reconciliation
-        run: python /tmp/terra_apply_d09_living_docs.py
+        run: python /tmp/terra_apply_d09_living_docs_r2.py
       - name: Verify exact public-doc scope
         run: |
           test "$(git diff --name-only | wc -l | tr -d ' ')" = "17"
