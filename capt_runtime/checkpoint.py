@@ -31,6 +31,7 @@ _KIND_TO_FIELD = {
     "capability": "capabilityVersions",
     "driverrun": "driverRunVersions",
     "claim": "claimVersions",
+    "human_approval": "humanApprovalVersions",
 }
 
 
@@ -114,6 +115,9 @@ def create_checkpoint(
             versions["driverRunVersions"], key=lambda e: e["streamId"]
         ),
         "claimVersions": sorted(versions["claimVersions"], key=lambda e: e["streamId"]),
+        "humanApprovalVersions": sorted(
+            versions["humanApprovalVersions"], key=lambda e: e["streamId"]
+        ),
         "activeLeaseIds": sorted(active_lease_ids),
         "activeReservationIds": sorted(open_reservation_ids),
         "pendingOutboxEventIds": store.pending_outbox(),

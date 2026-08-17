@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:64f2dc1488353b345d48b413e326718d56296eed95b576c9db9ad0e19c5925bb
+# source digest:  sha256:59bf06c0abc36da44f6f6841c1886dcde6b5d470790d65c42f5d5b15bfc0aa95
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -275,6 +275,7 @@ class CheckpointManifest(object):
     runtimeVersion: str
     schemaVersion: SchemaVersion
     taskVersions: List[StreamVersionEntry]
+    humanApprovalVersions: List[StreamVersionEntry] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -587,6 +588,22 @@ class ExtensionEnvelope(object):
     namespace: str
     payloadDigest: Digest
     payloadJson: str
+
+
+@dataclass(frozen=True)
+class HumanApprovalConsumption(object):
+    """Durable one-use admission of a previously approved model execution."""
+
+    consumedAt: Timestamp
+    driverRunId: Identifier
+    missionId: Identifier
+    operation: str
+    promptAssemblyDigest: Digest
+    requestId: Identifier
+    resource: str
+    schemaVersion: SchemaVersion
+    taskId: Identifier
+    useId: Identifier
 
 
 @dataclass(frozen=True)
@@ -1401,6 +1418,14 @@ class EvidenceRecordedPayload(object):
 
 
 @dataclass(frozen=True)
+class HumanApprovalConsumedPayload(object):
+    """HumanApprovalConsumedPayload"""
+
+    consumption: HumanApprovalConsumption
+    eventType: Literal["HumanApprovalConsumed"]
+
+
+@dataclass(frozen=True)
 class HumanApprovalDecidedPayload(object):
     """HumanApprovalDecidedPayload"""
 
@@ -1481,7 +1506,7 @@ class TaskTransitionedPayload(object):
 
 
 # discriminated on 'eventType'
-EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload]
+EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload]
 
 
 class EventType(str, Enum):
@@ -1509,6 +1534,7 @@ class EventType(str, Enum):
     CLAIMGUARDDECIDED = "ClaimGuardDecided"
     HUMANAPPROVALREQUESTED = "HumanApprovalRequested"
     HUMANAPPROVALDECIDED = "HumanApprovalDecided"
+    HUMANAPPROVALCONSUMED = "HumanApprovalConsumed"
 
 
 @dataclass(frozen=True)

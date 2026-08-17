@@ -10,6 +10,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict
 
+from ..approval_dispatch import require_expected_prompt_digest
+
 DRIVER_ID = "provider"
 DESCRIPTOR = {
     "schemaVersion": "1.0.0",
@@ -121,6 +123,7 @@ class ProviderDriver:
             else "Provide a bounded evidence-backed observation."
         )
         prompt_digest = "sha256:" + hashlib.sha256(prompt.encode()).hexdigest()
+        require_expected_prompt_digest(rid, prompt_digest)
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
         if self.api_key:
             headers["Authorization"] = "Bearer " + self.api_key

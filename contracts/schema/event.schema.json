@@ -30,7 +30,8 @@
         "ClaimVerified",
         "ClaimGuardDecided",
         "HumanApprovalRequested",
-        "HumanApprovalDecided"
+        "HumanApprovalDecided",
+        "HumanApprovalConsumed"
       ]
     },
     "EventPayload": {
@@ -267,6 +268,16 @@
           "properties": {
             "eventType": { "type": "string", "const": "HumanApprovalDecided" },
             "decision": { "$ref": "common.schema.json#/$defs/HumanApprovalDecision" }
+          }
+        },
+        {
+          "title": "HumanApprovalConsumedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "consumption"],
+          "properties": {
+            "eventType": { "type": "string", "const": "HumanApprovalConsumed" },
+            "consumption": { "$ref": "common.schema.json#/$defs/HumanApprovalConsumption" }
           }
         }
       ]

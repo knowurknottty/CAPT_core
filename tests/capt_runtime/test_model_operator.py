@@ -15,17 +15,59 @@ from capt_runtime.task_resolver import TaskResolver
 from desktop.m1_command_service import RuntimeCommandService
 
 
-def _envelope(op: str, payload: dict, *, operator: str = "operator-x", session: str = "sess-1") -> dict:
+def _envelope(
+    op: str,
+    payload: dict,
+    *,
+    operator: str = "operator-x",
+    session: str = "sess-1",
+    key: str | None = None,
+) -> dict:
+    token = key or op
     return {
-        "commandId": "cmd-model-1",
+        "commandId": "cmd-" + token,
         "operatorId": operator,
         "sessionId": session,
         "schemaVersion": "1.0.0",
-        "correlationId": "corr-model",
-        "idempotencyKey": "idem-model-1",
-        "timestamp": "2026-08-05T00:00:00Z",
+        "correlationId": "corr-" + token,
+        "idempotencyKey": "idem-" + token,
+        "timestamp": "2026-08-17T10:00:00Z",
         "op": op,
         "payload": payload,
+    }
+
+
+def _approved_run_payload(
+    svc: RuntimeCommandService, payload: dict, key: str
+) -> dict:
+    request_payload = {**payload, "expiresAt": "2030-01-01T00:00:00Z"}
+    request = svc.execute(
+        _envelope(
+            "request_model_prompt_approval",
+            request_payload,
+            key=key + "-request",
+        )
+    )
+    assert request["status"] == "accepted"
+    planned = request["result"]
+    decision = svc.execute(
+        _envelope(
+            "submit_approval_decision",
+            {"requestId": planned["requestId"], "decision": "approve"},
+            key=key + "-decision",
+        )
+    )
+    assert decision["status"] == "accepted"
+    authoritative = svc.store.require_state(
+        "human_approval-" + planned["requestId"]
+    )
+    assert authoritative["state"] == "approved"
+    return {
+        **payload,
+        "approvalRequestId": planned["requestId"],
+        "missionId": planned["missionId"],
+        "taskId": planned["taskId"],
+        "driverRunId": planned["driverRunId"],
     }
 
 
@@ -65,8 +107,12 @@ def test_governed_hermes_op_routes_to_runner_and_is_idempotent(tmp_path: Path) -
             return seen["prior"]
 
         svc.approved_hermes_runner = stub_runner
-        cmd = _envelope("run_approved_hermes_inspection",
-                        {"objective": "x", "targetRoot": "/tmp"})
+        payload = _approved_run_payload(
+            svc, {"objective": "x", "targetRoot": "/tmp"}, "route"
+        )
+        cmd = _envelope(
+            "run_approved_hermes_inspection", payload, key="route-run"
+        )
         first = svc.execute(cmd)
         assert first["status"] == "accepted"
         assert first["result"]["missionId"] == "m-model-1"
@@ -87,7 +133,14 @@ def test_governed_hermes_in_progress_is_not_presented_as_accepted(tmp_path: Path
     try:
         svc = RuntimeCommandService(runtime.store, "operator-x", "sess-1", runtime_service=runtime.service)
         svc.approved_hermes_runner = lambda _cmd: {"status": "in_progress", "commandId": "cmd-model-1"}
-        receipt = svc.execute(_envelope("run_approved_hermes_inspection", {"objective": "x", "targetRoot": "/tmp"}))
+        payload = _approved_run_payload(
+            svc, {"objective": "x", "targetRoot": "/tmp"}, "progress"
+        )
+        receipt = svc.execute(
+            _envelope(
+                "run_approved_hermes_inspection", payload, key="progress-run"
+            )
+        )
         assert receipt["status"] == "in_progress"
         assert receipt["classification"] == "in_progress"
     finally:

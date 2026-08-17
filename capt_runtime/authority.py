@@ -35,6 +35,7 @@ _PERMITTED: Dict[str, FrozenSet[str]] = {
     "submit_result": frozenset({EXECUTION, SYSTEM}),
     "request_human_approval": frozenset({EXECUTION, GOVERNANCE, SYSTEM}),
     "submit_human_approval_decision": frozenset({HUMAN}),
+    "consume_human_approval": frozenset({EXECUTION, SYSTEM}),
     "cancel_task": frozenset({EXECUTION, HUMAN, SYSTEM}),
     "cancel_driver_run": frozenset({EXECUTION, HUMAN, SYSTEM}),
     "record_evidence": frozenset({VERIFICATION, EXECUTION, SYSTEM}),

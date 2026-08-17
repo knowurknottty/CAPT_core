@@ -485,9 +485,13 @@ class CaptTUI(App):
             "targetRoot": str(Path.cwd()),
             "promptEnhancement": engine,
             "responseMode": str(self.query_one("#response-mode", Select).value),
+            "requestedContextBudget": int(str(self.query_one("#context-budget", Select).value)),
+            "humanVerificationRequired": self.query_one("#human-verification", Checkbox).value,
         }
         try:
-            request_receipt = self._op.request_prompt_approval(payload)
+            request_receipt = self._op.request_prompt_approval(
+                payload, "tui-approval-" + uuid.uuid4().hex
+            )
             if request_receipt.get("status") == "rejected":
                 detail = request_receipt.get("detail") or request_receipt.get("error")
                 raise RuntimeError("prompt approval request rejected: %s" % detail)

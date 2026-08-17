@@ -671,6 +671,12 @@ class RuntimeService(object):
         require("HumanApprovalRequest", request)
         require("CommandMetadata", metadata)
         require_authority("request_human_approval", metadata["actor"]["kind"])
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            return self._commit([], metadata)
+        stream = HumanApprovalAggregate.stream_id(request["requestId"])
+        if self.store.aggregate_version(stream) != 0:
+            raise AuthorityViolation("HUMAN_APPROVAL_REQUEST_ALREADY_EXISTS")
         return self._commit(
             [self._append_request_human_approval(request, metadata)], metadata
         )
@@ -681,7 +687,7 @@ class RuntimeService(object):
         require("HumanApprovalRequest", request)
         require_authority("request_human_approval", metadata["actor"]["kind"])
         stream = HumanApprovalAggregate.stream_id(request["requestId"])
-        expected = self.store.aggregate_version(stream)
+        expected = 0
         state = HumanApprovalAggregate.create(request)
         event = commands.envelope(
             event_id=metadata["commandId"] + "-ev1",
@@ -741,19 +747,103 @@ class RuntimeService(object):
     def require_approved_prompt_assembly(
         self, request_id: str, prompt_assembly_digest: str, operation: str
     ) -> Dict[str, Any]:
-        """Fail closed unless durable human approval binds this exact assembly.
+        """Compatibility read-check for the prompt portion of a governed approval.
 
-        This read-only RuntimeService check trusts neither a UI boolean nor a
-        client-supplied approval state. OFF is no transform, not no governance.
+        Consequential model execution MUST use ``admit_approved_model_execution``
+        first.  This check remains for the existing runner's later prompt-only
+        assertion and therefore accepts the persisted full binding digest or its
+        explicitly persisted base prompt-assembly digest.
         """
         state = self.store.require_state(HumanApprovalAggregate.stream_id(request_id))
-        if state.get("state") != "approved":
+        if state.get("state") not in ("approved", "consumed"):
             raise AuthorityViolation("MODEL_PROMPT_APPROVAL_NOT_APPROVED")
         if state.get("operation") != operation:
             raise AuthorityViolation("MODEL_PROMPT_APPROVAL_OPERATION_MISMATCH")
-        if state.get("promptAssemblyDigest") != prompt_assembly_digest:
+        binding = (state.get("scope") or {}).get("approvalBinding") or {}
+        accepted_digests = {
+            state.get("promptAssemblyDigest"),
+            binding.get("basePromptAssemblyDigest"),
+        }
+        if prompt_assembly_digest not in accepted_digests:
             raise AuthorityViolation("MODEL_PROMPT_APPROVAL_DIGEST_MISMATCH")
         return state
+
+    def admit_approved_model_execution(
+        self,
+        request_id: str,
+        prompt_assembly_digest: str,
+        operation: str,
+        *,
+        mission_id: str,
+        task_id: str,
+        driver_run_id: str,
+        resource: str,
+        use_id: str,
+        now: str,
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Atomically bind and consume one approved model execution admission."""
+        require("CommandMetadata", metadata)
+        require_authority("consume_human_approval", metadata["actor"]["kind"])
+        stream = HumanApprovalAggregate.stream_id(request_id)
+        current = self.store.require_state(stream)
+        if current.get("operation") != operation:
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_OPERATION_MISMATCH")
+        if current.get("promptAssemblyDigest") != prompt_assembly_digest:
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_DIGEST_MISMATCH")
+        binding = (current.get("scope") or {}).get("approvalBinding") or {}
+        checks = (
+            ("missionId", mission_id, "MODEL_PROMPT_APPROVAL_MISSION_MISMATCH"),
+            ("taskId", task_id, "MODEL_PROMPT_APPROVAL_TASK_MISMATCH"),
+            ("driverRunId", driver_run_id, "MODEL_PROMPT_APPROVAL_DRIVER_RUN_MISMATCH"),
+            ("targetRoot", resource, "MODEL_PROMPT_APPROVAL_RESOURCE_MISMATCH"),
+        )
+        for key, offered, code in checks:
+            if str(binding.get(key, "")) != str(offered):
+                raise AuthorityViolation(code)
+        if str(current.get("resource", "")) != str(resource):
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_RESOURCE_MISMATCH")
+        if current.get("state") == "consumed":
+            if current.get("consumedBy") == use_id:
+                return {**current, "status": "idempotent"}
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_CONSUMED")
+        if current.get("state") != "approved":
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_NOT_APPROVED")
+        if now > current.get("expiresAt", ""):
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_EXPIRED")
+        if current.get("remainingUses") != 1:
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_ONE_USE_REQUIRED")
+
+        expected = self.store.aggregate_version(stream)
+        state = HumanApprovalAggregate.consume(current, use_id, now)
+        consumption = {
+            "schemaVersion": "1.0.0",
+            "requestId": request_id,
+            "useId": use_id,
+            "consumedAt": now,
+            "missionId": mission_id,
+            "taskId": task_id,
+            "driverRunId": driver_run_id,
+            "resource": resource,
+            "operation": operation,
+            "promptAssemblyDigest": prompt_assembly_digest,
+        }
+        require("HumanApprovalConsumption", consumption)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1",
+            stream_id=stream,
+            event_type="HumanApprovalConsumed",
+            payload={"eventType": "HumanApprovalConsumed", "consumption": consumption},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+            mission_id=mission_id,
+            task_id=task_id,
+        )
+        committed = self._commit(
+            [AppendRequest(stream, HumanApprovalAggregate.KIND, expected, event, state)],
+            metadata,
+        )
+        return {**state, "status": committed.get("status", "applied")}
 
     # -- cancellation (M1) ------------------------------------------------
 
