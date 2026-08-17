@@ -1,0 +1,51 @@
+name: Terra PR47 Ouroboros Approval Migration
+
+on:
+  push:
+    branches:
+      - verify/terra-pr47-approval-hardening-r1
+    paths:
+      - tools/terra_apply_ouroboros_approval_migration.py
+
+permissions:
+  contents: write
+
+jobs:
+  migrate-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package and test tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e . pytest jsonschema
+      - name: Apply lifecycle migration and fifth-pass refinements
+        run: python tools/terra_apply_ouroboros_approval_migration.py
+      - name: Contract drift
+        run: python contracts/tools/check_drift.py
+      - name: Security regressions
+        run: python -m pytest -q tests/capt_runtime/test_prompt_approval_security.py
+      - name: Ouroboros lifecycle
+        run: python -m pytest -q tests/capt_runtime/test_ouroboros_lifecycle.py
+      - name: CAPT runtime suite
+        run: python -m pytest -q tests/capt_runtime
+      - name: Full repository suite
+        run: python -m pytest -q
+      - name: Validate patch whitespace
+        run: git diff --check
+      - name: Commit verified migration
+        run: |
+          if git diff --quiet; then
+            echo "No diff to commit."
+            exit 0
+          fi
+          git config user.name "knowurknot"
+          git config user.email "knowurknottty@gmail.com"
+          git add desktop/m1_command_service.py desktop/desktop_runtime_client.py tests/capt_runtime/test_ouroboros_lifecycle.py
+          git commit -m "test: migrate Ouroboros lifecycle to governed approval"
+          git push origin HEAD:verify/terra-pr47-approval-hardening-r1
