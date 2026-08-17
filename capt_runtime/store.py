@@ -75,8 +75,18 @@ CREATE TABLE IF NOT EXISTS checkpoints (
     global_sequence INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS security_rejections (
+    rejection_id    TEXT PRIMARY KEY,
+    timestamp       TEXT NOT NULL,
+    rejection_kind  TEXT NOT NULL,
+    source_ip       TEXT,
+    actor_id        TEXT,
+    details_json    TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_events_stream ON events (stream_id, stream_version);
 CREATE INDEX IF NOT EXISTS idx_outbox_pending ON outbox (status, global_sequence);
+CREATE INDEX IF NOT EXISTS idx_security_rejections ON security_rejections (rejection_kind, timestamp);
 """
 
 GENESIS_CHAIN = "sha256:" + "0" * 64
@@ -536,3 +546,37 @@ class EventStore(object):
             "SELECT manifest_json FROM checkpoints ORDER BY global_sequence DESC, rowid DESC LIMIT 1"
         ).fetchone()
         return json.loads(row["manifest_json"]) if row else None
+
+    def record_security_rejection(
+        self,
+        rejection_id: str,
+        rejection_kind: str,
+        details: Dict[str, Any],
+        source_ip: Optional[str] = None,
+        actor_id: Optional[str] = None,
+        timestamp: Optional[str] = None,
+    ) -> None:
+        """Durable recording of security-sensitive rejections and failed authorizations."""
+        ts = timestamp or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        with self.transaction() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO security_rejections (rejection_id, timestamp, rejection_kind, source_ip, actor_id, details_json) VALUES (?,?,?,?,?,?)",
+                (rejection_id, ts, rejection_kind, source_ip, actor_id, canonical_json(details)),
+            )
+
+    def list_security_rejections(self, limit: int = 100) -> List[Dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT rejection_id, timestamp, rejection_kind, source_ip, actor_id, details_json FROM security_rejections ORDER BY timestamp DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [
+            {
+                "rejectionId": r["rejection_id"],
+                "timestamp": r["timestamp"],
+                "rejectionKind": r["rejection_kind"],
+                "sourceIp": r["source_ip"],
+                "actorId": r["actor_id"],
+                "details": json.loads(r["details_json"]),
+            }
+            for r in rows
+        ]

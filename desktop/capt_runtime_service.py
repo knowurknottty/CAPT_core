@@ -648,6 +648,14 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             # Authenticate: first frame must be the session token.
             auth = _recv_json(conn)
             if not auth or auth.get("token") != token:
+                try:
+                    store.record_security_rejection(
+                        rejection_id="rej-" + secrets.token_hex(8),
+                        rejection_kind="unauthenticated_ipc_attempt",
+                        details={"reason": "invalid_or_missing_session_token"},
+                    )
+                except Exception:
+                    pass
                 _send_json(conn, {"ok": False, "error": "unauthenticated"})
                 return
             # Bind operator identity to this authenticated connection.
