@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
+import pytest
+
+pytest.importorskip("textual")
 
 from capt_ui.operator.contract import Dashboard, OperatorStatus, RuntimeHealth
 

@@ -118,13 +118,19 @@ class MemoryEngine:
             "error": None,
         }
         # In-memory databases have no filesystem to back up.
-        if str(self._db_path) in (":memory:", "") or not self._db_path.exists():
+        if str(self._db_path) in (":memory:", "") or not Path(self._db_path).exists():
             if str(self._db_path) in (":memory:", ""):
                 receipt["error"] = "in-memory database: no filesystem backup possible"
                 receipt["success"] = True  # nothing to back up; explicit, documented
                 return receipt
             # file path configured but file missing: nothing to back up yet
             receipt["error"] = "source database does not exist; nothing to back up"
+            receipt["success"] = True
+            return receipt
+
+        # If database file is completely empty (0 bytes), there is no schema to back up
+        if Path(self._db_path).stat().st_size == 0:
+            receipt["error"] = "source database is empty (0 bytes); nothing to back up"
             receipt["success"] = True
             return receipt
 
@@ -137,20 +143,34 @@ class MemoryEngine:
         while dest.exists():
             n += 1
             dest = backup_dir / f"capt_solo.v{from_version}.{stamp}.{n}.db"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+
+        # Checkpoint WAL to disk before backup so connection can read it
+        try:
+            self._conn.execute("PRAGMA wal_checkpoint(FULL)")
+        except Exception:
+            pass
 
         try:
-            # Open a SEPARATE connection to the same DB file for the backup so
-            # the engine's own connection transaction state cannot deadlock
-            # SQLite's online backup (which requires the source not be mid-txn).
-            srcconn = sqlite3.connect(str(self._db_path))
+            self._db_path.parent.mkdir(parents=True, exist_ok=True)
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            # Use self._conn.backup directly or separate connection
             try:
                 bconn = sqlite3.connect(str(dest))
                 try:
-                    srcconn.backup(bconn)
+                    self._conn.backup(bconn)
                 finally:
                     bconn.close()
-            finally:
-                srcconn.close()
+            except sqlite3.OperationalError:
+                srcconn = sqlite3.connect(str(self._db_path))
+                try:
+                    bconn = sqlite3.connect(str(dest))
+                    try:
+                        srcconn.backup(bconn)
+                    finally:
+                        bconn.close()
+                finally:
+                    srcconn.close()
             # verify the backup opens and passes integrity_check
             vconn = sqlite3.connect(str(dest))
             try:

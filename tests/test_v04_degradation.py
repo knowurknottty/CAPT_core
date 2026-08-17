@@ -17,6 +17,8 @@ from capt_solo.foundry import (
 @pytest.fixture
 def reg_stack(tmp_path, monkeypatch):
     monkeypatch.setenv("CAPT_SOLO_HOME", str(tmp_path))
+    from capt_solo.core.config import ensure_dirs
+    ensure_dirs()
     eng = MemoryEngine()
     pe = ProofEngine(eng._conn)
     reg = CapabilityRegistry(eng._conn, pe)
