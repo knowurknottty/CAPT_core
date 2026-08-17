@@ -1,0 +1,81 @@
+{
+  "schema": "capt-terra-installed-wheel-acceptance/1.0",
+  "classification": "INSTALLED_WHEEL_VERIFIED_WITH_CORRECTIONS",
+  "pr": 47,
+  "source": {
+    "repository": "knowurknottty/CAPT_core",
+    "tested_head": "4ee85af818008c2536faaaefa0e7ec00ac2a39c4",
+    "tested_parent": "4334657a919f74803e65d9b01aa5054d6d7b9a61",
+    "historical_parent_verified": "e104c4a56dd77604b4396f4e12d62a91864670bc",
+    "observed_pr_base": "533ef470f7ccaf4488922b6d39171eca9ed83a1a",
+    "observed_public_doc_main": "cc93c4e9fb8c756d224e2f256828d648b47eedc4"
+  },
+  "artifact": {
+    "distribution": "capt-solo",
+    "version": "0.5.0",
+    "wheel": "capt_solo-0.5.0-py3-none-any.whl",
+    "wheel_sha256": "152febe1dab1148d007e84f4461c369533ba4628d8f6306836ffcd84dd0ec1d5",
+    "sdist": "capt_solo-0.5.0.tar.gz",
+    "sdist_sha256": "f00b73f1506c2f8bda3ce71a4fc9443cc28d3bb3d64803c87c1522e68de273ae"
+  },
+  "environment": {
+    "os": "macOS 26.4.1 (25E253)",
+    "python": "CPython 3.9.6",
+    "build_frontend": "build 1.4.4",
+    "backend": "setuptools.build_meta (setuptools>=68.0)",
+    "install": "fresh venv; non-editable local wheel; PYTHONPATH empty; PYTHONNOUSERSITE=1; python -I; sandbox CWD"
+  },
+  "wheel_inventory": {
+    "record_captured": true,
+    "required_modules_present": [
+      "capt_runtime/approval_dispatch.py",
+      "capt_runtime/model_approval_binding.py",
+      "capt_runtime/prompt_approval.py",
+      "capt_runtime/operator_provenance.py",
+      "capt_runtime/services.py",
+      "capt_runtime/checkpoint.py",
+      "capt_runtime/aggregates/human_approval.py",
+      "desktop/capt_runtime_service.py",
+      "desktop/desktop_runtime_client.py",
+      "desktop/m1_command_service.py",
+      "capt_contracts/spec.py",
+      "capt_ui/operator/runtime.py",
+      "capt_ui/surfaces/tui/app.py"
+    ]
+  },
+  "provenance": {
+    "all_critical_imports_in_fresh_site_packages": true,
+    "repository_source_leakage_detected": false,
+    "critical_modules": ["capt_runtime", "capt_runtime.approval_dispatch", "capt_runtime.model_approval_binding", "desktop.capt_runtime_service", "desktop.desktop_runtime_client", "desktop.m1_command_service", "capt_ui", "capt_ui.operator.runtime", "capt_contracts"]
+  },
+  "installed_runtime": {
+    "installed_console_entrypoints_executed": ["capt", "capt-ui"],
+    "runtime_started": true,
+    "authenticated_client": true,
+    "request_model_prompt_approval_advertised": true,
+    "durable_approval_created": true,
+    "exact_outer_idempotency_retry": "idempotent",
+    "approval_decision": "accepted",
+    "checkpoint_human_approval_versions": [{"streamId": "human_approval-wheel-process-approval", "version": 2}]
+  },
+  "installed_suite": {"passed": 46, "failed": 0, "skipped": 6, "deselected": 0},
+  "source_suites": {
+    "approval_security": {"passed": 8, "failed": 0, "skipped": 0, "deselected": 0},
+    "focused": {"passed": 20, "failed": 0, "skipped": 6, "deselected": 0},
+    "ouroboros": {"passed": 18, "failed": 0, "skipped": 0, "deselected": 0},
+    "capt_runtime": {"passed": 397, "failed": 0, "skipped": 0, "deselected": 12},
+    "full": {"passed": 871, "failed": 0, "skipped": 57, "deselected": 12},
+    "contract_generation_changed_files": 0,
+    "contract_drift": "OK",
+    "git_diff_check": "PASS"
+  },
+  "correction": {
+    "found": true,
+    "commit": "4ee85af818008c2536faaaefa0e7ec00ac2a39c4",
+    "kind": "retained lifecycle regression harness correction",
+    "detail": "Replaced checkout-relative runpy.run_path service launch with installed module runpy.run_module launch; no production module changed."
+  },
+  "excluded_evidence": ["Hermes LOCAL-002 / D-09 quarantined metadata"],
+  "remaining_evidence_gaps": ["live intended-provider acceptance", "cross-model shutdown/restart continuity", "destructive external-provider/tool-kill rollback", "Cohort durability", "#49 security closure", "native desktop app", "production deployment", "public release readiness"],
+  "next_unresolved_gate": "live intended-provider acceptance from corrected exact PR head"
+}
