@@ -167,14 +167,37 @@ def test_approved_request_is_rejected_after_expiry_at_use_time(tmp_path):
     store = EventStore(str(tmp_path / "expired.db"))
     try:
         svc = RuntimeService(store)
-        svc.request_human_approval(
-            raw_request("approval-expired", expires_at="2026-08-16T00:00:00Z"),
-            meta("cmd-expired-request", "execution_plane", "idem-expired-request"),
+        result = request_model_prompt_approval(
+            svc,
+            approval_intent(
+                requestId="approval-expired",
+                expiresAt="2026-08-16T00:00:00Z",
+            ),
+            meta(
+                "cmd-expired-request",
+                "human",
+                "idem-expired-request",
+                issued_at="2026-08-15T00:00:00Z",
+            ),
         )
         approve(svc, "approval-expired", decided_at="2026-08-15T00:00:01Z")
         with pytest.raises(AuthorityViolation, match="EXPIRED"):
-            svc.require_approved_prompt_assembly(
-                "approval-expired", DIGEST, "ModelOperatorInspection"
+            svc.admit_approved_model_execution(
+                "approval-expired",
+                result["promptAssemblyDigest"],
+                "ModelOperatorInspection",
+                mission_id="m-security-1",
+                task_id="t-security-1",
+                driver_run_id="dr-security-1",
+                resource="/tmp/security-project",
+                use_id="run-expired",
+                now="2026-08-17T00:00:00Z",
+                metadata=meta(
+                    "cmd-expired-use",
+                    "execution_plane",
+                    "idem-expired-use",
+                    issued_at="2026-08-17T00:00:00Z",
+                ),
             )
     finally:
         store.close()

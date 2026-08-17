@@ -12,6 +12,7 @@ acceptance harness and by the Tk GUI view.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import socket
 import time
@@ -136,7 +137,7 @@ class RuntimeClient:
             "operatorId": self.operator_id,
             "sessionId": self.session_id,
             "schemaVersion": "1.0.0",
-            "correlationId": "corr-" + uuid.uuid4().hex,
+            "correlationId": "corr-" + hashlib.sha256((op + ":" + idek).encode()).hexdigest()[:24],
             "idempotencyKey": idek,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "op": op,

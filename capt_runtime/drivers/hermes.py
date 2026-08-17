@@ -37,6 +37,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from ..approval_dispatch import require_expected_prompt_digest
 from ..contracts import require
 from ..ingestion import IngestionRejection
 
@@ -354,7 +355,11 @@ class HermesDriver:
             )
             if resolved.scope.get("rootPath") != fs.get("rootPath"):
                 raise HermesDriverFailure("resolved task scope differs from work-order target")
-        prompt = build_prompt(ctx, work_order.get("operations", []), objective=resolved.objective if resolved else None)
+        prompt = build_prompt(
+            ctx, work_order["operations"], objective=resolved.objective if resolved else None
+        )
+        prompt_digest = "sha256:" + hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+        require_expected_prompt_digest(run_id, prompt_digest)
         budgets = ctx.get("budgets", {})
         timeout = float(budgets.get("maxSeconds") or self._default_timeout)
 
@@ -457,6 +462,7 @@ class HermesDriver:
                           "--safe-mode", "--pass-session-id"],
             "stderrTail": (stderr or "").strip()[-1000:],
             "envKeys": sorted(env.keys()),
+            "promptDigest": prompt_digest,
         }
         return {
             "externalRunId": "hermes-pid-%s" % pid,

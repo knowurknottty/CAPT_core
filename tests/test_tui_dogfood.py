@@ -61,7 +61,7 @@ class _Operator:
     def dashboard(self):
         return Dashboard(status=OperatorStatus(health=RuntimeHealth.HEALTHY), verification={})
 
-    def request_prompt_approval(self, payload):
+    def request_prompt_approval(self, payload, idempotency_key=None):
         self.approval_requests.append(dict(payload))
         return {
             "requestId": "approval-ui",

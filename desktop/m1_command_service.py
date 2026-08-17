@@ -13,6 +13,11 @@ from typing import Any, Dict, Optional
 
 from capt_runtime import commands
 from capt_runtime.errors import CaptRuntimeError
+from capt_runtime.approval_dispatch import register_expected_prompt_digest
+from capt_runtime.model_approval_binding import (
+    build_bound_model_operator_approval,
+    staging_root_for_ledger,
+)
 from capt_runtime.prompt_approval import request_model_prompt_approval
 from capt_runtime.services import RuntimeService
 from capt_runtime.store import EventStore
@@ -261,6 +266,70 @@ class RuntimeCommandService:
                             cmd, "internal_failure", "HERMES_DRIVER_UNAVAILABLE"
                         ),
                     )
+                p = cmd["payload"]
+                approval_request_id = str(p.get("approvalRequestId", ""))
+                if not approval_request_id:
+                    from capt_runtime.errors import AuthorityViolation
+                    raise AuthorityViolation("MODEL_PROMPT_APPROVAL_RECEIPT_REQUIRED")
+                mission_id = str(p.get("missionId") or ("m-model-" + cmd["commandId"]))
+                task_id = str(p.get("taskId") or (mission_id + "-task-1"))
+                driver_run_id = str(p.get("driverRunId") or ("dr-model-" + cmd["commandId"]))
+                target_root = str(p.get("targetRoot", ""))
+                assembly = build_bound_model_operator_approval(
+                    human_prompt=str(p.get("objective", "")),
+                    response_mode=str(p.get("responseMode", "SPOCK")),
+                    enhancement_engine=str(p.get("promptEnhancement", "OFF")),
+                    mission_id=mission_id,
+                    task_id=task_id,
+                    driver_run_id=driver_run_id,
+                    target_root=target_root,
+                    provider=str(p.get("provider", "") or ""),
+                    model=str(p.get("model", "") or ""),
+                    requested_context_budget=int(p.get("requestedContextBudget", 32_000)),
+                    human_verification_required=bool(p.get("humanVerificationRequired", True)),
+                    executable=str(p.get("executable", "") or ""),
+                    staging_root=staging_root_for_ledger(self.store.path, driver_run_id),
+                )
+                use_meta = commands.command(
+                    command_id="cmd-approval-use-" + commands.fingerprint(
+                        "approval-use", {"idempotencyKey": cmd["idempotencyKey"]}
+                    ).split(":", 1)[1][:24],
+                    idempotency_key="idem-approval-use-" + commands.fingerprint(
+                        "approval-use", {"idempotencyKey": cmd["idempotencyKey"]}
+                    ).split(":", 1)[1][:24],
+                    operation_fingerprint=commands.fingerprint(
+                        "consume_human_approval",
+                        {
+                            "requestId": approval_request_id,
+                            "promptAssemblyDigest": assembly["promptAssemblyDigest"],
+                            "missionId": mission_id,
+                            "taskId": task_id,
+                            "driverRunId": driver_run_id,
+                            "resource": target_root,
+                            "useId": cmd["idempotencyKey"],
+                        },
+                    ),
+                    correlation_id=cmd["correlationId"],
+                    actor_id="exec-1",
+                    actor_kind="execution_plane",
+                    issued_at=cmd.get("timestamp") or _now_rfc3339(),
+                    replay_policy="never",
+                )
+                self.svc.admit_approved_model_execution(
+                    approval_request_id,
+                    assembly["promptAssemblyDigest"],
+                    "ModelOperatorInspection",
+                    mission_id=mission_id,
+                    task_id=task_id,
+                    driver_run_id=driver_run_id,
+                    resource=target_root,
+                    use_id=cmd["idempotencyKey"],
+                    now=cmd.get("timestamp") or _now_rfc3339(),
+                    metadata=use_meta,
+                )
+                register_expected_prompt_digest(
+                    driver_run_id, assembly["dispatchPromptDigest"]
+                )
                 result = runner(cmd)
                 if result.get("status") == "in_progress":
                     return self._receipt(

@@ -356,6 +356,28 @@
         "sessionId": { "type": ["string", "null"], "maxLength": 128 }
       }
     },
+    "HumanApprovalConsumption": {
+      "title": "HumanApprovalConsumption",
+      "description": "Durable one-use admission of a previously approved model execution.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "requestId", "useId", "consumedAt", "missionId",
+        "taskId", "driverRunId", "resource", "operation", "promptAssemblyDigest"
+      ],
+      "properties": {
+        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
+        "requestId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "useId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "consumedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "taskId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "driverRunId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "resource": { "type": "string", "maxLength": 1024 },
+        "operation": { "type": "string", "maxLength": 128 },
+        "promptAssemblyDigest": { "$ref": "common.schema.json#/$defs/Digest" }
+      }
+    },
     "Principal": {
       "title": "Principal",
       "description": "The actor on whose behalf authority is exercised. Identity establishes the actor; delegation transfers bounded authority; governance evaluates; capability issuance grants permission. Additive plane-convergence extension under contract 1.0.0 (ADR-DT-PLANE-CONV).",

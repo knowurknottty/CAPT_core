@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:64f2dc1488353b345d48b413e326718d56296eed95b576c9db9ad0e19c5925bb
+// source digest:  sha256:93ddeb8bdedf2df53b0045d355f538d4f9209e42e65318bc600d54ffb6beb0f6
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -507,6 +507,20 @@ export interface ExtensionEnvelope {
   readonly namespace: string;
   readonly payloadDigest: Digest;
   readonly payloadJson: string;
+}
+
+/** Durable one-use admission of a previously approved model execution. */
+export interface HumanApprovalConsumption {
+  readonly consumedAt: Timestamp;
+  readonly driverRunId: Identifier;
+  readonly missionId: Identifier;
+  readonly operation: string;
+  readonly promptAssemblyDigest: Digest;
+  readonly requestId: Identifier;
+  readonly resource: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly taskId: Identifier;
+  readonly useId: Identifier;
 }
 
 /** Operator decision on a HumanApprovalRequest. 'approve' permits only the originally requested scope; 'deny' must prevent execution. Idempotent by idempotencyKey. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001). */
@@ -1212,10 +1226,11 @@ export type EventPayload =
   | ClaimVerifiedPayload
   | ClaimGuardDecidedPayload
   | HumanApprovalRequestedPayload
-  | HumanApprovalDecidedPayload;
+  | HumanApprovalDecidedPayload
+  | HumanApprovalConsumedPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -1239,12 +1254,19 @@ export const EventTypeValues = [
   "ClaimGuardDecided",
   "HumanApprovalRequested",
   "HumanApprovalDecided",
+  "HumanApprovalConsumed",
 ] as const;
 
 /** EvidenceRecordedPayload */
 export interface EvidenceRecordedPayload {
   readonly eventType: "EvidenceRecorded";
   readonly evidence: EvidenceRecord;
+}
+
+/** HumanApprovalConsumedPayload */
+export interface HumanApprovalConsumedPayload {
+  readonly consumption: HumanApprovalConsumption;
+  readonly eventType: "HumanApprovalConsumed";
 }
 
 /** HumanApprovalDecidedPayload */
