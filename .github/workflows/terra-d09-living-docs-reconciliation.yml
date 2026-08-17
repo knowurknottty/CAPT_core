@@ -1,0 +1,44 @@
+name: Terra D09 Living Docs Reconciliation
+
+on:
+  push:
+    branches:
+      - verify/terra-pr47-approval-hardening-r1
+    paths:
+      - tools/terra_apply_d09_living_docs.py
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Pin main and preserve applicator
+        run: |
+          cp tools/terra_apply_d09_living_docs.py /tmp/terra_apply_d09_living_docs.py
+          git fetch origin main
+          test "$(git rev-parse origin/main)" = "ffdc41e6b579291b120dc1a23b5d3d0f1461321c"
+          git checkout -B main origin/main
+      - name: Apply five-pass living-doc reconciliation
+        run: python /tmp/terra_apply_d09_living_docs.py
+      - name: Verify exact public-doc scope
+        run: |
+          test "$(git diff --name-only | wc -l | tr -d ' ')" = "17"
+          git diff --check
+          echo '=== MODIFIED LIVING DOCS ==='
+          git diff --name-only
+          echo '=== REMAINING LOCAL-002 REFERENCES (must be explicitly quarantined) ==='
+          git grep -n -E 'hermes-local-002-r6|5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04|HERMES_LOCAL_002_COMPLETE|HERMES_AGENT_TUI_WORKSPACE_TESTS_AND_STATE_MAP' -- README.md START_HERE.md docs capt_ui || true
+          ! git grep -n -E 'dedicated pushed branch|operator has published|Pushed HEAD|connector lagged|GitHub connector had not yet propagated|just-pushed remote ref|evidence branch pushed' -- README.md START_HERE.md docs capt_ui
+      - name: Commit atomically to main
+        run: |
+          git config user.name "knowurknot"
+          git config user.email "knowurknottty@gmail.com"
+          git add README.md capt_ui docs
+          git diff --cached --check
+          git commit -m "docs: quarantine unverifiable Hermes LOCAL-002 evidence"
+          git push origin HEAD:main
