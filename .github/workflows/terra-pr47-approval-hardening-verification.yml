@@ -1,0 +1,24 @@
+name: Terra PR47 Approval Hardening Verification
+
+on:
+  push:
+    branches:
+      - verify/terra-pr47-approval-hardening-r1
+
+permissions:
+  contents: read
+
+jobs:
+  prompt-approval-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test tooling
+        run: python -m pip install --upgrade pip pytest jsonschema
+      - name: Run Terra security regressions
+        run: python -m pytest -q tests/capt_runtime/test_prompt_approval_security.py
