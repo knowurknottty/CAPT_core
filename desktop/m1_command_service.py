@@ -302,6 +302,11 @@ class RuntimeCommandService:
                     executable=str(p.get("executable", "") or ""),
                     staging_root=staging_root_for_ledger(self.store.path, driver_run_id),
                 )
+                # Deterministic local preflight precedes irreversible one-use
+                # admission.  The runner persists this exact prompt as TaskNode.title;
+                # a schema rejection here proves external dispatch cannot occur.
+                if len(assembly["modelVisiblePrompt"]) > 512:
+                    raise ValueError("MODEL_VISIBLE_PROMPT_TITLE_TOO_LONG")
                 use_meta = commands.command(
                     command_id="cmd-approval-use-" + commands.fingerprint(
                         "approval-use", {"idempotencyKey": cmd["idempotencyKey"]}

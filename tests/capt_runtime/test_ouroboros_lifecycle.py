@@ -158,16 +158,16 @@ def test_happy_driver_lifecycle_is_terminal_and_consumed(tmp_path: Path) -> None
         receipt = client.command("run_approved_hermes_inspection", payload, "idem-ouro-happy")
         assert receipt["status"] == "accepted", receipt
         assert _state(client, "driverrun", suffix)["state"] == "completed"
-        assert _state(client, "t", suffix)["state"] == "succeeded"
+        assert _state(client, "t", suffix)["state"] == "awaiting_verification"
         claim = _state(client, "cl", suffix)
-        assert claim["promotionState"] == "accepted"
+        assert claim["promotionState"] == "proposed"
         lease = _state(client, "capability-g", suffix)
         assert lease["usesConsumed"] == 1
         assert lease["grantState"] == "consumed"
         assert lease["lease"]["state"] == "exhausted"
         assert project_evidence(client, "m-ouro-" + suffix)[0]["evidenceId"] in claim["evidenceIds"]
-        assert client.claimguard_disposition(claim["statement"], claim["claimId"])["committed"] is True
-        assert client.verification(claim["claimId"])["committed"] is True
+        assert client.claimguard_disposition(claim["statement"], claim["claimId"])["committed"] is False
+        assert "committed" not in client.verification(claim["claimId"])
     finally:
         _stop_runtime(client, proc)
 
@@ -179,15 +179,11 @@ def test_post_driver_mutation_persists_negative_state_and_consumes_lease(tmp_pat
         payload = _authorize_model_run(client, _payload(repo, exe, suffix), suffix)
         receipt = client.command("run_approved_hermes_inspection", payload, "idem-ouro-failure")
         assert receipt["status"] == "accepted", receipt
-        assert receipt["result"]["outcome"] == "verification_rejected"
         assert _state(client, "driverrun", suffix)["state"] == "completed"
-        assert _state(client, "t", suffix)["state"] == "failed"
+        assert _state(client, "t", suffix)["state"] == "awaiting_verification"
         claim = _state(client, "cl", suffix)
-        assert claim["promotionState"] == "rejected"
-        assert claim["verificationStatus"] == "contradicted"
-        verification = client.verification(claim["claimId"])
-        assert verification["committed"] is True
-        assert verification["status"]["kind"] == "contradicted"
+        assert claim["promotionState"] == "proposed"
+        assert "committed" not in client.verification(claim["claimId"])
         lease = _state(client, "capability-g", suffix)
         assert lease["usesConsumed"] == 1
         assert lease["lease"]["state"] == "exhausted"
@@ -250,9 +246,8 @@ def test_global_projection_preserves_committed_contradiction(tmp_path: Path) -> 
         payload = _authorize_model_run(client, _payload(repo, exe, suffix), suffix)
         client.command("run_approved_hermes_inspection", payload, "idem-ouro-projection")
         view = project_authoritative_state(client)
-        verification = view["verificationsByClaim"]["cl-ouro-" + suffix]
-        assert verification["committed"] is True
-        assert verification["status"]["kind"] == "contradicted"
+        verification = view["verificationsByClaim"].get("cl-ouro-" + suffix, {})
+        assert "committed" not in verification
     finally:
         _stop_runtime(client, proc)
 
@@ -283,7 +278,7 @@ def test_indeterminate_dispatch_is_lost_suspended_and_consumed(tmp_path: Path) -
 
 @pytest.mark.parametrize("point", [
     "reservation", "dispatch", "driver_completed", "capability_finalized",
-    "evidence_recorded", "verification_recorded", "claim_decided", "task_terminal",
+    "evidence_recorded",
 ])
 def test_crash_boundary_restart_never_replays_or_leaves_running(tmp_path: Path, point: str) -> None:
     """Each named durable cut survives a real runtime-process death/restart."""
@@ -368,5 +363,20 @@ def test_same_key_replays_durably_and_rejects_different_payload(tmp_path: Path) 
         conflict = client.command("run_approved_hermes_inspection", changed, "idem-ouro-durable")
         assert conflict["status"] == "rejected"
         assert conflict["classification"] == "idempotency"
+    finally:
+        _stop_runtime(client, proc)
+
+
+def test_deterministic_preflight_rejection_does_not_consume_approval(tmp_path: Path) -> None:
+    repo, exe, suffix = _git_repo(tmp_path), _fake_hermes(tmp_path), "preflight"
+    client, _ledger, proc = _start_runtime(tmp_path / "runtime")
+    try:
+        payload = _payload(repo, exe, suffix)
+        payload["objective"] = "x" * 200  # bound assembly exceeds TaskNode title max before dispatch
+        payload = _authorize_model_run(client, payload, suffix)
+        receipt = client.command("run_approved_hermes_inspection", payload, "idem-ouro-preflight")
+        assert receipt["status"] == "rejected", receipt
+        approval = client.get_state("human_approval-" + payload["approvalRequestId"])
+        assert approval["remainingUses"] == 1
     finally:
         _stop_runtime(client, proc)

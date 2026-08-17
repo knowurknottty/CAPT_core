@@ -1012,46 +1012,16 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                                      issued_at=now, replay_policy="never"),
                 )
                 _test_fault("evidence_recorded")
-                try:
-                    vr = build_verification_result(
-                        str(worktree), before, artifact_path, artifact_digest, "hermes",
-                        claim_id=claim_id, supporting_evidence_ids=[ev_id], before_git_status=before_git_status,
-                    )
-                except VerificationFailure as exc:
-                    vr = build_contradicted_verification_result(
-                        claim_id, [ev_id], "hermes", verified_at=now, reason=str(exc),
-                    )
-                    svc.record_verification(vr, verification_meta("verify-contradicted", vr["verificationId"]))
-                    svc.transition_task(task_id, "failed", "verification contradicted", exec_meta("taskfailed"))
-                    receipt = {"missionId": mission_id, "taskId": task_id, "driverRunId": run_id,
-                               "claimId": claim_id, "verificationId": vr["verificationId"],
-                               "outcome": "verification_rejected", "driver": "provider" if provider is not None else "hermes"}
-                    store.complete_claimed_command(key, command_fingerprint, receipt)
-                    return receipt
-                svc.record_verification(vr, verification_meta("verify", vr["verificationId"]))
-                _test_fault("verification_recorded")
-                decision = {
-                    "schemaVersion": "1.0.0", "decisionId": "cgd-" + command_id,
-                    "claimId": claim_id, "verdict": "accept",
-                    "rationale": "Bounded statement accepted by ClaimGuard; evidence and verification recorded.",
-                    "verificationId": vr["verificationId"],
-                    "decidedBy": {"actorId": "claim-guard", "kind": "claim_authority"}, "decidedAt": now,
-                }
-                svc.decide_claim(decision,
-                    commands.command(command_id=command_id + ":decide", idempotency_key=key + ":decide",
-                                     operation_fingerprint=commands.fingerprint("decide_claim", {"claimId": claim_id}),
-                                     correlation_id=command.get("correlationId", "corr-model"),
-                                     actor_id="claim-guard", actor_kind="claim_authority",
-                                     issued_at=now, replay_policy="never"),
-                )
-                _test_fault("claim_decided")
-                svc.transition_task(task_id, "succeeded", "verification and ClaimGuard accepted", exec_meta("tasksucceeded"))
-                _test_fault("task_terminal")
+                # A provider response and its immutable artifact are evidence, not
+                # verification.  Keep the claim proposed and the task in the
+                # aggregate's existing awaiting_verification state; a later
+                # verification/ClaimGuard authority must perform any promotion.
+                svc.transition_task(task_id, "awaiting_verification", "provider response recorded; independent verification required", exec_meta("taskawaitingverification"))
                 create_checkpoint(store, "cp-model-" + command_id, now,
                                   contracts.digest({"policyBundle": "model-operator", "version": 1}))
                 receipt = {
                     "missionId": mission_id, "taskId": task_id, "driverRunId": run_id,
-                    "claimId": claim_id, "verificationId": vr["verificationId"],
+                    "claimId": claim_id, "verificationId": None,
                     "artifactPath": artifact_path, "artifactDigest": artifact_digest,
                     "targetPath": str(worktree), "beforeDigest": before,
                     "observations": out.get("observations", []), "driver": "provider" if provider is not None else "hermes",
