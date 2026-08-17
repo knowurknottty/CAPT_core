@@ -1,85 +1,59 @@
 # CAPT Core Roadmap
 
-This roadmap separates **released**, **next**, and **future** work. Historical milestones are preserved without being mislabeled as the current release.
+This roadmap separates the numbered package release, merged productization work, active integration, and later product hardening.
 
-## Current release: v0.5
+## Historical numbered release — v0.5
 
-Released and evidenced:
+Preserved under `release_evidence/v0.5/`: installed local runtime lifecycle, EventStore/checkpoint/recovery, memory/governance/evidence foundations, bounded Hermes interaction, and associated hosted/local evidence.
 
-- [x] CAPT Solo local Memory Engine with provenance, confidence, metadata, import/export, backup, and integrity checks.
-- [x] CTP operational transaction journal with receipts, idempotency, correlation IDs, and recovery state.
-- [x] KHSB in-process coordination.
-- [x] Proof Engine, Capability Registry, ClaimGuard, Skill Foundry, Workflow Proof, and Knowledge Bubble lifecycle controls.
-- [x] EventStore authoritative runtime event ledger with ordered persistence and replay.
-- [x] Authenticated standalone harness service.
-- [x] TaskResolver and DriverHost composition.
-- [x] Checkpoint, restart, and no-repeat resume behavior.
-- [x] Runtime Memory Governor, ContextPack construction, rotation, stale-pack rejection, and budget enforcement.
-- [x] Packaged Hermes and OpenHarness driver surfaces.
-- [x] Bounded read-only Hermes operator action proven locally through an installed wheel.
-- [x] Python 3.10 and 3.12 hosted CI for build, install, import, package inspection, contracts, regression tests, secrets, and dependency audit.
-- [x] Versioned release evidence under `release_evidence/v0.5`.
+## Merged productization foundation
 
-Explicit boundaries:
+Completed on `main` beyond the original v0.5 experience:
 
-- General unrestricted model-driven repository engineering is not proven.
-- KHSB is not durable or cross-process.
-- CTP is not the authoritative EventStore ledger.
-- The CAPT Solo Memory Engine and Runtime Memory Governor are distinct.
-- Hosted CI does not rerun the external Hermes/provider lifecycle.
-- Hosted security status is degraded when the private optional anti-token-extraction dependency cannot be verified.
+- [x] normal `capt` lifecycle/on-ramp;
+- [x] shared operator facade;
+- [x] provider registry/health/model-list foundations;
+- [x] model-selection/favorites/override foundations;
+- [x] CaveCAPT presentation verbosity;
+- [x] Textual TUI MVP;
+- [x] governed TUI approval/control path;
+- [x] Tk operator MVP;
+- [x] SwiftUI client-contract library;
+- [x] onboarding/UI continuity scaffolding.
 
-## Near-term hardening
+## Active integration stack
 
-- [ ] Modernize package license metadata and raise the setuptools floor deliberately.
-- [ ] Restore a meaningful scoped or changed-line coverage policy.
-- [ ] Review PR #28 history and port only still-relevant adversarial OpenHarness tests to the canonical DriverHost implementation.
-- [ ] Rewrite the external Hermes compatibility skill against the v0.5 `capt harness` command surface.
-- [ ] Independently validate the rewritten Hermes compatibility package before moving it from Treasure Chest to a dedicated repository.
-- [ ] Add a documented private vulnerability-reporting channel.
-- [ ] Add a concise post-merge release attestation linking runtime source, evidence, wheel, and merge identities.
+- [ ] **#44 Discovery** — merge bounded Discovery Governor/SEAL scanning.
+- [ ] **#46 Ouroboros/Hermes lifecycle** — merge hardened dispatch/idempotency/lease/recovery semantics.
+- [ ] **#47 TUI cognition + ProviderDriver** — merge prompt assembly/provenance, cockpit controls, and bounded Ollama/OpenAI-compatible generation.
+- [ ] **#48 Cohorts** — merge bounded coordination contracts while keeping durable claims deferred.
+- [ ] **#49 SecurityGate** — close applicable controls with exact-head evidence; remain blocked until then.
 
-## Runtime usability
+## Hermes local evidence checkpoint
 
-- [ ] Improve installed CLI discoverability and examples for harness commands.
-- [ ] Complete a polished operator-facing TUI or desktop workflow without moving authority out of RuntimeService.
-- [ ] Add model-adapter configuration guides for local-first runtimes.
-- [ ] Expand bounded operator actions only with explicit capability, lease, verification, and adversarial tests.
+- [x] `HERMES_LOCAL_002_COMPLETE` evidence branch pushed for the Hermes Agent TUI workspace/state map: 98/0/0 focused and 174/0/2 broader results; no product/state-map blocker.
+- [ ] destructive external-provider/tool-kill rollback E2E remains to be proven.
+- [ ] investigate/resolve or explicitly quarantine the two pytest skips as appropriate.
+- [ ] keep unrelated macOS case-insensitive contributor-email checkout collision separated from product-state claims.
 
-## Security and trust
+## Release-critical acceptance still open
 
-- [ ] Optional encrypted backup and export.
-- [ ] Cryptographically signed release attestations and receipts.
-- [ ] Cryptographic Knowledge Bubble signature verification.
-- [ ] Stronger process isolation for optional external drivers.
-- [ ] Multi-user identity and authorization as a separate higher-trust profile.
+- [ ] exact terminal stacked-head full integration acceptance;
+- [ ] installed-runtime/live-provider acceptance for intended provider paths;
+- [ ] true Model A -> shutdown/restart -> Model B no-repeat continuity proof;
+- [ ] durable Cohort persistence/reconstruction/evidence admission before durable Cohort claims;
+- [ ] security closure for all applicable #49 controls;
+- [ ] native desktop application product beyond Tk MVP / SwiftUI library.
 
-## Memory and context
+## Later hardening/product work
 
-- [ ] Additional retrieval adapters behind the existing memory boundary.
-- [ ] Cross-model continuity demonstrations using the same authoritative runtime state.
-- [ ] Better ContextPack observability and operator diagnostics.
-- [ ] Policy-driven retention, consolidation, and archival controls.
+- native desktop packaging/signing/notarization/auto-update;
+- MLX/mlx_lm native execution parity;
+- stronger provider parameter/resource controls;
+- encrypted state/export options;
+- signed attestations/audit roots;
+- stronger process isolation;
+- platform expansion including separately proven Windows support;
+- durable/distributed coordination only where a real use case justifies it.
 
-## Future architecture
-
-These are directions, not implementation claims:
-
-- distributed or cross-process KHSB transports;
-- alternate durable storage backends;
-- multi-agent federation;
-- additional audio, vision, and multimodal drivers;
-- remote stores behind authenticated interfaces;
-- signed and independently verifiable audit chains.
-
-## Historical milestones
-
-Earlier versions established the CAPT Solo Memory Engine, CTP, KHSB, Foundry, proof, ClaimGuard, Knowledge Bubbles, migration safeguards, and optional anti-token-extraction integration. Their exact historical test and tool counts are retained in release history and evidence documents, not treated as current v0.5 status.
-
-## Versioning policy
-
-- **Major:** breaking changes to supported public API or runtime contracts.
-- **Minor:** additive capabilities or supported integration surfaces.
-- **Patch:** fixes and documentation changes that preserve public contracts.
-
-A roadmap checkbox is not release evidence. A capability becomes a public release claim only after implementation, tests, preserved evidence, and documentation agree.
+A roadmap checkbox is not release evidence.

@@ -1,47 +1,71 @@
 # Model Providers
 
-Status: **v0.6 P1 (planned).** This page is honest about where model-provider
-configuration stands today and what is coming.
+This page is the normal-user companion to [`PROVIDERS.md`](PROVIDERS.md).
 
-## Where things are
+## What works on merged `main`
 
-CAPT's runtime already hosts **bounded drivers** (the architecture's model
-connectors) and the cross-model continuity proof works at the seeded/demo level.
-However, there is **not yet** a unified normal-human model-provider
-configuration surface.
+CAPT already has a unified operator-layer foundation for provider registration, health/model discovery where supported, model selection, favorites/defaults/overrides, local/remote labeling, and secret-reference handling.
 
-There is no `capt models list/add/test/use` today. Model/driver configuration is
-internal (DriverHost), so a normal user cannot yet point CAPT at a model with
-simple commands. This is scheduled P1 productization work.
+The old statement that *no unified provider/model surface exists* is obsolete.
 
-Consequence: **do not assume every driver that imports is a supported
-normal-user path.** See [CAPABILITY_MATRIX.md](CAPABILITY_MATRIX.md) for what is
-operator-facing.
+Useful commands include:
 
-## Intended provider set (P1 target)
+```zsh
+capt-ui capabilities
+capt-ui providers
+capt-ui models
+```
 
-When the unified surface lands, it should cover at least:
+The exact command help in the installed build is authoritative.
 
-- LM Studio
-- Ollama
-- llama.cpp
-- MLX / mlx_lm
-- vLLM
-- OpenRouter
-- Hermes compatibility
+## What is integrating
 
-Each provider guide should say: prerequisites, discovery/configuration, context
-limit, credentials (if any), health check, first governed call, limitations.
+PR #47 adds bounded inference transport for:
 
-## What you can do today
+- Ollama native generation;
+- OpenAI-compatible chat-completions endpoints.
 
-- Run the deterministic first-success path (see [START_HERE](../START_HERE.md)) —
-  it needs no model at all.
-- Run the demos ([DEMOS.md](DEMOS.md)) — they use public interfaces and the
-  seeded demo mission.
-- Inspect the internal driver architecture via
-  [ARCHITECTURE.md](ARCHITECTURE.md) if you are an integrator.
+That means the architecture has moved from configuration-only toward governed provider execution, but the branch is still unmerged and the final live-provider release gate remains open.
 
-If you need model-backed governed execution now, you are an advanced/expert
-user and should use the harness's governed command operations and driver wiring
-per the architecture and plugin docs.
+## Provider classes
+
+### Ollama
+
+Merged: discovery/health/model-list foundation.
+
+Active integration: native generation at `/api/generate`.
+
+### LM Studio / vLLM / llama.cpp-compatible servers
+
+Merged: OpenAI-compatible registration/health/model-list foundation where configured.
+
+Active integration: the generic OpenAI-compatible ProviderDriver path can target compatible `/chat/completions` endpoints, subject to endpoint/provider compatibility and later acceptance evidence.
+
+### OpenRouter
+
+Merged: provider registration plus health/model-list support where credentials/network allow.
+
+Active integration: OpenAI-compatible generation transport. A controlled protocol test is not a paid/live OpenRouter acceptance run.
+
+### MLX / mlx_lm
+
+Registered as a local/native provider class, but native generation parity is still not a merged supported path. Do not route it through HTTP merely to make the matrix look complete.
+
+### Hermes
+
+Hermes remains a compatibility/execution client path, not CAPT runtime authority. Historical v0.5 evidence proves bounded installed-wheel interaction; newer lifecycle hardening lives in PR #46. The dedicated `HERMES_LOCAL_002_COMPLETE` evidence branch additionally records the local Hermes Agent TUI workspace/state-map test result described in `CURRENT_STATE.md`.
+
+## Choosing a model
+
+Selection does not grant capability and does not prove execution. The runtime still controls mission/task authority, approvals, leases, dispatch, evidence, verification, and completion state.
+
+## Current flagship acceptance target
+
+A meaningful cross-model proof is:
+
+```text
+Model A -> governed work -> evidence -> checkpoint -> process exit
+Model B -> same CAPT state -> no-repeat recovery -> new governed work -> evidence/verification
+```
+
+Synthetic model names or provider switching inside one process do not satisfy that target.

@@ -1,46 +1,84 @@
-# CAPT TUI (Textual)
+# CAPT TUI — Textual Operator Console
 
-The CAPT Textual TUI is the interactive operator surface. It is built on the
-shared `capt_ui` operator layer and is **not** a second runtime — all mutation
-and authority remain in CAPT RuntimeService.
+The TUI is a thin interactive operator surface over CAPT RuntimeService. It is **not** a second runtime.
 
-## Launch
+## Launch merged `main`
 
-```bash
-capt-ui dashboard   # interactive Textual dashboard
-```
-
-The TUI connects to a running runtime. If none is running, start one first:
-
-```bash
+```zsh
+python -m pip install -e '.[ui]'
 capt start
 capt-ui dashboard
 ```
 
-## What it shows
+The merged bootstrap resolves the same canonical `runtime.sock` / `runtime.token` layout created by `capt start`.
 
-- **Runtime** — health, version, integrity, head sequence
-- **Mission** — active mission/task state
-- **Provider/model** — configured providers, health, model list
-- **Approvals** — pending human approval queue (approve/deny)
-- **Evidence** — evidence / verification / ClaimGuard
-- **Memory** — durable memory overview
-- **Logs** — operator event feed
+## Merged TUI MVP
 
-## Governed actions
+The current `main` TUI exposes:
 
-Keyboard-first. Approve/deny, checkpoint, resume, and cancel route through the
-shared Operator facade into RuntimeService. The TUI never writes the
-EventStore/ledger directly.
+- runtime health/integrity;
+- mission/task state;
+- memory/context view;
+- provider/model state;
+- approval queue;
+- evidence/verification/ClaimGuard views;
+- logs/operator events;
+- governed approve/deny;
+- checkpoint/resume/cancel controls;
+- CaveCAPT presentation verbosity.
 
-## CaveCAPT verbosity
+Interactive keypress/operator-routing tests established that governed actions route through the shared Operator facade rather than touching EventStore/SQLite directly.
 
-`capt-ui verbosity` cycles presentational detail (minimal / normal / detailed /
-diagnostic). It is presentation-only and never weakens governance,
-verification, evidence, memory policy, or ClaimGuard.
+## Active cockpit upgrade — PR #47
 
-## Honest status
+The active integration branch upgrades the run panel with:
 
-- **TUI: SHIPPED MVP.** Acceptable for v0.6. Interactive keypress smoke passes.
-- Cross-model continuity is **NOT** claimed by the TUI; see
-  `capt_ui/ACCEPTANCE_STATUS.md`.
+| Control | Values / behavior |
+|---|---|
+| response mode | `MAX`, `SPOCK`, `CAVE CAPT`, `MIN` |
+| requested context | 32K–256K in 32K steps |
+| enhancement engine | `OFF`, `AUTO`, `OMNI`, `META`, `FORGE`, `SIGMA` |
+| human verification | explicit checkbox / approval requirement |
+| enhancement flow | `ENHANCE -> REVIEW -> APPROVE -> RUN` |
+
+The prompt enhancer is deterministic and presentation-side. If the request is underspecified, it asks for the missing outcome/success criterion rather than inventing one.
+
+When enhancement is enabled and human verification is required, RUN is locally blocked until the proposal is approved.
+
+The current-run panel also carries cognitive provenance including requested/effective context budget and a prompt-assembly digest.
+
+## Hermes Agent TUI workspace evidence
+
+A dedicated pushed evidence branch, `evidence/hermes-local-002-r6` at HEAD `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`, records `HERMES_LOCAL_002_COMPLETE` for the Hermes Agent TUI workspace/state-map exercise. The reported environment used Node `v22.22.2`; system npm `11.14.1` was engine-incompatible, so the faithful workspace run used npm `11.17.0` via `npx`.
+
+Reported results:
+
+- 98 passed / 0 failed / 0 skipped;
+- 174 passed / 0 failed / 2 skipped;
+- no product or state-map blocker.
+
+Remaining bounded gaps are the lack of a destructive external-provider/tool-kill rollback E2E test, the two skips, and an unrelated macOS case-insensitive contributor-email checkout collision.
+
+This evidence is relevant to the Hermes workspace/TUI integration state; it does not by itself prove every CAPT provider or destructive rollback path.
+
+## What these controls do not do
+
+They do not:
+
+- grant capabilities;
+- bypass RuntimeService approval;
+- make UI state authoritative;
+- turn a prompt proposal into evidence;
+- make a provider response verified;
+- declare task/mission completion.
+
+## Provider execution status
+
+PR #47 contains the bounded ProviderDriver used by the upgraded run path. Its controlled HTTP tests are meaningful protocol/lifecycle evidence, but the final exact-head live-provider installed-runtime acceptance remains open.
+
+## Current classification
+
+- merged Textual TUI: **SHIPPED MVP on `main`**;
+- Hermes local TUI/workspace state map: **`HERMES_LOCAL_002_COMPLETE` on dedicated evidence branch**;
+- PR #47 cockpit/provider execution: **IMPLEMENTED IN ACTIVE INTEGRATION, NOT SHIPPED**;
+- true real-provider cross-model continuity: **PENDING PROOF**.

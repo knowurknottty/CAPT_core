@@ -1,31 +1,32 @@
 # CAPT Desktop
 
-CAPT has two desktop tracks. Their statuses are deliberately distinct.
+CAPT currently has two desktop tracks with deliberately different claims.
 
-## Tk desktop — DESKTOP_OPERATOR_MVP
+## Tk operator MVP
 
-A thin Tk client over the `RuntimeClient`/operator surface. It is a
-reference/debug/client/fallback and view-model proving ground, **not** a native
-desktop product. It renders runtime status and operator actions through the
-shared operator layer.
+The Python/Tk surface is a real thin client/view-model proving ground over the authenticated runtime/operator boundary.
 
-## Native SwiftUI — LIBRARY ONLY (not yet a shipped app)
+Classification: **OPERATOR MVP / reference / fallback**, not a polished native product.
 
-`capt_ui/surfaces/desktop_swift/CAPTCoreDesktop` is a Swift Package that
-declares a **library** product (`Package.swift` → `.library`), not an
-executable/app. It defines value-type projections of the same operator concepts
-the CLI/TUI consume (a renderer contract and view-model shape), and builds
-cleanly:
+It must not own RuntimeService logic, EventStore writes, capability decisions, evidence promotion, or completion state.
 
-```bash
+## SwiftUI track
+
+`capt_ui/surfaces/desktop_swift/CAPTCoreDesktop` is a Swift Package/client contract. It models the same operator projections used by CLI/TUI while leaving CAPT authority in the existing local runtime service.
+
+Classification: **LIBRARY / CLIENT CONTRACT**, not a shipped `.app` executable.
+
+```zsh
 cd capt_ui/surfaces/desktop_swift
-swift build     # builds the library
+swift build
 ```
 
-**Status: NATIVE_DESKTOP_TRACK_INITIATED.** There is no `.app`/executable
-target yet; it must not be represented as a shipped native desktop product.
+A successful library build is not evidence of a distributable/notarized native application.
 
-## Angular truth
+## Relationship to current TUI work
 
-No desktop surface is a second runtime. All mutation and authority remain in
-CAPT RuntimeService / EventStore.
+The active PR #47 cognition/provider cockpit is presently implemented in the Textual TUI path. It should inform the eventual native operator UX, but desktop parity should not be claimed until the native client implements and proves equivalent governed controls.
+
+## Product gate
+
+The native desktop product remains a later usability/distribution milestone. Signing, notarization, packaging, auto-update, platform acceptance, and full provider/control parity require their own evidence.

@@ -1,173 +1,112 @@
 # CAPT Core Architecture
 
-CAPT Core is a model-agnostic cognitive infrastructure architecture. This repository contains **CAPT Solo**, the local-first reference implementation, and the packaged **CAPT Runtime Harness** used for governed execution and lifecycle control.
+CAPT Core is local-first governed cognitive infrastructure around replaceable inference models. The architecture deliberately keeps durable responsibility outside a model session.
 
-The architecture keeps persistent cognition outside any single model, vendor, or runtime. Models provide inference. CAPT owns durable memory, governed state, evidence, recovery, bounded execution, and human authority.
-
-## Architectural principles
-
-| Principle | Current v0.5 implementation |
-|---|---|
-| Model independence | External models are replaceable drivers or clients. |
-| Local-first operation | No required cloud service or external database. |
-| Stable in-process boundary | Integrators use `capt_solo.api`. |
-| Governed execution boundary | Operators and clients use the authenticated `capt harness` service. |
-| Authoritative runtime history | EventStore owns ordered runtime events and replay. |
-| Operational transactions | CTP records transaction receipts and recovery state. |
-| Bounded context | Runtime Memory Governor constructs and rotates ContextPack state. |
-| Evidence before trust | Verification requires declared evidence and preserved outcomes. |
-| Explicit governance | Consequential actions are attributed, bounded, and auditable. |
-| Honest reachability | Packaged, importable, internal, API, and operator-facing states are distinguished. |
-
-## Two public surfaces
-
-### 1. CAPT Solo API
-
-`capt_solo.api` is the supported in-process integration surface. It exposes local memory, CTP, KHSB, and proof-governed domain services without requiring callers to depend on internal implementation paths.
-
-### 2. CAPT Runtime Harness
-
-The installed `capt harness` CLI communicates with an authenticated local RuntimeService. The harness owns lifecycle control, EventStore persistence, TaskResolver, DriverHost, checkpoint/restart continuity, idempotency, and bounded external-driver execution.
-
-These surfaces are complementary, not interchangeable.
-
-## Runtime topology
+## Authority topology
 
 ```text
-Application code
-    |
-    +--> capt_solo.api
-    |       +--> Memory Engine
-    |       +--> CTP
-    |       +--> KHSB
-    |       +--> Foundry / Proof / ClaimGuard
-    |
-Operator or external compatibility client
-    |
-    +--> capt harness CLI
-            +--> authenticated RuntimeService
-            +--> EventStore
-            +--> Runtime Memory Governor
-            +--> ContextPack
-            +--> TaskResolver
-            +--> DriverHost
-            +--> Checkpoint / Recovery
-            +--> bounded external drivers
+Human / application / compatibility client
+              |
+      CLI / TUI / desktop
+              |
+      shared Operator facade
+              |
+      authenticated local IPC
+              v
+        RuntimeService
+              |
+   +----------+-----------+----------------+
+   |                      |                |
+EventStore            Governance       Memory/context
+ordered authority     grants/leases    durable memory
+history               approvals        + ContextPack
+   |                      |                |
+   +---------- governed execution ----------+
+              |
+          DriverHost
+              |
+      bounded model/tool drivers
+              |
+      replaceable inference
 ```
 
-Hermes is one possible external compatibility client. It is not the runtime, the system of record, or the owner of CAPT authority.
+No presentation surface, external model, Hermes client, Cohort coordinator, discovery scanner, prompt enhancer, or security checker becomes a parallel runtime.
 
-## Authority and responsibility
+## Durable layers
 
 ### EventStore
 
-EventStore is the authoritative ordered runtime event ledger. It provides durable event persistence, sequence ordering, replay, and chain-integrity evidence for the standalone runtime.
+Authoritative ordered runtime history, replay, sequence identity, and integrity evidence.
 
-### Cognitive Transaction Protocol
+### CTP
 
-CTP records operational transaction boundaries and recovery state, including begin, validate, commit, abort, note, idempotency, correlation, and receipts.
-
-CTP does **not** replace EventStore as the authoritative runtime event ledger.
+Operational transaction/recovery journal. CTP is useful for begin/validate/commit/abort/idempotency/receipt semantics, but it does not replace EventStore as runtime authority.
 
 ### CAPT Solo Memory Engine
 
-The CAPT Solo Memory Engine is a SQLite-backed API subsystem for persistent local knowledge. It supports namespaces, tags, provenance, confidence, metadata, import/export, backup, and integrity checks.
+Persistent local knowledge with provenance/metadata and local integrity/backup facilities.
 
-### Runtime Memory Governor
+### Runtime Memory Governor / ContextPack
 
-The Runtime Memory Governor is a separate subsystem. It owns trigger policy, token accounting, ContextPack construction, rotation, budget enforcement, stale-pack rejection, and runtime dispatch gating.
-
-### ContextPack
-
-ContextPack is bounded working context produced under runtime policy. External drivers receive only the authorized slice or reference defined by the runtime contract, not unrestricted access to durable memory.
+Separate from durable storage. It owns context policy, token/budget accounting, bounded context construction/rotation, stale-state rejection, and dispatch gating.
 
 ### KHSB
 
-KHSB is a local, in-process coordination bus supporting publish/subscribe and request/reply behavior. It is not durable and is not a cross-process or distributed transport.
+In-process coordination. It is not currently durable, cross-process, or distributed.
 
-### DriverHost
+## Governed execution
 
-DriverHost executes bounded external-driver operations under CAPT authority. Driver output remains untrusted until recorded, verified, and accepted through the governed evidence path.
+RuntimeService admits commands under explicit authority. DriverHost executes bounded external work. A completed driver call is an observation/artifact candidate, not automatic evidence acceptance, verification, task completion, or mission completion.
 
-The currently proven Hermes action is bounded read-only inspection. General unrestricted model-driven repository engineering is not claimed.
+The active #46 lifecycle hardening strengthens durable idempotency, lease consumption, dispatch-boundary accounting, cancellation, and indeterminate-execution recovery. When dispatch status cannot be proven, the safe behavior is suspension/reconciliation rather than silent replay.
 
-## Proof-governed subsystems
+## Operator layer
 
-### Proof and verification
+`capt_ui.operator` is the shared projection/control abstraction used by the Textual TUI and desktop/operator surfaces. It may render state and submit governed requests; it does not write EventStore directly.
 
-Evidence is evaluated against declared requirements. Source presence, imports, generated prose, or a successful-looking output are not sufficient proof by themselves.
+The merged TUI is an operator MVP. PR #47 adds prompt assembly/cognitive provenance and provider-run integration without changing the authority topology.
 
-### Capability Registry
+## Provider layer
 
-Capabilities move through explicit lifecycle states such as candidate, validated, proven, verified, degraded, deprecated, revoked, and experimental.
+Merged `main` contains provider registration, health/model discovery where supported, and model-selection foundations.
 
-### ClaimGuard
+PR #47 adds a bounded ProviderDriver for Ollama native generation and OpenAI-compatible chat-completions transport. Controlled HTTP tests establish protocol/lifecycle behavior; intended live-provider installed-runtime acceptance remains a separate proof class.
 
-ClaimGuard prevents unsupported completion or capability claims from being represented as verified. Degradation remains scoped so a local or platform-specific limitation does not become a false global failure.
+## Hermes boundary
 
-### Skill Foundry
+Hermes is a compatibility/execution client, not CAPT authority. Historical v0.5 evidence established bounded installed-wheel behavior. The `HERMES_LOCAL_002_COMPLETE` evidence branch adds a current local Hermes Agent TUI workspace/state-map result with no product/state-map blocker, while preserving bounded residual gaps.
 
-Skill Foundry supports explicit generation, validation, review, approval, publication, deprecation, and revocation states. A generated skill is not trusted merely because generation completed.
+## Discovery
 
-### Knowledge Bubbles
+PR #44 adds read-only bounded discovery/SEAL scanning. Discovery may observe source/state; it does not grant capabilities or mutate authoritative runtime state.
 
-Imported Knowledge Bubbles are quarantined and validated manifest-first before approval or installation.
+## Cohorts
 
-### Workflow Proof
+PR #48 defines bounded multi-perspective contribution/quorum/dissent coordination over CAPT authority. Current Cohort work does not yet claim durable reconstruction, restart-safe cursors, evidence admission, or installed-runtime TUI dogfood.
 
-A composed workflow carries independent proof. Verification is not inherited automatically from individually verified components.
+## SecurityGate
 
-## Lifecycle and recovery
+PR #49 turns security requirements into fail-closed infrastructure evidence. Its verdict is advisory/governance input, not a self-authorizing state transition. Applicable controls without evidence keep the gate blocked.
 
-The standalone runtime provides:
+## Truth classes
 
-- authenticated local service access;
-- idempotent command handling;
-- checkpoint creation;
-- restart continuity;
-- resume without repeating completed execution;
-- EventStore replay;
-- bounded driver dispatch;
-- persisted evidence and verification records.
+Use precise terms:
 
-CAPT Solo API subsystems also provide local integrity, backup, import/export, and CTP recovery features. These are separate layers and should not be conflated.
+```text
+SOURCE_PRESENT
+PACKAGED
+OPERATOR_REACHABLE
+EXECUTED
+EVIDENCE_RECORDED
+VERIFIED
+CLAIM_ACCEPTED
+TASK_COMPLETED
+MISSION_COMPLETED
+RELEASE_PROVEN
+```
 
-## Reachability vocabulary
+They are not interchangeable.
 
-Public documentation uses these classifications:
+## Current state
 
-- `SOURCE_PRESENT`
-- `PACKAGED_ONLY`
-- `IMPORTABLE_API`
-- `API_ONLY`
-- `INTERNAL_RUNTIME_SERVICE`
-- `OPERATOR_FACING`
-- `LOCAL_REAL_PROCESS_PROVEN`
-- `HOSTED_CI_PROVEN`
-- `DEFERRED`
-- `UNPROVEN`
-
-A class that imports is not automatically an operator feature. A local real-process proof is not automatically hosted-CI proof.
-
-## Security boundaries
-
-The current runtime assumes one trusted local operating-system user. It does not claim:
-
-- encryption at rest;
-- multi-user authorization;
-- protection from a compromised host account;
-- cryptographically signed audit history;
-- universal isolation of every external tool or model runtime.
-
-Optional drivers may require provider credentials or network access. The base CAPT runtime does not.
-
-## Extension seams
-
-Future implementations may add alternate memory backends, distributed transports, additional model drivers, encrypted exports, signed receipts, or stronger authorization. These are extension seams, not current implementation claims.
-
-## Naming
-
-- **CAPT Core** — architecture and project.
-- **CAPT Solo** — local-first reference implementation and API package.
-- **CAPT Runtime Harness** — governed execution and lifecycle service shipped with CAPT Solo.
-- **External compatibility skill or driver** — client integration that remains outside runtime authority.
+See [`CURRENT_STATE.md`](CURRENT_STATE.md) for the exact package/main/integration/evidence split.

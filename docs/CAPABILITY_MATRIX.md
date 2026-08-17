@@ -1,63 +1,44 @@
 # CAPT Capability Matrix
 
-This is the authoritative "what actually exists" table. A feature importing
-successfully is **not** proof it is operator-facing. This matrix is the single,
-honest view of capability status.
+This matrix distinguishes **merged `main`** from **active integration** and **release proof**.
 
-Legend for columns:
+Legend:
 
-- **Implemented** — code exists for it.
-- **Tested** — covered by the automated suite (`pytest tests/`).
-- **Installed** — available through the shipped `capt` CLI / wheel.
-- **Operator-facing** — a normal user can reach it without Python.
-- **Internal only** — reachable programmatically but not a user command.
-- **Proven** — demonstrated with real artifacts in release evidence.
-- **Notes** — pointers and caveats.
+- **MERGED** — present on `main` and reachable in its documented surface.
+- **INTEGRATING** — implemented on the current open stacked PR lineage, not yet shipped on `main`.
+- **HISTORICALLY PROVEN** — preserved exact evidence exists for the numbered v0.5 lineage.
+- **PENDING PROOF** — implementation may exist, but the required terminal/live acceptance has not been established.
 
-Status values: **YES** / **PARTIAL** / **NO**.
+| Capability | `main` | Active stack | Proof boundary |
+|---|---|---|---|
+| normal `capt` lifecycle | MERGED | — | v0.5/v0.6-onramp tests + historical release evidence |
+| durable memory CLI/API | MERGED | — | tested/historical evidence |
+| EventStore + RuntimeService | MERGED | hardened in #46 | authoritative runtime boundary |
+| checkpoint/restart/no-repeat resume | MERGED | hardened lifecycle in #46 | historical installed proof + newer focused tests |
+| evidence / verification / ClaimGuard | MERGED | projection/provenance strengthened | do not equate evidence with verification/completion |
+| shared operator facade | MERGED | extended | UI remains non-authoritative |
+| Textual TUI | MERGED MVP | cockpit upgrade in #47 | merged interactive smoke; upgraded slice not shipped |
+| TUI human approve/deny | MERGED MVP | prompt-approval binding strengthened #47 | governed command path |
+| CaveCAPT presentation verbosity | MERGED | — | presentational only |
+| provider registry/config | MERGED | consumed by #47 | registration ≠ execution |
+| provider health/model discovery | MERGED where adapter supports it | — | adapter-specific |
+| model-selection/favorites/overrides | MERGED foundation | used in cockpit | selection ≠ live governed inference |
+| bounded ProviderDriver inference | NO | INTEGRATING #47 | controlled HTTP protocol tests; live exact-head acceptance pending |
+| Ollama native generation transport | NO | INTEGRATING #47 | `/api/generate`; controlled server proof |
+| OpenAI-compatible generation transport | NO | INTEGRATING #47 | `/chat/completions`; controlled server proof |
+| prompt enhancement engines | NO | INTEGRATING #47 | deterministic presentation-side proposal |
+| response-mode/context-budget cockpit | NO | INTEGRATING #47 | requested/effective provenance in active branch |
+| cognitive provenance envelope | NO | INTEGRATING #47 | focused branch tests; not release proof |
+| Discovery Governor / SEAL scanner | NO | INTEGRATING #44 | local integration evidence; unmerged |
+| Ouroboros execution/recovery hardening | NO | INTEGRATING #46 | focused + full-suite evidence reported on branch |
+| bounded Cohort coordination | NO | INTEGRATING #48 | durable persistence/reconstruction still absent |
+| fail-closed SecurityGate | NO | INTEGRATING #49 | intentionally BLOCKED pending applicable-control evidence |
+| Tk desktop operator | MERGED MVP | — | reference/fallback, not native product |
+| SwiftUI native app | NO | client-contract library merged | no shipped `.app` |
+| true Model A -> restart -> Model B continuity | NO | scaffold/target | PENDING PROOF |
+| unrestricted autonomous repo mutation | NO | NO | explicitly not claimed |
+| Windows support | UNVERIFIED | — | requires separate proof |
 
-| Feature | Implemented | Tested | Installed | Operator-facing | Internal only | Proven | Notes |
-|---|---|---:|---:|---:|---:|---:|---|
-| Install (`install.sh` + `capt`) | YES | YES | YES | YES | | YES | `install.sh` now installs the `capt` CLI on PATH |
-| Verify (`verify.sh`) | YES | YES | YES | YES | | YES | runs `verify_runtime.py` |
-| Doctor (`capt doctor`) | YES | YES | YES | YES | | YES | first-class support surface |
-| Durable memory store (`capt memory store`) | YES | YES | YES | YES | | YES | new v0.6 command |
-| Memory search / list | YES | YES | YES | YES | | YES | |
-| Memory lifecycle (pin/archive/promote) | YES | YES | YES | YES | | | expert CLI verbs |
-| Runtime start (`capt start`) | YES | YES | YES | YES | | YES | defaults to `~/.capt` |
-| Runtime status (`capt status`) | YES | YES | YES | YES | | YES | |
-| Runtime stop (`capt stop`) | YES | YES | YES | YES | | YES | |
-| Checkpoint (`capt checkpoint`) | YES | YES | YES | YES | | YES | |
-| Resume (`capt resume`) | YES | YES | YES | YES | | YES | |
-| Evidence / verification view (`capt evidence`) | YES | YES | YES | YES | | YES | |
-| EventStore ordered history + replay | YES | YES | YES | PARTIAL | YES | YES | programmatic; via `capt harness` / API |
-| Mission creation (governed) | YES | YES | YES | PARTIAL | YES | YES | `capt runtime mission-begin` |
-| Approval / govern operator | YES | YES | PARTIAL | PARTIAL | YES | YES | `submit_approval_decision` command op |
-| Human approval gate | YES | YES | YES | PARTIAL | YES | YES | |
-| CTP transaction / recovery journal | YES | YES | YES | NO | YES | YES | internal |
-| Memory Governor / ContextPack policy | YES | YES | YES | NO | YES | YES | internal |
-| KHSB in-process coordination | YES | YES | YES | NO | YES | YES | internal |
-| Foundry (skills/capabilities) | YES | YES | YES | YES | | | `capt foundry ...` |
-| ClaimGuard claim discipline | YES | YES | YES | PARTIAL | | YES | surfaced in `capt evidence` |
-| Proof / Verification pipeline | YES | YES | YES | YES | | YES | `capt evidence` |
-| DriverHost + bounded drivers | YES | YES | YES | NO | YES | YES | model connectors internal |
-| Model provider config (`capt models ...`) | NO | NO | NO | NO | NO | NO | **v0.6 P1** — not yet unified |
-| Cross-model continuity demo | YES | YES | YES | PARTIAL | | YES | flagship v0.6 proof (demo 5) |
-| Desktop app as default surface | YES | YES | PARTIAL | NO | | | v0.6 P1 decision pending |
-| Windows support | NO | NO | NO | NO | NO | NO | unverified |
-| Local-model runtime (LM Studio/Ollama/MLX) | PARTIAL | PARTIAL | PARTIAL | NO | | | P1 model provider work |
+## Rule
 
----
-
-## Reading guide
-
-- **Operator-facing = YES** means you can use it from a `capt` command with no
-  Python. Start with the memory and runtime lifecycle rows — those are the v0.6
-  P0 on-ramp.
-- **Internal only** subsystems (CTP, Memory Governor, KHSB, DriverHost) are real
-  and tested but are not things a normal user invokes. Their presence inside the
-  architecture is intentional, not a gap.
-- **Model provider configuration is the main missing normal-user surface.** The
-  runtime can host bounded drivers and the cross-model proof works, but there is
-  not yet a unified `capt models list/add/test/use`. That is scheduled P1 work,
-  not a silent omission.
+Code presence never upgrades itself into release truth. Use the smallest claim supported by the exact source and evidence.

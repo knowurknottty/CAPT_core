@@ -1,76 +1,59 @@
-# CAPT UI Foundation
+# CAPT UI / Operator Layer
 
-A thin operator presentation/control layer for CAPT. Every surface — CLI, TUI,
-Desktop, future Web — consumes the same `capt_ui.operator` abstraction. No
-duplicated runtime, provider, or business logic; authority stays in
-RuntimeService.
+`capt_ui` is a thin projection/control layer over CAPT RuntimeService. CLI/TUI/desktop clients share operator concepts; none becomes an alternate ledger or authority source.
+
+## Merged `main`
+
+The package includes:
+
+- shared operator facade;
+- provider manager and adapter registry;
+- model manager/favorites/defaults/overrides;
+- CaveCAPT presentation verbosity;
+- first-run onboarding;
+- Textual TUI MVP;
+- Tk desktop/operator surface;
+- SwiftUI client-contract library;
+- UI continuity scaffolding.
+
+Typical commands:
+
+```zsh
+capt-ui status
+capt-ui dashboard
+capt-ui capabilities
+capt-ui providers
+capt-ui models
+capt-ui verbosity
+capt-ui memory
+capt-ui onramp
+```
+
+Use installed `--help` for exact flags.
+
+## Active PR #47
+
+The current TUI integration lane adds:
+
+- `MAX/SPOCK/CAVE CAPT/MIN` response modes;
+- 32K–256K requested context budgets;
+- `OFF/AUTO/OMNI/META/FORGE/SIGMA` enhancement engines;
+- inspect/review/approve prompt-enhancement flow;
+- requested/effective context provenance and prompt digest;
+- bounded ProviderDriver execution for Ollama native and OpenAI-compatible endpoints.
+
+These features remain active integration until the stack merges and terminal acceptance is recorded.
+
+## Hermes TUI workspace evidence
+
+The dedicated `HERMES_LOCAL_002_COMPLETE` evidence branch records the faithful Hermes Agent TUI workspace/state map with 98/0/0 focused and 174/0/2 broader test results and no product/state-map blocker. It does not close the destructive external-provider/tool-kill rollback E2E gap.
 
 ## Authority invariant
 
-```
-RuntimeService
-  -> EventStore
-  -> Memory
-  -> Governance
-  -> Drivers
+```text
+UI/operator intent
+      -> RuntimeService
+      -> governance / EventStore / memory / evidence / DriverHost
 ```
 
-The UI is a projection and control surface only. It never writes the ledger,
-never promotes driver output, and never fabricates authoritative state.
-
-## Layout
-
-```
-capt_ui/
-  operator/
-    contract.py    # typed enums + state views (RuntimeHealth, Verbosity, ...)
-    runtime.py     # Operator facade over RuntimeClient (status/dashboard/...)
-    providers.py   # ProviderManager (Phase 2): CRUD, health, local/remote
-    models.py      # ModelManager (Phase 3): default/mission/temp overrides
-    verbosity.py   # CaveCAPT (Phase 4): minimal/normal/detailed/diagnostic
-    onramp.py      # first-run onboarding wizard (Phase 7)
-    cli.py         # `capt-ui` console script (shared CLI surface)
-    bootstrap.py   # runtime socket/token resolution
-  surfaces/
-    tui/app.py     # Textual operator console (Phase 5)
-    desktop/       # desktop view-model over RuntimeClient (Phase 6)
-  acceptance/
-    ui_continuity_demo.py # UI continuity workflow demo (Phase 8)
-```
-
-## Commands
-
-```zsh
-# shared operator CLI (works on base install; no textual required)
-capt-ui status
-capt-ui dashboard
-capt-ui providers --test ollama
-capt-ui providers --activate ollama
-capt-ui models --set ollama/qwen2.5:7b
-capt-ui verbosity --set detailed
-capt-ui memory --store "a durable memory"
-capt-ui onramp
-
-# TUI (requires the 'ui' extra: pip install -e '.[ui]')
-python -m capt_ui.surfaces.tui.app
-```
-
-## Prerequisites
-
-A running CAPT runtime exposing an authenticated local socket + token
-(`RuntimeService`). The operator layer resolves them via `CAPT_STATE_DIR` /
-`CAPT_SOLO_HOME` or `CAPT_SOCK`/`CAPT_TOKEN`.
-
-## Tests
-
-```zsh
-pytest tests/test_ui_operator_layer.py \
-       tests/test_ui_tui.py \
-       tests/test_ui_desktop_surface.py \
-       tests/test_ui_onboarding.py \
-       tests/test_ui_cli.py \
-       tests/test_ui_continuity_demo.py
-```
-
-TUI/desktop/continuity tests that need a live runtime skip cleanly when none is
-running.
+The UI never fabricates authoritative completion state.

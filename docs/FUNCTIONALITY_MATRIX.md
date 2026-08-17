@@ -1,56 +1,36 @@
 # CAPT Functionality Matrix
 
-Authoritative, evidence-based view of what the merged CAPT Core `main`
-actually does, separating **shipped** from **proven-in-flight** from
-**release-gate (not yet claimed)**.
+## Operator surfaces on merged `main`
 
-Legend:
-- **SHIPPED** — reachable through the installed CLI / surface and verified.
-- **MVP** — functional operator surface, acceptable for v0.6.
-- **PROVEN** — exercised with real evidence in this closure.
-- **GATE** — declared release gate; present but NOT YET PROVEN.
+| Capability | CLI | TUI | Tk desktop | SwiftUI |
+|---|---|---|---|---|
+| runtime lifecycle | yes | status/control | yes | contract only |
+| checkpoint/resume | yes | yes | yes | contract only |
+| durable memory | yes | view/control | view/control | contract only |
+| evidence/verification | yes | yes | yes | contract only |
+| provider registry/health/model list | `capt-ui` operator CLI | yes | yes | contract only |
+| model-selection foundation | `capt-ui` | yes | yes | contract only |
+| CaveCAPT verbosity | `capt-ui` | yes | operator-layer dependent | contract only |
+| human approve/deny | expert/runtime paths | yes | yes | contract only |
+| live bounded provider generation | no | no on `main` | no | no |
 
-## Operator surfaces
+## Active integration additions
 
-| Capability | CLI | TUI | Desktop (Tk) | SwiftUI | Status |
-|---|---|---|---|---|---|
-| Runtime start/status/stop | ✅ | ✅ | ✅ | – | **SHIPPED** |
-| Checkpoint / resume | ✅ | ✅ | ✅ | – | **PROVEN** |
-| Doctor (env diagnostics) | ✅ | – | – | – | **SHIPPED** |
-| Durable memory store/search | ✅ | ✅ | ✅ | – | **PROVEN** |
-| Evidence / verification view | ✅ | ✅ | ✅ | – | **SHIPPED** |
-| Provider/model discovery | ✅ | ✅ | ✅ | – | **SHIPPED** |
-| CaveCAPT verbosity | ✅ | ✅ | – | – | **SHIPPED** |
-| Human approve/deny | – | ✅ | ✅ | – | **MVP** |
+PR #47 is the current operator/provider execution slice. It adds provider generation, prompt assembly/provenance, human-reviewed enhancement, response modes, requested context budgets, and current-run cognitive provenance to the TUI path.
 
-## Runtime / governance
+PR #44 adds governed discovery; #46 hardens execution/recovery; #48 adds bounded Cohort coordination; #49 adds the fail-closed security infrastructure gate.
 
-| Capability | Status |
-|---|---|
-| EventStore ledger + integrity | **SHIPPED** |
-| Authenticated IPC (socket/token) | **SHIPPED** |
-| Mission/task aggregates | **SHIPPED** |
-| Policy → grant → lease → driver | **PROVEN** (governed dispatch recorded in ledger) |
-| External Hermes ExecutionDriver (Mode A) | **PROVEN** (real `hermes -z` process dispatched) |
-| Checkpoint / replay / restart / resume | **PROVEN** (no-repeat verified) |
-| ClaimGuard | **SHIPPED** |
+## Release-gate truth
 
-## Provider execution (release gate)
+The following must not be represented as completed merely because pieces exist:
 
-| Capability | Status |
-|---|---|
-| Provider registration | **SHIPPED** |
-| Health probe / model list | **SHIPPED** |
-| Real governed model execution | **GATE** — NOT YET PROVEN |
-| Cross-model continuity (A→B via restart) | **GATE** — NOT YET PROVEN |
+- exact-terminal-head integrated-stack acceptance;
+- installed-runtime/live-provider acceptance for intended provider paths;
+- true process-boundary cross-model continuation with Model A replaced by Model B;
+- durable Cohort persistence/reconstruction/evidence admission;
+- security closure while #49 remains blocked;
+- a shipped native desktop product.
 
-## CAPT Lite / MCP (companion repo `capt-workspace-mcp`)
+## Authority boundary
 
-See the MCP repository — the MCP Gateway is merged there with 33 tools
-(14 workspace + 17 CAPT-facing + Lite L0/L1).
-
-## Honest boundaries
-
-- Provider registration ≠ provider execution.
-- A continuity **demo** (synthetic model IDs) ≠ real cross-model proof.
-- The SwiftUI package is a **library**, not a shipped app.
+Every UI and compatibility surface is a projection/control client. RuntimeService/EventStore remain authoritative.

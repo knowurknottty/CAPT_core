@@ -1,88 +1,54 @@
-# CAPT Solo — Changelog
+# CAPT Core Changelog
 
-## v0.4.1 (2026-07-20) — Anti-Token-Extraction Component Integration
+## Unreleased / repository `main` and active integration — 2026-08-17
 
-### Added
-- **Anti-Token-Extraction component** (`capt_solo/components/`): optional,
-  independently degradable capability invoking the REAL upstream
-  `anti_token_extraction` package as a local child process over stdio
-  (FastMCP). Cache mode off, sensitive-input refusal on, no credentials in
-  MCP arguments.
-- **Pinned upstream manifest**: `UPSTREAM_REPO` + `PINNED_COMMIT`
-  (https://github.com/knowurknottty/anti-token-extraction @ b68adac…) recorded
-  in `ATEManifest`; provenance verified via `direct_url.json`
-  (`verify_pinned_commit()` confirms install matches exact commit + repo + vcs).
-- **Legacy cache purge** on bootstrap/upgrade (`purge_legacy_cache()` delegates
-  to the upstream `anti-token-extraction security purge-legacy-cache`, removing
-  `~/.cache/anti-token-extraction/csc2.json`; symlink-safe, quarantines on
-  failure).
-- **Hermes MCP template** (`anti_token_extraction.mcp.json`): stdio, cache off,
-  refusal on, no creds, isolation metadata.
-- **Capability registration**: `register_capability(reg)` registers
-  `anti-token-extraction` as `candidate`, `optional`, `independently_degradable`.
-- **Plugin tool**: `capt_anti_token_extraction_status` (47 tools total).
-- **doctor.sh**: `v04.anti_token_extraction` check (pass healthy+pinned; warn
-  absent/degraded — never blocks core).
-- **verify_runtime.py**: `component.ate_*` checks (warn-only).
-- **Tests**: `tests/test_v04_anti_token_extraction.py` (27 tests: no-shim,
-  no-credential-extraction-regex, safe compress shape, sensitive refusal,
-  MCP template no-secret-params, cache off, no historical retrieval, stdio
-  transport, provenance exact/wrong-commit/wrong-repo/missing/malformed/absent,
-  scoped degradation, core systems unaffected, no payload state, no input in
-  errors, oversized rejection, timeout kill, legacy-cache purge, manifest
-  security, bootstrap idempotency, real end-to-end compression).
-- **Docs**: `docs/ANTI_TOKEN_EXTRACTION.md`.
+This section intentionally distinguishes merged `main` from open stacked integration.
 
-### Changed
-- `plugin.json` version 0.4.0 → 0.4.1; tool count 46 → 47.
-- `install.sh`: bootstraps the component (idempotent) and purges legacy caches.
-- `doctor.sh`: version label v0.4.1; plugin tool count 47.
+### Merged since the original v0.5 package release
 
-### Safety
-- Failure of this component degrades ONLY the anti-token-extraction capability
-  (scoped `affected_scope`). Memory, CTP, KHSB, governance, ClaimGuard, plugin
-  loading, and core runtime remain operational.
+- normal `capt` start/status/stop/checkpoint/resume/evidence/doctor on-ramp;
+- durable memory CLI;
+- shared `capt_ui.operator` layer;
+- provider registry/health/model-list foundations;
+- model-selection/favorites/override foundations;
+- CaveCAPT presentation verbosity;
+- Textual TUI MVP with governed approvals/control;
+- Tk operator MVP;
+- SwiftUI client-contract library;
+- onboarding/UI continuity scaffolding.
 
-## v0.4.0 (2026-07-19) — Proof-Governed Cognitive Operating System
+Package metadata remains `0.5.0`; these merged changes have not yet been represented by a new numbered package release.
 
-### Added
-- **Skill Foundry**: procedure → skill candidate → evidence → 12-stage validation
-  → review → publish. Full lifecycle with explicit transitions.
-- **Proof Engine**: evidence objects + aggregation against declared requirements.
-- **Capability Registry**: candidate→validated→proven→verified (3 distinct,
-  idempotent events). 12 explicit degradation reason codes with structured records.
-- **ClaimGuard**: claim validation with downgraded language; scoped degradation
-  (macOS-only ≠ global revoke).
-- **Knowledge Bubble Runtime**: v2 manifest (bubble_id, version, namespaces,
-  artifact inventory, per-artifact hashes, manifest hash, signature placeholder,
-  redaction declaration, declared permissions/dependencies, export policy,
-  provenance) + 12-step validation (manifest before payload). Quarantine-by-default.
-- **Governance Layer**: all consequential actions CTP-bounded + audited.
-- **Workflow Proof Engine**: composed workflows carry independent proof; do NOT
-  inherit component verification.
-- **Migration safety gate**: backup-gated forward migration (sqlite3.backup() +
-  integrity_check + receipt; abort on failure). `ALLOW_MIGRATION_WITHOUT_BACKUP=False`.
-- **CLI**: `foundry` group (skills, capabilities, bubbles, governance, curate, audit).
-- **Plugin**: 10 new v0.4 foundry tools (46 total).
-- **Doctor/verify**: extended with v0.4 checks (schema v4, backup dir, foundry
-  import, 12 degradation codes, CLI availability, plugin count, verify_runtime).
-- **Boundary audit**: `api.py` + `capt_cli.py` confirmed SQL-free; regression test.
+### Active stacked integration
 
-### Changed
-- `SCHEMA_VERSION` 3 → 4 (v0.4 tables: composite_workflows, workflow_proofs,
-  governance_audit, capability_degradations).
-- `build_skill` rollback default is now `None` (empty string is respected as a
-  real, validation-failing value).
+- PR #44: bounded Discovery Governor/SEAL scanner;
+- PR #46: Ouroboros/Hermes lifecycle and recovery hardening;
+- PR #47: prompt assembly/cognitive provenance, TUI cockpit, bounded ProviderDriver;
+- PR #48: bounded Cohort coordination;
+- PR #49: fail-closed security gate, intentionally blocked pending closure evidence.
 
-### Schema
-- Forward-only migrations. Backup taken before any version bump. Idempotent re-open.
+### Evidence
 
-### Verification
-- 348 tests passing (migration, workflow proof, degradation, bubble, CLI, plugin,
-  foundry, boundary, v0.1–v0.3 regression).
-- `verify_runtime.py` exercises all subsystems end to end.
-- `doctor.sh` reports v0.4 environment health.
+- `HERMES_LOCAL_002_COMPLETE` pushed on `evidence/hermes-local-002-r6` at `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`;
+- reported 98 passed / 0 failed / 0 skipped focused;
+- reported 174 passed / 0 failed / 2 skipped broader;
+- no product/state-map blocker;
+- destructive external-provider/tool-kill rollback E2E remains unproven.
 
-## v0.3.0 — Lifecycle, Sessions, Procedures, Prospective Memory
-## v0.2.0 — KHSB bus, CTP transactions, retrieval feedback
-## v0.1.0 — Memory engine, core, plugin scaffold
+## v0.5.0 — Standalone governed runtime release lineage
+
+The preserved `release_evidence/v0.5/` record is the authority for the exact numbered-release proof and limitations.
+
+## v0.4.1 — Anti-Token-Extraction optional component
+
+Historical addition of the bounded optional anti-token-extraction integration, provenance/degradation controls, and associated tests/docs.
+
+## v0.4.0 — Proof-governed subsystem expansion
+
+Historical addition of Foundry, Proof Engine, Capability Registry lifecycle, ClaimGuard, Knowledge Bubble quarantine/validation, workflow proof, migration safety, governance, and supporting CLI/tests.
+
+## v0.3 / v0.2 / v0.1
+
+Historical development of lifecycle/session/procedure/prospective-memory, KHSB/CTP/retrieval feedback, and the original local memory/core/plugin scaffold.
+
+Historical exact test counts and implementation details should be read from the corresponding committed evidence rather than treated as current `main` claims.

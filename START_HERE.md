@@ -1,245 +1,99 @@
 # Start Here
 
-**Welcome to CAPT.** Read this file first.
+**CAPT Core is a local-first governed runtime and continuity substrate around replaceable AI models.**
 
-> CAPT is a **local-first governed runtime and continuity substrate for AI agents.**
->
-> **The model becomes stateless. CAPT becomes stateful.**
+> The model is an inference component. CAPT keeps durable state, memory, authority, evidence, and recovery outside the model session.
 
-A model (an LLM) is transient and replaceable. CAPT owns the durable memory,
-governed state, evidence, authority, execution history, context policy, and
-recovery around the model. Whatever model you use, your continuity, proof, and
-state belong to CAPT.
+This walkthrough exercises the **merged `main` path**. It does not require a model or cloud credential.
 
----
-
-## What will you accomplish here?
-
-This is the only walkthrough you need to go from zero to real CAPT use. In
-about **five minutes** you will:
-
-1. install CAPT;
-2. verify the install;
-3. store and retrieve durable memory;
-4. start the governed runtime;
-5. inspect its health and evidence;
-6. checkpoint it;
-7. stop it;
-8. restart and resume it;
-9. inspect the proof that CAPT tracks what happened.
-
-You do **not** need Hermes, an API key, a hosted model provider, Docker, or an
-external database for any of this. It is fully local and deterministic.
-
----
+For exact current status before evaluating advanced features, read [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md).
 
 ## Prerequisites
 
-| Requirement | Minimum | Notes |
-|---|---|---|
-| Operating system | macOS or Linux | Windows is unverified until separately tested |
-| Python | 3.10, 3.11, or 3.12 | release-tested path |
-| Tools | `git`, a POSIX shell | |
+- macOS or Linux for the currently exercised path;
+- Python 3.10–3.12 are the established CI/release-era versions; 3.12 is a good default;
+- `git` and a POSIX shell.
 
-Check Python:
+Windows remains unverified unless a newer exact-head platform proof says otherwise.
+
+## Install the CLI and TUI
 
 ```zsh
-python3 --version
+git clone https://github.com/knowurknottty/CAPT_core.git
+cd CAPT_core
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -e '.[ui]'
 ```
 
-If `python3` is not one of 3.10–3.12, choose an available one (e.g. `python3.12`).
-
----
-
-## 1. Install and verify
+Confirm what you installed:
 
 ```zsh
-git clone https://github.com/knowurknottty/CAPT_core.git capt-core
-cd capt-core
-./install.sh
-./verify.sh
-```
-
-`install.sh` installs the `capt` command-line interface and prepares local
-state. Confirm it worked:
-
-```zsh
+which capt
 capt --version
+capt doctor
 ```
 
-Expected:
+The package metadata currently reports `capt-solo 0.5.0` even though `main` contains later productization work. That version/state distinction is intentional and documented.
 
-```text
-capt-solo 0.5.0
-```
-
-If `capt` is not found, ensure your `python3`'s bin directory is on `PATH`,
-or re-run `/path/to/capt-core/install.sh` with the Python you plan to use.
-
-> Troubleshooting: run `capt doctor` any time. It prints a clear list of what
-> is present and what is missing, and what to do about each.
-
----
-
-## 2. First success: durable memory
-
-CAPT's memory is independent of any model. Store a fact:
+## First success: durable memory
 
 ```zsh
 capt memory store "CAPT keeps durable state outside the model."
-```
-
-You should see a `memory_id`. Now retrieve it:
-
-```zsh
 capt memory search "durable state"
 capt memory list
 ```
 
-This is the core CAPT property: **knowledge belongs to CAPT, not to a model
-transcript.** Restart your computer and this memory is still there.
-
----
-
-## 3. Start the governed runtime
+## Start the governed runtime
 
 ```zsh
 capt start
-```
-
-That's it. No socket paths, tokens, or ledger paths to configure. CAPT allocates
-a default local state directory (`~/.capt`, or `$CAPT_STATE_DIR` if you set it)
-and starts the authenticated runtime service.
-
-You should see `status: HEALTHY`.
-
-Check runtime health and capabilities:
-
-```zsh
 capt status
 ```
 
----
+Normal state defaults to `~/.capt` unless `$CAPT_STATE_DIR` is set. The normal user does not need to provide socket, token, or ledger paths.
 
-## 4. Inspect evidence and verification
-
-Evidence is how CAPT answers "why does this claim say it is complete?".
+## Inspect evidence
 
 ```zsh
 capt evidence
 ```
 
-This shows authoritative CAPT state: the active mission, recorded evidence,
-verification result, and — when a real claim exists — the ClaimGuard decision.
+Evidence, verification, and ClaimGuard are different concepts. A recorded observation is not automatically verified, and verification is not automatically mission completion.
 
-> Not every first-run runtime has a mission yet, so the mission may be `None`.
-> The verification result is still shown.
-
----
-
-## 5. Checkpoint the runtime
-
-A checkpoint captures authoritative state so you can resume later.
+## Launch the merged Textual TUI
 
 ```zsh
-capt checkpoint --idempotency-key my-first-checkpoint
+capt-ui dashboard
 ```
 
-You should see `status: accepted` and a `checkpointId`. Run the same command
-again — CAPT treats a repeated idempotency key as a duplicate, not a second
-state change.
+The merged TUI is an operator/control surface over RuntimeService. It does not own the ledger or bypass governance.
 
----
+The richer prompt/cognitive cockpit controls described in [`docs/TUI.md`](docs/TUI.md) are currently part of the active PR #47 integration lane, not the numbered package release.
 
-## 6. Stop, restart, resume
-
-Stop the runtime:
+## Checkpoint, stop, restart, resume
 
 ```zsh
+capt checkpoint --idempotency-key first-cp
 capt stop
-```
-
-`capt status` should now report the runtime is not running. Restart it using the
-same default state directory (your ledger is preserved):
-
-```zsh
 capt start
-```
-
-Resume from the check-pointed state:
-
-```zsh
-capt resume --idempotency-key my-first-resume
-```
-
-Re-check health:
-
-```zsh
+capt resume --idempotency-key first-resume
 capt status
 ```
 
-Completed work is not repeated; CAPT resumes from its authoritative state.
+The purpose of this path is to demonstrate that continuity belongs to CAPT state rather than to a model transcript.
 
----
+## Next
 
-## 7. Where the truth lives (mental model)
+- [Current repository state](docs/CURRENT_STATE.md)
+- [Mental model](docs/MENTAL_MODEL.md)
+- [User workflows](docs/USER_GUIDE.md)
+- [TUI](docs/TUI.md)
+- [Providers](docs/PROVIDERS.md)
+- [Capability matrix](docs/CAPABILITY_MATRIX.md)
+- [Demos](docs/DEMOS.md)
+- [Security boundaries](docs/SECURITY.md)
+- [Release evidence](docs/RELEASE_EVIDENCE.md)
 
-Keep this one picture in mind:
-
-```text
-Human
-  |
-  v
-CAPT Runtime
-  |
-  +--> Memory        durable, model-independent
-  +--> Governance    nothing happens without authority/approval
-  +--> Evidence      proof, verification, claims
-  +--> Recovery      EventStore, checkpoints
-  |
-  v
-Replaceable Models   (LM Studio, Ollama, OpenRouter, ...)
-```
-
-Everything above the bottom line is CAPT's responsibility. Models are pluggable
-inference components below the line. See `docs/MENTAL_MODEL.md` for the detail.
-
----
-
-## 8. What you can do next
-
-- **[Use CAPT](./docs/USER_GUIDE.md)** — the task-oriented workflows.
-- **[Run a flagship demo](./docs/DEMOS.md)** — five end-to-end demonstrations.
-- **[See what is real](./docs/CAPABILITY_MATRIX.md)** — implemented vs. tested
-  vs. operator-facing, at a glance.
-- **[Inspect the proof](./docs/RELEASE_EVIDENCE.md)** — how v0.5 was verified.
-- **[Add a model provider](./docs/MODEL_PROVIDERS.md)** — wire up a model.
-- **[Read the architecture](./docs/ARCHITECTURE.md)** — after first success.
-- **[Get help](./docs/TROUBLESHOOTING.md)** — common failures and fixes.
-
----
-
-## Command reference (the essentials)
-
-| Command | What it does |
-|---|---|
-| `capt memory store "<text>"` | store a durable memory |
-| `capt memory search "<terms>"` | retrieve memories |
-| `capt start` | start the governed runtime (defaults) |
-| `capt status` | runtime health and version |
-| `capt evidence` | human-readable evidence / verification view |
-| `capt checkpoint` | capture authoritative state |
-| `capt resume` | resume after restart |
-| `capt stop` | stop the runtime |
-| `capt doctor` | diagnose the environment |
-| `capt --version` | version |
-
----
-
-## A note on honesty
-
-This walkthrough uses the **normal-human** CLI surface that exists in v0.6.
-Some deeper subsystem features are real but not yet surfaced through simple
-commands; the capability matrix at `docs/CAPABILITY_MATRIX.md` tells you
-exactly what is operator-facing versus internal versus experimental. If a doc
-ever implies something that a command does not actually do, the command wins.
+If a guide and an executable surface disagree, the exact source/contract and exact-head evidence win.

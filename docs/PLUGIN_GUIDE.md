@@ -1,126 +1,50 @@
 # CAPT Runtime and Integration Guide
 
-CAPT Core supports two integration paths:
+CAPT exposes three relevant integration layers:
 
-- `capt_solo.api` for in-process CAPT Solo features;
-- `capt harness` for governed runtime lifecycle and bounded execution.
+- `capt_solo.api` for supported in-process services;
+- RuntimeService / `capt harness` for governed lifecycle and execution;
+- `capt_ui.operator` for presentation/control clients such as TUI/desktop.
 
-Hermes is an external compatibility client. It is not the CAPT runtime and does not own CAPT authority.
+Hermes is an external compatibility/execution client. It is not CAPT runtime authority.
 
-## Start with the installed harness
+## Runtime integration
 
-```zsh
-capt harness start
-capt harness health
-capt harness capabilities
-capt harness command --help
-capt harness stop
-```
+Use installed `capt harness --help` as the exact command authority. The harness owns authenticated runtime access, EventStore-backed lifecycle, command admission/idempotency, checkpoint/recovery, capability/lease boundaries, DriverHost, evidence/verification persistence, and bounded external execution.
 
-Use the installed help output as the authority for exact command names and arguments.
+## UI/operator integration
 
-## What the harness provides
+A client may project runtime/mission/memory/provider/approval/evidence state and submit operator intent through the shared operator/runtime boundary. It must not write SQLite/EventStore directly or promote model output to authoritative completion.
 
-The standalone harness owns:
+## Provider integration
 
-- authenticated local RuntimeService access;
-- command classification and idempotency;
-- EventStore persistence and replay;
-- Runtime Memory Governor policy;
-- ContextPack construction and rotation;
-- TaskResolver and DriverHost;
-- checkpoint and restart continuity;
-- evidence and VerificationResult persistence;
-- ClaimGuard decisions;
-- bounded external-driver execution.
+Merged `main` contains provider registry/discovery/model-selection foundations. Active PR #47 adds bounded Ollama native and OpenAI-compatible generation transport with provenance/digests/secret scrubbing and conservative reconciliation semantics.
 
-## Hermes boundary
+Do not label a provider operational merely because it registers or returns a model list.
 
-The proven Hermes-facing path is:
+## Hermes integration
 
-```text
-Hermes -> bounded compatibility layer -> installed capt harness -> CAPT-owned runtime
-```
+The current evidence story has multiple layers:
 
-The compatibility layer must not:
+- historical v0.5 installed-wheel bounded Hermes proof;
+- active #46 lifecycle hardening;
+- `HERMES_LOCAL_002_COMPLETE` local Hermes Agent TUI workspace/state-map evidence on `evidence/hermes-local-002-r6` at `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`.
 
-- reconstruct CAPT in prompts;
-- claim that Hermes owns memory, policy, ledger, or lifecycle authority;
-- bypass RuntimeService or DriverHost;
-- expose raw internal state as a public contract;
-- represent prompt discipline as runtime enforcement;
-- claim general repository engineering when only bounded inspection is proven.
+LOCAL-002 reports 98/0/0 focused and 174/0/2 broader tests with no product/state-map blocker. It explicitly does not close the destructive external-provider/tool-kill rollback E2E gap.
 
-The historical Hermes skill has been archived outside CAPT Core because it targets older `capt agent` and plugin commands. It must be rewritten and independently proven against the v0.5 harness before being called release-ready.
+## Building a compatibility client
 
-## Current Hermes proof
+A client should:
 
-The preserved v0.5 evidence demonstrates a local installed-wheel lifecycle using a real Hermes process, including authenticated service access, mission/task/session creation, bounded driver execution, verification persistence, ClaimGuard decision, checkpointing, restart, idempotent duplicate handling, and no-repeat resume.
+1. use public installed/runtime/operator contracts;
+2. preserve CAPT-generated IDs and provenance;
+3. request only declared capability/scope;
+4. distinguish local client state from RuntimeService authority;
+5. treat provider/model output as untrusted until evidence/verification admission;
+6. test duplicate, restart, cancellation, stale-state, auth, and indeterminate-dispatch cases;
+7. never silently persist credentials into evidence/logs;
+8. retain limitations in user-facing output.
 
-Limitations:
+## Security rule
 
-- hosted CI does not rerun the external Hermes/provider lifecycle;
-- one run encountered a provider HTTP 429 condition;
-- the proven operator action is bounded read-only inspection;
-- unrestricted model-driven repository mutation is not proven.
-
-## CAPT Solo API integrations
-
-Applications that need memory, CTP, KHSB, or proof-governed domain services should import `capt_solo.api` directly.
-
-```python
-from capt_solo.api import MemoryEngine
-
-engine = MemoryEngine()
-engine.store(
-    "A durable project decision.",
-    namespace="project",
-    provenance="operator",
-)
-```
-
-This API path is separate from harness execution.
-
-## Security boundaries
-
-- Do not pass provider secrets through CAPT command payloads unless the specific driver contract requires and protects them.
-- Do not log authorization headers or credentials.
-- Treat external model output as untrusted until verified.
-- Keep the runtime directory restricted to the trusted local account.
-- Do not store unnecessary secrets in CAPT memory.
-- Distinguish local external-process proof from hosted-CI proof.
-- Surface degraded optional dependencies explicitly.
-
-## Building a new compatibility client
-
-A new client should:
-
-1. depend only on installed public surfaces;
-2. resolve the exact CAPT version and capabilities;
-3. authenticate through the supported local service boundary;
-4. request only declared capabilities;
-5. preserve CAPT-generated identifiers and receipts;
-6. avoid direct database or internal-module mutation;
-7. test duplicate commands, restart, stale context, and authorization failure;
-8. preserve limitations in user-facing output.
-
-## Verification
-
-Run:
-
-```zsh
-./verify.sh
-./doctor.sh
-python3 verify_runtime.py
-python3 -m pytest tests/ -q
-```
-
-For release evidence, see [`release_evidence/v0.5`](../release_evidence/v0.5).
-
-## Related documentation
-
-- [Project overview](../README.md)
-- [Architecture](ARCHITECTURE.md)
-- [API reference](API.md)
-- [Security boundaries](SECURITY.md)
-- [Roadmap](ROADMAP.md)
+Prompt discipline is not runtime enforcement. Client-side approval UI is not capability authority. A model or compatibility client must never be documented as owning CAPT memory, ledger, verification, or completion state.

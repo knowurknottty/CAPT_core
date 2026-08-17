@@ -1,115 +1,86 @@
-# User Guide — Task-Oriented Workflows
+# CAPT User Guide
 
-This guide documents complete workflows, not module inventories. Each section is
-a path you can run from the CLI. Everything here uses the normal-human `capt`
-surface introduced in v0.6.
+This guide uses public operator surfaces and separates merged workflows from active integration work.
 
-Prerequisite: you have completed [START_HERE](../START_HERE.md) and `capt` is
-installed.
+Prerequisite: complete [`START_HERE.md`](../START_HERE.md).
 
----
-
-## Workflow A — The life of a runtime session
-
-This is the primary rhythm. Checkpoint early, checkpoint often.
-
-```text
-Install -> Start -> Health -> Use -> Inspect -> Checkpoint -> Stop -> Resume
-```
+## Runtime lifecycle
 
 ```zsh
-capt start                       # start (idempotent: safe to run again)
-capt status                      # health + version + capabilities
-capt memory store "my working fact"   # do some work
-capt evidence                    # inspect what is recorded
-capt checkpoint --idempotency-key wf-a-cp   # save state
-capt stop                        # stop the process
-capt start                       # restart, same state dir
-capt resume --idempotency-key wf-a-rs      # resume, no repeated work
+capt start
+capt status
+capt evidence
+capt checkpoint --idempotency-key work-cp
+capt stop
+capt start
+capt resume --idempotency-key work-resume
 ```
 
----
+CAPT's EventStore and checkpoint/recovery path are responsible for continuity; a model transcript is not.
 
-## Workflow B — Governed execution (mission → approval → evidence)
-
-Nothing consequential runs without approval. The pattern is:
-
-```text
-Mission -> Approval -> Execution -> Evidence -> Verification -> Claim
-```
-
-The runtime exposes governed command operations (`create_mission`,
-`submit_approval_decision`, ...). The deterministic local demonstration is the
-seeded demo mission:
+## Durable memory
 
 ```zsh
-capt start --seed     # seeds a demonstration mission with a full chain
-capt evidence         # inspect missionSpec, evidence, verification
-```
-
-For applications, use `capt harness command` with the governed operations to
-walk this workflow against your own state. The expert surface is documented in
-[`docs/PLUGIN_GUIDE.md`](PLUGIN_GUIDE.md).
-
----
-
-## Workflow C — Durable memory
-
-```text
-Remember -> Retrieve -> ContextPack -> Model -> Persist
-```
-
-```zsh
-capt memory store "CAPT keeps memory outside the model."
-capt memory search "durable"
+capt memory store "A durable project decision." --namespace project
+capt memory search "project decision"
 capt memory list
 ```
 
-Memory is durable: it survives process restarts and is independent of any model.
+Persistent memory and the Runtime Memory Governor/ContextPack are separate layers: durable storage is not the same thing as the bounded context sent to a model.
 
----
-
-## Workflow D — Stop, restart, resume without losing work
+## TUI operator workflow
 
 ```zsh
-capt checkpoint --idempotency-key resume-prep
-capt stop
 capt start
-capt resume --idempotency-key resume-continue
-capt status
+capt-ui dashboard
 ```
 
-The EventStore records ordered history; checkpoints capture authoritative state.
-CAPT resumes from that state rather than repeating completed work.
+The merged TUI exposes runtime, mission, memory/context, provider/model, approvals, evidence, and logs. Governed approve/deny/checkpoint/resume/cancel actions route through the shared operator/runtime boundary.
 
----
+### Active cockpit upgrade
 
-## Workflow E — Install and diagnose
+PR #47 adds an integrated run surface with:
+
+- provider/model choice;
+- response modes `MAX`, `SPOCK`, `CAVE CAPT`, `MIN`;
+- requested context budgets from 32K to 256K;
+- prompt-enhancement choices `OFF`, `AUTO`, `OMNI`, `META`, `FORGE`, `SIGMA`;
+- explicit human review/approval when required;
+- requested/effective context and prompt-assembly provenance.
+
+Until that stack merges and receives terminal acceptance evidence, treat it as active integration work rather than a released feature.
+
+## Governed execution model
+
+The conceptual path is:
+
+```text
+operator request
+ -> mission/task
+ -> policy / approval / capability / lease
+ -> bounded driver dispatch
+ -> untrusted observation/artifact candidate
+ -> evidence admission
+ -> verification
+ -> ClaimGuard / completion decision
+```
+
+A driver returning successfully is not itself task completion.
+
+## Provider execution boundary
+
+Merged `main` supports provider registration/health/model-list foundations. The active PR #47 lineage adds a bounded ProviderDriver for Ollama native generation and OpenAI-compatible chat-completions transport.
+
+Its controlled HTTP tests validate protocol shape, provenance/digests, cancellation truthfulness, reconciliation, and secret exclusion. Live-provider exact-head installed-runtime acceptance remains a separate gate.
+
+## Evidence inspection
 
 ```zsh
-git clone https://github.com/knowurknottty/CAPT_core.git capt-core
-cd capt-core
-./install.sh
-./verify.sh
-capt doctor      # when something is wrong, run this first
+capt evidence
 ```
 
-If a workflow fails, start with `capt doctor`, then see
-[TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+Use evidence to answer *what was observed?*, verification to answer *what did the evidence establish?*, and ClaimGuard/completion state to answer *what may CAPT truthfully claim?*
 
----
+## Expert integration
 
-## Command map (normal-human surface)
-
-| Command | Purpose |
-|---|---|
-| `capt start` / `capt status` / `capt stop` | runtime lifecycle (defaults) |
-| `capt checkpoint` / `capt resume` | state capture + continuation |
-| `capt evidence` | human-readable proof / verification view |
-| `capt doctor` | environment diagnostics |
-| `capt memory store/search/list` | durable memory |
-| `capt harness ...` | full expert surface (paths, raw commands) |
-
-`capt harness start/health/stop` remain available unchanged for expert/debug
-use. The new `capt start/status/stop` are the recommended normal-human entry
-points; they allocate default local state (`~/.capt`).
+Use `capt harness ...` and the runtime/integration guide only when you need explicit socket/token/ledger control or governed command operations. Normal users should not need those details for first success.
