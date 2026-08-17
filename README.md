@@ -1,283 +1,448 @@
 # CAPT Core
 
-**Local-first governed runtime and continuity substrate for AI agents.**
+**Local-first governed runtime, continuity substrate, and operator layer for AI systems.**
 
-> **The model becomes stateless. CAPT becomes stateful.**
+> **The model becomes replaceable. CAPT keeps the state, authority, evidence, memory, and recovery.**
 
-A model is a transient, replaceable inference component. CAPT owns the durable
-memory, governed state, evidence, authority, execution history, context policy,
-and recovery around it. This is the one identity CAPT has: a local-first
-governed runtime and continuity substrate for AI agents.
+CAPT moves the responsibilities that should not live inside a transient model session into a durable local runtime: authoritative state, memory, execution history, governance, evidence, verification, capability control, context policy, checkpoint/recovery, and operator control.
+
+The model is an inference component. **CAPT is the system of record around it.**
+
+---
+
+## Current repository status
+
+CAPT Core is presently between the proven standalone v0.5 package release and the next integrated product/runtime release.
+
+- **Package metadata remains `0.5.0`.** That is the latest numbered package release represented by `pyproject.toml`.
+- **`main` is substantially newer than the original v0.5 release.** The v0.6 productization work is merged: simplified onboarding, shared operator layer, provider/model management foundations, CaveCAPT verbosity, Textual TUI MVP, Tk operator MVP, and the native SwiftUI client contract.
+- **The next integration lane is active but not yet shipped.** Discovery governance, hardened governed execution lifecycle, prompt/cognitive provenance, the upgraded TUI run surface, Cohort coordination, and the fail-closed security gate are being reconciled through the current PR stack.
+- **A branch or PR implementation is not described here as shipped merely because the code exists.** This README separates merged behavior from active integration work and from release proof.
+
+### Active integration stack
+
+| PR | Area | Current classification |
+|---|---|---|
+| #44 | Discovery Governor + bounded local scanner | Implemented and locally verified; not yet merged |
+| #46 | Governed Hermes/Ouroboros execution lifecycle | Hardened lifecycle and recovery semantics; not yet merged |
+| #47 | Prompt assembly, cognitive provenance, TUI upgrade, provider-run integration | **Near-complete integration slice; not yet merged** |
+| #48 | Bounded Cohort coordination | Coordination contracts verified; durable runtime integration remains later work |
+| #49 | Fail-closed security infrastructure gate | Draft; intentionally blocked until exact-head evidence and remaining controls close |
+
+This stack is cumulative. Later PRs build on earlier integration branches rather than redefining CAPT authority.
+
+---
 
 ## Start here
 
-**New to CAPT? Read [`START_HERE.md`](START_HERE.md) and follow it — it is the
-only walkthrough you need.** It takes about five minutes: install, verify,
-store memory, start the runtime, inspect evidence, checkpoint, stop, restart,
-resume.
+For the canonical walkthrough, use [`START_HERE.md`](START_HERE.md).
 
-For the mental model, see [`docs/MENTAL_MODEL.md`](docs/MENTAL_MODEL.md) — the
-whole system fits on one screen.
-
-## Quick start
+For the current normal-human install, including the Textual TUI:
 
 ```zsh
-git clone https://github.com/knowurknottty/CAPT_core.git capt-core
-cd capt-core
-./install.sh
-./verify.sh
+git clone https://github.com/knowurknottty/CAPT_core.git
+cd CAPT_core
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -e '.[ui]'
 ```
 
-Then confirm the CLI:
+Verify the environment and start CAPT:
 
 ```zsh
 capt --version
+capt doctor
+capt start
+capt status
 ```
 
-Start the governed runtime with defaults and use it:
-
-```zsh
-capt start        # starts the runtime with a default state dir (~/.capt)
-capt status       # runtime health and version
-capt evidence     # human-readable proof / verification view
-capt checkpoint   # save authoritative state
-capt resume       # resume after restart
-capt stop         # stop the runtime
-```
-
-Durable memory, no model required:
+Exercise durable state:
 
 ```zsh
 capt memory store "CAPT keeps durable state outside the model."
-capt memory search "durable"
+capt memory search "durable state"
+capt evidence
+capt checkpoint
 ```
 
-`capt start/status/stop/checkpoint/resume` are the recommended normal-human
-entry points. The full expert surface remains available as
-`capt harness start/health/capabilities/stop` for advanced and debug use.
-
-Diagnose the environment any time:
+Launch the current merged TUI:
 
 ```zsh
-capt doctor
+capt-ui dashboard
 ```
 
-## What is proven in v0.5
+Then stop and resume without repeating completed work:
 
-CAPT Core v0.5 is release-proven for local evaluation and development within the documented boundaries.
+```zsh
+capt stop
+capt resume
+capt status
+```
 
-The current release includes:
+The expert harness surface remains available through `capt harness ...` when explicit socket/token/ledger control is required.
 
-- a local SQLite-backed Memory Engine exposed through `capt_solo.api`;
-- an authoritative EventStore for ordered runtime events and replay;
-- CTP operational transaction and recovery journals;
-- an internal Memory Governor and bounded ContextPack rotation policy;
+---
+
+## What is merged on `main`
+
+### Governed runtime and continuity
+
+The current default branch contains the core runtime architecture that makes CAPT more than a prompt wrapper:
+
+- authoritative ordered **EventStore** history with integrity checking;
+- authenticated local RuntimeService IPC;
+- mission/task/runtime aggregates and governed state transitions;
+- capability grants and bounded leases;
+- DriverHost and execution-driver boundaries;
+- checkpoint, restart, replay, idempotency, and no-repeat recovery;
+- CAPT Solo durable Memory Engine;
+- Runtime Memory Governor and ContextPack policy;
+- CTP operational transaction/recovery journaling;
 - KHSB in-process coordination;
-- proof, capability lifecycle, ClaimGuard, Skill Foundry, workflow-proof, and Knowledge Bubble subsystems;
-- an authenticated local harness service with checkpoint, restart, idempotency, and bounded driver execution;
-- installed-wheel, local real-process, and hosted-CI evidence under [`release_evidence/v0.5`](release_evidence/v0.5).
+- evidence and verification machinery;
+- ClaimGuard;
+- proof/workflow/Foundry/Knowledge Bubble components;
+- bounded Hermes compatibility execution, with the strongest historical release proof centered on controlled inspection rather than unrestricted autonomous repository mutation.
 
-The currently proven Hermes-facing action is **bounded read-only inspection**. General unrestricted model-driven repository engineering is not claimed.
+### Normal operator surfaces
 
-## Quick start
+`main` also contains the productization layer that was not present in the original v0.5 experience:
 
-```zsh
-git clone https://github.com/knowurknottty/CAPT_core.git capt-core
-cd capt-core
-./install.sh
-./verify.sh
-```
+| Surface / capability | Merged status |
+|---|---|
+| `capt` normal CLI | **SHIPPED** |
+| `capt start/status/stop/checkpoint/resume/evidence/doctor` | **SHIPPED** |
+| durable memory store/search from CLI | **SHIPPED / PROVEN** |
+| shared `capt_ui.operator` facade | **SHIPPED** |
+| Textual TUI | **SHIPPED MVP** |
+| human approve/deny through TUI | **SHIPPED MVP** |
+| provider registration/configuration | **SHIPPED** |
+| provider health/model discovery where supported | **SHIPPED** |
+| model selection/favorites/override foundations | **SHIPPED** |
+| CaveCAPT Minimal/Normal/Detailed/Diagnostic presentation modes | **SHIPPED** |
+| first-run operator onboarding flow | **SHIPPED** |
+| Tk desktop operator | **OPERATOR MVP / reference fallback** |
+| native SwiftUI surface | **CLIENT CONTRACT / LIBRARY ONLY** |
+| real cross-model process-boundary continuity | **NOT YET RELEASE-PROVEN** |
 
-For deeper diagnostics:
+The UI is deliberately thin. **CLI, TUI, and desktop surfaces do not become alternate runtimes.** Consequential mutations continue to route into RuntimeService.
 
-```zsh
-./doctor.sh
-python3 verify_runtime.py
-python3 -m pytest tests/ -q
-```
+---
 
-After installation, inspect the standalone harness:
+## TUI: merged MVP and the nearly-complete upgrade
 
-```zsh
-capt harness start
-capt harness health
-capt harness capabilities
-capt harness stop
-```
+### What the merged TUI already does
 
-Use `capt harness command --help` to inspect the governed command surface available in the installed version.
+The Textual TUI on `main` is a keyboard-first operator console over the same shared Operator facade used by the other surfaces.
+
+It exposes:
+
+- runtime health and integrity;
+- mission/task state;
+- memory/context state;
+- evidence, verification, and ClaimGuard views;
+- configured providers and models;
+- human approval queue;
+- logs/operator event feed;
+- checkpoint/resume/cancel controls;
+- CaveCAPT verbosity;
+- governed approve/deny without direct EventStore or SQLite mutation.
+
+The earlier bootstrap defect that prevented `capt-ui` from finding the token created by `capt start` has been fixed on `main`; both now resolve the canonical `runtime.sock` + `runtime.token` layout.
+
+### What the active TUI integration adds
+
+PR #47 upgrades the TUI from a monitoring/control MVP toward the intended CAPT operator cockpit. The code currently adds:
+
+- provider and model selection directly in the governed run surface;
+- **response modes:** `MAX`, `SPOCK`, `CAVE CAPT`, `MIN`;
+- **requested context budgets:** 32K through 256K in 32K increments;
+- **prompt enhancement engines:** `OFF`, `AUTO`, `OMNI`, `META`, `FORGE`, `SIGMA`;
+- inspectable prompt enhancement instead of invisible prompt rewriting;
+- clarification when the input is too underspecified to optimize safely;
+- explicit **ENHANCE → REVIEW → APPROVE → RUN** operator flow when human verification is required;
+- persisted non-secret prompt preferences;
+- requested-versus-effective context provenance;
+- prompt-assembly digest display on the current run;
+- model-visible cognitive provenance carried through the governed execution path.
+
+The enhancement layer is intentionally presentation-side and deterministic. It can propose a better execution prompt, but it cannot mint capability, bypass approval, write authoritative state, or declare work complete.
+
+### Provider execution in the active integration lane
+
+The active PR #47 lineage also contains a bounded `ProviderDriver` for actual inference transport:
+
+- Ollama via its native `/api/generate` endpoint;
+- OpenAI-compatible chat-completions transport for compatible remote/local providers;
+- provider/model/endpoint provenance and prompt/response digests;
+- secret exclusion from artifacts and returned diagnostics;
+- explicit dispatch-boundary tracking;
+- truthful cancellation semantics that do not pretend an underlying HTTP request was aborted when it was not;
+- reconciliation for pre-dispatch, response-complete, and externally-unknown states.
+
+**Important proof boundary:** the current provider-driver tests exercise the real HTTP protocol path against controlled local test servers. That proves transport shape, lifecycle behavior, provenance, and secret handling; it is **not yet the same thing as an exact-head live-provider release acceptance run**. The repository does not claim that final gate prematurely.
+
+---
 
 ## Why CAPT exists
 
-Most AI systems attach memory, tool state, and execution history to a temporary model session. That makes continuity fragile and makes it difficult to distinguish a convincing answer from a verified system state.
+Most AI applications still make the model session responsible for too much:
 
-CAPT moves durable responsibility outside the model:
+- remembering what happened;
+- reconstructing context;
+- deciding what evidence matters;
+- keeping execution state;
+- determining whether a tool action is authorized;
+- evaluating its own output;
+- recovering after restart;
+- deciding whether work is complete.
 
-| Concern | CAPT owner |
+Those are poor places to rely on a probabilistic, context-bounded inference component.
+
+CAPT externalizes them:
+
+| Responsibility | CAPT owner |
 |---|---|
 | Persistent local knowledge | CAPT Solo Memory Engine |
-| Authoritative runtime event history | EventStore |
-| Operational transaction and recovery journal | CTP |
-| Context budgeting and rotation | Runtime Memory Governor |
+| Authoritative runtime history | EventStore |
+| Runtime transitions | RuntimeService |
+| Operational transaction/recovery journal | CTP |
+| Context budgeting / rotation | Runtime Memory Governor + ContextPack |
 | In-process coordination | KHSB |
-| Evidence and verification state | Proof and verification subsystems |
-| Claim discipline | ClaimGuard |
-| Consequential runtime execution | CAPT Runtime Harness |
-| Final authority | Human operator |
+| Capability and lease enforcement | Runtime governance |
+| External execution | bounded Drivers / DriverHost |
+| Evidence | evidence subsystem |
+| Verification | verification subsystem |
+| Claim support discipline | ClaimGuard |
+| Presentation and operator controls | `capt`, `capt-ui`, desktop clients |
+| Final authority | human operator / explicitly authorized runtime policy |
 
-This makes models replaceable inference components rather than the system of record.
+This makes a model replaceable without making the mission, memory, evidence trail, or runtime identity disposable.
 
-## Two supported public surfaces
-
-CAPT has two integration paths. For normal users, the `capt` CLI is the primary
-surface. For developers, the `capt_solo.api` Python API and the `capt harness`
-expert CLI are the integration surfaces.
-
-### `capt` CLI (recommended, v0.6)
-
-`capt start/status/stop/checkpoint/resume/evidence/doctor` plus
-`capt memory ...` are the normal-human surface. See
-[`START_HERE.md`](START_HERE.md) and [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md).
-
-### CAPT Solo API
-
-Use `capt_solo.api` for supported in-process integrations such as memory, CTP, KHSB, and proof-governed domain services.
-
-```python
-from capt_solo.api import MemoryEngine
-
-memory = MemoryEngine()
-memory.store(
-    "CAPT keeps durable state outside the model.",
-    namespace="project",
-    provenance="user",
-)
-```
-
-### CAPT Runtime Harness (expert)
-
-Use the installed `capt harness` CLI for governed runtime lifecycle and bounded execution at the full detail level (explicit socket/token/ledger paths). The harness owns authenticated service access, command dispatch, checkpointing, restart continuity, idempotency, EventStore persistence, and driver boundaries.
-
-`capt start/status/stop` are thin convenience wrappers over this harness that
-allocate default local state. Authority remains in RuntimeService.
-
-Hermes and other external callers are compatibility clients. They do not become
-the CAPT runtime.
+---
 
 ## Architecture at a glance
 
 ```text
-Application or local caller
-        |
-        +--> capt_solo.api
-        |       +--> Memory Engine
-        |       +--> CTP
-        |       +--> KHSB
-        |       +--> Foundry / Proof / ClaimGuard
-        |
-        +--> capt harness CLI
-                +--> authenticated RuntimeService
-                +--> EventStore
-                +--> Memory Governor / ContextPack
-                +--> DriverHost
-                +--> checkpoint and recovery
-                +--> bounded external drivers
+                    Human / Application / Agent Host
+                               |
+             +-----------------+------------------+
+             |                                    |
+          capt CLI                           capt-ui / desktop
+             |                                    |
+             +---------- shared Operator ---------+
+                               |
+                     authenticated local IPC
+                               |
+                        RuntimeService
+                               |
+       +-----------------------+-----------------------+
+       |                       |                       |
+   EventStore              Governance              Memory
+ authoritative          grants / leases /       Memory Engine
+ event history          approvals / policy      + ContextPack
+       |                       |                       |
+       +--------------- governed execution ------------+
+                               |
+                           DriverHost
+                               |
+              +----------------+----------------+
+              |                                 |
+          Hermes driver                 ProviderDriver*
+                                              |
+                                  Ollama / compatible API
+
+* ProviderDriver is currently in the active integration lineage, not merged
+  release behavior on main.
 ```
 
 ### Authority boundaries
 
-- **EventStore** owns the authoritative ordered runtime event ledger.
-- **CTP** records operational transactions, receipts, and recovery state; it is not the authoritative runtime ledger.
-- **KHSB** is in-process only; it is not durable or cross-process.
-- **CAPT Solo Memory Engine** and the **Runtime Memory Governor** are separate subsystems.
-- Packaging or importability does not automatically make a subsystem operator-facing.
-- Local external-model evidence is distinct from deterministic hosted-CI evidence.
+Several distinctions are architectural, not cosmetic:
+
+- **EventStore** owns authoritative runtime event history.
+- **CTP** is an operational transaction/recovery journal, not a replacement ledger.
+- **KHSB** is currently in-process and non-durable.
+- **CAPT Solo Memory Engine** and **Runtime Memory Governor** are separate subsystems.
+- **Evidence is not verification.**
+- **Verification is not claim acceptance.**
+- **Claim acceptance is not task completion.**
+- **Task completion is not mission completion.**
+- A driver result is untrusted until admitted through CAPT boundaries.
+- A UI action is a request to the runtime, not authority owned by the UI.
+- A provider being registered or discoverable does not prove governed provider execution.
+- A synthetic continuity demo does not prove real Model-A → restart → Model-B continuity.
+
+---
+
+## Provider and model status
+
+The merged provider layer deliberately separates **registration**, **discovery**, **health**, **model listing**, and **execution proof**.
+
+Current `main` foundation includes configuration/support paths for:
+
+- OpenRouter;
+- Ollama;
+- LM Studio;
+- vLLM;
+- llama.cpp-compatible servers;
+- MLX / `mlx_lm` registration foundation;
+- Hermes compatibility.
+
+On merged `main`, several HTTP-based providers support health/model-list operations, while MLX remains registered-only and the full real-provider governed-execution/cross-model release gate remains open.
+
+The active integration lineage advances this with the bounded ProviderDriver described above. Until exact-head live-provider acceptance is recorded, the README keeps **implemented transport** and **release-proven provider execution** as different claims.
+
+See [`docs/PROVIDERS.md`](docs/PROVIDERS.md), [`docs/FUNCTIONALITY_MATRIX.md`](docs/FUNCTIONALITY_MATRIX.md), and [`capt_ui/ACCEPTANCE_STATUS.md`](capt_ui/ACCEPTANCE_STATUS.md).
+
+---
+
+## Cohorts and multi-perspective cognition
+
+PR #48 introduces the first bounded CAPT-native Cohort coordination slice.
+
+It currently defines and verifies:
+
+- typed contribution outcomes;
+- bounded participant rosters;
+- deliberation epochs;
+- stale-result admission rules;
+- participant cursors over authoritative global sequence;
+- round-local Silence Quorum;
+- required-participant positive quorum;
+- material dissent/escalation from any admitted participant;
+- cognitive-debt and escalation projection;
+- duplicate/future-round rejection;
+- final-round quorum versus bounded-incomplete discrimination.
+
+It does **not** yet claim durable Cohort persistence/reconstruction, restart-safe participant cursors, the evidence-admission bridge, governed participant scheduling, or installed-runtime/TUI Cohort dogfooding. Cohorts remain coordination over CAPT authority, not a parallel runtime.
+
+---
+
+## Discovery and governed execution hardening
+
+The active v0.7-era integration stack also includes:
+
+### Discovery Governor / SEAL — PR #44
+
+A bounded, read-only local scanner and discovery policy that can inspect source presence without granting itself capability or mutating authoritative runtime state.
+
+### Ouroboros lifecycle reconciliation — PR #46
+
+Hardens long-running governed execution around:
+
+- durable command idempotency;
+- dispatch-boundary accounting;
+- consumed capability leases;
+- lost/indeterminate execution recovery;
+- suspension instead of unsafe redispatch;
+- truthful projection of verification state;
+- governed cancellation paths.
+
+The central rule is conservative: **when CAPT cannot prove whether external dispatch occurred, it does not silently replay the work.**
+
+---
 
 ## Security posture
 
-The base runtime requires no cloud service, external database, Docker deployment, or provider credential. Optional external model drivers may require their own credentials and network access.
+CAPT is local-first, but local-first does not automatically mean high-assurance.
 
-Current boundaries:
+Merged/current boundaries include:
 
-- local persistent state is plaintext unless protected by host or filesystem encryption;
-- the runtime assumes one trusted local operating-system user;
-- it is not a multi-user authorization service;
-- audit records are not yet cryptographically signed;
-- imported Knowledge Bubbles are quarantined and validated before approval;
-- unsafe migrations and failed integrity checks stop rather than silently proceeding;
-- hosted security CI reports `DEGRADED_OPTIONAL_DEPENDENCY` when the private optional anti-token-extraction dependency cannot be verified.
+- authenticated local socket/token access;
+- single trusted local OS-user threat model;
+- secret references rather than raw provider tokens in UI provider configuration;
+- secret scrubbing from provider diagnostics/evidence paths;
+- integrity checks and fail-closed behavior in multiple runtime paths;
+- imported Knowledge Bubble validation/quarantine boundaries.
 
-Read [Security Boundaries](docs/SECURITY.md) before storing sensitive data or integrating CAPT into a higher-trust environment.
+Current limitations include:
+
+- persistent runtime/memory state is not yet comprehensively encrypted at rest by CAPT itself;
+- the system is not currently a multi-tenant authorization platform;
+- audit integrity is not yet backed by independently trusted signed checkpoint roots;
+- production IPC bounded-frame migration is part of the active security closure work;
+- complete provider token/cost/request/output ceilings remain security-hardening work;
+- adversarial prompt/context/provider injection assurance is not yet a complete release gate.
+
+PR #49 turns the pre-launch security checklist into executable fail-closed infrastructure. It is intentionally **BLOCKED**, not cosmetically green, until each applicable control has exact-head evidence.
+
+Read [`docs/SECURITY.md`](docs/SECURITY.md) before placing sensitive material or higher-trust workloads into CAPT.
+
+---
 
 ## Repository layout
 
 ```text
-START_HERE.md     **start here** — the only walkthrough you need
-capt_cli.py       the `capt` command-line interface (normal + expert surface)
-capt_solo/        CAPT Solo API, memory, CTP, KHSB, and proof-governed services
-capt_runtime/     standalone governed runtime, EventStore, memory policy, drivers
-contracts/        canonical schemas and generated language bindings
-desktop/          local runtime service and desktop client surfaces
-docs/             user guide, mental model, matrix, demos, troubleshooting, architecture
-release_evidence/ versioned manifests, matrices, and release proof records
-tests/            automated test suite
+START_HERE.md       canonical first-success walkthrough
+capt_cli.py         normal + expert `capt` CLI
+capt_solo/          local API, memory, CTP, KHSB, proof-governed services
+capt_runtime/       authoritative runtime, EventStore, governance, drivers
+capt_ui/            shared operator layer, TUI, desktop/operator surfaces
+contracts/          canonical schemas + generated bindings
+desktop/            runtime IPC service and desktop integration code
+docs/               user docs, architecture, security, design, release state
+release_evidence/   versioned proof/evidence records
+tests/              runtime, UI, contract, integration, adversarial tests
 ```
 
-Find things by task, not by title:
+---
+
+## Documentation map
 
 | I want to... | Read this |
 |---|---|
-| Do the five-minute walkthrough | [`START_HERE.md`](START_HERE.md) |
-| Understand the whole system in one screen | [`docs/MENTAL_MODEL.md`](docs/MENTAL_MODEL.md) |
+| Get CAPT running | [`START_HERE.md`](START_HERE.md) |
+| Install the current operator surfaces | [`docs/INSTALLATION.md`](docs/INSTALLATION.md) |
+| Understand CAPT in one screen | [`docs/MENTAL_MODEL.md`](docs/MENTAL_MODEL.md) |
+| Use the TUI | [`docs/TUI.md`](docs/TUI.md) |
+| See exactly what is shipped/proven/gated | [`docs/FUNCTIONALITY_MATRIX.md`](docs/FUNCTIONALITY_MATRIX.md) |
+| Configure providers | [`docs/PROVIDERS.md`](docs/PROVIDERS.md) |
+| Inspect UI acceptance boundaries | [`capt_ui/ACCEPTANCE_STATUS.md`](capt_ui/ACCEPTANCE_STATUS.md) |
 | Run realistic workflows | [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) |
 | Run demos | [`docs/DEMOS.md`](docs/DEMOS.md) |
-| Know what actually exists | [`docs/CAPABILITY_MATRIX.md`](docs/CAPABILITY_MATRIX.md) |
-| Fix a problem | [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) |
-| Add/use a model | [`docs/MODEL_PROVIDERS.md`](docs/MODEL_PROVIDERS.md) |
-| Inspect the proof | [`docs/RELEASE_EVIDENCE.md`](docs/RELEASE_EVIDENCE.md) |
-| Deep architecture | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (after first success) |
+| Troubleshoot | [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) |
+| Understand architecture deeply | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
+| Review the whitepaper | [`docs/WHITEPAPER.md`](docs/WHITEPAPER.md) |
+| Review security boundaries | [`docs/SECURITY.md`](docs/SECURITY.md) |
 | Integrate in Python | [`docs/API.md`](docs/API.md) |
+| Inspect release proof | [`docs/RELEASE_EVIDENCE.md`](docs/RELEASE_EVIDENCE.md) |
+| See productization source-of-truth | [`docs/V0_6_PRODUCTIZATION_SOURCE_OF_TRUTH.md`](docs/V0_6_PRODUCTIZATION_SOURCE_OF_TRUTH.md) |
 
-## Documentation
-
-User path (start here):
-
-- [Start Here](START_HERE.md)
-- [Mental Model](docs/MENTAL_MODEL.md)
-- [User Guide](docs/USER_GUIDE.md)
-- [Demos](docs/DEMOS.md)
-- [Capability Matrix](docs/CAPABILITY_MATRIX.md)
-- [Troubleshooting](docs/TROUBLESHOOTING.md)
-- [Model Providers](docs/MODEL_PROVIDERS.md)
-
-Deep path (after first success):
-
-- [Whitepaper](docs/WHITEPAPER.md)
-- [Architecture](docs/ARCHITECTURE.md)
-- [Design rationale](docs/DESIGN.md)
-- [Security boundaries](docs/SECURITY.md)
-- [API reference](docs/API.md)
-- [Runtime and integration guide](docs/PLUGIN_GUIDE.md)
-- [Roadmap](docs/ROADMAP.md)
-- [v0.6 source of truth](docs/V0_6_PRODUCTIZATION_SOURCE_OF_TRUTH.md)
-- [Release evidence](docs/RELEASE_EVIDENCE.md)
+---
 
 ## Naming
 
-- **CAPT Core** — the architecture and project.
-- **CAPT Solo** — the local-first reference implementation and supported API package.
-- **CAPT Runtime Harness** — the governed lifecycle and execution service shipped with CAPT Solo.
-- **Hermes compatibility skill** — an external client integration, archived separately from the canonical runtime.
+- **CAPT Core** — the architecture and canonical project.
+- **CAPT Solo** — the local-first reference implementation/API package.
+- **CAPT Runtime Harness** — governed lifecycle and execution service.
+- **CAPT Operator layer** — shared projection/control facade consumed by CLI/TUI/desktop.
+- **CaveCAPT** — shared presentation verbosity modes; never a governance bypass.
+- **Hermes compatibility** — an external execution/client integration; Hermes does not become CAPT authority.
+- **Cohort** — bounded multi-perspective coordination over CAPT state; not an alternate runtime.
 
-## Current limitations and next work
+---
 
-The main non-blocking follow-up work is:
+## Release semantics
 
-- modernizing packaging license metadata;
-- restoring a meaningful scoped coverage policy;
-- deciding whether selected adversarial OpenHarness tests should be ported to the canonical driver implementation;
-- rewriting and independently validating the external Hermes compatibility skill against the v0.5 harness;
-- adding stronger cryptographic and multi-user controls only as separately implemented and proven features.
+CAPT intentionally uses stricter language than “the code exists.”
+
+A useful progression is:
+
+```text
+implemented
+    -> locally tested
+    -> integrated
+    -> exact-head verified
+    -> installed-runtime verified
+    -> live external dependency/provider verified (when applicable)
+    -> release-proven
+```
+
+The current repository contains work at several of those stages simultaneously. This README calls out the stage instead of collapsing them into one green checkbox.
+
+---
 
 ## Support CAPT
 
@@ -287,8 +452,8 @@ CAPT Core is independently developed open-source infrastructure.
 - Bitcoin: `bc1q82dsstmrh9qzpp8gsa8hwzr8t5caj6n0w2w94j`
 - Ethereum / EVM: `0xB4E04b51191fB52C5Bae5C2dC4D6457a431d6825`
 
-Verify destination addresses before sending. Cryptocurrency contributions are generally irreversible.
+Verify destination addresses before sending. Cryptocurrency transfers are generally irreversible.
 
 ## License
 
-CAPT Core is available under the MIT License. See [LICENSE](LICENSE).
+CAPT Core is available under the MIT License. See [`LICENSE`](LICENSE).
