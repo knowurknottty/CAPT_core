@@ -82,17 +82,13 @@ def build_prompt_assembly(
         rendered_lines = []
         for rec in cont_records:
             trust = rec.get("trust", "unverified")
-            label = "PRIOR UNVERIFIED MODEL EVIDENCE" if trust != "verified" else "PRIOR VERIFIED MODEL EVIDENCE"
-            body = rec.get("content") or rec.get("marker") or ""
+            tag = "UNVERIFIED" if trust != "verified" else "VERIFIED"
+            body = (rec.get("content") or rec.get("marker") or "").strip()
+            if len(body) > 40:
+                body = body[:37] + "..."
             rendered_lines.append(
-                "[%s] (recordId=%s, source=%s, trust=%s)\n%s"
-                % (
-                    label,
-                    rec.get("recordId"),
-                    rec.get("provenance", {}).get("source", "unknown"),
-                    trust,
-                    body,
-                )
+                "[PRIOR %s] %s (src=%s)"
+                % (tag, body, rec.get("provenance", {}).get("source", "unknown"))
             )
         sections.append(
             _section(
