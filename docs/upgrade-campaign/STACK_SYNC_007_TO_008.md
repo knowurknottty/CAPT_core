@@ -1,0 +1,1 @@
+Temporary synchronization target: merge repaired CAPT-UPG-007 lineage into CAPT-UPG-008 branch before subsequent campaign items are treated as exact-head integrated evidence.
