@@ -45,11 +45,12 @@ py-modules = ["capt_cli"]
 
 [tool.setuptools.packages.find]
 where = [".", "contracts/generated/python"]
-include = ["capt_solo*", "capt_runtime*", "capt_contracts*", "desktop*", "capt_ui*"]
+include = ["capt_solo*", "capt_runtime*", "capt_contracts*", "desktop*", "capt_ui*", "capt_lab*"]
 namespaces = true
 
 [tool.setuptools.package-data]
 "capt_solo.components" = ["*.json"]
+"capt_lab" = ["donors/*.json"]
 "capt_solo.plugin" = ["*.json"]
 "capt_solo.skills" = ["**/*.md"]
 "capt_runtime" = ["skill_packs/*.json"]
