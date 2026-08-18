@@ -6,6 +6,7 @@ from .claim_driver import ClaimAggregate, DriverRunAggregate
 from .cohort_state import CohortAggregate
 from .human_approval import HumanApprovalAggregate
 from .mission_task import MissionAggregate, TaskAggregate
+from .replay_fork import ReplayForkAggregate
 
 ALL_AGGREGATES = (
     MissionAggregate,
@@ -16,6 +17,7 @@ ALL_AGGREGATES = (
     HumanApprovalAggregate,
     ArtifactPromotionAggregate,
     CohortAggregate,
+    ReplayForkAggregate,
 )
 
 __all__ = [
@@ -27,6 +29,7 @@ __all__ = [
     "DriverRunAggregate",
     "HumanApprovalAggregate",
     "MissionAggregate",
+    "ReplayForkAggregate",
     "TaskAggregate",
     "scope_contains",
 ]

@@ -46,6 +46,7 @@ from capt_runtime.drivers.registry import DriverRegistry
 from capt_runtime.scenario import build_scenario
 from capt_runtime.services import RuntimeService
 from capt_runtime.errors import AuthorityViolation
+from capt_runtime.replay import replay_to_sequence
 from capt_runtime.store import EventStore
 from capt_runtime.verification import (
     VerificationFailure,
@@ -429,6 +430,25 @@ class RuntimeQueryService:
     def event_timeline(self, after: int = 0) -> List[Dict[str, Any]]:
         return self.store.read_events(after)
 
+    def replay_state_at(self, global_sequence: int, stream_id: Optional[str] = None) -> Dict[str, Any]:
+        """Project deterministic historical state without mutating the runtime."""
+        state = replay_to_sequence(self.store, int(global_sequence))
+        result: Dict[str, Any] = {
+            "globalSequence": int(global_sequence),
+            "headSequence": self.store.head_sequence(),
+            "stateDigest": state.digest(),
+            "summary": state.summary(),
+        }
+        if stream_id is not None:
+            result.update(
+                {
+                    "streamId": stream_id,
+                    "streamVersion": state.versions.get(stream_id),
+                    "state": state.aggregates.get(stream_id),
+                }
+            )
+        return result
+
     def _claim_id_for_statement(self, statement: str) -> Optional[str]:
         """Find the most recent claim with this exact statement, if any."""
         matches = []
@@ -510,8 +530,8 @@ class RuntimeQueryService:
             if op == "capabilities":
                 return {"ok": True, "result": {
                     "schemaVersion": CONTRACT_SCHEMA_VERSION,
-                    "queryOperations": ["identity", "capabilities", "list_aggregates", "get_state", "get_stream_events", "event_timeline", "claimguard", "verification", "get_memory_policy", "get_memory_state"],
-                    "commandOperations": ["create_mission", "submit_approval_decision", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime"],
+                    "queryOperations": ["identity", "capabilities", "list_aggregates", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state"],
+                    "commandOperations": ["create_mission", "submit_approval_decision", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime"],
                     "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True},
                     "lifecycleOperations": {"checkpoint": True, "shutdown": True, "resume": True},
                 }}
@@ -526,6 +546,10 @@ class RuntimeQueryService:
                 return {"ok": True, "result": self.get_stream_events(request["streamId"])}
             if op == "event_timeline":
                 return {"ok": True, "result": self.event_timeline(int(request.get("after", 0)))}
+            if op == "replay_state_at":
+                return {"ok": True, "result": self.replay_state_at(
+                    int(request["globalSequence"]), request.get("streamId")
+                )}
             if op == "claimguard":
                 return {"ok": True, "result": self.claimguard_disposition(
                     request["statement"], request.get("claimId")

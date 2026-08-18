@@ -149,6 +149,49 @@
         "payloadDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
         "extensions": []
       }
+    },
+    {
+      "id": "replay-fork-created-event-valid",
+      "type": "EventEnvelope",
+      "expectValid": true,
+      "value": {
+        "schemaVersion": "1.0.0",
+        "eventId": "ev-replay-fork-created",
+        "streamId": "replay_fork-fork-parity",
+        "streamVersion": 1,
+        "globalSequence": 4,
+        "eventType": "ReplayForkCreated",
+        "occurredAt": "2026-08-18T07:42:00Z",
+        "actor": {
+          "actorId": "captain",
+          "kind": "human"
+        },
+        "missionId": "m-fork-parity",
+        "taskId": null,
+        "claimId": null,
+        "correlationId": "corr-replay-fork-parity",
+        "causationId": null,
+        "payload": {
+          "eventType": "ReplayForkCreated",
+          "fork": {
+            "forkId": "fork-parity",
+            "sourceSequence": 3,
+            "sourceEventId": "ev-cohort-steered",
+            "sourceStateDigest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "newMissionId": "m-fork-parity",
+            "reason": "parity fixture alternate continuation",
+            "createdBy": {
+              "actorId": "captain",
+              "kind": "human"
+            },
+            "createdAt": "2026-08-18T07:42:00Z",
+            "historicalAuthorityReactivated": false,
+            "state": "created"
+          }
+        },
+        "payloadDigest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "extensions": []
+      }
     }
   ]
 }

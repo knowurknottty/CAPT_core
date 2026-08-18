@@ -41,7 +41,7 @@ _KIND_TO_FIELD = {
 
 # These aggregates remain authoritative/durable in EventStore and full replay,
 # but the current frozen checkpoint schema has no version arrays for them.
-_CHECKPOINT_EXTENSION_KINDS = frozenset({"human_approval", "artifact_promotion", "cohort"})
+_CHECKPOINT_EXTENSION_KINDS = frozenset({"human_approval", "artifact_promotion", "cohort", "replay_fork"})
 
 
 def _file_digest(path: Path) -> str:

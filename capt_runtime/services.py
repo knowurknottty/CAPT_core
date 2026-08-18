@@ -20,10 +20,12 @@ from .aggregates import (
     DriverRunAggregate,
     HumanApprovalAggregate,
     MissionAggregate,
+    ReplayForkAggregate,
     TaskAggregate,
 )
 from .authority import require_authority
 from .contracts import require
+from .replay import replay_to_sequence
 from .errors import AuthorityViolation, ConcurrencyError, IdempotencyConflict
 from .store import AppendRequest, EventStore
 
@@ -56,6 +58,112 @@ class RuntimeService(object):
             # Strictly AFTER commit returns (spec invariant 10).
             self.store.dispatch()
         return result
+
+
+    # -- historical replay fork -------------------------------------------
+
+    def create_replay_fork_from_intent(
+        self, intent: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Build a new MissionSpec inside RuntimeService, then create the fork."""
+        require("ReplayForkIntent", intent)
+        require("CommandMetadata", metadata)
+        require_authority("create_replay_fork", metadata["actor"]["kind"])
+        mission_intent = intent["missionIntent"]
+        # UPG-016 creates a draft mission only. Approval/capability authority is
+        # deliberately not copied or auto-created from either source history or
+        # the intent; normal governed transitions must establish it afterward.
+        if mission_intent.get("requiresApproval"):
+            raise AuthorityViolation(
+                "replay fork creation cannot auto-create approval authority"
+            )
+        mission_spec = self._build_mission_spec_from_intent(mission_intent)
+        return self.create_replay_fork(
+            str(intent["forkId"]),
+            int(intent["sourceSequence"]),
+            mission_spec,
+            str(intent["reason"]),
+            metadata,
+        )
+
+    def create_replay_fork(
+        self,
+        fork_id: str,
+        source_sequence: int,
+        new_mission_spec: Dict[str, Any],
+        reason: str,
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Create new governed history bound to an immutable historical prefix.
+
+        The source replay is provenance only. No historical capability, lease,
+        approval, task, or DriverRun state is copied into the new mission.
+        """
+        require("MissionSpec", new_mission_spec)
+        require("CommandMetadata", metadata)
+        require_authority("create_replay_fork", metadata["actor"]["kind"])
+
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            offered = metadata.get("operationFingerprint")
+            if offered and prior["operation_fingerprint"] != offered:
+                raise IdempotencyConflict("replay fork idempotency conflict")
+            current = self.store.require_state(ReplayForkAggregate.stream_id(fork_id))
+            return {"status": "idempotent", "fork": current, "replayed": True}
+
+        fork_stream = ReplayForkAggregate.stream_id(fork_id)
+        if self.store.aggregate_version(fork_stream) != 0:
+            raise AuthorityViolation("replay fork identity already exists")
+        mission_stream = MissionAggregate.stream_id(new_mission_spec["missionId"])
+        if self.store.aggregate_version(mission_stream) != 0:
+            raise AuthorityViolation("replay fork requires a new mission identity")
+
+        source_sequence = int(source_sequence)
+        head = self.store.head_sequence()
+        if source_sequence < 0:
+            raise AuthorityViolation("replay fork sourceSequence must be >= 0")
+        if source_sequence > head:
+            raise AuthorityViolation(
+                "replay fork sourceSequence %d exceeds ledger head %d"
+                % (source_sequence, head)
+            )
+        historical = replay_to_sequence(self.store, source_sequence)
+        if source_sequence == 0:
+            source_event_id = None
+        else:
+            events = self.store.read_events(after_sequence=int(source_sequence) - 1)
+            source_event_id = events[0]["eventId"] if events else None
+
+        fork_record = ReplayForkAggregate.create(
+            {
+                "forkId": fork_id,
+                "sourceSequence": int(source_sequence),
+                "sourceEventId": source_event_id,
+                "sourceStateDigest": historical.digest(),
+                "newMissionId": new_mission_spec["missionId"],
+                "reason": reason,
+                "createdBy": dict(metadata["actor"]),
+                "createdAt": metadata["issuedAt"],
+                "historicalAuthorityReactivated": False,
+            }
+        )
+        fork_event = commands.envelope(
+            event_id=metadata["commandId"] + "-fork",
+            stream_id=fork_stream,
+            event_type="ReplayForkCreated",
+            payload={"eventType": "ReplayForkCreated", "fork": fork_record},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+            mission_id=new_mission_spec["missionId"],
+        )
+        result = self._commit(
+            [
+                AppendRequest(fork_stream, ReplayForkAggregate.KIND, 0, fork_event, fork_record),
+                self._append_create_mission(new_mission_spec, metadata),
+            ],
+            metadata,
+        )
+        return {**result, "fork": fork_record}
 
     # -- mission -----------------------------------------------------------
 

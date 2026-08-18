@@ -53,6 +53,7 @@ _PERMITTED: Dict[str, FrozenSet[str]] = {
     # Cohort lifecycle extensions used by the Sol-Reconciliation campaign.
     "persist_cohort": frozenset({COGNITION, SYSTEM}),
     "steer_cohort": frozenset({HUMAN}),
+    "create_replay_fork": frozenset({HUMAN}),
 }
 
 
