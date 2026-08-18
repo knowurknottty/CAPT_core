@@ -18,7 +18,7 @@
     "recordCount": 1,
     "records": [
       {
-        "artifactPath": "/tmp/hy3-pr47-ctx-r1/state/staging/dr-model-2a60d83c1ea22993f31385ef/provider-analysis-dr-model-2a60d83c1ea22993f31385ef.md",
+        "artifactPath": "<gate-run>/state/staging/dr-model-2a60d83c1ea22993f31385ef/provider-analysis-dr-model-2a60d83c1ea22993f31385ef.md",
         "content": "MK-A-7f8a196a",
         "driverRunId": "dr-model-2a60d83c1ea22993f31385ef",
         "kind": "prior_model_evidence",

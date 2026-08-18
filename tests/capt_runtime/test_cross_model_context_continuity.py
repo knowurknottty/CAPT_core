@@ -69,7 +69,7 @@ def test_red02_prepared_execution_binds_context_pack_digest():
         command_id="cmd-x", idempotency_key="idem-x", correlation_id="corr-x",
         issued_at="2026-08-18T00:00:00Z", approval_request_id="req-x",
         prompt_assembly_digest="sha256:aaaa", dispatch_prompt_digest="sha256:bbbb",
-        mission_id="m-x", task_id="t-x", driver_run_id="dr-x", resource="/tmp/x",
+        mission_id="m-x", task_id="t-x", driver_run_id="dr-x", resource="x",
         objective="obj", provider_id="ollama", provider_model="m", executable=None,
         data={}, context_pack_digest="sha256:cccc",
     )
@@ -77,7 +77,7 @@ def test_red02_prepared_execution_binds_context_pack_digest():
         command_id="cmd-x", idempotency_key="idem-x", correlation_id="corr-x",
         issued_at="2026-08-18T00:00:00Z", approval_request_id="req-x",
         prompt_assembly_digest="sha256:aaaa", dispatch_prompt_digest="sha256:bbbb",
-        mission_id="m-x", task_id="t-x", driver_run_id="dr-x", resource="/tmp/x",
+        mission_id="m-x", task_id="t-x", driver_run_id="dr-x", resource="x",
         objective="obj", provider_id="ollama", provider_model="m", executable=None,
         data={}, context_pack_digest="sha256:dddd",
     )

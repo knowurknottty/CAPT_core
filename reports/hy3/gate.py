@@ -1,7 +1,7 @@
 #!/usr/bin/env python3.12
 """HY3 PR #47 — TRUE CROSS-MODEL CONTEXT CONTINUITY GATE (r1, authoritative tree).
 
-Source: capt_workspace/capt_core @ d768479 (new wheel cff16e9...).
+Source: capt_workspace/capt_core @ e6c3b35 (verified impl head).
 Real process-boundary + governed context-continuity proof.
 
 Differs from TERRA's prior run (reclassified PROCESS_BOUNDARY_STATE_RECONSTRUCTION_
@@ -10,16 +10,18 @@ continuation marker through CAPT's governed selection path, not merely that the
 ledger survived restart.
 """
 from __future__ import annotations
-import sys, os, time, json, hashlib, subprocess, signal
+import sys, os, time, json, hashlib, subprocess, signal, tempfile
 from pathlib import Path
 
-REPO = '/Users/knowurknot/capt_workspace/capt_core'
+# Repo root is three levels up from this script (reports/hy3/gate.py -> repo root).
+REPO = str(Path(__file__).resolve().parents[2])
 sys.path.insert(0, REPO)
 from desktop.desktop_runtime_client import RuntimeClient
 from capt_runtime.store import EventStore
 from capt_runtime.continuation_context import select_continuation_context
 
-BASE = Path('/tmp/hy3-pr47-ctx-r1')
+# Run artifacts live in an isolated temp dir (no committed /tmp or local paths).
+BASE = Path(tempfile.mkdtemp(prefix="hy3-pr47-ctx-"))
 BASE.mkdir(parents=True, exist_ok=True)
 LEDGER = str(BASE / 'state' / 'runtime.db')
 SOCK = str(BASE / 'state' / 'runtime.sock')
