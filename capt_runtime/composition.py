@@ -33,9 +33,9 @@ class RuntimeComposition:
 
     def command_service(self, operator_id: str, session_id: str):
         # Import lazily to avoid a desktop-to-runtime import cycle at module load.
-        from desktop.governed_m1_command_service import GovernedRuntimeCommandService
+        from desktop.lease_command_service import LeaseRuntimeCommandService
 
-        return GovernedRuntimeCommandService(
+        return LeaseRuntimeCommandService(
             self.store,
             operator_id,
             session_id,
@@ -79,7 +79,6 @@ class RuntimeComposition:
         return host
 
     def task_resolver(self) -> TaskResolver:
-        """Return CAPT's authoritative task-reference resolver."""
         return TaskResolver(self.store)
 
     def close(self) -> None:
@@ -93,7 +92,6 @@ def create_runtime(
     memory_path: Optional[str] = None,
     model_safe_limit_steps: int = 8,
 ) -> RuntimeComposition:
-    """Construct every operator-owned runtime dependency exactly once."""
     ledger = str(Path(ledger_path))
     store = EventStore(ledger)
     memory_store = MemoryStore(memory_path or (ledger + ".memory"))
