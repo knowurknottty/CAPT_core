@@ -104,6 +104,7 @@ def build_default_registry() -> LabEngineRegistry:
     from .engines.math_engine import execute_math
     from .engines.analogy import execute_analogy
     from .engines.consensus import execute_consensus
+    from .engines.forge import execute_forge
 
     registry = LabEngineRegistry()
     registry.register(_descriptor(
@@ -133,5 +134,5 @@ def build_default_registry() -> LabEngineRegistry:
             LabOperationDescriptor("forgeproof_score", "advisory", "Apply the ForgeProof evaluation rubric."),
         ),
         requires_filesystem=True,
-    ))
+    ), execute_forge)
     return registry
