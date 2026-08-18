@@ -101,15 +101,16 @@ def _descriptor(engine_id: str, name: str, description: str,
 
 
 def build_default_registry() -> LabEngineRegistry:
+    from .engines.math_engine import execute_math
+
     registry = LabEngineRegistry()
     registry.register(_descriptor(
         "lab.math", "CAPTLang Math", "Bounded deterministic and heuristic mathematical instruments.",
         (
             LabOperationDescriptor("cyclotomic_summary", "calculation", "Summarize a bounded cyclotomic field."),
             LabOperationDescriptor("mcmillan_tc", "calculation", "Evaluate the McMillan transition-temperature equation."),
-            LabOperationDescriptor("materials_screen", "heuristic", "Run an explicitly heuristic materials screen."),
         ),
-    ))
+    ), execute_math)
     registry.register(_descriptor(
         "lab.analogy", "Structural Analogy", "Deterministic VSA/SME-inspired structural comparison.",
         (
