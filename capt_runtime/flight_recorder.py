@@ -11,7 +11,7 @@ import hashlib
 import json
 import zipfile
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Set
+from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Set, Union
 
 from .contracts import canonical_json
 from .errors import IntegrityViolation
@@ -109,7 +109,7 @@ def _zip_write(zf: zipfile.ZipFile, name: str, payload: bytes) -> None:
 
 def export_flight(
     store: EventStore,
-    destination: str | Path,
+    destination: Union[str, Path],
     *,
     bundle_id: str,
     created_at: str,
@@ -132,7 +132,9 @@ def export_flight(
     if after_sequence < 0:
         raise ValueError("after_sequence must be >= 0")
 
-    # Verify the authoritative ledger before copying observations from it.
+    custom_secret_keys = tuple(secret_keys or ())
+    explicit_secret_values = tuple(secret_values or ())
+
     ledger_digest = store.verify_chain()
     head = store.head_sequence()
     if after_sequence > head:
@@ -140,8 +142,8 @@ def export_flight(
 
     events = redact(
         store.read_events(after_sequence=after_sequence),
-        secret_keys=secret_keys,
-        secret_values=secret_values,
+        secret_keys=custom_secret_keys,
+        secret_values=explicit_secret_values,
     )
     aggregate_inventory = []
     aggregate_states: Dict[str, Any] = {}
@@ -151,8 +153,8 @@ def export_flight(
         )
         aggregate_states[stream_id] = redact(
             store.load_state(stream_id),
-            secret_keys=secret_keys,
-            secret_values=secret_values,
+            secret_keys=custom_secret_keys,
+            secret_values=explicit_secret_values,
         )
 
     members: Dict[str, bytes] = {
@@ -166,15 +168,15 @@ def export_flight(
         "runtime_metadata.json": _json_bytes(
             redact(
                 dict(runtime_metadata or {}),
-                secret_keys=secret_keys,
-                secret_values=secret_values,
+                secret_keys=custom_secret_keys,
+                secret_values=explicit_secret_values,
             )
         ),
         "artifact_refs.json": _json_bytes(
             redact(
                 list(artifact_refs or ()),
-                secret_keys=secret_keys,
-                secret_values=secret_values,
+                secret_keys=custom_secret_keys,
+                secret_values=explicit_secret_values,
             )
         ),
     }
@@ -182,8 +184,8 @@ def export_flight(
         members["checkpoint.json"] = _json_bytes(
             redact(
                 dict(checkpoint_manifest),
-                secret_keys=secret_keys,
-                secret_values=secret_values,
+                secret_keys=custom_secret_keys,
+                secret_values=explicit_secret_values,
             )
         )
 
@@ -211,8 +213,8 @@ def export_flight(
         "files": files,
         "redaction": {
             "defaultSecretKeys": sorted(_DEFAULT_SECRET_KEYS),
-            "customSecretKeyCount": len(tuple(secret_keys or ())),
-            "explicitSecretValueCount": len(tuple(secret_values or ())),
+            "customSecretKeyCount": len(custom_secret_keys),
+            "explicitSecretValueCount": len(explicit_secret_values),
         },
         "manifestDigest": "",
     }
@@ -221,20 +223,20 @@ def export_flight(
 
     path = Path(destination)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(path, "w") as zf:
+    with zipfile.ZipFile(str(path), "w") as zf:
         _zip_write(zf, "manifest.json", manifest_bytes)
         for name in sorted(members):
             _zip_write(zf, name, members[name])
     return manifest
 
 
-def verify_flight(path: str | Path) -> Dict[str, Any]:
+def verify_flight(path: Union[str, Path]) -> Dict[str, Any]:
     """Independently verify archive structure and content digests."""
     bundle = Path(path)
     if not bundle.is_file():
         raise IntegrityViolation("flight bundle does not exist: %s" % bundle)
     try:
-        with zipfile.ZipFile(bundle, "r") as zf:
+        with zipfile.ZipFile(str(bundle), "r") as zf:
             names = set(zf.namelist())
             if "manifest.json" not in names:
                 raise IntegrityViolation("flight bundle missing manifest.json")
