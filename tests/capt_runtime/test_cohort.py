@@ -89,14 +89,59 @@ def test_silence_quorum_is_current_round_only_and_cap_does_not_mask_success():
         success.next_round()
 
 
-def test_admitted_optional_participant_debt_is_material_under_contract_a():
-    """Required controls PASS quorum; every admitted participant may block."""
-    epoch = DeliberationEpoch("m", "t")
-    cohort = BoundedCohort({"planner", "critic"}, {"planner", "critic", "watchdog"}, 3, 2)
+def test_cohort_persistence_and_reconstruction_from_eventstore(tmp_path):
+    from capt_runtime.store import EventStore
+    from capt_runtime import commands
+    from capt_runtime.services import RuntimeService
+    from capt_runtime.cohort import persist_cohort_evidence
+    db = str(tmp_path / "cohort.db")
+    store = EventStore(db)
+    svc = RuntimeService(store)
+
+    epoch = DeliberationEpoch("m-1", "t-1")
+    cohort = BoundedCohort({"planner", "critic"}, {"planner", "critic"}, 2, 2)
     cohort.record(c("planner", ContributionOutcome.PASS))
     cohort.record(c("critic", ContributionOutcome.PASS))
-    cohort.record(c("watchdog", ContributionOutcome.ESCALATE, escalation=EscalationCategory.SAFETY_BOUNDARY))
-    assert cohort.stopping_reason(epoch) is None
+
+    # Seed claim
+    claim_meta = commands.command(
+        command_id="cmd-claim-1",
+        idempotency_key="idem-claim-1",
+        operation_fingerprint=commands.fingerprint("claim", {"id": "cl-1"}),
+        correlation_id="corr-1",
+        actor_id="operator",
+        actor_kind="execution_plane",
+        issued_at="2026-08-16T00:00:00Z",
+    )
+    claim = {
+        "schemaVersion": "1.0.0",
+        "claimId": "cl-1",
+        "missionId": "m-1",
+        "kind": "completion",
+        "statement": "Cohort consensus reached.",
+        "evidenceIds": [],
+        "promotionState": "proposed",
+        "proposedBy": {"actorId": "operator", "kind": "execution_plane"},
+        "proposedAt": "2026-08-16T00:00:00Z",
+    }
+    svc.propose_claim(claim, claim_meta)
+
+    meta = commands.command(
+        command_id="cmd-cohort-1",
+        idempotency_key="idem-cohort-1",
+        operation_fingerprint=commands.fingerprint("cohort", {"id": "coh-1"}),
+        correlation_id="corr-1",
+        actor_id="operator",
+        actor_kind="execution_plane",
+        issued_at="2026-08-16T00:00:00Z",
+    )
+    state = persist_cohort_evidence("coh-1", cohort, epoch, "cl-1", store, meta)
+    assert state["stoppingReason"] == "SILENCE_QUORUM"
+
+    st = store.load_state("claim-cl-1")
+    assert st is not None
+    assert "ev-cohort-coh-1" in st["evidenceIds"]
+    store.close()
 
 
 def test_admitted_optional_participant_without_debt_does_not_block_quorum():

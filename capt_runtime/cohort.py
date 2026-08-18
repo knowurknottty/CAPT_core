@@ -7,7 +7,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, Iterable, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Set
+
+if TYPE_CHECKING:
+    from capt_runtime.store import EventStore
 
 
 class ContributionOutcome(str, Enum):
@@ -190,3 +193,89 @@ def cognitive_debt(
         ),
         "staleResults": stale_count,
     }
+
+
+def persist_cohort_evidence(
+    cohort_id: str,
+    cohort: BoundedCohort,
+    epoch: DeliberationEpoch,
+    claim_id: str,
+    store: EventStore,
+    metadata: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Persist Cohort deliberation evidence into the authoritative EventStore claim stream."""
+    import hashlib
+    import json
+    state = {
+        "cohortId": cohort_id,
+        "missionId": epoch.mission_id,
+        "taskId": epoch.task_id,
+        "epoch": epoch.epoch,
+        "rounds": cohort.rounds,
+        "roundCap": cohort.round_cap,
+        "participantCap": cohort.participant_cap,
+        "required": sorted(cohort.required),
+        "roster": sorted(cohort.roster),
+        "contributions": [
+            {
+                "contributionId": c.contribution_id,
+                "participant": c.participant,
+                "epoch": c.epoch,
+                "round": c.round,
+                "outcome": c.outcome.value,
+                "cursor": c.cursor,
+                "material": c.material,
+                "escalation": c.escalation.value if c.escalation else None,
+            }
+            for c in cohort.contributions
+        ],
+        "stoppingReason": cohort.stopping_reason(epoch),
+    }
+    blob = json.dumps(state, sort_keys=True).encode()
+    content_digest = "sha256:" + hashlib.sha256(blob).hexdigest()
+    evidence = {
+        "schemaVersion": "1.0.0",
+        "evidenceId": "ev-cohort-" + cohort_id,
+        "missionId": epoch.mission_id,
+        "evidence": {
+            "kind": "artifact_hash",
+            "artifactPath": "/cohort/" + cohort_id,
+            "artifactDigest": content_digest,
+        },
+        "collectedBy": {"actorId": metadata["actor"]["actorId"], "kind": metadata["actor"]["kind"]},
+        "collectedAt": metadata["issuedAt"],
+        "trust": "capt_authoritative",
+    }
+    from capt_runtime.services import RuntimeService
+    svc = RuntimeService(store)
+    svc.record_evidence(claim_id, evidence, metadata)
+    return state
+
+
+def load_cohort_state(cohort_id: str, store: EventStore) -> Optional[tuple[BoundedCohort, DeliberationEpoch]]:
+    """Reconstruct BoundedCohort and DeliberationEpoch from durable SQLite EventStore state."""
+    state = store.load_state("cohort-" + cohort_id)
+    if state is None:
+        return None
+    cohort = BoundedCohort(
+        required=set(state["required"]),
+        roster=set(state["roster"]),
+        participant_cap=state["participantCap"],
+        round_cap=state["roundCap"],
+        rounds=state["rounds"],
+    )
+    for cd in state.get("contributions", []):
+        cohort.contributions.append(
+            Contribution(
+                contribution_id=cd["contributionId"],
+                participant=cd["participant"],
+                epoch=cd["epoch"],
+                round=cd["round"],
+                outcome=ContributionOutcome(cd["outcome"]),
+                cursor=cd["cursor"],
+                material=cd.get("material", False),
+                escalation=EscalationCategory(cd["escalation"]) if cd.get("escalation") else None,
+            )
+        )
+    epoch = DeliberationEpoch(mission_id=state["missionId"], task_id=state["taskId"], epoch=state["epoch"])
+    return cohort, epoch
