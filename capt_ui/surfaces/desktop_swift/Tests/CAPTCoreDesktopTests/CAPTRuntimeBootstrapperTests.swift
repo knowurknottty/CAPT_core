@@ -18,3 +18,24 @@ final class CAPTRuntimeBootstrapperTests: XCTestCase {
         XCTAssertEqual(candidates.first, "/Users/tester/.capt/runtime-venv/bin/capt")
     }
 }
+
+extension CAPTRuntimeBootstrapperTests {
+    func testCustomStateDirectoryOwnRuntimeVenvIsFirstCandidate() {
+        let bootstrapper = CAPTRuntimeBootstrapper(
+            stateDirectory: "/Users/tester/.capt-inversion-labs",
+            environment: [:]
+        )
+        XCTAssertEqual(
+            bootstrapper.executableCandidates.first,
+            "/Users/tester/.capt-inversion-labs/runtime-venv/bin/capt"
+        )
+    }
+
+    func testOperatorCLIStoresCustomStateDirectoryForChildEnvironment() {
+        let cli = CAPTOperatorCLI(
+            executablePath: "/Users/tester/.capt-inversion-labs/runtime-venv/bin/capt-ui",
+            stateDirectory: "/Users/tester/.capt-inversion-labs"
+        )
+        XCTAssertEqual(cli.stateDirectory, "/Users/tester/.capt-inversion-labs")
+    }
+}

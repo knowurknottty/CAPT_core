@@ -35,6 +35,12 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var reviewedClaimID: String?
     @Published var providerCredentialStatus: [String: String] = [:]
     @Published private var chatWorkspace = CAPTNativeChatWorkspace()
+    @Published var labEngines: [CAPTLabEngineSnapshot] = []
+    @Published var selectedLabEngineID = "lab.math"
+    @Published var selectedLabOperation = "cyclotomic_summary"
+    @Published var labInputJSON = "{\"conductor\":5}"
+    @Published var labReceipt: CAPTLabRunReceipt?
+    @Published var labControlMessage = ""
 
     private let runtime: CAPTBackgroundRuntime
     private let sessionStore: CAPTEncryptedSessionStore
@@ -331,6 +337,122 @@ final class CAPTOperatorStore: ObservableObject {
         }
     }
 
+    func refreshLabs() {
+        guard connectionState == .connected else { return }
+        Task {
+            do {
+                labEngines = try await runtime.labEngines()
+                normalizeLabSelection()
+            } catch {
+                // A regular CAPT runtime may legitimately omit this additive query.
+                labEngines = []
+            }
+        }
+    }
+
+    var selectedLabEngine: CAPTLabEngineSnapshot? {
+        labEngines.first { $0.id == selectedLabEngineID }
+    }
+
+    var selectedLabOperationSnapshot: CAPTLabOperationSnapshot? {
+        selectedLabEngine?.operations.first { $0.name == selectedLabOperation }
+    }
+
+    var activeLabMissionSummary: CAPTMissionSummary? {
+        guard let missionID = activeMissionID else { return nil }
+        return missions.first { $0.id == missionID }
+    }
+
+    var activeLabTaskID: String? { activeLabMissionSummary?.taskID }
+
+    func selectLabEngine(_ engineID: String) {
+        selectedLabEngineID = engineID
+        if let first = labEngines.first(where: { $0.id == engineID })?.operations.first {
+            selectedLabOperation = first.name
+        }
+        labInputJSON = labTemplate(engineID: selectedLabEngineID, operation: selectedLabOperation)
+        labReceipt = nil
+    }
+
+    func selectLabOperation(_ operation: String) {
+        selectedLabOperation = operation
+        labInputJSON = labTemplate(engineID: selectedLabEngineID, operation: operation)
+        labReceipt = nil
+    }
+
+    func runSelectedLabAdvisory() {
+        guard runtimeCapabilities?.supportsCommand("run_lab_engine_advisory") == true,
+              let missionID = activeMissionID,
+              let taskID = activeLabTaskID,
+              let engine = selectedLabEngine, engine.available,
+              engine.operations.contains(where: { $0.name == selectedLabOperation }),
+              !isBusy else { return }
+        isBusy = true
+        lastError = nil
+        labControlMessage = "Running governed Lab advisory…"
+        let engineID = selectedLabEngineID
+        let operation = selectedLabOperation
+        let input = labInputJSON
+        Task {
+            defer { isBusy = false }
+            do {
+                labReceipt = try await runtime.runLabAdvisory(
+                    engineID: engineID, operation: operation, inputJSON: input,
+                    missionID: missionID, taskID: taskID
+                )
+                labControlMessage = "Advisory recorded as proposed evidence; independent verification not performed."
+                refreshHistory()
+            } catch {
+                handleGlobal(error)
+                labControlMessage = "Lab advisory rejected or failed."
+            }
+        }
+    }
+
+    private func normalizeLabSelection() {
+        guard !labEngines.isEmpty else { return }
+        if !labEngines.contains(where: { $0.id == selectedLabEngineID }) {
+            selectedLabEngineID = labEngines.first?.id ?? ""
+        }
+        guard let engine = selectedLabEngine else { return }
+        if !engine.operations.contains(where: { $0.name == selectedLabOperation }) {
+            selectedLabOperation = engine.operations.first?.name ?? ""
+        }
+        labInputJSON = labTemplate(engineID: selectedLabEngineID, operation: selectedLabOperation)
+    }
+
+    private func labTemplate(engineID: String, operation: String) -> String {
+        switch (engineID, operation) {
+        case ("lab.math", "cyclotomic_summary"):
+            return "{\n  \"conductor\": 5\n}"
+        case ("lab.math", "mcmillan_tc"):
+            return "{\n  \"lambda\": 1.0,\n  \"omegaLog\": 300.0,\n  \"muStar\": 0.1\n}"
+        case ("lab.analogy", "structural_map"):
+            return "{\n  \"source\": {\"name\": \"fire\", \"roles\": {\"CAUSE\": \"fire\", \"EFFECT\": \"smoke\"}},\n  \"target\": {\"name\": \"bug\", \"roles\": {\"CAUSE\": \"bug\", \"EFFECT\": \"crash\"}}\n}"
+        case ("lab.analogy", "schema_abstract"):
+            return "{\n  \"structures\": [\n    {\"name\": \"one\", \"roles\": {\"CAUSE\": \"a\", \"EFFECT\": \"b\"}},\n    {\"name\": \"two\", \"roles\": {\"CAUSE\": \"c\", \"EFFECT\": \"d\"}}\n  ]\n}"
+        case ("lab.consensus", "aggregate_beliefs"):
+            return "{\n  \"beliefs\": [0.2, 0.8, 0.7]\n}"
+        case ("lab.forge", "repository_archaeology"):
+            return forgeRootTemplate(["root": targetRoot])
+        case ("lab.forge", "gap_analysis"):
+            return forgeRootTemplate(["root": targetRoot, "expectations": ["document current architecture", "preserve tests"]])
+        case ("lab.forge", "sigma_brief"):
+            return forgeRootTemplate(["root": targetRoot, "objective": "Strengthen the current implementation", "expectations": ["preserve tests", "preserve authority boundaries"]])
+        case ("lab.forge", "forgeproof_score"):
+            return "{\n  \"scores\": {\"Precision\": 4, \"Reusability\": 4, \"Safety\": 4, \"Auditability\": 4, \"Effectiveness\": 4},\n  \"notes\": {\"Assumptions\": \"bounded internal use\", \"Known limits\": \"not externally benchmarked\", \"Experimental elements\": \"none\", \"Confidence tag\": \"medium\"}\n}"
+        default:
+            return "{}"
+        }
+    }
+
+    private func forgeRootTemplate(_ object: [String: Any]) -> String {
+        guard JSONSerialization.isValidJSONObject(object),
+              let data = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]),
+              let text = String(data: data, encoding: .utf8) else { return "{}" }
+        return text
+    }
+
     func refreshMemory() {
         guard connectionState == .connected else { return }
         Task {
@@ -345,6 +467,7 @@ final class CAPTOperatorStore: ObservableObject {
         refreshOperatorState()
         refreshMemory()
         refreshCapabilities()
+        refreshLabs()
     }
 
     var pendingApprovals: [CAPTApprovalSummary] {
