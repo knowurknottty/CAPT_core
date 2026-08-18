@@ -55,7 +55,7 @@ command ops and renders projections.
 Implemented and exercised on macOS:
 
 - native ChatGPT-style sidebar/detail/inspector chat shell with New Chat + recent conversations;
-- AES-GCM encrypted presentation-session cache at `~/.capt/ui/native_sessions.enc` with a device-only macOS Keychain key and `0600` file permissions;
+- AES-GCM encrypted classic presentation-session cache at `~/.capt/ui/classic_native_sessions.enc` with a device-only macOS Keychain key and `0600` file permissions; on first use, the legacy shared `native_sessions.enc` cache is migrated once, preserving valid bound approvals while quarantining expired/unknown cursors;
 - process-death/relaunch restoration of transcript, mission binding, provider/model/target preferences, and exact native-origin pending approval;
 - multi-turn governed continuation: one durable mission, a fresh authoritative Task per turn, prior model evidence selected by CAPT with trust labels preserved;
 - authenticated connection to `~/.capt/runtime.sock` + `runtime.token`;

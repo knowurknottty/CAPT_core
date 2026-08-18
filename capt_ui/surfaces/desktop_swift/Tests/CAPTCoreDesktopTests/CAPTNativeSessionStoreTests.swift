@@ -56,6 +56,85 @@ final class CAPTNativeSessionStoreTests: XCTestCase {
         XCTAssertEqual(restored.first?.pendingApproval?.expiresAt, expiresAt)
     }
 
+    func testDefaultClassicSessionCacheDoesNotUseLegacySharedFilename() {
+        XCTAssertEqual(
+            CAPTEncryptedSessionStore.defaultFileURL().lastPathComponent,
+            "classic_native_sessions.enc"
+        )
+    }
+
+    func testClassicCacheMigratesLegacySessionsAndQuarantinesUnknownApproval() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let ui = root.appendingPathComponent("ui", isDirectory: true)
+        let legacyFile = ui.appendingPathComponent("native_sessions.enc")
+        let classicFile = ui.appendingPathComponent("classic_native_sessions.enc")
+        let key = StaticSessionKeyProvider(bytes: Data(repeating: 0x33, count: 32))
+        let pending = CAPTPendingApproval(
+            requestID: "approval-legacy",
+            missionID: "mission-legacy",
+            taskID: "task-legacy",
+            driverRunID: "driver-legacy",
+            objective: "legacy request",
+            targetRoot: "/repo",
+            provider: "openrouter",
+            model: "model",
+            promptAssemblyDigest: "sha256:" + String(repeating: "b", count: 64),
+            expiresAt: nil
+        )
+        let historical = CAPTNativeSession(
+            title: "Historical",
+            messages: [CAPTChatMessage(role: .user, text: "keep this transcript")],
+            provider: "openrouter",
+            model: "model",
+            targetRoot: "/repo",
+            pendingApproval: pending
+        )
+        try CAPTEncryptedSessionStore(fileURL: legacyFile, keyProvider: key).save([historical])
+
+        let classic = CAPTEncryptedSessionStore(fileURL: classicFile, keyProvider: key)
+        let restored = try classic.load()
+
+        XCTAssertEqual(restored.count, 1)
+        XCTAssertEqual(restored.first?.messages.first?.text, "keep this transcript")
+        XCTAssertNil(restored.first?.pendingApproval)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: classicFile.path))
+    }
+
+    func testClassicCacheMigrationPreservesStillValidBoundApproval() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let ui = root.appendingPathComponent("ui", isDirectory: true)
+        let legacyFile = ui.appendingPathComponent("native_sessions.enc")
+        let classicFile = ui.appendingPathComponent("classic_native_sessions.enc")
+        let key = StaticSessionKeyProvider(bytes: Data(repeating: 0x44, count: 32))
+        let expiresAt = Date().addingTimeInterval(3_600)
+        let pending = CAPTPendingApproval(
+            requestID: "approval-valid",
+            missionID: "mission-valid",
+            taskID: "task-valid",
+            driverRunID: "driver-valid",
+            objective: "recover valid approval",
+            targetRoot: "/repo",
+            provider: "openrouter",
+            model: "model",
+            promptAssemblyDigest: "sha256:" + String(repeating: "c", count: 64),
+            expiresAt: expiresAt
+        )
+        let historical = CAPTNativeSession(
+            title: "Recoverable", provider: "openrouter", model: "model",
+            targetRoot: "/repo", pendingApproval: pending
+        )
+        try CAPTEncryptedSessionStore(fileURL: legacyFile, keyProvider: key).save([historical])
+
+        let restored = try CAPTEncryptedSessionStore(
+            fileURL: classicFile, keyProvider: key
+        ).load()
+
+        XCTAssertEqual(restored.first?.pendingApproval?.requestID, "approval-valid")
+        XCTAssertEqual(restored.first?.pendingApproval?.expiresAt, expiresAt)
+    }
+
     func testMissingSessionCacheLoadsEmpty() throws {
         let file = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)

@@ -119,12 +119,37 @@ public final class CAPTEncryptedSessionStore: @unchecked Sendable {
                 .appendingPathComponent(".capt", isDirectory: true)
         }
         return root.appendingPathComponent("ui", isDirectory: true)
-            .appendingPathComponent("native_sessions.enc")
+            .appendingPathComponent("classic_native_sessions.enc")
     }
 
     public func load() throws -> [CAPTNativeSession] {
-        guard FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
-        let combined = try Data(contentsOf: fileURL)
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            return try decodeSessions(at: fileURL)
+        }
+        guard fileURL.lastPathComponent == "classic_native_sessions.enc" else { return [] }
+
+        let legacyURL = fileURL.deletingLastPathComponent()
+            .appendingPathComponent("native_sessions.enc")
+        guard FileManager.default.fileExists(atPath: legacyURL.path) else { return [] }
+
+        var migrated = try decodeSessions(at: legacyURL)
+        let now = Date()
+        for index in migrated.indices {
+            guard let pending = migrated[index].pendingApproval else { continue }
+            switch pending.validity(at: now) {
+            case .valid:
+                continue
+            case .expired, .unknown:
+                migrated[index].pendingApproval = nil
+                migrated[index].updatedAt = now
+            }
+        }
+        try save(migrated)
+        return migrated
+    }
+
+    private func decodeSessions(at url: URL) throws -> [CAPTNativeSession] {
+        let combined = try Data(contentsOf: url)
         let keyData = try keyProvider.keyData()
         guard keyData.count == 32 else { throw CAPTSessionStoreError.invalidKey }
         do {
