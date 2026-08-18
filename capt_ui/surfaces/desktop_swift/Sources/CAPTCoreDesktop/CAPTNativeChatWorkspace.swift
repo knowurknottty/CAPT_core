@@ -75,7 +75,7 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         if flows[id] == nil {
             flows[id] = CAPTChatFlow(pending: session(id)?.pendingApproval, now: now)
         }
-        expireApprovalIfNeeded(for: id, now: now)
+        reconcileApprovalValidity(for: id, now: now)
         return true
     }
 
@@ -110,22 +110,31 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
 
     public mutating func receiveApproval(
         _ pending: CAPTPendingApproval,
-        for id: UUID
+        for id: UUID,
+        now: Date = Date()
     ) {
         guard let index = index(of: id) else { return }
         sessions[index].pendingApproval = pending
         if sessions[index].missionID == nil {
             sessions[index].missionID = pending.missionID
         }
-        sessions[index].messages.append(CAPTChatMessage(
-            role: .system,
-            text: "CAPT prepared a bound execution. Review and approve before dispatch.",
-            authorityState: "approval_required"
-        ))
         sessions[index].updatedAt = Date()
-        var currentFlow = flow(for: id)
-        currentFlow.approvalPrepared(pending)
-        flows[id] = currentFlow
+
+        switch pending.validity(at: now) {
+        case .valid:
+            sessions[index].messages.append(CAPTChatMessage(
+                role: .system,
+                text: "CAPT prepared a bound execution. Review and approve before dispatch.",
+                authorityState: "approval_required"
+            ))
+            var currentFlow = flow(for: id)
+            currentFlow.approvalPrepared(pending, now: now)
+            flows[id] = currentFlow
+        case .expired:
+            expireApproval(for: id, pending: pending)
+        case .unknown:
+            quarantineUnknownApproval(for: id, pending: pending)
+        }
     }
 
     public mutating func failApprovalRequest(
@@ -150,10 +159,18 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
     ) -> CAPTPendingApproval? {
         guard let index = index(of: id),
               let pending = sessions[index].pendingApproval else { return nil }
-        if pending.isExpired(at: now) {
+
+        switch pending.validity(at: now) {
+        case .valid:
+            break
+        case .expired:
             expireApproval(for: id, pending: pending)
             return nil
+        case .unknown:
+            quarantineUnknownApproval(for: id, pending: pending)
+            return nil
         }
+
         var currentFlow = flow(for: id)
         guard !currentFlow.isBusy else { return nil }
         currentFlow.beginExecution(pending)
@@ -236,13 +253,19 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         sessions[index].updatedAt = Date()
     }
 
-    private mutating func expireApprovalIfNeeded(
+    private mutating func reconcileApprovalValidity(
         for id: UUID,
         now: Date
     ) {
-        guard let pending = session(id)?.pendingApproval,
-              pending.isExpired(at: now) else { return }
-        expireApproval(for: id, pending: pending)
+        guard let pending = session(id)?.pendingApproval else { return }
+        switch pending.validity(at: now) {
+        case .valid:
+            return
+        case .expired:
+            expireApproval(for: id, pending: pending)
+        case .unknown:
+            quarantineUnknownApproval(for: id, pending: pending)
+        }
     }
 
     private mutating func expireApproval(
@@ -264,6 +287,22 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
             pending: pending
         )
         flows[id] = currentFlow
+    }
+
+    private mutating func quarantineUnknownApproval(
+        for id: UUID,
+        pending: CAPTPendingApproval
+    ) {
+        guard let index = index(of: id) else { return }
+        sessions[index].pendingApproval = nil
+        let message = "Approval validity is unavailable for this cached request. Submit the prompt again to mint a fresh approval."
+        sessions[index].messages.append(CAPTChatMessage(
+            role: .system,
+            text: message,
+            authorityState: "approval_stale"
+        ))
+        sessions[index].updatedAt = Date()
+        flows[id] = CAPTChatFlow(pending: pending)
     }
 
     private func index(of id: UUID) -> Int? {
