@@ -87,8 +87,9 @@ final class CAPTOperatorStore: ObservableObject {
             }.value
             switch result {
             case .success(let restored):
-                var workspace = CAPTNativeChatWorkspace(sessions: restored)
-                if let first = workspace.sessions.first {
+                var workspace = chatWorkspace
+                workspace.mergeRestoredSessions(restored)
+                if workspace.activeSessionID == nil, let first = workspace.sessions.first {
                     _ = workspace.activate(first.id)
                 }
                 chatWorkspace = workspace
@@ -176,7 +177,12 @@ final class CAPTOperatorStore: ObservableObject {
                     missionID: missionID
                 )
                 mutateWorkspace { $0.receiveApproval(pending, for: sessionID) }
-                if activeSessionID == sessionID { taskState = "approval_required" }
+                if activeSessionID == sessionID {
+                    updateTaskStateFromActiveFlow()
+                    if activeChatFlow.phase == .recoverableFailure {
+                        lastError = chatWorkspace.activeSession?.messages.last?.text
+                    }
+                }
                 saveSessions()
                 refreshHistory()
             } catch {
@@ -198,8 +204,8 @@ final class CAPTOperatorStore: ObservableObject {
         guard let pending = mutateWorkspace({
             $0.beginExecution(for: sessionID)
         }) else {
-            if localPending.isExpired() {
-                taskState = "approval_expired"
+            if !localPending.isActionable() {
+                updateTaskStateFromActiveFlow()
                 lastError = chatWorkspace.activeSession?.messages.last?.text
                 saveSessions()
             }
@@ -243,8 +249,8 @@ final class CAPTOperatorStore: ObservableObject {
         guard let pending = mutateWorkspace({
             $0.beginExecution(for: sessionID)
         }) else {
-            if localPending.isExpired() {
-                taskState = "approval_expired"
+            if !localPending.isActionable() {
+                updateTaskStateFromActiveFlow()
                 lastError = chatWorkspace.activeSession?.messages.last?.text
                 saveSessions()
             }
