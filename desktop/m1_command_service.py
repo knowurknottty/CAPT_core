@@ -19,6 +19,8 @@ from capt_runtime.services import RuntimeService
 from capt_runtime.store import EventStore
 from capt_runtime.tool_broker import ToolBrokerError, ToolUnavailable
 from capt_runtime.tools.registry import UnknownToolId
+from capt_lab.contracts import LabContractError
+from capt_lab.registry import LabRegistryError
 
 CONTRACT_SCHEMA_VERSION = "1.0.0"
 
@@ -43,6 +45,7 @@ _VALID_OPS = (
     "update_memory_trigger_policy",
     "run_fixed_openharness_inspection",
     "run_approved_hermes_inspection",
+    "run_lab_engine_advisory",
     "checkpoint_runtime",
     "shutdown",
     "resume_runtime",
@@ -76,6 +79,7 @@ class RuntimeCommandService:
         self.tool_broker = tool_broker
         self.fixed_openharness_runner = None
         self.approved_hermes_runner: Any = None
+        self.lab_runner: Any = None
         self.runtime_checkpoint_runner = None
         self.shutdown_runner = None
         self.resume_runner = None
@@ -394,6 +398,27 @@ class RuntimeCommandService:
                     result=result,
                 )
 
+            elif op == "run_lab_engine_advisory":
+                runner = self.lab_runner
+                if runner is None:
+                    return self._receipt(
+                        cmd, status="rejected", classification="internal_failure",
+                        error=self._error_envelope(
+                            cmd, "internal_failure", "LAB_ENGINE_RUNTIME_UNAVAILABLE"
+                        ),
+                    )
+                result = runner(cmd)
+                if result.pop("_in_progress", False):
+                    return self._receipt(
+                        cmd, status="in_progress", classification="in_progress", result=result
+                    )
+                status = "idempotent" if result.pop("_idempotent", False) else "accepted"
+                return self._receipt(
+                    cmd, status=status,
+                    classification="duplicate" if status == "idempotent" else "accepted",
+                    result=result,
+                )
+
             elif op == "checkpoint_runtime":
                 runner = self.runtime_checkpoint_runner
                 if runner is None:
@@ -482,6 +507,12 @@ class RuntimeCommandService:
                 status="rejected",
                 classification="internal",
                 error=self._error_envelope(cmd, "internal", "TOOL_BROKER_ERROR"),
+                detail=str(exc)[:240],
+            )
+        except (LabContractError, LabRegistryError) as exc:
+            return self._receipt(
+                cmd, status="rejected", classification="malformed",
+                error=self._error_envelope(cmd, "malformed", type(exc).__name__.upper()),
                 detail=str(exc)[:240],
             )
         except CaptRuntimeError as exc:

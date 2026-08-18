@@ -441,10 +441,14 @@ def _seed_memory_store(mem_store) -> None:
 # --------------------------------------------------------------------------
 
 class RuntimeQueryService:
-    def __init__(self, store: EventStore, demo: Optional[Dict[str, Any]] = None, memory_engine: Any = None) -> None:
+    def __init__(
+        self, store: EventStore, demo: Optional[Dict[str, Any]] = None,
+        memory_engine: Any = None, lab_registry: Any = None,
+    ) -> None:
         self.store = store
         self.demo = demo or {}
         self.memory_engine = memory_engine
+        self.lab_registry = lab_registry
 
     def identity(self) -> Dict[str, Any]:
         return {
@@ -576,9 +580,9 @@ class RuntimeQueryService:
             if op == "capabilities":
                 return {"ok": True, "result": {
                     "schemaVersion": CONTRACT_SCHEMA_VERSION,
-                    "queryOperations": ["identity", "capabilities", "list_aggregates", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state"],
-                    "commandOperations": ["create_mission", "request_model_prompt_approval", "submit_approval_decision", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool"],
-                    "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True, "toolRegistry": True, "toolBroker": True},
+                    "queryOperations": ["identity", "capabilities", "list_aggregates", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state"] + (["lab_engines"] if self.lab_registry is not None else []),
+                    "commandOperations": ["create_mission", "request_model_prompt_approval", "submit_approval_decision", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool"] + (["run_lab_engine_advisory"] if self.lab_registry is not None else []),
+                    "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True, "toolRegistry": True, "toolBroker": True, "labEngines": self.lab_registry is not None},
                     "lifecycleOperations": {"checkpoint": True, "shutdown": True, "resume": True},
                 }}
             if op == "list_aggregates":
@@ -602,6 +606,10 @@ class RuntimeQueryService:
                 )}
             if op == "verification":
                 return {"ok": True, "result": self.verification(request.get("claimId"))}
+            if op == "lab_engines":
+                if self.lab_registry is None:
+                    return {"ok": False, "error": "Lab engine registry not active"}
+                return {"ok": True, "result": self.lab_registry.describe()}
             if op == "get_memory_policy":
                 if self.memory_engine is None:
                     return {"ok": False, "error": "memory engine not active"}
@@ -691,7 +699,10 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
     # command service and into DriverHost dispatch gating.
     memory_engine = runtime.memory_engine
 
-    query = RuntimeQueryService(store, demo, memory_engine)
+    from capt_lab.registry import build_default_registry
+    from capt_lab.runtime import run_lab_advisory
+    lab_registry = build_default_registry()
+    query = RuntimeQueryService(store, demo, memory_engine, lab_registry=lab_registry)
 
     token = secrets.token_hex(32)
     tf = Path(token_file)
@@ -744,6 +755,10 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 fixed_work_receipts[key] = result
                 return result
             cmd_svc.fixed_openharness_runner = _fixed_openharness
+            lab_staging_root = Path(ledger_path).parent / "lab-staging"
+            cmd_svc.lab_runner = lambda command: run_lab_advisory(
+                store, svc, lab_registry, lab_staging_root, command
+            )
             # Governed model operator: the CLI objective becomes authoritative
             # mission/task state; the frozen work order carries only the
             # missionId/taskId references; HermesDriver derives its prompt from
