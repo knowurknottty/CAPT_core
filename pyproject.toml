@@ -25,6 +25,8 @@ capt = "capt_cli:main"
 capt-ui = "capt_ui.operator.cli:main"
 capt-tui = "capt_ui.surfaces.tui.lease_app:main"
 capt-provenance = "desktop.provenance_lens:main"
+capt-cohort = "desktop.cohort_chamber:main"
+capt-cohort-tui = "capt_ui.surfaces.tui.cohort_chamber_app:main"
 capt-security = "capt_runtime.security_gate:main"
 
 [project.optional-dependencies]

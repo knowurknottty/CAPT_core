@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from .contract import ApproxRequest, Dashboard, EvidenceView, OperatorStatus, RuntimeHealth, health_of
+from .cohort_chamber import project_cohort_chamber
 from .epistemics import project_epistemic_ladder
 from .leases import project_capability_leases
 
@@ -114,6 +115,13 @@ class Operator:
         dash.status.approvals_pending = len(dash.approvals)
         dash.evidence = EvidenceView(verification=dash.verification)
         return dash
+
+    def cohort_chamber(self, cohort_id: str) -> Dict[str, Any]:
+        """Project one authoritative Cohort aggregate for operator inspection."""
+        state = self._client.get_state("cohort-" + str(cohort_id))
+        if not state:
+            raise OperatorError("Cohort %s not found" % cohort_id)
+        return project_cohort_chamber(state)
 
     def capability_leases(self, now: Optional[str] = None) -> List[Dict[str, Any]]:
         """Project current authoritative capability/lease states for display."""
