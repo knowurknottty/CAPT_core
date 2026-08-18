@@ -142,7 +142,7 @@ The canonical JSON bytes, not an in-memory object, are the evidence artifact. Vo
 
 ### 7.1 CAPTLang Math — `lab.math`
 
-Donor snapshot: `/Users/knowurknot/Biocapt-ecosystem-fullcaptlang` at `28e7834982c859731636e733c53df9f84893f897`.
+Donor snapshot: `https://github.com/knowurknottty/biocapt-ecosystem.git` at `28e7834982c859731636e733c53df9f84893f897`.
 
 Validated donor state:
 

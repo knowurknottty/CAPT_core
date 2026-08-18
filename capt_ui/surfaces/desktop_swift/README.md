@@ -1,11 +1,11 @@
 # Inversion Labs CAPT Native macOS Desktop (SwiftUI)
 
-**Status:** INVERSION_LABS_R1_DOGFOOD_EVIDENCE_CAPTURED — runnable
+**Status:** INVERSION_LABS_R1_DOGFOOD_READY_WITH_BOUNDED_LIMITS — runnable
 `Inversion Labs CAPT.app` with authenticated RuntimeService IPC, governed
 multi-turn model execution, additive specialist Labs, cold-start bootstrap,
 encrypted restartable chat sessions, and the meaningful operator surface of the
-frozen CAPT-core base. Installed-artifact and signed-app dogfood are captured in
-`reports/lab/`; final gate-by-gate reconciliation remains before READY classification.
+frozen CAPT-core base. All 15 R1 acceptance gates passed; exact evidence and
+bounded exclusions are recorded under `reports/lab/` and `docs/lab/`.
 
 **Purpose:** a separate Inversion Labs edition built on the frozen CAPT runtime
 boundary. The SwiftUI app is still a thin renderer/controller: it does NOT port
