@@ -7,7 +7,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, Iterable, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Set
+
+if TYPE_CHECKING:
+    from capt_runtime.store import EventStore
 
 
 class ContributionOutcome(str, Enum):
@@ -127,8 +130,6 @@ class BoundedCohort:
         self.contributions.append(contribution)
 
     def next_round(self) -> None:
-        # `rounds` is the zero-based current round index. A cap of N therefore
-        # permits rounds 0..N-1 and never creates an Nth index.
         if self.rounds + 1 >= self.round_cap:
             raise ValueError("COHORT_ROUND_CAP")
         self.rounds += 1
@@ -143,16 +144,9 @@ class BoundedCohort:
             c.outcome == ContributionOutcome.DISSENT and c.material for c in epoch_values
         )
         at_cap = self.rounds + 1 >= self.round_cap
-
-        # Dissent/escalation/evidence debt cannot be erased merely by a later
-        # PASS. At the final permitted round unresolved debt closes as bounded
-        # incomplete rather than leaving an unbounded wait.
         if has_escalation_debt or has_material_dissent:
             return "BOUNDED_INCOMPLETE" if at_cap else None
 
-        # Silence quorum is round-local: every required participant's latest
-        # contribution in the current round must be PASS. A PASS from an older
-        # round cannot satisfy a later round after new cognition occurred.
         latest: Dict[str, Contribution] = {}
         for contribution in epoch_values:
             if contribution.round == self.rounds:
@@ -190,3 +184,89 @@ def cognitive_debt(
         ),
         "staleResults": stale_count,
     }
+
+
+def cohort_snapshot(cohort_id: str, cohort: BoundedCohort, epoch: DeliberationEpoch) -> Dict[str, Any]:
+    """Serialize typed cognitive state for the authoritative Cohort aggregate."""
+    cursors: Dict[str, int] = {}
+    contributions = []
+    for c in cohort.contributions:
+        cursors[c.participant] = max(cursors.get(c.participant, 0), c.cursor)
+        contributions.append({
+            "contributionId": c.contribution_id,
+            "participant": c.participant,
+            "epoch": c.epoch,
+            "round": c.round,
+            "outcome": c.outcome.value,
+            "cursor": c.cursor,
+            "sourceSequences": list(c.source_sequences),
+            "material": c.material,
+            "escalation": c.escalation.value if c.escalation else None,
+        })
+    return {
+        "cohortId": cohort_id,
+        "missionId": epoch.mission_id,
+        "taskId": epoch.task_id,
+        "epoch": epoch.epoch,
+        "rounds": cohort.rounds,
+        "roundCap": cohort.round_cap,
+        "participantCap": cohort.participant_cap,
+        "required": sorted(cohort.required),
+        "roster": sorted(cohort.roster),
+        "participantCursors": cursors,
+        "contributions": contributions,
+        "stoppingReason": cohort.stopping_reason(epoch),
+        "evidenceIds": [],
+        "latestSteer": None,
+    }
+
+
+def persist_cohort_evidence(
+    cohort_id: str,
+    cohort: BoundedCohort,
+    epoch: DeliberationEpoch,
+    claim_id: str,
+    store: "EventStore",
+    metadata: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Compatibility entrypoint routed through canonical governed RuntimeService."""
+    from capt_runtime.governed_service import GovernedRuntimeService
+    service = GovernedRuntimeService(store)
+    result = service.persist_cohort_snapshot(
+        cohort_snapshot(cohort_id, cohort, epoch), claim_id, metadata
+    )
+    return result["cohort"]
+
+
+def load_cohort_state(
+    cohort_id: str, store: "EventStore"
+) -> Optional[tuple[BoundedCohort, DeliberationEpoch]]:
+    """Reconstruct typed Cohort cognition from authoritative EventStore state."""
+    state = store.load_state("cohort-" + cohort_id)
+    if state is None:
+        return None
+    cohort = BoundedCohort(
+        required=set(state["required"]),
+        roster=set(state["roster"]),
+        participant_cap=int(state["participantCap"]),
+        round_cap=int(state["roundCap"]),
+        rounds=int(state["rounds"]),
+    )
+    for cd in state.get("contributions") or []:
+        cohort.contributions.append(
+            Contribution(
+                contribution_id=cd["contributionId"],
+                participant=cd["participant"],
+                epoch=int(cd["epoch"]),
+                round=int(cd["round"]),
+                outcome=ContributionOutcome(cd["outcome"]),
+                cursor=int(cd["cursor"]),
+                source_sequences=tuple(int(v) for v in cd.get("sourceSequences") or []),
+                material=bool(cd.get("material", False)),
+                escalation=EscalationCategory(cd["escalation"]) if cd.get("escalation") else None,
+            )
+        )
+    epoch = DeliberationEpoch(
+        mission_id=state["missionId"], task_id=state["taskId"], epoch=int(state["epoch"])
+    )
+    return cohort, epoch
