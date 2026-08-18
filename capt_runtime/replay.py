@@ -10,9 +10,10 @@ a duplicate event is a no-op rather than a double-count.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict
 
 from .aggregates import (
+    ArtifactPromotionAggregate,
     CapabilityAggregate,
     ClaimAggregate,
     DriverRunAggregate,
@@ -54,6 +55,32 @@ class ReplayState(object):
         }
 
 
+_CREATION_EVENTS = frozenset(
+    {
+        "MissionCreated",
+        "TaskCreated",
+        "CapabilityGranted",
+        "DriverRunCreated",
+        "ClaimCreated",
+        "HumanApprovalRequested",
+        "ArtifactPromotionPrepared",
+    }
+)
+
+# Aggregate kinds omitted from the frozen CheckpointManifest must be rebuilt
+# from their events up to the checkpoint before the normal tail is applied.
+_CHECKPOINT_EXTENSION_EVENTS = frozenset(
+    {
+        "HumanApprovalRequested",
+        "HumanApprovalDecided",
+        "ArtifactPromotionPrepared",
+        "ArtifactPromotionAuthorized",
+        "ArtifactPromotionAdopted",
+        "ArtifactPromotionDiscarded",
+    }
+)
+
+
 def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
     """Fold one event. Duplicate or stale events are skipped, not applied."""
     stream_id = envelope["streamId"]
@@ -61,7 +88,6 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
     current_version = state.versions.get(stream_id, 0)
 
     if version <= current_version:
-        # Already folded: duplicate delivery or replayed segment overlap.
         state.skipped += 1
         return
     if version != current_version + 1:
@@ -74,24 +100,14 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
     event_type = payload["eventType"]
     current = state.aggregates.get(stream_id)
 
-    _CREATION_EVENTS = (
-        "MissionCreated",
-        "TaskCreated",
-        "CapabilityGranted",
-        "DriverRunCreated",
-        "ClaimCreated",
-        "HumanApprovalRequested",
-    )
     if event_type not in _CREATION_EVENTS and current is None:
-        # A mutation event on a stream with no prior state means the ledger is
-        # truncated or reordered. Fail loudly rather than fabricate state.
         raise IntegrityViolation(
             "event %s (%s) mutates stream %s which has no prior state"
             % (envelope["eventId"], event_type, stream_id)
         )
 
     def existing() -> Dict[str, Any]:
-        assert current is not None  # guaranteed by the guard above
+        assert current is not None
         return current
 
     if event_type == "MissionCreated":
@@ -145,10 +161,25 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         nxt = HumanApprovalAggregate.create(payload["request"])
     elif event_type == "HumanApprovalDecided":
         from capt_runtime.aggregates.human_approval import HumanApprovalAggregate
-        nxt = HumanApprovalAggregate.decide(existing(), payload["decision"], payload.get("decidedAt") or envelope.get("recordedAt", ""))
+        nxt = HumanApprovalAggregate.decide(
+            existing(), payload["decision"],
+            payload.get("decidedAt") or envelope.get("recordedAt", "")
+        )
+    elif event_type == "ArtifactPromotionPrepared":
+        nxt = ArtifactPromotionAggregate.prepare(payload["promotion"])
+    elif event_type == "ArtifactPromotionAuthorized":
+        nxt = ArtifactPromotionAggregate.authorize(
+            existing(), payload["authorizedBy"], payload["authorizedAt"]
+        )
+    elif event_type == "ArtifactPromotionAdopted":
+        nxt = ArtifactPromotionAggregate.adopt(
+            existing(), payload["receipt"], payload["adoptedAt"]
+        )
+    elif event_type == "ArtifactPromotionDiscarded":
+        nxt = ArtifactPromotionAggregate.discard(
+            existing(), payload["reason"], payload["discardedAt"]
+        )
     elif event_type in ("CheckpointCreated", "MissionResumed"):
-        # Bookkeeping events: they advance the stream version but carry no
-        # aggregate state change.
         nxt = existing()
     else:
         raise IntegrityViolation("no reducer for event type %r" % event_type)
@@ -170,10 +201,12 @@ def full_replay(store: EventStore) -> ReplayState:
 def checkpoint_replay(
     store: EventStore, manifest: Dict[str, Any]
 ) -> ReplayState:
-    """Load a verified checkpoint's aggregate versions, then fold the tail.
+    """Load a verified checkpoint's known streams, rebuild extension streams, fold tail.
 
-    The checkpoint is verified BEFORE it is trusted. A corrupted manifest
-    aborts recovery rather than seeding replay with bad state.
+    The frozen CheckpointManifest does not yet carry human-approval or
+    Sol-Reconciliation extension stream versions. Those streams are replayed
+    from origin through the checkpoint position; normal checkpointed streams
+    continue using the existing checkpoint seed path.
     """
     verify_checkpoint(manifest)
     store.verify_chain()
@@ -197,6 +230,14 @@ def checkpoint_replay(
             state.versions[entry["streamId"]] = entry["version"]
 
     position = manifest["ledgerPosition"]["globalSequence"]
+
+    # Rebuild only extension streams omitted by the frozen checkpoint schema.
+    for envelope in store.read_events(after_sequence=0):
+        if int(envelope["globalSequence"]) > position:
+            break
+        if envelope["payload"].get("eventType") in _CHECKPOINT_EXTENSION_EVENTS:
+            _apply(state, envelope)
+
     for envelope in store.read_events(after_sequence=position):
         _apply(state, envelope)
     return state
