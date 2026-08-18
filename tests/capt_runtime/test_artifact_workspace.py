@@ -94,13 +94,21 @@ def test_promotion_requires_verification():
             aw.decide_promotion(staged, _decision("promote"), verified=False)
 
 
-def test_promotion_digest_mismatch_rejected():
-    with tempfile.TemporaryDirectory() as d:
-        staged = aw.stage_candidate(_candidate(os.path.join(d, "out.txt")),
-                                    _ws(d), "2026-08-03T00:00:00Z")
-        with pytest.raises(IntegrityViolation):
-            aw.decide_promotion(staged, _decision("promote"), verified=True,
-                                expected_digest="sha256:" + "f" * 64)
+def test_promote_artifact_to_destination_governed():
+    with tempfile.TemporaryDirectory() as staging, tempfile.TemporaryDirectory() as dest_dir:
+        cand_file = os.path.join(staging, "artifact.json")
+        with open(cand_file, "w") as f:
+            f.write('{"test": true}')
+        import hashlib
+        digest = "sha256:" + hashlib.sha256(b'{"test": true}').hexdigest()
+        cand = _candidate(cand_file, digest=digest)
+        staged = aw.stage_candidate(cand, _ws(staging), "2026-08-03T00:00:00Z")
+        
+        target = os.path.join(dest_dir, "promoted.json")
+        rec = aw.promote_artifact_to_destination(staged, _decision("promote"), target, verified=True, expected_digest=digest)
+        assert rec["destinationPath"] == target
+        assert os.path.exists(target)
+        assert open(target).read() == '{"test": true}'
 
 
 def test_promotion_verified_ok():

@@ -20,6 +20,7 @@ evidence adjudication, or capability issuance.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .contracts import require
@@ -120,3 +121,22 @@ def rollback(staged: Dict[str, Any]) -> Dict[str, Any]:
         "contentDigest": staged["contentDigest"],
         "verified": True,
     }
+
+
+def promote_artifact_to_destination(
+    staged: Dict[str, Any],
+    decision: Dict[str, Any],
+    destination_path: str,
+    *,
+    verified: bool,
+    expected_digest: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Governed transaction: promotes a staged verified artifact to destination path."""
+    record = decide_promotion(staged, decision, verified=verified, expected_digest=expected_digest)
+    if decision.get("decision") == "promote":
+        import shutil
+        dest = Path(destination_path)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(staged["path"], dest)
+        record["destinationPath"] = str(dest)
+    return record
