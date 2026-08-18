@@ -54,21 +54,25 @@ Implemented and exercised on macOS:
 - native sidebar/detail/inspector chat shell with live mission/evidence/ledger counts;
 - authenticated connection to `~/.capt/runtime.sock` + `runtime.token`;
 - cold-start recovery through the private `~/.capt/runtime-venv/bin/capt` CLI;
-- explicit provider/model/target-root selection;
+- live provider inventory/health with test + activate controls via the packaged operator layer;
+- live model inventory/default-model control and CaveCAPT verbosity preference;
+- explicit target-root selection;
 - governed `request_model_prompt_approval` flow;
 - visible approve/deny decision card;
 - exact bound `run_approved_hermes_inspection` execution after approval only;
 - returned model observations rendered in the transcript;
 - authoritative task state shown without automatic verification/promotion;
 - read-only mission/task lineage, claim/evidence state, and last-250 EventStore timeline projections;
+- authoritative memory-policy/ContextPack inspector via RuntimeService;
+- governed checkpoint/resume controls with checkpoint, ledger, and integrity digests surfaced;
 - bounded 4 MiB framed Unix-socket transport;
 - `script/install_local_runtime.sh` builds/installs the exact local CAPT wheel into a private venv;
 - `script/build_and_run.sh --verify` installs that runtime if needed, stages, and launches `dist/CAPT.app`.
 
-Still later native-surface work: onboarding polish, full mission browser, memory
-inspector, evidence/provenance drill-down, checkpoint/resume controls, and
-provider management UI. Those are UI/productization gaps, not alternate runtime
-authority.
+Still later native-surface work: onboarding polish, richer mission detail, memory-record
+drill-down, evidence artifact/provenance inspection, approval-queue management,
+provider credential-reference editing, signing/notarization, and visual polish.
+Those are UI/productization gaps, not alternate runtime authority.
 
 ## Behavioral reference
 

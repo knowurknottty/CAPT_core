@@ -55,4 +55,30 @@ final class CAPTLiveRuntimeTests: XCTestCase {
         XCTAssertFalse(result.text.isEmpty)
         XCTAssertEqual(result.taskState, "awaiting_verification")
     }
+    func testRealOperatorPreferencesAndGovernedCheckpoint() throws {
+        try requireLive()
+        let operatorCLI = CAPTOperatorCLI()
+        let providers = try operatorCLI.providers()
+        let models = try operatorCLI.models()
+        XCTAssertTrue(providers.contains(where: { $0.id == "ollama" && $0.selected }))
+        XCTAssertFalse(models.active.isEmpty)
+        _ = try operatorCLI.activateProvider("ollama")
+        if let defaultModel = models.defaultSelection?.model {
+            let after = try operatorCLI.setDefaultModel(providerID: "ollama", modelID: defaultModel)
+            XCTAssertEqual(after.defaultSelection?.model, defaultModel)
+        }
+
+        let client = CAPTRuntimeClient()
+        defer { client.disconnect() }
+        _ = try client.connect()
+        let receipt = try client.command(
+            op: "checkpoint_runtime", payload: [:],
+            idempotencyKey: "native-swift-checkpoint-" + UUID().uuidString.lowercased()
+        )
+        let checkpoint = try XCTUnwrap(CAPTRuntimeControlProjection.checkpoint(receipt))
+        XCTAssertEqual(checkpoint.status, "accepted")
+        XCTAssertTrue(checkpoint.checkpointID.hasPrefix("cp-"))
+        XCTAssertFalse(checkpoint.integrityDigest.isEmpty)
+    }
+
 }

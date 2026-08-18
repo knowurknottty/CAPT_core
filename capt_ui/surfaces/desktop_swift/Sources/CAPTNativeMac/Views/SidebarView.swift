@@ -4,7 +4,9 @@ enum CAPTSidebarSection: String, CaseIterable, Identifiable {
     case chat = "Chat"
     case missions = "Missions"
     case providers = "Providers"
+    case memory = "Memory"
     case evidence = "Evidence"
+    case runtime = "Runtime"
     case ledger = "Ledger"
     case settings = "Settings"
 
@@ -15,7 +17,9 @@ enum CAPTSidebarSection: String, CaseIterable, Identifiable {
         case .chat: return "bubble.left.and.bubble.right"
         case .missions: return "scope"
         case .providers: return "cpu"
+        case .memory: return "brain.head.profile"
         case .evidence: return "checkmark.seal"
+        case .runtime: return "externaldrive.connected.to.line.below"
         case .ledger: return "list.bullet.rectangle.portrait"
         case .settings: return "gearshape"
         }

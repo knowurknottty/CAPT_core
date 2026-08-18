@@ -40,15 +40,15 @@ struct ContentView: View {
         case .missions:
             MissionBrowserView(store: store)
         case .providers:
-            InfoSurface(
-                title: "Providers",
-                symbol: "cpu",
-                detail: "Choose the provider and model for the next governed execution in the inspector."
-            )
+            ProviderControlView(store: store)
+        case .memory:
+            MemoryContextView(store: store)
         case .evidence:
             EvidenceBrowserView(store: store)
         case .ledger:
             LedgerView(store: store)
+        case .runtime:
+            RuntimeControlView(store: store)
         case .settings:
             InfoSurface(
                 title: "Settings",

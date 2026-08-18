@@ -5,14 +5,17 @@ actor CAPTBackgroundRuntime {
     private let client: CAPTRuntimeClient
     private let coordinator: CAPTChatCoordinator
     private let bootstrapper: CAPTRuntimeBootstrapper
+    private let operatorCLI: CAPTOperatorCLI
 
     init(
         client: CAPTRuntimeClient = CAPTRuntimeClient(),
-        bootstrapper: CAPTRuntimeBootstrapper = CAPTRuntimeBootstrapper()
+        bootstrapper: CAPTRuntimeBootstrapper = CAPTRuntimeBootstrapper(),
+        operatorCLI: CAPTOperatorCLI = CAPTOperatorCLI()
     ) {
         self.client = client
         self.coordinator = CAPTChatCoordinator(client: client)
         self.bootstrapper = bootstrapper
+        self.operatorCLI = operatorCLI
     }
 
     func connect() throws -> [String: Any] {
@@ -75,6 +78,44 @@ actor CAPTBackgroundRuntime {
             evidence: Array(evidence),
             events: Array(events)
         )
+    }
+
+    func operatorSnapshot() throws -> (providers: [CAPTProviderSnapshot], models: CAPTModelSelectionSnapshot, verbosity: String) {
+        (try operatorCLI.providers(), try operatorCLI.models(), try operatorCLI.verbosity())
+    }
+
+    func activateProvider(_ providerID: String) throws -> [CAPTProviderSnapshot] {
+        try operatorCLI.activateProvider(providerID)
+    }
+
+    func testProvider(_ providerID: String) throws -> [CAPTProviderSnapshot] {
+        try operatorCLI.testProvider(providerID)
+    }
+
+    func setDefaultModel(providerID: String, modelID: String) throws -> CAPTModelSelectionSnapshot {
+        try operatorCLI.setDefaultModel(providerID: providerID, modelID: modelID)
+    }
+
+    func setVerbosity(_ value: String) throws -> String {
+        try operatorCLI.setVerbosity(value)
+    }
+
+    func memorySnapshot(missionID: String = "") throws -> CAPTMemoryRuntimeSnapshot {
+        let policy = try client.query(op: "get_memory_policy", payload: [:])["result"] as? [String: Any] ?? [:]
+        let state = try client.query(op: "get_memory_state", payload: ["missionId": missionID])["result"] as? [String: Any] ?? [:]
+        return CAPTRuntimeControlProjection.memory(policy: policy, state: state)
+    }
+
+    func checkpoint() throws -> CAPTCheckpointSnapshot {
+        let receipt = try client.command(op: "checkpoint_runtime", payload: [:], idempotencyKey: "native-checkpoint-" + UUID().uuidString.lowercased())
+        guard let snapshot = CAPTRuntimeControlProjection.checkpoint(receipt) else {
+            throw CAPTRuntimeClientError.malformedResponse("checkpoint receipt missing result")
+        }
+        return snapshot
+    }
+
+    func resume() throws -> [String: Any] {
+        try client.command(op: "resume_runtime", payload: [:], idempotencyKey: "native-resume-" + UUID().uuidString.lowercased())
     }
 
     func requestApproval(

@@ -23,6 +23,12 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var missions: [CAPTMissionSummary] = []
     @Published var evidenceItems: [CAPTEvidenceSummary] = []
     @Published var recentEvents: [CAPTEventSummary] = []
+    @Published var providers: [CAPTProviderSnapshot] = []
+    @Published var modelSnapshot: CAPTModelSelectionSnapshot?
+    @Published var verbosity = "normal"
+    @Published var memorySnapshot: CAPTMemoryRuntimeSnapshot?
+    @Published var checkpointSnapshot: CAPTCheckpointSnapshot?
+    @Published var runtimeControlMessage = ""
 
     private let runtime: CAPTBackgroundRuntime
 
@@ -52,7 +58,7 @@ final class CAPTOperatorStore: ObservableObject {
                 let integrity = identity["integrity"] as? String ?? "unknown"
                 runtimeIdentity = "\(version) · integrity \(integrity)"
                 connectionState = .connected
-                refreshHistory()
+                refreshAll()
             } catch {
                 let message = error.localizedDescription
                 lastError = message
@@ -177,9 +183,109 @@ final class CAPTOperatorStore: ObservableObject {
         }
     }
 
+    func refreshOperatorState() {
+        Task {
+            do {
+                let snapshot = try await runtime.operatorSnapshot()
+                providers = snapshot.providers
+                modelSnapshot = snapshot.models
+                verbosity = snapshot.verbosity
+                if let selected = snapshot.providers.first(where: { $0.selected }) {
+                    provider = selected.id
+                } else if let selected = snapshot.models.defaultSelection {
+                    provider = selected.provider
+                }
+                if !snapshot.models.active.isEmpty { model = snapshot.models.active }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    func refreshMemory() {
+        guard connectionState == .connected else { return }
+        Task {
+            do { memorySnapshot = try await runtime.memorySnapshot() }
+            catch { lastError = error.localizedDescription }
+        }
+    }
+
     func refreshAll() {
         refreshIdentity()
         refreshHistory()
+        refreshOperatorState()
+        refreshMemory()
+    }
+
+
+    func activateProvider(_ providerID: String) {
+        guard !isBusy else { return }
+        isBusy = true
+        Task {
+            do {
+                providers = try await runtime.activateProvider(providerID)
+                provider = providerID
+                let snapshot = try await runtime.operatorSnapshot()
+                modelSnapshot = snapshot.models
+                if let first = providers.first(where: { $0.id == providerID })?.models.first {
+                    model = first
+                }
+            } catch { handle(error) }
+            isBusy = false
+        }
+    }
+
+    func testProvider(_ providerID: String) {
+        guard !isBusy else { return }
+        isBusy = true
+        Task {
+            do { providers = try await runtime.testProvider(providerID) }
+            catch { handle(error) }
+            isBusy = false
+        }
+    }
+
+    func setDefaultModel(_ modelID: String) {
+        guard !isBusy else { return }
+        let providerID = provider
+        isBusy = true
+        Task {
+            do {
+                modelSnapshot = try await runtime.setDefaultModel(providerID: providerID, modelID: modelID)
+                model = modelID
+            } catch { handle(error) }
+            isBusy = false
+        }
+    }
+
+    func setVerbosity(_ value: String) {
+        Task {
+            do { verbosity = try await runtime.setVerbosity(value) }
+            catch { handle(error) }
+        }
+    }
+
+    func createCheckpoint() {
+        guard connectionState == .connected, !isBusy else { return }
+        isBusy = true
+        Task {
+            do {
+                checkpointSnapshot = try await runtime.checkpoint()
+                runtimeControlMessage = "Checkpoint committed"
+            } catch { handle(error) }
+            isBusy = false
+        }
+    }
+
+    func resumeRuntime() {
+        guard connectionState == .connected, !isBusy else { return }
+        isBusy = true
+        Task {
+            do {
+                _ = try await runtime.resume()
+                runtimeControlMessage = "Runtime resume accepted"
+                refreshAll()
+            } catch { handle(error) }
+            isBusy = false
+        }
     }
 
     private func handle(_ error: Error) {
