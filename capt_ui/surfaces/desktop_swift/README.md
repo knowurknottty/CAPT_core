@@ -1,7 +1,7 @@
 # CAPT Native macOS Desktop MVP (SwiftUI)
 
-**Status:** NATIVE_DESKTOP_TRACK_INITIATED — first slice (client contract +
-project scaffold). This is NOT the shipped native product yet.
+**Status:** NATIVE_DESKTOP_CHAT_MVP — runnable `CAPT.app` with authenticated
+RuntimeService IPC, governed model approval/deny, and real local-model execution.
 
 **Purpose:** a thin SwiftUI macOS client over the authenticated CAPT runtime
 boundary. It does NOT port RuntimeService to Swift and does NOT duplicate
@@ -47,21 +47,25 @@ Unix-domain socket + token that `desktop/desktop_runtime_client.py` uses. There
 is deliberately NO port of the runtime to Swift; Swift only issues the query/
 command ops and renders projections.
 
-## Initial surface (per roadmap UI-4)
+## Current native slice
 
-- first-run onboarding;
-- runtime start/status/stop;
-- provider selection;
-- model selection;
-- CaveCAPT verbosity;
-- conversation/mission surface;
-- approval queue (approve/deny);
-- memory/context status;
-- evidence inspector;
-- checkpoint/resume;
-- provider LOCAL/CLOUD state;
-- event/provenance view;
-- troubleshooting surface.
+Implemented and exercised on macOS:
+
+- native sidebar/detail/inspector chat shell;
+- authenticated connection to `~/.capt/runtime.sock` + `runtime.token`;
+- explicit provider/model/target-root selection;
+- governed `request_model_prompt_approval` flow;
+- visible approve/deny decision card;
+- exact bound `run_approved_hermes_inspection` execution after approval only;
+- returned model observations rendered in the transcript;
+- authoritative task state shown without automatic verification/promotion;
+- bounded 4 MiB framed Unix-socket transport;
+- `script/build_and_run.sh --verify` stages and launches `dist/CAPT.app`.
+
+Still later native-surface work: onboarding polish, full mission browser, memory
+inspector, evidence/provenance drill-down, checkpoint/resume controls, and
+provider management UI. Those are UI/productization gaps, not alternate runtime
+authority.
 
 ## Behavioral reference
 
