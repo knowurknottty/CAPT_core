@@ -7,7 +7,7 @@ final class CAPTNativeChatWorkspaceTests: XCTestCase {
 
     private func pending(
         requestID: String = "approval-1",
-        expiresAt: Date? = nil
+        expiresAt: Date? = Date.distantFuture
     ) -> CAPTPendingApproval {
         CAPTPendingApproval(
             requestID: requestID,
@@ -105,6 +105,23 @@ final class CAPTNativeChatWorkspaceTests: XCTestCase {
         XCTAssertEqual(workspace.activeSession?.missionID, "mission-1")
         XCTAssertEqual(workspace.activeFlow.phase, .recoverableFailure)
         XCTAssertEqual(workspace.activeSession?.messages.last?.authorityState, "approval_expired")
+    }
+
+    func testActivatingLegacyApprovalWithoutExpiryClearsLocalCursor() {
+        let old = CAPTNativeSession(
+            id: oldID, missionID: "mission-1", title: "Legacy",
+            messages: [], provider: "openrouter", model: "model-a",
+            targetRoot: "/repo", pendingApproval: pending(expiresAt: nil)
+        )
+        var workspace = CAPTNativeChatWorkspace(
+            sessions: [old], activeSessionID: nil
+        )
+
+        XCTAssertTrue(workspace.activate(oldID))
+        XCTAssertNil(workspace.activePendingApproval)
+        XCTAssertEqual(workspace.activeSession?.missionID, "mission-1")
+        XCTAssertEqual(workspace.activeFlow.phase, .recoverableFailure)
+        XCTAssertEqual(workspace.activeSession?.messages.last?.authorityState, "approval_stale")
     }
 
     func testRetryableExecutionFailureKeepsApprovalForRetry() {
