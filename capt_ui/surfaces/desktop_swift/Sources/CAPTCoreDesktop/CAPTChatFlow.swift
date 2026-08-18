@@ -50,20 +50,26 @@ public struct CAPTChatFlow: Equatable, Sendable {
         pending: CAPTPendingApproval? = nil,
         now: Date = Date()
     ) {
-        if let pending {
-            if pending.isExpired(at: now) {
-                phase = .recoverableFailure
-                requestID = nil
-                failureMessage = "Prompt approval expired"
-            } else {
-                phase = .awaitingApproval
-                requestID = pending.requestID
-                failureMessage = nil
-            }
-        } else {
+        guard let pending else {
             phase = .idle
             requestID = nil
             failureMessage = nil
+            return
+        }
+
+        switch pending.validity(at: now) {
+        case .valid:
+            phase = .awaitingApproval
+            requestID = pending.requestID
+            failureMessage = nil
+        case .expired:
+            phase = .recoverableFailure
+            requestID = nil
+            failureMessage = "Prompt approval expired"
+        case .unknown:
+            phase = .recoverableFailure
+            requestID = nil
+            failureMessage = "Prompt approval validity unavailable"
         }
     }
 
@@ -81,10 +87,24 @@ public struct CAPTChatFlow: Equatable, Sendable {
         failureMessage = nil
     }
 
-    public mutating func approvalPrepared(_ pending: CAPTPendingApproval) {
-        phase = .awaitingApproval
-        requestID = pending.requestID
-        failureMessage = nil
+    public mutating func approvalPrepared(
+        _ pending: CAPTPendingApproval,
+        now: Date = Date()
+    ) {
+        switch pending.validity(at: now) {
+        case .valid:
+            phase = .awaitingApproval
+            requestID = pending.requestID
+            failureMessage = nil
+        case .expired:
+            phase = .recoverableFailure
+            requestID = nil
+            failureMessage = "Prompt approval expired"
+        case .unknown:
+            phase = .recoverableFailure
+            requestID = nil
+            failureMessage = "Prompt approval validity unavailable"
+        }
     }
 
     public mutating func beginExecution(_ pending: CAPTPendingApproval) {
