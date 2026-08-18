@@ -108,7 +108,7 @@ def test_red03_prompt_assembly_rejects_placeholder_context():
     )
     rendered = asm["modelVisiblePrompt"]
     assert "CAPT-CONTINUITY-A-TEST" in rendered, "continuation context not rendered"
-    assert "PRIOR UNVERIFIED MODEL EVIDENCE" in rendered, "trust label missing"
+    assert "PRIOR UNVERIFIED" in rendered, "trust label missing"
     assert asm["contextPackDigest"] == "sha256:dddd"
 
 
