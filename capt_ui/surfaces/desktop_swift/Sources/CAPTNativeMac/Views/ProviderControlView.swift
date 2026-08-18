@@ -4,6 +4,8 @@ import CAPTCoreDesktop
 struct ProviderControlView: View {
     @ObservedObject var store: CAPTOperatorStore
     @State private var credentialReference = ""
+    @State private var apiKey = ""
+    @State private var showAdvancedCredentialReference = false
 
     private var selectedProvider: CAPTProviderSnapshot? {
         store.providers.first(where: { $0.id == store.provider })
@@ -32,6 +34,7 @@ struct ProviderControlView: View {
                 .font(.callout).foregroundStyle(.secondary)
         }
     }
+
     private var providersSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Providers").font(.headline)
@@ -52,8 +55,10 @@ struct ProviderControlView: View {
                     }
                     Spacer()
                     Button("Test") { store.testProvider(item.id) }
+                        .disabled(store.isBusy)
                     if !item.selected {
                         Button("Activate") { store.activateProvider(item.id) }
+                            .disabled(store.isBusy)
                     }
                 }
                 .padding(10)
@@ -61,6 +66,7 @@ struct ProviderControlView: View {
             }
         }
     }
+
     private var modelSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Default model").font(.headline)
@@ -74,6 +80,7 @@ struct ProviderControlView: View {
                     }
                 }
                 .pickerStyle(.menu)
+                .disabled(store.isBusy)
                 Text("Active: \(store.modelSnapshot?.active ?? store.model)")
                     .font(.caption).foregroundStyle(.secondary)
             } else {
@@ -83,22 +90,76 @@ struct ProviderControlView: View {
         }
     }
 
-
     private var credentialSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Credential reference").font(.headline)
+            Text("Provider credentials").font(.headline)
             if let item = selectedProvider {
-                HStack {
-                    TextField("env:OPENROUTER_API_KEY or keychain:openrouter", text: $credentialReference)
-                        .textFieldStyle(.roundedBorder)
-                    Button("Save Reference") {
-                        store.setProviderKeyReference(providerID: item.id, reference: credentialReference)
-                        credentialReference = ""
+                if item.id == "openrouter" {
+                    Text("Set the OpenRouter API key once. CAPT stores it in macOS Keychain as service ‘capt-provider’, account ‘openrouter’. RuntimeService persists only keychain:openrouter.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+
+                    HStack {
+                        SecureField("OpenRouter API key", text: $apiKey)
+                            .textFieldStyle(.roundedBorder)
+                        Button("Set API Key") {
+                            let submittedKey = apiKey
+                            Task {
+                                if await store.configureProviderAPIKey(
+                                    providerID: item.id,
+                                    apiKey: submittedKey
+                                ) {
+                                    apiKey = ""
+                                }
+                            }
+                        }
+                        .disabled(
+                            apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                            store.isBusy
+                        )
                     }
-                    .disabled(credentialReference.isEmpty)
+
+                    if let status = store.providerCredentialStatus[item.id] {
+                        Text(status)
+                            .font(.caption)
+                            .foregroundStyle(status.localizedCaseInsensitiveContains("failed") ? .red : .secondary)
+                    }
                 }
-                Text("Stored: \(item.keyRef). Raw keys are rejected; the native app persists only CAPT secret references.")
-                    .font(.caption).foregroundStyle(.secondary)
+
+                DisclosureGroup(
+                    "Advanced credential reference",
+                    isExpanded: $showAdvancedCredentialReference
+                ) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            TextField(
+                                "env:OPENROUTER_API_KEY or keychain:openrouter",
+                                text: $credentialReference
+                            )
+                            .textFieldStyle(.roundedBorder)
+
+                            Button("Save Reference") {
+                                let submittedReference = credentialReference
+                                Task {
+                                    if await store.setProviderKeyReference(
+                                        providerID: item.id,
+                                        reference: submittedReference
+                                    ) {
+                                        credentialReference = ""
+                                    }
+                                }
+                            }
+                            .disabled(
+                                credentialReference.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                                store.isBusy
+                            )
+                        }
+                        Text("Stored reference: \(item.keyRef). Raw keys are rejected here; use Set API Key above for OpenRouter.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 6)
+                }
             }
         }
     }

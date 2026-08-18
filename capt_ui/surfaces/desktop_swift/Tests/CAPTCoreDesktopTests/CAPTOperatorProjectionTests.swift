@@ -58,11 +58,28 @@ extension CAPTOperatorProjectionTests {
             "scope": ["approvalBinding": ["provider": "ollama", "model": "qwen", "targetRoot": "/repo"]]
         ]
         let item = CAPTOperatorProjection.approval(raw)
+        let formatter = ISO8601DateFormatter()
+        let beforeExpiry = formatter.date(from: "2026-08-18T13:59:59Z")!
+        let atExpiry = formatter.date(from: "2026-08-18T14:00:00Z")!
+
         XCTAssertEqual(item.id, "approval-1")
         XCTAssertEqual(item.provider, "ollama")
         XCTAssertEqual(item.model, "qwen")
         XCTAssertEqual(item.state, "requested")
         XCTAssertEqual(item.remainingUses, 1)
+        XCTAssertTrue(item.isActionable(at: beforeExpiry))
+        XCTAssertFalse(item.isActionable(at: atExpiry))
+    }
+
+    func testApprovalWithMalformedExpiryFailsClosed() {
+        let raw: [String: Any] = [
+            "requestId": "approval-2", "missionId": "m-1", "taskId": "t-2",
+            "operation": "ModelOperatorInspection", "requestedCapability": "cap.fs.read",
+            "riskClassification": "low", "state": "requested", "remainingUses": 1,
+            "expiresAt": "not-a-time"
+        ]
+        let item = CAPTOperatorProjection.approval(raw)
+        XCTAssertFalse(item.isActionable())
     }
 }
 

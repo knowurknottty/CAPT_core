@@ -18,7 +18,6 @@ public struct CAPTEvidenceSummary: Identifiable, Sendable, Equatable {
     public let evidenceCount: Int
 }
 
-
 public struct CAPTApprovalSummary: Identifiable, Sendable, Equatable {
     public let id: String
     public let missionID: String
@@ -33,6 +32,20 @@ public struct CAPTApprovalSummary: Identifiable, Sendable, Equatable {
     public let provider: String
     public let model: String
     public let targetRoot: String
+
+    public func isActionable(at date: Date = Date()) -> Bool {
+        guard state == "requested", decision == nil, remainingUses > 0 else { return false }
+        guard let expiry = Self.parseTimestamp(expiresAt) else { return false }
+        return expiry > date
+    }
+
+    private static func parseTimestamp(_ value: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: value) { return date }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: value)
+    }
 }
 
 public struct CAPTEventSummary: Identifiable, Sendable, Equatable {
@@ -45,7 +58,6 @@ public struct CAPTEventSummary: Identifiable, Sendable, Equatable {
     public let taskID: String?
     public let actorKind: String
 }
-
 
 public struct CAPTDriverRunSummary: Identifiable, Sendable, Equatable {
     public let id: String
@@ -87,7 +99,6 @@ public enum CAPTOperatorProjection {
             evidenceCount: evidenceIDs.count
         )
     }
-
 
     public static func approval(_ raw: [String: Any]) -> CAPTApprovalSummary {
         let scope = raw["scope"] as? [String: Any] ?? [:]

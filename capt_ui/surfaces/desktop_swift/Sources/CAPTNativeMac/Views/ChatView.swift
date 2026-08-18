@@ -14,14 +14,31 @@ struct ChatView: View {
                             MessageRow(message: message)
                                 .id(message.id)
                         }
+
+                        if store.activeChatFlow.phase == .requestingApproval {
+                            ChatProgressCard(
+                                title: "Preparing governed approval",
+                                detail: "CAPT is binding the prompt, provider, model, target, context and approval request."
+                            )
+                            .id("chat-requesting-approval")
+                        }
+
                         if let pending = store.pendingApproval {
                             ApprovalCard(
                                 pending: pending,
-                                isBusy: store.isBusy,
+                                isBusy: store.isActiveChatBusy,
                                 approve: store.approvePending,
                                 deny: store.denyPending
                             )
                             .id("pending-approval")
+                        }
+
+                        if store.activeChatFlow.phase == .executing {
+                            ChatProgressCard(
+                                title: "Executing approved task",
+                                detail: "The bound execution is running through CAPT RuntimeService. Model output remains evidence until separately verified."
+                            )
+                            .id("chat-executing")
                         }
                     }
                     .padding(24)
@@ -35,12 +52,12 @@ struct ChatView: View {
             Divider()
             ComposerView(
                 draft: $draft,
-                enabled: store.connectionState == .connected &&
-                    store.pendingApproval == nil && !store.isBusy
+                enabled: store.canComposeInActiveChat
             ) {
+                guard store.canComposeInActiveChat else { return }
                 let text = draft
-                draft = ""
                 store.submitPrompt(text)
+                draft = ""
             }
         }
         .navigationTitle(store.activeSessionTitle)
@@ -80,6 +97,25 @@ private struct MessageRow: View {
     }
 }
 
+private struct ChatProgressCard: View {
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            ProgressView()
+                .controlSize(.small)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.headline)
+                Text(detail).font(.callout).foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+        .padding(14)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 14))
+    }
+}
+
 private struct ApprovalCard: View {
     let pending: CAPTPendingApproval
     let isBusy: Bool
@@ -100,13 +136,20 @@ private struct ApprovalCard: View {
             LabeledContent("Prompt digest", value: pending.promptAssemblyDigest)
                 .font(.caption2.monospaced())
                 .lineLimit(1)
+            if let expiresAt = pending.expiresAt {
+                LabeledContent(
+                    "Expires",
+                    value: expiresAt.formatted(date: .omitted, time: .standard)
+                )
+                .font(.caption)
+            }
             HStack {
                 Button("Deny", role: .destructive, action: deny)
-                    .disabled(isBusy)
+                    .disabled(isBusy || !pending.isActionable())
                 Spacer()
                 Button("Approve & Run", action: approve)
                     .buttonStyle(.borderedProminent)
-                    .disabled(isBusy)
+                    .disabled(isBusy || !pending.isActionable())
             }
         }
         .padding(16)

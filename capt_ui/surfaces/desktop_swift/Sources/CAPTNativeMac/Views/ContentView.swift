@@ -55,7 +55,7 @@ struct ContentView: View {
             InfoSurface(
                 title: "Settings",
                 symbol: "gearshape",
-                detail: "CAPT state paths follow CAPT_STATE_DIR or ~/.capt. Credentials remain outside the app."
+                detail: "CAPT state paths follow CAPT_STATE_DIR or ~/.capt. Provider secrets stay in macOS Keychain; CAPT state persists secret references only."
             )
         }
     }

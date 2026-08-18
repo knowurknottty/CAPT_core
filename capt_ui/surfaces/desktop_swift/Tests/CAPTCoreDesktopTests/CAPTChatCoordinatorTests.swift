@@ -22,7 +22,8 @@ final class CAPTChatCoordinatorTests: XCTestCase {
         ["result": [
             "requestId": "approval-1", "missionId": "mission-1",
             "taskId": "task-1", "driverRunId": "run-1",
-            "promptAssemblyDigest": "sha256:abc"
+            "promptAssemblyDigest": "sha256:abc",
+            "expiresAt": "2026-08-18T18:30:00Z"
         ]]
     }
 
@@ -37,6 +38,7 @@ final class CAPTChatCoordinatorTests: XCTestCase {
         )
 
         XCTAssertEqual(pending.requestID, "approval-1")
+        XCTAssertNotNil(pending.expiresAt)
         XCTAssertEqual(client.calls.map(\.0), ["request_model_prompt_approval"])
         XCTAssertFalse(client.calls.map(\.0).contains("run_approved_hermes_inspection"))
     }

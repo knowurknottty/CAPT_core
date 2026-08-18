@@ -49,6 +49,7 @@ public final class CAPTChatCoordinator {
         let taskID = try Self.requireString("taskId", from: result)
         let driverRunID = try Self.requireString("driverRunId", from: result)
         let digest = try Self.requireString("promptAssemblyDigest", from: result)
+        let expiresAt = (result["expiresAt"] as? String).flatMap(Self.parseTimestamp)
         return CAPTPendingApproval(
             requestID: requestID,
             missionID: missionID,
@@ -58,7 +59,8 @@ public final class CAPTChatCoordinator {
             targetRoot: targetRoot,
             provider: provider,
             model: model,
-            promptAssemblyDigest: digest
+            promptAssemblyDigest: digest,
+            expiresAt: expiresAt
         )
     }
 
@@ -151,6 +153,14 @@ public final class CAPTChatCoordinator {
             parts.append("runtime status " + status)
         }
         return parts.isEmpty ? "runtime rejected command" : parts.joined(separator: ": ")
+    }
+
+    private static func parseTimestamp(_ value: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: value) { return date }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: value)
     }
 
     private static func extractTaskState(_ response: [String: Any]) -> String {
