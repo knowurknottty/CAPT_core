@@ -1,0 +1,27 @@
+name: Native macOS Swift
+
+on:
+  pull_request:
+    paths:
+      - "capt_ui/surfaces/desktop_swift/**"
+      - ".github/workflows/native-macos-swift.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  swift:
+    runs-on: macos-15
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: capt_ui/surfaces/desktop_swift
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Toolchain
+        run: swift --version
+      - name: Unit tests
+        run: swift test
+      - name: Build native app target
+        run: swift build --product CAPTNativeMac
