@@ -15,30 +15,45 @@ final class CAPTNativeSessionStoreTests: XCTestCase {
         let store = CAPTEncryptedSessionStore(fileURL: file, keyProvider: key)
         let message = CAPTChatMessage(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!,
-            role: .user, text: "private invention prompt",
+            role: .user,
+            text: "private invention prompt",
             timestamp: Date(timeIntervalSince1970: 1_700_000_000)
         )
+        let expiresAt = Date(timeIntervalSince1970: 1_700_000_120)
         let pending = CAPTPendingApproval(
-            requestID: "approval-1", missionID: "m-native-1", taskID: "task-2",
-            driverRunID: "dr-2", objective: "continue", targetRoot: "/repo",
-            provider: "ollama", model: "qwen",
-            promptAssemblyDigest: "sha256:" + String(repeating: "a", count: 64)
+            requestID: "approval-1",
+            missionID: "m-native-1",
+            taskID: "task-2",
+            driverRunID: "dr-2",
+            objective: "continue",
+            targetRoot: "/repo",
+            provider: "ollama",
+            model: "qwen",
+            promptAssemblyDigest: "sha256:" + String(repeating: "a", count: 64),
+            expiresAt: expiresAt
         )
         let session = CAPTNativeSession(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
-            missionID: "m-native-1", title: "Private invention",
+            missionID: "m-native-1",
+            title: "Private invention",
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
             updatedAt: Date(timeIntervalSince1970: 1_700_000_001),
-            messages: [message], provider: "ollama", model: "qwen",
-            targetRoot: "/repo", pendingApproval: pending
+            messages: [message],
+            provider: "ollama",
+            model: "qwen",
+            targetRoot: "/repo",
+            pendingApproval: pending
         )
 
         try store.save([session])
         let raw = try Data(contentsOf: file)
-        XCTAssertFalse(String(data: raw, encoding: .utf8)?.contains("private invention prompt") ?? false)
+        XCTAssertFalse(
+            String(data: raw, encoding: .utf8)?.contains("private invention prompt") ?? false
+        )
         let restored = try store.load()
         XCTAssertEqual(restored, [session])
         XCTAssertEqual(restored.first?.pendingApproval?.requestID, "approval-1")
+        XCTAssertEqual(restored.first?.pendingApproval?.expiresAt, expiresAt)
     }
 
     func testMissingSessionCacheLoadsEmpty() throws {
@@ -46,6 +61,9 @@ final class CAPTNativeSessionStoreTests: XCTestCase {
             .appendingPathComponent(UUID().uuidString)
             .appendingPathComponent("native_sessions.enc")
         let key = StaticSessionKeyProvider(bytes: Data(repeating: 0x24, count: 32))
-        XCTAssertEqual(try CAPTEncryptedSessionStore(fileURL: file, keyProvider: key).load(), [])
+        XCTAssertEqual(
+            try CAPTEncryptedSessionStore(fileURL: file, keyProvider: key).load(),
+            []
+        )
     }
 }
