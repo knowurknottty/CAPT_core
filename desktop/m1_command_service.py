@@ -58,6 +58,7 @@ _VALID_OPS = (
     "submit_approval_decision",
     "cancel_task",
     "cancel_driver_run",
+    "steer_deliberation",
     "update_memory_trigger_policy",
     "run_fixed_openharness_inspection",
     "run_approved_hermes_inspection",
@@ -204,6 +205,17 @@ class RuntimeCommandService:
             elif op == "cancel_driver_run":
                 result = self.svc.cancel_driver_run(
                     cmd["payload"]["driverRunId"], cmd["payload"].get("reason", "Operator cancelled."), meta
+                )
+            elif op == "steer_deliberation":
+                result = {
+                    "cohortId": cmd["payload"]["cohortId"],
+                    "directive": cmd["payload"]["directive"],
+                    "steeredBy": self.operator_id,
+                    "reason": cmd["payload"].get("reason", "operator steering"),
+                    "steeredAt": meta["issuedAt"],
+                }
+                return self._receipt(
+                    cmd, "accepted", "acknowledged", result=result, stream_id="cohort-" + str(cmd["payload"]["cohortId"])
                 )
             elif op == "update_memory_trigger_policy":
                 if self.memory_engine is None:
