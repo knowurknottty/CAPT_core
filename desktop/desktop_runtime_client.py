@@ -273,6 +273,7 @@ def project_authoritative_state(client: RuntimeClient) -> Dict[str, Any]:
     """
     aggregates = client.list_aggregates()
     missions, tasks, approvals, driver_runs, claims = [], [], [], [], []
+    capabilities, artifact_promotions, cohorts, replay_forks = [], [], [], []
     for agg in aggregates:
         st = client.get_state(agg["streamId"])
         if st is None:
@@ -287,6 +288,14 @@ def project_authoritative_state(client: RuntimeClient) -> Dict[str, Any]:
             driver_runs.append(st)
         elif agg["kind"] == "claim":
             claims.append(st)
+        elif agg["kind"] == "capability":
+            capabilities.append(st)
+        elif agg["kind"] == "artifact_promotion":
+            artifact_promotions.append(st)
+        elif agg["kind"] == "cohort":
+            cohorts.append(st)
+        elif agg["kind"] == "replay_fork":
+            replay_forks.append(st)
     # Verification is claim-owned: a global scalar would hide coexistence of
     # accepted and contradicted claims. Preserve every committed claim result;
     # only claims without one expose their explicitly advisory fallback.
@@ -300,6 +309,10 @@ def project_authoritative_state(client: RuntimeClient) -> Dict[str, Any]:
         "approvals": approvals,
         "driverRuns": driver_runs,
         "claims": claims,
+        "capabilities": capabilities,
+        "artifactPromotions": artifact_promotions,
+        "cohorts": cohorts,
+        "replayForks": replay_forks,
         "eventTimeline": client.event_timeline(),
         "verificationsByClaim": verifications,
         "identity": client.identity(),

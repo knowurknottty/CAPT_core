@@ -107,3 +107,164 @@ def test_cycle_is_reported_not_hidden():
     }
     with pytest.raises(IntegrityViolation, match="contains cycle"):
         topological_order(graph)
+
+
+def test_current_runtime_shapes_include_authority_effect_cohort_and_replay_provenance():
+    state = _state()
+    # Real VerificationResult shape: supporting evidence belongs to status.
+    state["verificationsByClaim"]["cl-1"] = {
+        "verificationId": "ver-1",
+        "claimId": "cl-1",
+        "strategy": "artifact_hashing",
+        "status": {"kind": "verified", "supportingEvidenceIds": ["ev-1"]},
+        "verifiedBy": {"actorId": "verification_pipeline", "kind": "verification_plane"},
+        "verifiedAt": "2026-08-18T08:00:00Z",
+        "committed": True,
+        "advisory": False,
+    }
+    state["approvals"][0].update({
+        "decision": "approve",
+        "operatorId": "captain",
+        "decidedAt": "2026-08-18T08:00:00Z",
+    })
+    state["capabilities"] = [{
+        "grantId": "g-1",
+        "grantState": "leased",
+        "capabilityId": "cap.fs.read",
+        "subjectActorId": "exec-1",
+        "operations": ["repository.read"],
+        "scope": {"kind": "filesystem", "rootPath": "/tmp/repo", "recursive": True},
+        "policyDecisionId": "pd-1",
+        "policyBundleDigest": "sha256:" + "b" * 64,
+        "usesConsumed": 0,
+        "lease": {
+            "leaseId": "l-1",
+            "missionId": "m-1",
+            "taskId": "t-1",
+            "executionContextId": "ec-1",
+            "operations": ["repository.read"],
+            "scope": {"kind": "filesystem", "rootPath": "/tmp/repo", "recursive": False},
+            "state": "active",
+        },
+        "reservations": [],
+        "consumptions": [],
+        "revocation": None,
+    }]
+    state["artifactPromotions"] = [{
+        "promotionId": "p-1",
+        "candidateId": "cand-1",
+        "workspaceId": "ws-1",
+        "contentDigest": "sha256:" + "c" * 64,
+        "claimId": "cl-1",
+        "verificationId": "ver-1",
+        "evidenceId": "ev-1",
+        "state": "adopted",
+    }]
+    state["cohorts"] = [{
+        "cohortId": "coh-1",
+        "missionId": "m-1",
+        "taskId": "t-1",
+        "epoch": 1,
+        "rounds": 1,
+        "stoppingReason": "SILENCE_QUORUM",
+        "evidenceIds": ["ev-cohort-1"],
+        "latestSteer": {
+            "directive": "inspect alternate evidence",
+            "reason": "operator steering",
+            "steeredBy": "captain",
+            "steeredAt": "2026-08-18T08:00:00Z",
+            "epoch": 1,
+        },
+    }]
+    state["replayForks"] = [{
+        "forkId": "fork-1",
+        "sourceSequence": 12,
+        "sourceEventId": "ev-source-12",
+        "sourceStateDigest": "sha256:" + "d" * 64,
+        "sourceChainDigest": "sha256:" + "e" * 64,
+        "newMissionId": "m-1",
+        "reason": "alternate continuation",
+        "createdBy": {"actorId": "captain", "kind": "human"},
+        "createdAt": "2026-08-18T08:00:00Z",
+        "historicalAuthorityReactivated": False,
+        "state": "created",
+    }]
+
+    graph = build_provenance_graph(state)
+    edges = _edge_set(graph)
+    node_ids = {node["id"] for node in graph["nodes"]}
+
+    # Real VerificationResult nested evidence relation.
+    assert ("evidence:ev-1", "verification:ver-1", "supports_verification") in edges
+
+    # Approval request and operator decision remain distinct.
+    assert "approval_decision:ap-1:approve" in node_ids
+    assert ("approval:ap-1", "approval_decision:ap-1:approve", "resolved_by") in edges
+
+    # Capability grant/lease authority is visible but remains projection-only.
+    assert "capability_grant:g-1" in node_ids
+    assert "capability_lease:l-1" in node_ids
+    assert ("capability_grant:g-1", "capability_lease:l-1", "activates_lease") in edges
+    assert ("task:t-1", "capability_lease:l-1", "scopes_lease_to_task") in edges
+
+    # Verified artifact promotion binds distinct claim/evidence/verification identities.
+    assert "artifact_promotion:p-1" in node_ids
+    assert ("claim:cl-1", "artifact_promotion:p-1", "governs_promotion") in edges
+    assert ("verification:ver-1", "artifact_promotion:p-1", "binds_promotion_verification") in edges
+    assert ("evidence:ev-1", "artifact_promotion:p-1", "binds_promotion_evidence") in edges
+
+    # Cohort and steering provenance are explicit without inventing model identities.
+    assert "cohort:coh-1" in node_ids
+    assert ("task:t-1", "cohort:coh-1", "coordinates_with") in edges
+    assert ("human_actor:captain", "cohort:coh-1", "steered_cohort") in edges
+
+    # Replay fork points from an explicit historical source identity into new history.
+    assert "replay_fork:fork-1" in node_ids
+    replay_sources = [node["id"] for node in graph["nodes"] if node["kind"] == "replay_source"]
+    assert len(replay_sources) == 1
+    assert (replay_sources[0], "replay_fork:fork-1", "forked_from") in edges
+    assert ("replay_fork:fork-1", "mission:m-1", "creates_mission") in edges
+    assert graph["authority"] == "projection_only"
+
+
+def test_later_authoritative_event_enriches_placeholder_node_without_losing_identity():
+    state = _state()
+    # Remove the original full EvidenceRecorded event so claim/verification
+    # references create only the identity placeholder before authoritative
+    # event detail arrives.
+    state["eventTimeline"] = []
+    state["eventTimeline"].append({
+        "globalSequence": 9,
+        "eventId": "evt-evidence-rich",
+        "payload": {
+            "eventType": "EvidenceRecorded",
+            "evidence": {
+                "schemaVersion": "1.0.0",
+                "evidenceId": "ev-1",
+                "missionId": "m-1",
+                "evidence": {
+                    "kind": "artifact_hash",
+                    "artifactPath": "/tmp/report.md",
+                    "artifactDigest": "sha256:" + "9" * 64,
+                },
+                "collectedBy": {"actorId": "verification_pipeline", "kind": "verification_plane"},
+                "collectedAt": "2026-08-18T08:05:00Z",
+                "trust": "capt_authoritative",
+            },
+        },
+    })
+
+    graph = build_provenance_graph(state)
+    evidence = next(node for node in graph["nodes"] if node["id"] == "evidence:ev-1")
+    assert evidence["data"]["evidenceId"] == "ev-1"
+    assert evidence["data"]["collectedAt"] == "2026-08-18T08:05:00Z"
+    assert evidence["data"]["evidence"]["artifactDigest"] == "sha256:" + "9" * 64
+
+
+def test_conflicting_explicit_data_for_same_provenance_identity_fails_visible():
+    from capt_ui.operator.provenance import ProvenanceGraphBuilder
+
+    builder = ProvenanceGraphBuilder()
+    builder.add_node("evidence", "ev-conflict", {"evidenceId": "ev-conflict", "trust": "a"})
+    with pytest.raises(IntegrityViolation, match="PROVENANCE_NODE_CONFLICT"):
+        builder.add_node("evidence", "ev-conflict", {"evidenceId": "ev-conflict", "trust": "b"})

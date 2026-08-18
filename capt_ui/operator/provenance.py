@@ -36,7 +36,23 @@ class ProvenanceGraphBuilder(object):
             }
         elif payload:
             merged = dict(existing.get("data") or {})
-            merged.update(payload)
+            for key, value in payload.items():
+                if key not in merged:
+                    merged[key] = value
+                    continue
+                prior = merged[key]
+                if prior == value:
+                    continue
+                prior_empty = prior is None or prior == "" or prior == [] or prior == {}
+                value_empty = value is None or value == "" or value == [] or value == {}
+                if prior_empty and not value_empty:
+                    merged[key] = value
+                    continue
+                if value_empty:
+                    continue
+                raise IntegrityViolation(
+                    "PROVENANCE_NODE_CONFLICT %s field %s" % (node_id, key)
+                )
             existing["data"] = merged
         return node_id
 
@@ -89,6 +105,7 @@ def build_provenance_graph(state: Mapping[str, Any]) -> Dict[str, Any]:
     driver_nodes: Dict[str, str] = {}
     claim_nodes: Dict[str, str] = {}
     approval_nodes: Dict[str, str] = {}
+    verification_nodes: Dict[str, str] = {}
 
     for mission in state.get("missions", []) or []:
         mission_id = mission.get("missionId")
@@ -125,6 +142,20 @@ def build_provenance_graph(state: Mapping[str, Any]) -> Dict[str, Any]:
         if prompt_digest:
             prompt_node = b.add_node("prompt_assembly", prompt_digest, {"digest": prompt_digest})
             b.add_edge(prompt_node, approval_node, "approval_binds_prompt")
+        decision = approval.get("decision")
+        if decision:
+            decision_identity = "%s:%s" % (request_id, decision)
+            decision_node = b.add_node(
+                "approval_decision",
+                decision_identity,
+                {
+                    "decision": decision,
+                    "operatorId": approval.get("operatorId"),
+                    "decidedAt": approval.get("decidedAt"),
+                    "note": approval.get("note"),
+                },
+            )
+            b.add_edge(approval_node, decision_node, "resolved_by")
 
     for run in state.get("driverRuns", []) or []:
         run_id = run.get("driverRunId")
@@ -180,7 +211,11 @@ def build_provenance_graph(state: Mapping[str, Any]) -> Dict[str, Any]:
                     "advisory": verification.get("advisory"),
                 },
             )
-            for evidence_id in verification.get("supportingEvidenceIds") or []:
+            verification_nodes[verification_id] = verification_node
+            status = verification.get("status")
+            status_evidence = status.get("supportingEvidenceIds") if isinstance(status, Mapping) else None
+            supporting_evidence = verification.get("supportingEvidenceIds") or status_evidence or []
+            for evidence_id in supporting_evidence:
                 evidence_node = b.add_node("evidence", str(evidence_id), {"evidenceId": str(evidence_id)})
                 b.add_edge(evidence_node, verification_node, "supports_verification")
             b.add_edge(verification_node, claim_node, "evaluates_claim")
@@ -192,6 +227,144 @@ def build_provenance_graph(state: Mapping[str, Any]) -> Dict[str, Any]:
                 {"verdict": claim.get("guardVerdict"), "qualification": claim.get("qualification")},
             )
             b.add_edge(claim_node, decision_node, "adjudicated_by")
+
+    # Capability authority: grant and embedded lease remain separate nodes.
+    for capability in state.get("capabilities", []) or []:
+        grant_id = capability.get("grantId")
+        if not grant_id:
+            continue
+        grant_node = b.add_node(
+            "capability_grant",
+            str(grant_id),
+            {
+                "capabilityId": capability.get("capabilityId"),
+                "grantState": capability.get("grantState"),
+                "subjectActorId": capability.get("subjectActorId"),
+                "operations": capability.get("operations"),
+                "scope": capability.get("scope"),
+                "usesConsumed": capability.get("usesConsumed"),
+                "revocation": capability.get("revocation"),
+            },
+        )
+        policy_id = capability.get("policyDecisionId")
+        if policy_id:
+            policy_node = b.add_node(
+                "policy_decision_ref", str(policy_id), {"referenceOnly": True}
+            )
+            b.add_edge(policy_node, grant_node, "authorizes_grant")
+        lease = capability.get("lease")
+        if isinstance(lease, Mapping) and lease.get("leaseId"):
+            lease_id = str(lease["leaseId"])
+            lease_node = b.add_node(
+                "capability_lease",
+                lease_id,
+                {
+                    "state": lease.get("state"),
+                    "operations": lease.get("operations"),
+                    "scope": lease.get("scope"),
+                    "executionContextId": lease.get("executionContextId"),
+                },
+            )
+            b.add_edge(grant_node, lease_node, "activates_lease")
+            mission_id = lease.get("missionId")
+            task_id = lease.get("taskId")
+            if mission_id and str(mission_id) in mission_nodes:
+                b.add_edge(mission_nodes[str(mission_id)], lease_node, "scopes_lease_to_mission")
+            if task_id and str(task_id) in task_nodes:
+                b.add_edge(task_nodes[str(task_id)], lease_node, "scopes_lease_to_task")
+
+    # Artifact promotion is a separate authority domain from verification and ClaimGuard.
+    for promotion in state.get("artifactPromotions", []) or []:
+        promotion_id = promotion.get("promotionId")
+        if not promotion_id:
+            continue
+        promotion_node = b.add_node(
+            "artifact_promotion",
+            str(promotion_id),
+            {
+                "state": promotion.get("state"),
+                "candidateId": promotion.get("candidateId"),
+                "workspaceId": promotion.get("workspaceId"),
+                "contentDigest": promotion.get("contentDigest"),
+                "destinationPath": promotion.get("destinationPath"),
+            },
+        )
+        claim_id = promotion.get("claimId")
+        if claim_id and str(claim_id) in claim_nodes:
+            b.add_edge(claim_nodes[str(claim_id)], promotion_node, "governs_promotion")
+        evidence_id = promotion.get("evidenceId")
+        if evidence_id:
+            evidence_node = b.add_node("evidence", str(evidence_id), {"evidenceId": str(evidence_id)})
+            b.add_edge(evidence_node, promotion_node, "binds_promotion_evidence")
+        verification_id = promotion.get("verificationId")
+        if verification_id and str(verification_id) in verification_nodes:
+            b.add_edge(
+                verification_nodes[str(verification_id)],
+                promotion_node,
+                "binds_promotion_verification",
+            )
+
+    # Cohort detail remains intentionally bounded here; UPG-018 owns the deliberation chamber.
+    for cohort in state.get("cohorts", []) or []:
+        cohort_id = cohort.get("cohortId")
+        if not cohort_id:
+            continue
+        cohort_node = b.add_node(
+            "cohort",
+            str(cohort_id),
+            {
+                "epoch": cohort.get("epoch"),
+                "rounds": cohort.get("rounds"),
+                "stoppingReason": cohort.get("stoppingReason"),
+            },
+        )
+        mission_id = cohort.get("missionId")
+        task_id = cohort.get("taskId")
+        if mission_id and str(mission_id) in mission_nodes:
+            b.add_edge(mission_nodes[str(mission_id)], cohort_node, "coordinates_mission")
+        if task_id and str(task_id) in task_nodes:
+            b.add_edge(task_nodes[str(task_id)], cohort_node, "coordinates_with")
+        for evidence_id in cohort.get("evidenceIds") or []:
+            evidence_node = b.add_node("evidence", str(evidence_id), {"evidenceId": str(evidence_id)})
+            b.add_edge(evidence_node, cohort_node, "records_cohort_state")
+        steer = cohort.get("latestSteer")
+        if isinstance(steer, Mapping) and steer.get("steeredBy"):
+            actor_id = str(steer["steeredBy"])
+            actor_node = b.add_node("human_actor", actor_id, {"actorId": actor_id})
+            b.add_edge(actor_node, cohort_node, "steered_cohort")
+
+    # Replay fork source identity is explicit provenance; it does not reactivate source authority.
+    for fork in state.get("replayForks", []) or []:
+        fork_id = fork.get("forkId")
+        if not fork_id:
+            continue
+        fork_node = b.add_node(
+            "replay_fork",
+            str(fork_id),
+            {
+                "state": fork.get("state"),
+                "reason": fork.get("reason"),
+                "historicalAuthorityReactivated": fork.get("historicalAuthorityReactivated"),
+            },
+        )
+        source_sequence = fork.get("sourceSequence")
+        source_chain = fork.get("sourceChainDigest")
+        if source_sequence is not None and source_chain:
+            source_identity = "%s:%s" % (source_sequence, source_chain)
+            source_node = b.add_node(
+                "replay_source",
+                source_identity,
+                {
+                    "globalSequence": source_sequence,
+                    "eventId": fork.get("sourceEventId"),
+                    "stateDigest": fork.get("sourceStateDigest"),
+                    "chainDigest": source_chain,
+                },
+            )
+            b.add_edge(source_node, fork_node, "forked_from")
+        new_mission_id = fork.get("newMissionId")
+        if new_mission_id and str(new_mission_id) in mission_nodes:
+            b.add_edge(fork_node, mission_nodes[str(new_mission_id)], "creates_mission")
 
     # Recorded event payloads may carry richer evidence and cognitive
     # provenance than aggregate snapshots. Add only explicit identities.
