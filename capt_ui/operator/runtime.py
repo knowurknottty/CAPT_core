@@ -2,26 +2,16 @@
 
 A thin, surface-agnostic wrapper over RuntimeClient that exposes a stable
 operator API consumed by CLI, TUI, Desktop, and future Web surfaces.
-
-It reuses the proven projection functions in desktop.desktop_runtime_client
-and never duplicates runtime authority. All mutations route through governed
-command ops.
+All mutations route through governed command ops; epistemic state is projection only.
 """
-
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from .contract import (
-    ApproxRequest,
-    Dashboard,
-    EvidenceView,
-    OperatorStatus,
-    RuntimeHealth,
-    health_of,
-)
+from .contract import ApproxRequest, Dashboard, EvidenceView, OperatorStatus, RuntimeHealth, health_of
+from .epistemics import project_epistemic_ladder
 
-try:  # fall back so pure-view code can import without a live socket
+try:
     from desktop.desktop_runtime_client import (  # type: ignore
         RuntimeClient,
         project_approval_queue,
@@ -31,18 +21,16 @@ try:  # fall back so pure-view code can import without a live socket
         project_mission_spec,
         project_mission_view,
     )
-except Exception:  # pragma: no cover - dev convenience
+except Exception:  # pragma: no cover
     RuntimeClient = None  # type: ignore
     project_authoritative_state = None  # type: ignore
 
 
 class OperatorError(RuntimeError):
-    """Raised for operator-layer errors, translated for the user."""
+    pass
 
 
 class Operator:
-    """The single shared operator API over CAPT RuntimeService."""
-
     def __init__(self, sock_path: str, token_file: str) -> None:
         if RuntimeClient is None:
             raise OperatorError("runtime client unavailable")
@@ -95,14 +83,29 @@ class Operator:
             return Dashboard()
         st = project_authoritative_state(self._client)  # type: ignore
         approvals = project_approval_queue(self._client)  # type: ignore
+        claims = list(st.get("claims", []))
+        verifications_by_claim = dict(st.get("verificationsByClaim", {}))
+        if len(verifications_by_claim) == 1:
+            compatibility_verification = next(iter(verifications_by_claim.values()))
+        elif len(verifications_by_claim) > 1:
+            compatibility_verification = {
+                "status": {"kind": "claim_scoped"},
+                "claimCount": len(verifications_by_claim),
+                "note": "Use verifications_by_claim / epistemic_ladder; no global verification scalar exists.",
+            }
+        else:
+            compatibility_verification = {}
         dash = Dashboard(
             status=OperatorStatus(health=health_of(self._client.identity(), True)),
             missions=st.get("missions", []),
             tasks=st.get("tasks", []),
             approvals=[_to_approval(a) for a in approvals],
             driver_runs=st.get("driverRuns", []),
+            claims=claims,
             events=st.get("eventTimeline", []),
-            verification=st.get("verification", {}),
+            verification=compatibility_verification,
+            verifications_by_claim=verifications_by_claim,
+            epistemic_ladder=project_epistemic_ladder(claims, verifications_by_claim),
             ledger_chain_digest=st.get("identity", {}).get("ledgerChainDigest", ""),
         )
         dash.status.head_sequence = st.get("identity", {}).get("headSequence", 0) or 0
@@ -111,7 +114,6 @@ class Operator:
         dash.evidence = EvidenceView(verification=dash.verification)
         return dash
 
-    # -- governed controls ------------------------------------------------
     def create_mission(self, payload: Dict[str, Any], idempotency_key: Optional[str] = None) -> Dict[str, Any]:
         return self._client.command("create_mission", payload, idempotency_key)
 
@@ -127,14 +129,8 @@ class Operator:
     def cancel_driver_run(self, driver_run_id: str, reason: str = "operator stop") -> Dict[str, Any]:
         return self._client.command("cancel_driver_run", {"driverRunId": driver_run_id, "reason": reason})
 
-    def steer_deliberation(
-        self, cohort_id: str, directive: str, *, reason: str = "operator steering"
-    ) -> Dict[str, Any]:
-        """Submit a governed out-of-band steering directive for a durable Cohort."""
-        return self._client.command(
-            "steer_deliberation",
-            {"cohortId": cohort_id, "directive": directive, "reason": reason},
-        )
+    def steer_deliberation(self, cohort_id: str, directive: str, *, reason: str = "operator steering") -> Dict[str, Any]:
+        return self._client.command("steer_deliberation", {"cohortId": cohort_id, "directive": directive, "reason": reason})
 
     def update_memory_policy(self, payload: Dict[str, Any], idempotency_key: Optional[str] = None) -> Dict[str, Any]:
         return self._client.command("update_memory_trigger_policy", payload, idempotency_key)
@@ -172,8 +168,7 @@ class Operator:
         except Exception:  # noqa: BLE001
             return {}
 
-    def store_memory(self, content: str, *, namespace: str = "default",
-                     tags: Optional[List[str]] = None, provenance: str = "operator") -> Dict[str, Any]:
+    def store_memory(self, content: str, *, namespace: str = "default", tags: Optional[List[str]] = None, provenance: str = "operator") -> Dict[str, Any]:
         try:
             from capt_solo.memory.engine import MemoryEngine
             from capt_solo.core.config import memory_db_path
@@ -192,14 +187,10 @@ class Operator:
 
 def _to_approval(a: Dict[str, Any]) -> ApproxRequest:
     return ApproxRequest(
-        request_id=a.get("requestId", ""),
-        mission_id=a.get("missionId", ""),
-        task_id=a.get("taskId", ""),
-        capability=a.get("requestedCapability", ""),
-        operation=a.get("operation", ""),
-        scope=str(a.get("scope", "")),
-        risk=a.get("riskClassification", ""),
-        state=a.get("state", ""),
+        request_id=a.get("requestId", ""), mission_id=a.get("missionId", ""),
+        task_id=a.get("taskId", ""), capability=a.get("requestedCapability", ""),
+        operation=a.get("operation", ""), scope=str(a.get("scope", "")),
+        risk=a.get("riskClassification", ""), state=a.get("state", ""),
         policy_reason=a.get("policyReason", ""),
     )
 
