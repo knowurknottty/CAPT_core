@@ -102,6 +102,8 @@ def _descriptor(engine_id: str, name: str, description: str,
 
 def build_default_registry() -> LabEngineRegistry:
     from .engines.math_engine import execute_math
+    from .engines.analogy import execute_analogy
+    from .engines.consensus import execute_consensus
 
     registry = LabEngineRegistry()
     registry.register(_descriptor(
@@ -117,11 +119,11 @@ def build_default_registry() -> LabEngineRegistry:
             LabOperationDescriptor("structural_map", "heuristic", "Score and map supplied structures."),
             LabOperationDescriptor("schema_abstract", "advisory", "Abstract a schema from supplied structures."),
         ),
-    ))
+    ), execute_analogy)
     registry.register(_descriptor(
         "lab.consensus", "QIPC Consensus", "Bounded consensus and uncertainty diagnostics.",
         (LabOperationDescriptor("aggregate_beliefs", "advisory", "Aggregate supplied belief probabilities."),),
-    ))
+    ), execute_consensus)
     registry.register(_descriptor(
         "lab.forge", "Forge", "Read-only repository archaeology, gap synthesis, and implementation briefs.",
         (
