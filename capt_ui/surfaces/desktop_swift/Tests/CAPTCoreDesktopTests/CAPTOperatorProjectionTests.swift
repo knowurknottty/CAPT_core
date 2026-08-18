@@ -63,6 +63,8 @@ extension CAPTOperatorProjectionTests {
         XCTAssertEqual(item.model, "qwen")
         XCTAssertEqual(item.state, "requested")
         XCTAssertEqual(item.remainingUses, 1)
+        XCTAssertTrue(item.isActionable(at: Date(timeIntervalSince1970: 1_776_513_000)))
+        XCTAssertFalse(item.isActionable(at: Date(timeIntervalSince1970: 1_776_520_000)))
     }
 }
 
