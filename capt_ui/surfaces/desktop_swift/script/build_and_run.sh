@@ -16,6 +16,9 @@ for arg in "$@"; do
 done
 
 pkill -x "$EXECUTABLE" 2>/dev/null || true
+if [[ ! -x "$HOME/.capt/runtime-venv/bin/capt" ]]; then
+  "$ROOT/script/install_local_runtime.sh"
+fi
 cd "$ROOT"
 swift build --product "$EXECUTABLE"
 

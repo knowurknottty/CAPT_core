@@ -6,7 +6,7 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            SidebarView(selection: $selection)
+            SidebarView(selection: $selection, store: store)
                 .navigationSplitViewColumnWidth(min: 170, ideal: 210, max: 260)
         } detail: {
             VStack(spacing: 0) {
@@ -22,7 +22,7 @@ struct ContentView: View {
         }
         .toolbar {
             ToolbarItemGroup {
-                Button { store.refreshIdentity() } label: {
+                Button { store.refreshAll() } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
                 Button { store.connect() } label: {
@@ -38,11 +38,7 @@ struct ContentView: View {
         case .chat:
             ChatView(store: store)
         case .missions:
-            InfoSurface(
-                title: "Missions",
-                symbol: "scope",
-                detail: "Mission and task lineage remain authoritative in RuntimeService."
-            )
+            MissionBrowserView(store: store)
         case .providers:
             InfoSurface(
                 title: "Providers",
@@ -50,11 +46,9 @@ struct ContentView: View {
                 detail: "Choose the provider and model for the next governed execution in the inspector."
             )
         case .evidence:
-            InfoSurface(
-                title: "Evidence",
-                symbol: "checkmark.seal",
-                detail: "Model output remains evidence until separately verified and accepted."
-            )
+            EvidenceBrowserView(store: store)
+        case .ledger:
+            LedgerView(store: store)
         case .settings:
             InfoSurface(
                 title: "Settings",

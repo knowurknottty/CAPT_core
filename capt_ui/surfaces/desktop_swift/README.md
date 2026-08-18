@@ -1,7 +1,7 @@
 # CAPT Native macOS Desktop MVP (SwiftUI)
 
 **Status:** NATIVE_DESKTOP_CHAT_MVP — runnable `CAPT.app` with authenticated
-RuntimeService IPC, governed model approval/deny, and real local-model execution.
+RuntimeService IPC, governed model execution, cold-start runtime bootstrap, and live mission/evidence/ledger browsing.
 
 **Purpose:** a thin SwiftUI macOS client over the authenticated CAPT runtime
 boundary. It does NOT port RuntimeService to Swift and does NOT duplicate
@@ -51,16 +51,19 @@ command ops and renders projections.
 
 Implemented and exercised on macOS:
 
-- native sidebar/detail/inspector chat shell;
+- native sidebar/detail/inspector chat shell with live mission/evidence/ledger counts;
 - authenticated connection to `~/.capt/runtime.sock` + `runtime.token`;
+- cold-start recovery through the private `~/.capt/runtime-venv/bin/capt` CLI;
 - explicit provider/model/target-root selection;
 - governed `request_model_prompt_approval` flow;
 - visible approve/deny decision card;
 - exact bound `run_approved_hermes_inspection` execution after approval only;
 - returned model observations rendered in the transcript;
 - authoritative task state shown without automatic verification/promotion;
+- read-only mission/task lineage, claim/evidence state, and last-250 EventStore timeline projections;
 - bounded 4 MiB framed Unix-socket transport;
-- `script/build_and_run.sh --verify` stages and launches `dist/CAPT.app`.
+- `script/install_local_runtime.sh` builds/installs the exact local CAPT wheel into a private venv;
+- `script/build_and_run.sh --verify` installs that runtime if needed, stages, and launches `dist/CAPT.app`.
 
 Still later native-surface work: onboarding polish, full mission browser, memory
 inspector, evidence/provenance drill-down, checkpoint/resume controls, and

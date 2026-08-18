@@ -20,6 +20,9 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var taskState = "—"
     @Published var isBusy = false
     @Published var lastError: String?
+    @Published var missions: [CAPTMissionSummary] = []
+    @Published var evidenceItems: [CAPTEvidenceSummary] = []
+    @Published var recentEvents: [CAPTEventSummary] = []
 
     private let runtime: CAPTBackgroundRuntime
 
@@ -49,6 +52,7 @@ final class CAPTOperatorStore: ObservableObject {
                 let integrity = identity["integrity"] as? String ?? "unknown"
                 runtimeIdentity = "\(version) · integrity \(integrity)"
                 connectionState = .connected
+                refreshHistory()
             } catch {
                 let message = error.localizedDescription
                 lastError = message
@@ -92,6 +96,7 @@ final class CAPTOperatorStore: ObservableObject {
                     text: "CAPT prepared a bound execution. Review and approve before dispatch.",
                     authorityState: "approval_required"
                 ))
+                refreshHistory()
             } catch {
                 handle(error)
             }
@@ -113,6 +118,7 @@ final class CAPTOperatorStore: ObservableObject {
                     text: result.text,
                     authorityState: result.taskState
                 ))
+                refreshHistory()
             } catch {
                 handle(error)
             }
@@ -134,6 +140,7 @@ final class CAPTOperatorStore: ObservableObject {
                     text: "Execution denied. No model dispatch was authorized.",
                     authorityState: "denied"
                 ))
+                refreshHistory()
             } catch {
                 handle(error)
             }
@@ -154,6 +161,25 @@ final class CAPTOperatorStore: ObservableObject {
                 handle(error)
             }
         }
+    }
+
+    func refreshHistory() {
+        guard connectionState == .connected else { return }
+        Task {
+            do {
+                let snapshot = try await runtime.historySnapshot()
+                missions = snapshot.missions
+                evidenceItems = snapshot.evidence
+                recentEvents = snapshot.events
+            } catch {
+                lastError = error.localizedDescription
+            }
+        }
+    }
+
+    func refreshAll() {
+        refreshIdentity()
+        refreshHistory()
     }
 
     private func handle(_ error: Error) {
