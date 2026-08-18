@@ -55,11 +55,11 @@ command ops and renders projections.
 Implemented and exercised on macOS:
 
 - native ChatGPT-style sidebar/detail/inspector chat shell with New Chat + recent conversations;
-- AES-GCM encrypted classic presentation-session cache at `~/.capt/ui/classic_native_sessions.enc` with a device-only macOS Keychain key and `0600` file permissions; on first use, the legacy shared `native_sessions.enc` cache is migrated once, preserving valid bound approvals while quarantining expired/unknown cursors;
+- AES-GCM encrypted Lab presentation-session cache at `~/.capt-inversion-labs/ui/native_sessions.enc` with a Lab-specific device-only macOS Keychain key, `0700` parent directory, and `0600` ciphertext permissions;
 - process-death/relaunch restoration of transcript, mission binding, provider/model/target preferences, and exact native-origin pending approval;
 - multi-turn governed continuation: one durable mission, a fresh authoritative Task per turn, prior model evidence selected by CAPT with trust labels preserved;
-- authenticated connection to `~/.capt/runtime.sock` + `runtime.token`;
-- cold-start recovery through the private `~/.capt/runtime-venv/bin/capt` CLI;
+- authenticated connection to `~/.capt-inversion-labs/runtime.sock` + `runtime.token`;
+- cold-start recovery through the private `~/.capt-inversion-labs/runtime-venv/bin/capt` CLI;
 - global approval-decision queue with explicit decision-vs-dispatch separation;
 - live provider inventory/health with test + activate controls via the packaged operator layer;
 - live model inventory/default-model control and CaveCAPT verbosity preference;
@@ -78,6 +78,8 @@ Implemented and exercised on macOS:
 - complete six-threshold governed memory-policy editor; RuntimeService remains validator and policy authority;
 - read-only ClaimGuard + verification drill-down preserving advisory/uncommitted/not-tested distinctions;
 - live RuntimeService capability inventory for queries, commands, components, and lifecycle operations;
+- dedicated Labs surface backed only by `lab_engines` + `run_lab_engine_advisory`, with Math, Structural Analogy, QIPC Consensus, and bounded Forge instruments;
+- explicit epistemic labels (`CALCULATION`, `HEURISTIC`, `ADVISORY`) kept separate from CAPT authority state (`UNVERIFIED` unless a real verification identity exists);
 - bounded 4 MiB framed Unix-socket transport;
 - `script/install_local_runtime.sh` builds/installs the exact local CAPT wheel into a private venv;
 - `script/build_and_run.sh --verify` installs that runtime if needed, stages, signs, verifies, and launches `dist/CAPT.app`.

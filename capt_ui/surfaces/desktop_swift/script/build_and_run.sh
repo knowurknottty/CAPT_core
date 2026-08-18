@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP_NAME="CAPT"
+APP_NAME="Inversion Labs CAPT"
 EXECUTABLE="CAPTNativeMac"
 BUNDLE="$ROOT/dist/$APP_NAME.app"
 BINARY="$ROOT/.build/debug/$EXECUTABLE"
@@ -26,8 +26,9 @@ while IFS= read -r pid; do
   [[ -z "$pid" ]] && continue
   kill "$pid" 2>/dev/null || true
 done < <(bundle_pids)
-if [[ ! -x "$HOME/.capt/runtime-venv/bin/capt" ]]; then
-  "$ROOT/script/install_local_runtime.sh"
+LAB_STATE_DIR="${CAPT_LAB_STATE_DIR:-$HOME/.capt-inversion-labs}"
+if [[ ! -x "$LAB_STATE_DIR/runtime-venv/bin/capt" ]]; then
+  CAPT_LAB_STATE_DIR="$LAB_STATE_DIR" "$ROOT/script/install_local_runtime.sh"
 fi
 cd "$ROOT"
 swift build --product "$EXECUTABLE"
@@ -43,9 +44,9 @@ cat > "$BUNDLE/Contents/Info.plist" <<'PLIST'
 <dict>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleExecutable</key><string>CAPTNativeMac</string>
-  <key>CFBundleIdentifier</key><string>com.inversionlabs.capt</string>
-  <key>CFBundleName</key><string>CAPT</string>
-  <key>CFBundleDisplayName</key><string>CAPT</string>
+  <key>CFBundleIdentifier</key><string>com.inversionlabs.capt.lab</string>
+  <key>CFBundleName</key><string>Inversion Labs CAPT</string>
+  <key>CFBundleDisplayName</key><string>Inversion Labs CAPT</string>
   <key>CFBundleVersion</key><string>1</string>
   <key>CFBundleShortVersionString</key><string>0.1</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
@@ -60,11 +61,11 @@ if [[ -z "$SIGN_IDENTITY" ]]; then
     | sed -n 's/.*"\(Apple Development:[^"]*\)".*/\1/p' | head -1)"
 fi
 if [[ -n "$SIGN_IDENTITY" ]]; then
-  /usr/bin/codesign --force --sign "$SIGN_IDENTITY" --identifier com.inversionlabs.capt "$BUNDLE"
-  echo "CAPT.app signed: $SIGN_IDENTITY"
+  /usr/bin/codesign --force --sign "$SIGN_IDENTITY" --identifier com.inversionlabs.capt.lab "$BUNDLE"
+  echo "Inversion Labs CAPT.app signed: $SIGN_IDENTITY"
 else
-  /usr/bin/codesign --force --sign - --identifier com.inversionlabs.capt "$BUNDLE"
-  echo "CAPT.app signed ad-hoc (no development identity available)"
+  /usr/bin/codesign --force --sign - --identifier com.inversionlabs.capt.lab "$BUNDLE"
+  echo "Inversion Labs CAPT.app signed ad-hoc (no development identity available)"
 fi
 /usr/bin/codesign --verify --strict --verbose=2 "$BUNDLE"
 
@@ -74,11 +75,11 @@ if (( VERIFY )); then
   for _ in {1..30}; do
     PID="$(bundle_pids | head -1 || true)"
     if [[ -n "$PID" ]]; then
-      echo "CAPT.app launched: PID $PID"
+      echo "Inversion Labs CAPT.app launched: PID $PID"
       exit 0
     fi
     sleep 0.2
   done
-  echo "CAPT.app did not remain running" >&2
+  echo "Inversion Labs CAPT.app did not remain running" >&2
   exit 1
 fi

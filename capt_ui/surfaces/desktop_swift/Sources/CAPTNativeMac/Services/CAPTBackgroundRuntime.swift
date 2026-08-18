@@ -18,6 +18,21 @@ actor CAPTBackgroundRuntime {
         self.operatorCLI = operatorCLI
     }
 
+    init(stateDirectory: String) {
+        let root = NSString(string: stateDirectory).expandingTildeInPath
+        let client = CAPTRuntimeClient(
+            socketPath: URL(fileURLWithPath: root).appendingPathComponent("runtime.sock").path,
+            tokenPath: URL(fileURLWithPath: root).appendingPathComponent("runtime.token").path
+        )
+        self.client = client
+        self.coordinator = CAPTChatCoordinator(client: client)
+        self.bootstrapper = CAPTRuntimeBootstrapper(stateDirectory: root)
+        self.operatorCLI = CAPTOperatorCLI(
+            executablePath: URL(fileURLWithPath: root).appendingPathComponent("runtime-venv/bin/capt-ui").path,
+            stateDirectory: root
+        )
+    }
+
     func connect() throws -> CAPTRuntimeIdentitySnapshot {
         let response: [String: Any]
         do {
@@ -136,6 +151,29 @@ actor CAPTBackgroundRuntime {
 
     func setVerbosity(_ value: String) throws -> String {
         try operatorCLI.setVerbosity(value)
+    }
+
+    func labEngines() throws -> [CAPTLabEngineSnapshot] {
+        let response = try client.query(op: "lab_engines", payload: [:])
+        let raw = response["result"] as? [[String: Any]] ?? []
+        return raw.map(CAPTLabProjection.engine)
+    }
+
+    func runLabAdvisory(
+        engineID: String, operation: String, inputJSON: String,
+        missionID: String, taskID: String
+    ) throws -> CAPTLabRunReceipt {
+        let input = try CAPTLabProjection.inputObject(from: inputJSON)
+        let receipt = try client.command(
+            op: "run_lab_engine_advisory",
+            payload: [
+                "engineId": engineID, "operation": operation, "input": input,
+                "missionId": missionID, "taskId": taskID,
+            ],
+            idempotencyKey: "native-lab-" + UUID().uuidString.lowercased()
+        )
+        let result = receipt["result"] as? [String: Any] ?? [:]
+        return CAPTLabProjection.receipt(result)
     }
 
     func memorySnapshot(missionID: String = "") throws -> CAPTMemoryRuntimeSnapshot {

@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="${0:A:h}"
 REPO_ROOT="${SCRIPT_DIR:h:h:h:h}"
-STATE_DIR="${CAPT_STATE_DIR:-$HOME/.capt}"
+STATE_DIR="${CAPT_LAB_STATE_DIR:-$HOME/.capt-inversion-labs}"
 VENV="$STATE_DIR/runtime-venv"
 BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/capt-native-runtime.XXXXXX")"
 trap 'rm -rf "$BUILD_DIR"' EXIT
@@ -24,7 +24,7 @@ printf '%s\n' "$SOURCE_HEAD" > "$VENV/CAPT_SOURCE_HEAD"
 printf '%s\n' "$WHEEL_SHA" > "$VENV/CAPT_WHEEL_SHA256"
 
 "$VENV/bin/capt" --help >/dev/null
-printf 'CAPT private runtime installed\n'
+printf 'Inversion Labs CAPT runtime installed\n'
 printf '  source: %s\n' "$SOURCE_HEAD"
 printf '  wheel:  %s\n' "$WHEEL_SHA"
 printf '  cli:    %s\n' "$VENV/bin/capt"
