@@ -59,7 +59,7 @@ def test_checkpoint_replay_uses_historical_state_before_folding_post_checkpoint_
 def test_linear_replay_fork_creates_new_history_without_reactivating_historical_authority(tmp_path):
     from copy import deepcopy
 
-    from capt_runtime.replay import replay_to_sequence
+    from capt_runtime.replay import ledger_identity_to_sequence, replay_to_sequence
     from capt_runtime.scenario import mission_spec
 
     db = str(tmp_path / "fork.db")
@@ -112,6 +112,9 @@ def test_linear_replay_fork_creates_new_history_without_reactivating_historical_
     fork_state = store.require_state("replay_fork-fork-001")
     assert fork_state["sourceSequence"] == source_sequence
     assert fork_state["sourceStateDigest"] == source_digest
+    assert fork_state["sourceChainDigest"] == ledger_identity_to_sequence(
+        store, source_sequence
+    )["chainDigest"]
     assert fork_state["newMissionId"] == "m-fork-001"
     assert fork_state["historicalAuthorityReactivated"] is False
     assert fork_state["state"] == "created"

@@ -27,6 +27,7 @@ A self-consistent manifest digest cannot authorize a false historical ledger anc
 - source global sequence;
 - source event ID;
 - source replay-state digest;
+- exact source ledger-prefix chain digest;
 - new mission ID;
 - human actor/reason/time;
 - explicit `historicalAuthorityReactivated: false`.
@@ -64,7 +65,7 @@ Tests cover:
 - wrong authenticated identity;
 - future/nonexistent source sequence;
 - attempted approval-authority smuggling;
-- source historical digest unchanged after fork creation.
+- source historical state and chain-prefix identity unchanged after fork creation.
 
 ## Pre-commit verification
 

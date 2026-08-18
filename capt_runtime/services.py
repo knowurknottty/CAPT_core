@@ -25,7 +25,7 @@ from .aggregates import (
 )
 from .authority import require_authority
 from .contracts import require
-from .replay import replay_to_sequence
+from .replay import ledger_identity_to_sequence, replay_to_sequence
 from .errors import AuthorityViolation, ConcurrencyError, IdempotencyConflict
 from .store import AppendRequest, EventStore
 
@@ -128,11 +128,8 @@ class RuntimeService(object):
                 % (source_sequence, head)
             )
         historical = replay_to_sequence(self.store, source_sequence)
-        if source_sequence == 0:
-            source_event_id = None
-        else:
-            events = self.store.read_events(after_sequence=int(source_sequence) - 1)
-            source_event_id = events[0]["eventId"] if events else None
+        source_identity = ledger_identity_to_sequence(self.store, source_sequence)
+        source_event_id = source_identity["eventId"]
 
         fork_record = ReplayForkAggregate.create(
             {
@@ -140,6 +137,7 @@ class RuntimeService(object):
                 "sourceSequence": int(source_sequence),
                 "sourceEventId": source_event_id,
                 "sourceStateDigest": historical.digest(),
+                "sourceChainDigest": source_identity["chainDigest"],
                 "newMissionId": new_mission_spec["missionId"],
                 "reason": reason,
                 "createdBy": dict(metadata["actor"]),

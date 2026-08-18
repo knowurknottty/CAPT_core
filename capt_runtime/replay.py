@@ -188,6 +188,30 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
     state.applied += 1
 
 
+def ledger_identity_to_sequence(store: EventStore, target_sequence: int) -> Dict[str, Any]:
+    """Return the immutable append-only prefix identity through a sequence."""
+    store.verify_chain()
+    head = store.head_sequence()
+    if target_sequence < 0:
+        raise ValueError("target_sequence must be >= 0")
+    if target_sequence > head:
+        raise ValueError(
+            "target_sequence %d exceeds ledger head %d" % (target_sequence, head)
+        )
+    chain = GENESIS_CHAIN
+    event_id = None
+    for envelope in store.read_events(after_sequence=0):
+        if int(envelope["globalSequence"]) > target_sequence:
+            break
+        chain = chain_next(chain, envelope["payloadDigest"], envelope["eventId"])
+        event_id = envelope["eventId"]
+    return {
+        "globalSequence": int(target_sequence),
+        "eventId": event_id,
+        "chainDigest": chain,
+    }
+
+
 def replay_to_sequence(store: EventStore, target_sequence: int) -> ReplayState:
     """Reconstruct authoritative state exactly through ``target_sequence``.
 
@@ -226,15 +250,9 @@ def checkpoint_replay(store: EventStore, manifest: Dict[str, Any]) -> ReplayStat
     # Bind the self-verifying manifest to the actual append-only ledger prefix.
     # A caller may recompute manifestIntegrity after changing ledgerDigest; that
     # must not make a checkpoint authoritative for history it never described.
-    prefix_chain = GENESIS_CHAIN
-    prefix_event_id = None
-    for envelope in store.read_events(after_sequence=0):
-        if int(envelope["globalSequence"]) > position:
-            break
-        prefix_chain = chain_next(
-            prefix_chain, envelope["payloadDigest"], envelope["eventId"]
-        )
-        prefix_event_id = envelope["eventId"]
+    prefix_identity = ledger_identity_to_sequence(store, position)
+    prefix_chain = prefix_identity["chainDigest"]
+    prefix_event_id = prefix_identity["eventId"]
     if prefix_chain != manifest["ledgerDigest"]:
         raise IntegrityViolation(
             "checkpoint ledger digest mismatch at globalSequence %d" % position

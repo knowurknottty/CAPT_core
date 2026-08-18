@@ -186,7 +186,8 @@
             },
             "createdAt": "2026-08-18T07:42:00Z",
             "historicalAuthorityReactivated": false,
-            "state": "created"
+            "state": "created",
+            "sourceChainDigest": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
           }
         },
         "payloadDigest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",

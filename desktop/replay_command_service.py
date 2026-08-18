@@ -51,6 +51,7 @@ class ReplayRuntimeCommandService(LeaseRuntimeCommandService):
                     "forkId": fork["forkId"],
                     "sourceSequence": fork["sourceSequence"],
                     "sourceStateDigest": fork["sourceStateDigest"],
+                    "sourceChainDigest": fork["sourceChainDigest"],
                     "newMissionId": fork["newMissionId"],
                     "historicalAuthorityReactivated": False,
                 },
