@@ -13,10 +13,10 @@ from typing import Optional
 from .driver_host import DriverHost
 from .drivers.openharness import DESCRIPTOR, OpenHarnessDriver
 from .drivers.registry import DriverRegistry
-from .lease_service import LeaseRuntimeService
 from .memory.engine import MemoryTriggerEngine
 from .memory.store import MemoryStore
 from .services import RuntimeService
+from .steered_service import SteeredRuntimeService
 from .store import EventStore
 from .task_resolver import TaskResolver
 
@@ -102,7 +102,7 @@ def create_runtime(
     )
     return RuntimeComposition(
         store=store,
-        service=LeaseRuntimeService(store),
+        service=SteeredRuntimeService(store),
         registry=DriverRegistry(),
         memory_store=memory_store,
         memory_engine=memory_engine,

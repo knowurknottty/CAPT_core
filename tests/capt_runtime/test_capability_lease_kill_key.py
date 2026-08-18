@@ -6,7 +6,8 @@ import pytest
 from capt_runtime import commands
 from capt_runtime.aggregates.capability import CapabilityAggregate
 from capt_runtime.composition import create_runtime
-from capt_runtime.errors import CapabilityDenied
+from capt_runtime.errors import AuthorityViolation, CapabilityDenied
+from capt_runtime.services import RuntimeService
 from capt_runtime.store import AppendRequest, EventStore
 
 TS = "2026-08-18T06:00:00Z"
@@ -199,3 +200,33 @@ def test_revocation_survives_close_reopen_and_remains_terminal(tmp_path):
     with pytest.raises(CapabilityDenied, match="revoked"):
         reopened.service.check_lease("g-kill", "l-kill", "fs.write", SCOPE, TS)
     reopened.close()
+
+
+def test_base_runtime_service_itself_rejects_mismatched_revocation_target(tmp_path):
+    store = EventStore(str(tmp_path / "runtime.db"))
+    _seed_leased_capability(store)
+    svc = RuntimeService(store)
+    revocation = {
+        "schemaVersion": "1.0.0",
+        "revocationId": "rev-direct",
+        "targetKind": "lease",
+        "targetId": "l-wrong",
+        "reason": "must fail at canonical service boundary",
+        "revokedBy": {"actorId": "captain", "kind": "human"},
+        "revokedAt": TS,
+    }
+    meta = commands.command(
+        command_id="direct-revoke",
+        idempotency_key="idem-direct-revoke",
+        operation_fingerprint=commands.fingerprint("revoke", revocation),
+        correlation_id="corr-direct-revoke",
+        actor_id="captain",
+        actor_kind="human",
+        issued_at=TS,
+    )
+    before = store.head_sequence()
+    with pytest.raises(AuthorityViolation, match="does not match active lease"):
+        svc.revoke("g-kill", revocation, meta)
+    assert store.head_sequence() == before
+    assert store.require_state("capability-g-kill")["revocation"] is None
+    store.close()

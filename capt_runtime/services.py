@@ -574,7 +574,24 @@ class RuntimeService(object):
 
         stream = CapabilityAggregate.stream_id(grant_id)
         expected = self.store.aggregate_version(stream)
-        state = CapabilityAggregate.revoke(self.store.require_state(stream), revocation)
+        current = self.store.require_state(stream)
+        target_kind = revocation["targetKind"]
+        target_id = revocation["targetId"]
+        if target_kind == "grant":
+            if target_id != grant_id:
+                raise AuthorityViolation(
+                    "revocation targetId %r does not match grant %r" % (target_id, grant_id)
+                )
+        else:
+            lease = current.get("lease")
+            if lease is None:
+                raise AuthorityViolation("cannot revoke lease: grant has no active lease record")
+            if target_id != lease.get("leaseId"):
+                raise AuthorityViolation(
+                    "revocation targetId %r does not match active lease %r"
+                    % (target_id, lease.get("leaseId"))
+                )
+        state = CapabilityAggregate.revoke(current, revocation)
 
         event_type = (
             "CapabilityGrantRevoked"
