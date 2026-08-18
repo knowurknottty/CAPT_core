@@ -163,4 +163,70 @@ final class CAPTNativeChatWorkspaceTests: XCTestCase {
         XCTAssertTrue(workspace.flow(for: oldID).canCompose)
         XCTAssertEqual(workspace.session(oldID)?.messages.last?.authorityState, "approval_expired")
     }
+
+    func testAsyncRestoreMergesWithoutReplacingLiveChat() {
+        var workspace = CAPTNativeChatWorkspace()
+        _ = workspace.newChat(
+            id: newID, provider: "openrouter", model: "live-model", targetRoot: "/live"
+        )
+        _ = workspace.beginPrompt(
+            "live prompt", provider: "openrouter", model: "live-model", targetRoot: "/live"
+        )
+        let restored = CAPTNativeSession(
+            id: oldID,
+            missionID: "mission-restored",
+            title: "Restored",
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 200),
+            messages: [],
+            provider: "ollama",
+            model: "restored-model",
+            targetRoot: "/restored"
+        )
+
+        workspace.mergeRestoredSessions([restored])
+
+        XCTAssertEqual(workspace.activeSessionID, newID)
+        XCTAssertEqual(workspace.session(newID)?.messages.last?.text, "live prompt")
+        XCTAssertEqual(workspace.flow(for: newID).phase, .requestingApproval)
+        XCTAssertEqual(workspace.session(oldID)?.missionID, "mission-restored")
+        XCTAssertEqual(workspace.sessions.count, 2)
+    }
+
+    func testAsyncRestoreNeverOverwritesSameIDLiveMutation() {
+        let seed = CAPTNativeSession(
+            id: oldID,
+            title: "Cached",
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 200),
+            messages: [],
+            provider: "ollama",
+            model: "cached-model",
+            targetRoot: "/cached"
+        )
+        var workspace = CAPTNativeChatWorkspace(
+            sessions: [seed], activeSessionID: oldID
+        )
+        _ = workspace.beginPrompt(
+            "live mutation", provider: "openrouter", model: "live-model", targetRoot: "/live"
+        )
+        let restoredDuplicate = CAPTNativeSession(
+            id: oldID,
+            title: "Older disk copy",
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 150),
+            messages: [],
+            provider: "ollama",
+            model: "older-model",
+            targetRoot: "/older"
+        )
+
+        workspace.mergeRestoredSessions([restoredDuplicate])
+
+        XCTAssertEqual(workspace.session(oldID)?.title, "live mutation")
+        XCTAssertEqual(workspace.session(oldID)?.model, "live-model")
+        XCTAssertEqual(workspace.session(oldID)?.messages.last?.text, "live mutation")
+        XCTAssertEqual(workspace.flow(for: oldID).phase, .requestingApproval)
+        XCTAssertEqual(workspace.sessions.count, 1)
+    }
 }
