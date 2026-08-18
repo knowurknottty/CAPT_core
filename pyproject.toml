@@ -24,6 +24,7 @@ Homepage = "https://github.com/knowurknottty/CAPT_core"
 capt = "capt_cli:main"
 capt-ui = "capt_ui.operator.cli:main"
 capt-tui = "capt_ui.surfaces.tui.epistemic_app:main"
+capt-security-cockpit = "desktop.security_cockpit:main"
 capt-security = "capt_runtime.security_gate:main"
 
 [project.optional-dependencies]
