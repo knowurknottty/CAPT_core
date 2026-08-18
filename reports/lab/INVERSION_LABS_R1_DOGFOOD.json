@@ -1,0 +1,221 @@
+{
+  "artifacts": {
+    "bundleIdentifier": "com.inversionlabs.capt.lab",
+    "donorManifestDigest": "sha256:dc86c8b8769f4cfba27e03e5d1c7edb460ee84b95a02f2b75673da39235a9d74",
+    "labLedgerDigest": "sha256:018b97557ad63ec1cf34d8761246d27711dac37a5154ca3bf862da6956c254fb",
+    "labStateRoot": "~/.capt-inversion-labs",
+    "nativeBinarySha256": "852a7e242f440f56e16366a87b96a50b1d889ae5975171789ab66267140bd5f8",
+    "sdistSha256": "a06f191357498302637b8560c91366b63db5e06335264a721a4e8cf2d5b7756f",
+    "teamIdentifier": "49FBXNL38U",
+    "wheelSha256": "7f065a6977b99bb42e98f389057da47a5193851b9060524b20c0c28cd3eadf9b"
+  },
+  "coreIsolation": {
+    "coreLedgerFileSha256": "ebf1681f33b42e2efd77eb729039a2c4672a61ba6174fe5d6c67fdf02d262560",
+    "installedSourceHead": "5f2917772e675523176a3112c49e28ffba20b8f1",
+    "installedWheelSha256": "46f09fb0c2d914c292112689b99809e3fb63d030f06af7040550f801ba95d259",
+    "unchangedDuringLabInstall": true
+  },
+  "finalRetainedWheelDogfood": {
+    "engines": {
+      "analogy": {
+        "artifactDigest": "sha256:5f786da63dfcbab8a30c04d477946f2cd16434d6670751cca719d45706c3eb06",
+        "artifactDigestVerified": true,
+        "claimEvidenceIds": [
+          "ev-lab-5f786da63dfcbab8a30c04d4"
+        ],
+        "claimId": "cl-lab-1b8e8f84726361ae35faf003",
+        "claimKind": "observation",
+        "donorManifestDigest": "sha256:dc86c8b8769f4cfba27e03e5d1c7edb460ee84b95a02f2b75673da39235a9d74",
+        "driverRunId": "dr-lab-1b8e8f84726361ae35faf003",
+        "driverRunState": "completed",
+        "engine": "analogy",
+        "engineId": "lab.analogy",
+        "epistemicClass": "heuristic",
+        "evidenceId": "ev-lab-5f786da63dfcbab8a30c04d4",
+        "implementationDigest": "sha256:181ecd5f86d49956c3544262f03a4931c8cb4f729efc2861e4ad3bb560e80b04",
+        "observation": {
+          "confidence": 0.647862030562225,
+          "isAnalogy": true,
+          "structuralSimilarity": 1.0,
+          "surfaceSimilarity": -0.17379323145924966
+        },
+        "operation": "structural_map",
+        "promotionState": "proposed",
+        "replayClassification": "duplicate",
+        "replayStatus": "idempotent",
+        "requestDigest": "sha256:5c8460da081dbab91bf6c0b29faa55a2ff4fa9e0b3a67c86bfc4cf526c128c12",
+        "verificationId": null
+      },
+      "consensus": {
+        "artifactDigest": "sha256:26eceec45bd51e01fd4289f991612c80ff6d93d47d9904cf4c360855f85badb6",
+        "artifactDigestVerified": true,
+        "claimEvidenceIds": [
+          "ev-lab-26eceec45bd51e01fd4289f9"
+        ],
+        "claimId": "cl-lab-9acf091a15b789b47db4d66d",
+        "claimKind": "observation",
+        "donorManifestDigest": "sha256:dc86c8b8769f4cfba27e03e5d1c7edb460ee84b95a02f2b75673da39235a9d74",
+        "driverRunId": "dr-lab-9acf091a15b789b47db4d66d",
+        "driverRunState": "completed",
+        "engine": "consensus",
+        "engineId": "lab.consensus",
+        "epistemicClass": "advisory",
+        "evidenceId": "ev-lab-26eceec45bd51e01fd4289f9",
+        "implementationDigest": "sha256:97d0d99b03800e711b3ecedd8e86df9fdd86e3fd987c425ff31978ed9cddf10b",
+        "observation": {
+          "confidence": 0.014461254954367897,
+          "mostLikely": "true",
+          "probabilityFalse": 0.42932383348983927,
+          "probabilityTrue": 0.5706761665101606
+        },
+        "operation": "aggregate_beliefs",
+        "promotionState": "proposed",
+        "replayClassification": "duplicate",
+        "replayStatus": "idempotent",
+        "requestDigest": "sha256:63abb2173c1c46a8fa63fed4c692346edfbe268fa3c48cb843647a15e6bbded7",
+        "verificationId": null
+      },
+      "forge": {
+        "artifactDigest": "sha256:70a88bf6614deff3ab5a8bee2faf6eb251b8e2e133948cd54639f6178b5847b8",
+        "artifactDigestVerified": true,
+        "claimEvidenceIds": [
+          "ev-lab-70a88bf6614deff3ab5a8bee"
+        ],
+        "claimId": "cl-lab-09bed5829a851e2d03610a4e",
+        "claimKind": "observation",
+        "donorManifestDigest": "sha256:dc86c8b8769f4cfba27e03e5d1c7edb460ee84b95a02f2b75673da39235a9d74",
+        "driverRunId": "dr-lab-09bed5829a851e2d03610a4e",
+        "driverRunState": "completed",
+        "engine": "forge",
+        "engineId": "lab.forge",
+        "epistemicClass": "advisory",
+        "evidenceId": "ev-lab-70a88bf6614deff3ab5a8bee",
+        "implementationDigest": "sha256:3ee95587a64d65434a5bbbdea41c43ce90ab07d956df62c34dfcdf7169166e8f",
+        "observation": {
+          "bytesRead": 113,
+          "excluded": [
+            ".env",
+            "escape.txt"
+          ],
+          "files": [
+            "README.md",
+            "src/math.py",
+            "test_math.py"
+          ],
+          "truncated": false
+        },
+        "operation": "repository_archaeology",
+        "promotionState": "proposed",
+        "replayClassification": "duplicate",
+        "replayStatus": "idempotent",
+        "requestDigest": "sha256:94af5593a0633622ad4c5394eaa5642c168b239b8d0f96fcf802c0b0d7a071e1",
+        "verificationId": null
+      },
+      "math": {
+        "artifactDigest": "sha256:8bc7051123d4f1fdfa3815b0ff64f67b4406586a8d9d846d2f07d2671187c104",
+        "artifactDigestVerified": true,
+        "claimEvidenceIds": [
+          "ev-lab-8bc7051123d4f1fdfa3815b0"
+        ],
+        "claimId": "cl-lab-d7f8bab6014de93034942aa1",
+        "claimKind": "observation",
+        "donorManifestDigest": "sha256:dc86c8b8769f4cfba27e03e5d1c7edb460ee84b95a02f2b75673da39235a9d74",
+        "driverRunId": "dr-lab-d7f8bab6014de93034942aa1",
+        "driverRunState": "completed",
+        "engine": "math",
+        "engineId": "lab.math",
+        "epistemicClass": "calculation",
+        "evidenceId": "ev-lab-8bc7051123d4f1fdfa3815b0",
+        "implementationDigest": "sha256:f9942206ecd26bcaf2cfc3cc94bd046aec3cf30b9f5be268f469aec945c85fbc",
+        "observation": {
+          "conductor": 5,
+          "degree": 4,
+          "discriminant": "125",
+          "torsionOrder": 10,
+          "unitRank": 1
+        },
+        "operation": "cyclotomic_summary",
+        "promotionState": "proposed",
+        "replayClassification": "duplicate",
+        "replayStatus": "idempotent",
+        "requestDigest": "sha256:f5c448c5b7ed24fd1af8c3f6d3bf38c3e93e707af7d31250e86b7bf97b379b8d",
+        "verificationId": null
+      }
+    },
+    "forbiddenPromotionObserved": false,
+    "missionId": "m-lab-r1-final",
+    "missionStateAfter": "draft",
+    "missionStateBefore": "draft",
+    "taskId": "m-lab-r1-final-task-1",
+    "taskStateAfter": "pending",
+    "taskStateBefore": "pending"
+  },
+  "frozenCoreBase": "5f2917772e675523176a3112c49e28ffba20b8f1",
+  "nativeUI": {
+    "finalRetainedWheelEngineImplementationDigest": "sha256:f9942206ecd26bcaf2cfc3cc94bd046aec3cf30b9f5be268f469aec945c85fbc",
+    "implementationBytesMatchFinalRetainedWheel": true,
+    "labMathClaimId": "cl-lab-7c0602fab86a6ef193eea7fe",
+    "labMathDriverRunId": "dr-lab-7c0602fab86a6ef193eea7fe",
+    "labMathEvidenceId": "ev-lab-80239f47c2fffd35eab90702",
+    "nativeChatMissionId": "m-model-c97af77f2c575eef7af99709",
+    "nativeChatTaskFinalState": "awaiting_verification",
+    "nativeChatTaskId": "m-model-c97af77f2c575eef7af99709-task-1",
+    "nativeProviderDriverRunId": "dr-model-c97af77f2c575eef7af99709",
+    "postRepinAutomationNote": "A later AX attempt to invoke the same enabled button after runtime repin did not deliver the Swift action. Reconnect behavior itself passed the final 4/4 live Swift runtime gate; this second automation attempt is not counted as execution evidence.",
+    "realLocalChatApprovalAndInference": true,
+    "signedBundleLaunched": true,
+    "uiEngineImplementationDigest": "sha256:f9942206ecd26bcaf2cfc3cc94bd046aec3cf30b9f5be268f469aec945c85fbc",
+    "uiRunSourceHead": "819b94f30b97d18c64a61dea5e2db905a7df2d74",
+    "uiRunTemporaryWheelSha256": "7af02a50f2f9d2d4526e3226070edade11f9ce05ab7bba2090ec959435ff3c47",
+    "visibleAuthorityLabel": "UNVERIFIED",
+    "visibleEpistemicLabel": "CALCULATION"
+  },
+  "schemaVersion": "1.0.0",
+  "sessionSecurity": {
+    "encryptedCache": "~/.capt-inversion-labs/ui/native_sessions.enc",
+    "keychainItemPresent": true,
+    "keychainService": "com.inversionlabs.capt.lab.native-session-cache",
+    "mode": "0600",
+    "plaintextAssistantProbeMatches": 0,
+    "plaintextBindingProbeMatches": 0
+  },
+  "sourceHead": "819b94f30b97d18c64a61dea5e2db905a7df2d74",
+  "status": "DOGFOOD_EVIDENCE_CAPTURED_PENDING_FINAL_RECONCILIATION",
+  "tests": {
+    "focused": {
+      "analogyConsensus": 15,
+      "forge": 8,
+      "math": 15,
+      "runtimeAdvisory": 9,
+      "targetedAuthorityRegression": 55
+    },
+    "mathDonorRust": {
+      "cargoCheck": true,
+      "failed": 0,
+      "passed": 17
+    },
+    "pythonInstalledWheelRegression": {
+      "deselected": 12,
+      "failed": 0,
+      "note": "Source-layout CLI tests used a temporary capt_cli.py symlink pointing to the installed site-packages copy.",
+      "passed": 938,
+      "skipped": 57
+    },
+    "pythonSourceRegression": {
+      "deselected": 12,
+      "failed": 0,
+      "passed": 938,
+      "skipped": 57
+    },
+    "swiftLiveFinalLabRuntime": {
+      "durationSeconds": 60.894,
+      "failed": 0,
+      "passed": 4
+    },
+    "swiftNormal": {
+      "failed": 0,
+      "passed": 35,
+      "skippedLive": 4
+    }
+  }
+}
