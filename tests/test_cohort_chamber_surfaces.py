@@ -81,7 +81,7 @@ def test_textual_chamber_mounts_projection_and_submits_governed_steer():
         app = CohortChamberTUI(cohort_id="coh-ui", operator=op)
         async with app.run_test() as pilot:
             chamber = app.query_one("#chamber", Static)
-            assert "SILENCE_QUORUM" in str(chamber.renderable)
+            assert "SILENCE_QUORUM" in str(chamber.render())
             app.query_one("#directive", Input).value = "inspect alternate evidence"
             app.query_one("#reason", Input).value = "operator correction"
             await pilot.click("#submit-steer")
