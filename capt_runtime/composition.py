@@ -58,23 +58,32 @@ class RuntimeComposition:
 
     def hermes_host(
         self, *, target_repo: str, staging_root: str, executable: Optional[str] = None,
-        enforce_memory: bool = True,
+        enforce_memory: bool = True, dispatch_prompt: str = "",
     ) -> DriverHost:
         from .drivers.hermes import DESCRIPTOR as HERMES_DESCRIPTOR, HermesDriver
         if not self.registry.is_registered(HERMES_DESCRIPTOR["driverId"]):
             self.registry.register(HERMES_DESCRIPTOR)
         host = DriverHost(self.registry, staging_root, target_repo,
                           memory_engine=self.memory_engine if enforce_memory else None)
-        host.select_driver(HermesDriver(staging_root, executable=executable,
-                                        task_resolver=self.task_resolver()))
+        host.select_driver(HermesDriver(
+            staging_root, executable=executable, task_resolver=self.task_resolver(),
+            dispatch_prompt=dispatch_prompt,
+        ))
         return host
 
-    def provider_host(self, *, target_repo: str, staging_root: str, provider_id: str, model: str, base_url: str, api_key: str = "") -> DriverHost:
+    def provider_host(
+        self, *, target_repo: str, staging_root: str, provider_id: str, model: str,
+        base_url: str, api_key: str = "", dispatch_prompt: str = "",
+    ) -> DriverHost:
         from .drivers.provider import DESCRIPTOR as PROVIDER_DESCRIPTOR, ProviderDriver
         if not self.registry.is_registered(PROVIDER_DESCRIPTOR["driverId"]):
             self.registry.register(PROVIDER_DESCRIPTOR)
         host = DriverHost(self.registry, staging_root, target_repo)
-        host.select_driver(ProviderDriver(staging_root, provider_id=provider_id, model=model, base_url=base_url, api_key=api_key, task_resolver=self.task_resolver()))
+        host.select_driver(ProviderDriver(
+            staging_root, provider_id=provider_id, model=model, base_url=base_url,
+            api_key=api_key, task_resolver=self.task_resolver(),
+            dispatch_prompt=dispatch_prompt,
+        ))
         return host
 
     def task_resolver(self) -> TaskResolver:

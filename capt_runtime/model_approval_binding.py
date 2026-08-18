@@ -112,5 +112,6 @@ def build_bound_model_operator_approval(
         "basePromptAssemblyDigest": assembly["promptAssemblyDigest"],
         "promptAssemblyDigest": approval_digest,
         "executionBinding": binding,
+        "dispatchPrompt": dispatch_prompt,
         "dispatchPromptDigest": dispatch_prompt_digest,
     }

@@ -210,8 +210,10 @@ replayA = runc('run_approved_hermes_inspection', {'objective': objA, 'targetRoot
     'provider': 'ollama', 'model': 'qwen3.5-defiant-fable:latest',
     'missionId': reqA['missionId'], 'taskId': reqA['taskId'], 'driverRunId': reqA['driverRunId'],
     'approvalRequestId': reqA['requestId'], 'requestedContextBudget': 32000,
-    'responseMode': 'SPOCK', 'promptEnhancement': 'OFF', 'humanVerificationRequired': True}, 'A-replay')
+    'responseMode': 'SPOCK', 'promptEnhancement': 'OFF', 'humanVerificationRequired': True}, 'A-run')
 EVID['replayModelA'] = {'status': replayA.get('status'), 'classification': replayA.get('classification')}
+assert replayA.get('status') == 'idempotent', replayA
+assert replayA.get('classification') == 'duplicate', replayA
 print('replay A:', replayA.get('status'), replayA.get('classification'))
 
 # ---------------- event delta ----------------

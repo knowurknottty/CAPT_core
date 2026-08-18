@@ -163,3 +163,54 @@ def test_cancel_rejects_unknown_run(tmp_path: Path):
         assert "unknown driverRunId" in str(exc)
     else:
         raise AssertionError("unknown cancellation must fail")
+
+
+def test_governed_provider_uses_explicit_approved_dispatch_prompt(tmp_path: Path):
+    from capt_runtime.approval_dispatch import register_expected_prompt_digest
+    import hashlib
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _Server)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        approved = "approved-dispatch\n" + ("context evidence " * 60)
+        digest = "sha256:" + hashlib.sha256(approved.encode()).hexdigest()
+        register_expected_prompt_digest("dr-bound-long", digest)
+        driver = ProviderDriver(
+            str(tmp_path), provider_id="ollama", model="local-model",
+            base_url=f"http://127.0.0.1:{server.server_port}/v1",
+            task_resolver=_resolver(), dispatch_prompt=approved,
+        )
+        out = asyncio.run(driver.submit({
+            "driverRunId": "dr-bound-long", "missionId": "m-1",
+            "taskId": "t-1", "contextSlice": {},
+            "submittedAt": "2026-01-01T00:00:00Z",
+        }))
+        assert len(approved) > 512
+        assert _Server.seen["body"]["prompt"] == approved
+        assert out["diagnostics"]["promptDigest"] == digest
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_governed_provider_explicit_prompt_still_fails_closed_on_digest_mismatch(tmp_path: Path):
+    from capt_runtime.approval_dispatch import register_expected_prompt_digest
+    import hashlib
+
+    approved = "approved prompt"
+    expected = "different approved prompt"
+    register_expected_prompt_digest(
+        "dr-bound-mismatch", "sha256:" + hashlib.sha256(expected.encode()).hexdigest()
+    )
+    driver = ProviderDriver(
+        str(tmp_path), provider_id="ollama", model="local-model",
+        base_url="http://127.0.0.1:1/v1", task_resolver=_resolver(),
+        dispatch_prompt=approved,
+    )
+    with __import__("pytest").raises(Exception, match="DISPATCH_DIGEST_MISMATCH"):
+        asyncio.run(driver.submit({
+            "driverRunId": "dr-bound-mismatch", "missionId": "m-1",
+            "taskId": "t-1", "contextSlice": {},
+            "submittedAt": "2026-01-01T00:00:00Z",
+        }))

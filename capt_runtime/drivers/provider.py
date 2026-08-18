@@ -38,6 +38,7 @@ class ProviderDriver:
         base_url: str,
         api_key: str = "",
         task_resolver=None,
+        dispatch_prompt: str = "",
     ):
         self.root = Path(staging_root)
         self.root.mkdir(parents=True, exist_ok=True)
@@ -46,6 +47,7 @@ class ProviderDriver:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.task_resolver = task_resolver
+        self.dispatch_prompt = dispatch_prompt
         self.runs: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.RLock()
 
@@ -115,7 +117,7 @@ class ProviderDriver:
         }
 
     def _execute(self, rid, wo):
-        prompt = (
+        prompt = self.dispatch_prompt or (
             self.task_resolver.resolve_for_execution(
                 mission_id=wo["missionId"], task_id=wo["taskId"]
             ).objective

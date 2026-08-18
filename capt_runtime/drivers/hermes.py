@@ -244,6 +244,7 @@ class HermesDriver:
         extra_args: Optional[List[str]] = None,
         default_timeout: float = 300.0,
         task_resolver: Optional[Any] = None,
+        dispatch_prompt: str = "",
     ) -> None:
         self._staging_root = Path(staging_root)
         self._staging_root.mkdir(parents=True, exist_ok=True)
@@ -252,6 +253,7 @@ class HermesDriver:
         self._extra_args = list(extra_args or [])
         self._default_timeout = default_timeout
         self._task_resolver = task_resolver
+        self._dispatch_prompt = dispatch_prompt
         self._runs: Dict[str, Dict[str, Any]] = {}
 
     # -- ExecutionDriver surface ------------------------------------------
@@ -355,7 +357,7 @@ class HermesDriver:
             )
             if resolved.scope.get("rootPath") != fs.get("rootPath"):
                 raise HermesDriverFailure("resolved task scope differs from work-order target")
-        prompt = build_prompt(
+        prompt = self._dispatch_prompt or build_prompt(
             ctx, work_order["operations"], objective=resolved.objective if resolved else None
         )
         prompt_digest = "sha256:" + hashlib.sha256(prompt.encode("utf-8")).hexdigest()

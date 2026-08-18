@@ -752,8 +752,6 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     context_pack_digest=context_pack_digest,
                     continuation_context=continuation["records"],
                 )
-                if len(bound_assembly["modelVisiblePrompt"]) > 512:
-                    raise ValueError("MODEL_VISIBLE_PROMPT_TITLE_TOO_LONG")
                 # This read-only check catches a mismatched approval before the
                 # command service consumes the one-use receipt.
                 svc.require_approved_prompt_assembly(
@@ -779,6 +777,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         "enhancementEngine": enhancement_engine,
                         "humanVerificationRequired": human_verification_required,
                         "promptAssembly": prompt_assembly,
+                        "dispatchPrompt": bound_assembly["dispatchPrompt"],
                         "contextPackDigest": context_pack_digest,
                         "continuationContext": continuation["records"],
                     }),
@@ -819,6 +818,8 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 human_verification_required = prepared.data["humanVerificationRequired"]
                 prompt_assembly = prepared.data["promptAssembly"]
                 model_visible_objective = prompt_assembly["modelVisiblePrompt"]
+                dispatch_prompt = prepared.data["dispatchPrompt"]
+                task_title = str(objective).strip()[:512] or "Model operator task"
                 cognitive_provenance = build_cognitive_provenance(
                     assembly=prompt_assembly, provider_id=provider.id if provider is not None else "hermes",
                     model=str(provider_model or "hermes"), requested_context_budget=requested_context_budget,
@@ -891,7 +892,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 intent = {
                     "schemaVersion": "1.0.0",
                     "missionId": mission_id,
-                    "objective": model_visible_objective,
+                    "objective": task_title,
                     "scope": {"kind": "filesystem", "rootPath": target_root, "recursive": True},
                     "requiresApproval": False,
                     "constraints": [{"kind": "resource_boundary", "constraintId": "con-model-1",
@@ -992,11 +993,17 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 staging = Path(ledger_path).parent / "staging" / run_id
                 staging.mkdir(parents=True, exist_ok=True)
                 if provider is not None:
-                    host = runtime.provider_host(target_repo=str(worktree), staging_root=str(staging), provider_id=provider.id, model=str(provider_model), base_url=provider.base_url, api_key=provider_key)
+                    host = runtime.provider_host(
+                        target_repo=str(worktree), staging_root=str(staging),
+                        provider_id=provider.id, model=str(provider_model),
+                        base_url=provider.base_url, api_key=provider_key,
+                        dispatch_prompt=str(dispatch_prompt),
+                    )
                 else:
                     host = runtime.hermes_host(
                         target_repo=str(worktree), staging_root=str(staging),
                         executable=executable, enforce_memory=False,
+                        dispatch_prompt=str(dispatch_prompt),
                     )
                 ctx = host.build_context(
                     {"leaseId": lease["leaseId"], "operations": lease["operations"],
