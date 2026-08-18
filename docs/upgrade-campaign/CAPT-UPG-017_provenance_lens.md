@@ -5,7 +5,7 @@
 - **PR:** #85
 - **Base:** verified CAPT-UPG-016 @ `f7a6c6d22feb08a914e931611976ab0b766f1557`
 - **Parallel precursor preserved:** `archive/upg017-pre-repair-parallel` @ `6826d145f44df1cb1402a9c9f34b345d007198c5`
-- **Disposition before exact-commit gate:** `IMPLEMENTED_PENDING_EXACT_COMMIT_VERIFICATION`
+- **Disposition:** `IMPLEMENTED_VERIFIED_READY_FOR_OWNER_REVIEW`
 
 ## Authority boundary
 
@@ -157,17 +157,23 @@ Desktop toolchain qualification:
 
 This is a launch smoke, not a claim of exhaustive visual QA.
 
-## Exact-head verification requirement
+## Exact-head verification
 
-After the implementation/evidence commit is created, rerun:
+Implementation commit `5a305179e451421d501eaca9a051ce6fa14039b3` was verified before this final evidence-only commit:
 
-```bash
-python contracts/tools/check_drift.py
-python -m pytest -q \
-  tests/test_provenance_dag.py \
-  tests/test_provenance_runtime_projection.py \
-  tests/test_provenance_lens_layout.py
-python -m pytest -q
+```text
+DRIFT CHECK: OK (11 generated files match the schema source)
+focused provenance/read-model/layout gate: 9 passed
+full non-slow suite: 998 passed, 13 skipped, 12 deselected
 ```
 
-Then rebuild/install the wheel from that immutable commit and repeat installed import/help/headless acceptance before changing this item to owner-review-ready.
+A wheel rebuilt from that exact implementation commit also passed:
+
+```text
+exact_installed_imports=PASS
+capt-provenance --help: PASS
+exact_installed_headless=PASS
+exact_installed_tk_launch_smoke=PASS alive_after_2s
+```
+
+This final evidence-only commit changes no runtime/package implementation. The same drift/focused/full gates are rerun on the final branch head before PR promotion. No claim extends to tests excluded by the repository `slow` marker or to exhaustive visual QA.
