@@ -1,35 +1,40 @@
-# CAPT-UPG-013: ContextPack Merkle / Component Provenance Experiment
+# CAPT-UPG-013 — ContextPack Merkle / Component Provenance Experiment
 
-- **Campaign ID**: `CAPT-UPG-013`
-- **Issue**: #77
-- **PR**: #78
-- **Rebuilt base**: corrected CAPT-UPG-012 @ `94b118259ecffe0c855d7202100e7c8b5c4cf14d`
-- **Disposition**: `IMPLEMENTED_PENDING_EXECUTION_PROBE`
+- **Campaign ID:** `CAPT-UPG-013`
+- **Issue:** #77
+- **PR:** #78
+- **Base:** verified CAPT-UPG-012 @ `6f88d565df84e3ce41fc04e5ec145998bc4bf490`
+- **Disposition:** `IMPLEMENTED_VERIFIED_AS_LOCAL_PROVENANCE_PROBE`
 
-## Scope implemented
+## Scope
 
-`capt_runtime/context_merkle.py` provides an explicitly non-authoritative component-provenance experiment over ContextPack data:
+`capt_runtime/context_merkle.py` is explicitly non-authoritative and provides:
 
-- fixed component identities/order for policy, usage, selection, exclusions, compression, and lineage;
+- fixed ContextPack component identities/order for policy, usage, selection, exclusions, compression, and lineage;
 - deterministic component leaf digests and binary Merkle root;
 - changed/unchanged component localization;
-- explicit preservation of the existing canonical `contextPackDigest` contract identity;
-- explicit statement that Merkle identity does not imply provider prompt-cache behavior;
-- a separate exact prompt-prefix serialization plan with independent prefix/full-prompt digests.
+- preservation of the canonical `contextPackDigest` contract identity;
+- explicit `providerCacheHitClaim: false` semantics;
+- a separate exact serialized prompt-prefix identity model, because provider caching depends on exact prefix layout rather than Merkle identity.
 
-`tests/capt_runtime/test_context_merkle.py` covers deterministic roots, local invalidation, unaffected-leaf stability, and separation of stable-prefix identity from full-prompt changes.
+## Executable probe
 
-`scripts/context_merkle_probe.py` measures local construction/invalidation only and explicitly emits `providerCacheClaim: false`.
+`scripts/context_merkle_probe.py` now resolves the repository root itself, so the documented direct invocation works without an external `PYTHONPATH` workaround.
+
+Observed locally on the repaired branch:
+
+```text
+3 passed
+iterations: 1000
+changedComponents: ["selection"]
+meanMicroseconds: ~80.4
+providerCacheClaim: false
+```
+
+This timing is an environment-specific local construction measurement, not a provider-cache benchmark and not a general performance guarantee.
 
 ## Verification boundary
 
-This item was rebuilt scope-only on the corrected 012 stack. No exact-head pytest or probe result is claimed from this environment.
+The mechanism is verified as an internal provenance/invalidation probe only. Any claim about OpenAI, Anthropic, OpenRouter, or another provider's prompt-cache hit rate requires a separate provider-specific benchmark over actual serialized prompts and cache telemetry.
 
-Required:
-
-```bash
-pytest tests/capt_runtime/test_context_merkle.py
-python scripts/context_merkle_probe.py
-```
-
-Any provider-cache claim requires a separate provider-specific experiment.
+Exact-commit full-suite verification is recorded on PR #78 after this commit.

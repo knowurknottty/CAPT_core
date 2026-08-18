@@ -7,8 +7,14 @@ ContextPack component-tree construction and change localization.
 from __future__ import annotations
 
 import json
+import sys
 import time
 from copy import deepcopy
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from capt_runtime.context_merkle import build_context_merkle, diff_context_merkle
 
