@@ -107,9 +107,15 @@ class Dashboard:
     tasks: List[Dict[str, Any]] = field(default_factory=list)
     approvals: List[ApproxRequest] = field(default_factory=list)
     driver_runs: List[Dict[str, Any]] = field(default_factory=list)
+    claims: List[Dict[str, Any]] = field(default_factory=list)
     events: List[Dict[str, Any]] = field(default_factory=list)
     evidence: EvidenceView = field(default_factory=EvidenceView)
+    # Backward-compatible single verification view. New surfaces should prefer
+    # verifications_by_claim so coexistence of accepted/contradicted claims is
+    # never collapsed into a misleading global scalar.
     verification: Dict[str, Any] = field(default_factory=dict)
+    verifications_by_claim: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    epistemic_ladder: List[Dict[str, Any]] = field(default_factory=list)
     ledger_chain_digest: str = ""
     provider_status: Dict[str, Any] = field(default_factory=dict)
     memory: Dict[str, Any] = field(default_factory=dict)
