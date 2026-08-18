@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import inspect
+from pathlib import Path
 from typing import Any, Callable, Dict, Mapping, Optional, Tuple
 
-from .contracts import LabEngineRequest, LabEngineResult
+from .contracts import LabEngineRequest, LabEngineResult, sha256_digest
 from .provenance import donor_for
 
 
@@ -73,7 +75,7 @@ class LabEngineRegistry:
             })
         return output
 
-    def execute(self, request: LabEngineRequest, context: Mapping[str, Any]) -> LabEngineResult:
+    def resolve(self, request: LabEngineRequest) -> LabEngineDescriptor:
         item = self._items.get(request.engine_id)
         if item is None:
             raise LabRegistryError("unknown engine %s" % request.engine_id)
@@ -82,6 +84,22 @@ class LabEngineRegistry:
             raise LabRegistryError("unknown operation %s for %s" % (request.operation, request.engine_id))
         if engine is None:
             raise LabRegistryError("engine %s is unavailable" % request.engine_id)
+        return descriptor
+
+    def implementation_digest(self, engine_id: str) -> str:
+        item = self._items.get(engine_id)
+        if item is None or item[1] is None:
+            raise LabRegistryError("engine %s is unavailable" % engine_id)
+        engine = item[1]
+        source = inspect.getsourcefile(engine)
+        if not source or not Path(source).is_file():
+            raise LabRegistryError("engine %s implementation source is unavailable" % engine_id)
+        return sha256_digest(Path(source).read_bytes())
+
+    def execute(self, request: LabEngineRequest, context: Mapping[str, Any]) -> LabEngineResult:
+        self.resolve(request)
+        engine = self._items[request.engine_id][1]
+        assert engine is not None
         return engine(request, context)
 
 
