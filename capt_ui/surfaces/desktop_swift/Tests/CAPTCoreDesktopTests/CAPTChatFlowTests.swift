@@ -2,7 +2,7 @@ import XCTest
 @testable import CAPTCoreDesktop
 
 final class CAPTChatFlowTests: XCTestCase {
-    private func pending(expiresAt: Date? = nil) -> CAPTPendingApproval {
+    private func pending(expiresAt: Date? = Date.distantFuture) -> CAPTPendingApproval {
         CAPTPendingApproval(
             requestID: "approval-1",
             missionID: "mission-1",
@@ -37,6 +37,17 @@ final class CAPTChatFlowTests: XCTestCase {
         XCTAssertEqual(flow.phase, .recoverableFailure)
         XCTAssertNil(flow.requestID)
         XCTAssertTrue(flow.canCompose)
+    }
+
+    func testUnknownExpiryPendingIsRecoverableAndNonActionable() {
+        let flow = CAPTChatFlow(
+            pending: pending(expiresAt: nil),
+            now: Date(timeIntervalSince1970: 2_000)
+        )
+        XCTAssertEqual(flow.phase, .recoverableFailure)
+        XCTAssertNil(flow.requestID)
+        XCTAssertTrue(flow.canCompose)
+        XCTAssertEqual(flow.failureMessage, "Prompt approval validity unavailable")
     }
 
     func testProviderFailureKeepsApprovalRetryable() {
