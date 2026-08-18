@@ -20,6 +20,7 @@ from .contract import (
     RuntimeHealth,
     health_of,
 )
+from .epistemics import project_epistemic_ladder
 
 try:  # fall back so pure-view code can import without a live socket
     from desktop.desktop_runtime_client import (  # type: ignore
@@ -99,14 +100,34 @@ class Operator:
             return Dashboard()
         st = project_authoritative_state(self._client)  # type: ignore
         approvals = project_approval_queue(self._client)  # type: ignore
+        claims = list(st.get("claims", []))
+        verifications_by_claim = dict(st.get("verificationsByClaim", {}))
+
+        # Preserve the old scalar field only as a compatibility view. Never
+        # choose one arbitrary claim when multiple claim-specific verification
+        # states coexist.
+        if len(verifications_by_claim) == 1:
+            compatibility_verification = next(iter(verifications_by_claim.values()))
+        elif len(verifications_by_claim) > 1:
+            compatibility_verification = {
+                "status": {"kind": "claim_scoped"},
+                "claimCount": len(verifications_by_claim),
+                "note": "Use verifications_by_claim / epistemic_ladder; no global verification scalar exists.",
+            }
+        else:
+            compatibility_verification = {}
+
         dash = Dashboard(
             status=OperatorStatus(health=health_of(self._client.identity(), True)),
             missions=st.get("missions", []),
             tasks=st.get("tasks", []),
             approvals=[_to_approval(a) for a in approvals],
             driver_runs=st.get("driverRuns", []),
+            claims=claims,
             events=st.get("eventTimeline", []),
-            verification=st.get("verification", {}),
+            verification=compatibility_verification,
+            verifications_by_claim=verifications_by_claim,
+            epistemic_ladder=project_epistemic_ladder(claims, verifications_by_claim),
             ledger_chain_digest=st.get("identity", {}).get("ledgerChainDigest", ""),
         )
         # fill top-line status from authoritative state
