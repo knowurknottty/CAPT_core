@@ -18,13 +18,13 @@ public enum CAPTRuntimeConnectionState: Equatable {
     case failed(String)
 }
 
-public enum CAPTMessageRole: String, Codable {
+public enum CAPTMessageRole: String, Codable, Sendable {
     case user
     case assistant
     case system
 }
 
-public struct CAPTChatMessage: Identifiable, Equatable {
+public struct CAPTChatMessage: Identifiable, Codable, Equatable, Sendable {
     public let id: UUID
     public let role: CAPTMessageRole
     public let text: String
@@ -46,7 +46,7 @@ public struct CAPTChatMessage: Identifiable, Equatable {
     }
 }
 
-public struct CAPTPendingApproval: Equatable {
+public struct CAPTPendingApproval: Codable, Equatable, Sendable {
     public let requestID: String
     public let missionID: String
     public let taskID: String

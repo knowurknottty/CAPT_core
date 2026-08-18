@@ -146,13 +146,15 @@ actor CAPTBackgroundRuntime {
         objective: String,
         targetRoot: String,
         provider: String,
-        model: String
+        model: String,
+        missionID: String? = nil
     ) throws -> CAPTPendingApproval {
         try coordinator.requestApproval(
             objective: objective,
             targetRoot: targetRoot,
             provider: provider,
-            model: model
+            model: model,
+            missionID: missionID
         )
     }
 

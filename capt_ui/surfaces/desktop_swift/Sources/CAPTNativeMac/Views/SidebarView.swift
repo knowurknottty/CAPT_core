@@ -33,20 +33,63 @@ struct SidebarView: View {
     @ObservedObject var store: CAPTOperatorStore
 
     var body: some View {
-        List(CAPTSidebarSection.allCases, selection: $selection) { item in
-            HStack {
-                Label(item.rawValue, systemImage: item.systemImage)
-                Spacer()
-                if let count = count(for: item), count > 0 {
-                    Text("\(count)")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+        List(selection: $selection) {
+            Section {
+                Button {
+                    store.newChat()
+                    selection = .chat
+                } label: {
+                    Label("New Chat", systemImage: "square.and.pencil")
+                }
+                .disabled(store.pendingApproval != nil || store.isBusy)
+            }
+
+            if !store.sessions.isEmpty {
+                Section("Recent Chats") {
+                    ForEach(store.sessions.prefix(20)) { session in
+                        Button {
+                            store.activateSession(session.id)
+                            selection = .chat
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(session.title).lineLimit(1)
+                                Text(session.missionID.map(shortMission) ?? "Local draft")
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(store.pendingApproval != nil || store.isBusy)
+                        .listRowBackground(
+                            store.activeSessionID == session.id
+                                ? Color.accentColor.opacity(0.12) : Color.clear
+                        )
+                    }
                 }
             }
-                .tag(item)
+
+            Section("CAPT") {
+                ForEach(CAPTSidebarSection.allCases) { item in
+                    HStack {
+                        Label(item.rawValue, systemImage: item.systemImage)
+                        Spacer()
+                        if let count = count(for: item), count > 0 {
+                            Text("\(count)")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .tag(item)
+                }
+            }
         }
         .listStyle(.sidebar)
         .navigationTitle("CAPT")
+    }
+
+    private func shortMission(_ id: String) -> String {
+        id.count > 26 ? String(id.prefix(26)) + "…" : id
     }
 
     private func count(for item: CAPTSidebarSection) -> Int? {

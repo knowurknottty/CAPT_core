@@ -1,7 +1,9 @@
-# CAPT Native macOS Desktop MVP (SwiftUI)
+# CAPT Native macOS Desktop (SwiftUI)
 
-**Status:** NATIVE_DESKTOP_CHAT_MVP — runnable `CAPT.app` with authenticated
-RuntimeService IPC, governed model execution, cold-start runtime bootstrap, and live mission/evidence/ledger browsing.
+**Status:** NATIVE_DESKTOP_INTERNAL_DOGFOOD_CANDIDATE — runnable `CAPT.app`
+with authenticated RuntimeService IPC, governed multi-turn model execution,
+cold-start runtime bootstrap, encrypted restartable chat sessions, and live
+mission/approval/evidence/memory/ledger projections.
 
 **Purpose:** a thin SwiftUI macOS client over the authenticated CAPT runtime
 boundary. It does NOT port RuntimeService to Swift and does NOT duplicate
@@ -51,7 +53,10 @@ command ops and renders projections.
 
 Implemented and exercised on macOS:
 
-- native sidebar/detail/inspector chat shell with live mission/evidence/ledger counts;
+- native ChatGPT-style sidebar/detail/inspector chat shell with New Chat + recent conversations;
+- AES-GCM encrypted presentation-session cache at `~/.capt/ui/native_sessions.enc` with a device-only macOS Keychain key and `0600` file permissions;
+- process-death/relaunch restoration of transcript, mission binding, provider/model/target preferences, and exact native-origin pending approval;
+- multi-turn governed continuation: one durable mission, a fresh authoritative Task per turn, prior model evidence selected by CAPT with trust labels preserved;
 - authenticated connection to `~/.capt/runtime.sock` + `runtime.token`;
 - cold-start recovery through the private `~/.capt/runtime-venv/bin/capt` CLI;
 - global approval-decision queue with explicit decision-vs-dispatch separation;
@@ -62,6 +67,7 @@ Implemented and exercised on macOS:
 - governed `request_model_prompt_approval` flow;
 - visible approve/deny decision card;
 - exact bound `run_approved_hermes_inspection` execution after approval only;
+- immutable approved dispatch text decoupled from bounded Task titles while retaining the final pre-network digest gate;
 - returned model observations rendered in the transcript;
 - authoritative task state shown without automatic verification/promotion;
 - read-only mission/task lineage, claim/evidence state, and last-250 EventStore timeline projections;
@@ -71,10 +77,12 @@ Implemented and exercised on macOS:
 - `script/install_local_runtime.sh` builds/installs the exact local CAPT wheel into a private venv;
 - `script/build_and_run.sh --verify` installs that runtime if needed, stages, and launches `dist/CAPT.app`.
 
-Still later native-surface work: onboarding polish, richer mission detail, memory-record
-drill-down, evidence artifact/provenance inspection, keychain secret-entry UX,
-provider-specific advanced settings, signing/notarization, and visual polish.
-Those are UI/productization gaps, not alternate runtime authority.
+Remaining core-surface parity work is intentionally bounded to current RuntimeService
+capabilities: active task/DriverRun cancellation, memory-policy mutation,
+ClaimGuard/verification drill-down, and explicit runtime shutdown. After those
+controls are wired, remaining work is productization: onboarding polish, deeper
+artifact/provenance browsing, signing/notarization, icon/visual polish, and
+provider-specific advanced settings. None of those may create alternate runtime authority.
 
 ## Behavioral reference
 

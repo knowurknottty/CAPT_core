@@ -82,3 +82,38 @@ final class CAPTLiveRuntimeTests: XCTestCase {
     }
 
 }
+
+extension CAPTLiveRuntimeTests {
+    func testRealNativeConversationUsesSameMissionDistinctSuccessorTasks() throws {
+        try requireLive()
+        let client = CAPTRuntimeClient()
+        defer { client.disconnect() }
+        _ = try client.connect()
+        let coordinator = CAPTChatCoordinator(client: client)
+        let target = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("CAPT_core", isDirectory: true).path
+
+        let first = try coordinator.requestApproval(
+            objective: "Native continuity turn A. READ-ONLY.",
+            targetRoot: target, provider: "ollama",
+            model: "qwen3.5-defiant-fable:latest"
+        )
+        let firstResult = try coordinator.approveAndRun(first)
+        XCTAssertEqual(firstResult.taskState, "awaiting_verification")
+
+        let second = try coordinator.requestApproval(
+            objective: "Native continuity turn B. READ-ONLY.",
+            targetRoot: target, provider: "ollama",
+            model: "ornith-1.0-9b:latest", missionID: first.missionID
+        )
+        XCTAssertEqual(second.missionID, first.missionID)
+        XCTAssertNotEqual(second.taskID, first.taskID)
+        let secondResult = try coordinator.approveAndRun(second)
+        XCTAssertEqual(secondResult.taskState, "awaiting_verification")
+
+        let missionEvents = try client.query(
+            op: "get_stream_events", payload: ["streamId": "mission-" + first.missionID]
+        )["result"] as? [[String: Any]] ?? []
+        XCTAssertEqual(missionEvents.filter { $0["eventType"] as? String == "MissionCreated" }.count, 1)
+    }
+}

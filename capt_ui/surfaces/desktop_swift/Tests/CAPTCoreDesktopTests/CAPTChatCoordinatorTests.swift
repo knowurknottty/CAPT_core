@@ -86,3 +86,45 @@ final class CAPTChatCoordinatorTests: XCTestCase {
         XCTAssertEqual(runPayload["driverRunId"] as? String, "run-1")
     }
 }
+
+extension CAPTChatCoordinatorTests {
+    func testContinuationPassesMissionWithoutReusingTaskIdentity() throws {
+        let client = MockRuntimeClient()
+        client.responses["request_model_prompt_approval"] = approvalResponse()
+        let coordinator = CAPTChatCoordinator(client: client)
+
+        _ = try coordinator.requestApproval(
+            objective: "continue", targetRoot: "/repo",
+            provider: "ollama", model: "model-b",
+            missionID: "mission-1"
+        )
+
+        let payload = client.calls[0].1
+        XCTAssertEqual(payload["missionId"] as? String, "mission-1")
+        XCTAssertNil(payload["taskId"])
+    }
+}
+
+extension CAPTChatCoordinatorTests {
+    func testStructuredRuntimeRejectionSurfacesCodeAndDetail() throws {
+        let client = MockRuntimeClient()
+        client.responses["request_model_prompt_approval"] = approvalResponse()
+        client.responses["submit_approval_decision"] = ["status": "accepted"]
+        client.responses["run_approved_hermes_inspection"] = [
+            "status": "rejected", "classification": "authority",
+            "error": ["code": "EXAMPLE_REJECTION", "message": "authority refused"],
+            "detail": "specific deterministic reason"
+        ]
+        let coordinator = CAPTChatCoordinator(client: client)
+        let pending = try coordinator.requestApproval(
+            objective: "inspect", targetRoot: "/repo",
+            provider: "ollama", model: "model-a"
+        )
+
+        XCTAssertThrowsError(try coordinator.approveAndRun(pending)) { error in
+            let text = error.localizedDescription
+            XCTAssertTrue(text.contains("EXAMPLE_REJECTION"))
+            XCTAssertTrue(text.contains("specific deterministic reason"))
+        }
+    }
+}

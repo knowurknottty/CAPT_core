@@ -30,11 +30,24 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var memorySnapshot: CAPTMemoryRuntimeSnapshot?
     @Published var checkpointSnapshot: CAPTCheckpointSnapshot?
     @Published var runtimeControlMessage = ""
+    @Published var sessions: [CAPTNativeSession] = []
+    @Published var activeSessionID: UUID?
 
     private let runtime: CAPTBackgroundRuntime
+    private let sessionStore: CAPTEncryptedSessionStore
 
-    init(runtime: CAPTBackgroundRuntime = CAPTBackgroundRuntime()) {
+    init(
+        runtime: CAPTBackgroundRuntime = CAPTBackgroundRuntime(),
+        sessionStore: CAPTEncryptedSessionStore = CAPTEncryptedSessionStore()
+    ) {
         self.runtime = runtime
+        self.sessionStore = sessionStore
+        do {
+            sessions = try sessionStore.load().sorted { $0.updatedAt > $1.updatedAt }
+            if let first = sessions.first { activateSession(first.id) }
+        } catch {
+            lastError = "Native session cache: " + error.localizedDescription
+        }
     }
 
     var connectionLabel: String {
@@ -81,12 +94,15 @@ final class CAPTOperatorStore: ObservableObject {
         guard !objective.isEmpty, connectionState == .connected else { return }
         guard pendingApproval == nil, !isBusy else { return }
 
+        ensureActiveSession(titleFrom: objective)
         messages.append(CAPTChatMessage(role: .user, text: objective))
+        persistActiveSession()
         isBusy = true
         lastError = nil
         let selectedProvider = provider
         let selectedModel = model
         let root = targetRoot
+        let missionID = activeMissionID
 
         Task {
             do {
@@ -94,15 +110,18 @@ final class CAPTOperatorStore: ObservableObject {
                     objective: objective,
                     targetRoot: root,
                     provider: selectedProvider,
-                    model: selectedModel
+                    model: selectedModel,
+                    missionID: missionID
                 )
                 pendingApproval = pending
+                bindActiveSession(to: pending.missionID)
                 taskState = "approval_required"
                 messages.append(CAPTChatMessage(
                     role: .system,
                     text: "CAPT prepared a bound execution. Review and approve before dispatch.",
                     authorityState: "approval_required"
                 ))
+                persistActiveSession()
                 refreshHistory()
             } catch {
                 handle(error)
@@ -125,6 +144,7 @@ final class CAPTOperatorStore: ObservableObject {
                     text: result.text,
                     authorityState: result.taskState
                 ))
+                persistActiveSession()
                 refreshHistory()
             } catch {
                 handle(error)
@@ -147,6 +167,7 @@ final class CAPTOperatorStore: ObservableObject {
                     text: "Execution denied. No model dispatch was authorized.",
                     authorityState: "denied"
                 ))
+                persistActiveSession()
                 refreshHistory()
             } catch {
                 handle(error)
@@ -192,12 +213,14 @@ final class CAPTOperatorStore: ObservableObject {
                 providers = snapshot.providers
                 modelSnapshot = snapshot.models
                 verbosity = snapshot.verbosity
-                if let selected = snapshot.providers.first(where: { $0.selected }) {
-                    provider = selected.id
-                } else if let selected = snapshot.models.defaultSelection {
-                    provider = selected.provider
+                if activeSessionID == nil {
+                    if let selected = snapshot.providers.first(where: { $0.selected }) {
+                        provider = selected.id
+                    } else if let selected = snapshot.models.defaultSelection {
+                        provider = selected.provider
+                    }
+                    if !snapshot.models.active.isEmpty { model = snapshot.models.active }
                 }
-                if !snapshot.models.active.isEmpty { model = snapshot.models.active }
             } catch { lastError = error.localizedDescription }
         }
     }
@@ -248,6 +271,7 @@ final class CAPTOperatorStore: ObservableObject {
                 if let first = providers.first(where: { $0.id == providerID })?.models.first {
                     model = first
                 }
+                persistActiveSession()
             } catch { handle(error) }
             isBusy = false
         }
@@ -281,6 +305,7 @@ final class CAPTOperatorStore: ObservableObject {
             do {
                 modelSnapshot = try await runtime.setDefaultModel(providerID: providerID, modelID: modelID)
                 model = modelID
+                persistActiveSession()
             } catch { handle(error) }
             isBusy = false
         }
@@ -318,6 +343,81 @@ final class CAPTOperatorStore: ObservableObject {
         }
     }
 
+    var activeMissionID: String? {
+        guard let id = activeSessionID,
+              let session = sessions.first(where: { $0.id == id }) else { return nil }
+        return session.missionID
+    }
+
+    var activeSessionTitle: String {
+        guard let id = activeSessionID,
+              let session = sessions.first(where: { $0.id == id }) else { return "CAPT Chat" }
+        return session.title
+    }
+
+    func newChat() {
+        guard pendingApproval == nil, !isBusy else { return }
+        let welcome = CAPTChatMessage(role: .system, text: "New governed CAPT chat ready.")
+        let session = CAPTNativeSession(
+            title: "New Chat", messages: [welcome], provider: provider,
+            model: model, targetRoot: targetRoot
+        )
+        sessions.insert(session, at: 0)
+        activeSessionID = session.id
+        messages = session.messages
+        taskState = "—"
+        persistActiveSession()
+    }
+
+    func activateSession(_ id: UUID) {
+        guard pendingApproval == nil, !isBusy || activeSessionID == nil else { return }
+        guard let session = sessions.first(where: { $0.id == id }) else { return }
+        activeSessionID = id
+        messages = session.messages
+        provider = session.provider
+        model = session.model
+        targetRoot = session.targetRoot
+        pendingApproval = session.pendingApproval
+        taskState = pendingApproval == nil ? "—" : "approval_required"
+    }
+
+    private func ensureActiveSession(titleFrom objective: String) {
+        if activeSessionID == nil {
+            let title = String(objective.prefix(72))
+            let session = CAPTNativeSession(
+                title: title, messages: messages, provider: provider,
+                model: model, targetRoot: targetRoot
+            )
+            sessions.insert(session, at: 0)
+            activeSessionID = session.id
+        } else if let id = activeSessionID,
+                  let index = sessions.firstIndex(where: { $0.id == id }),
+                  sessions[index].title == "New Chat" {
+            sessions[index].title = String(objective.prefix(72))
+        }
+    }
+
+    private func bindActiveSession(to missionID: String) {
+        guard let id = activeSessionID,
+              let index = sessions.firstIndex(where: { $0.id == id }) else { return }
+        if sessions[index].missionID == nil { sessions[index].missionID = missionID }
+    }
+
+    private func persistActiveSession() {
+        guard let id = activeSessionID,
+              let index = sessions.firstIndex(where: { $0.id == id }) else { return }
+        sessions[index].messages = messages
+        sessions[index].provider = provider
+        sessions[index].model = model
+        sessions[index].targetRoot = targetRoot
+        sessions[index].pendingApproval = pendingApproval
+        sessions[index].updatedAt = Date()
+        let current = sessions.remove(at: index)
+        sessions.insert(current, at: 0)
+        do { try sessionStore.save(sessions) }
+        catch { lastError = "Native session cache: " + error.localizedDescription }
+    }
+
     private func handle(_ error: Error) {
         let message = error.localizedDescription
         lastError = message
@@ -326,5 +426,6 @@ final class CAPTOperatorStore: ObservableObject {
             text: message,
             authorityState: "error"
         ))
+        persistActiveSession()
     }
 }

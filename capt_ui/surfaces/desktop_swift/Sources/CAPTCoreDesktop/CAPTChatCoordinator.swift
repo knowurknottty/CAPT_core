@@ -21,20 +21,23 @@ public final class CAPTChatCoordinator {
         objective: String,
         targetRoot: String,
         provider: String,
-        model: String
+        model: String,
+        missionID: String? = nil
     ) throws -> CAPTPendingApproval {
+        var payload: [String: Any] = [
+            "objective": objective,
+            "targetRoot": targetRoot,
+            "provider": provider,
+            "model": model,
+            "requestedContextBudget": 32_000,
+            "responseMode": "SPOCK",
+            "promptEnhancement": "OFF",
+            "humanVerificationRequired": true,
+        ]
+        if let missionID, !missionID.isEmpty { payload["missionId"] = missionID }
         let response = try client.command(
             op: "request_model_prompt_approval",
-            payload: [
-                "objective": objective,
-                "targetRoot": targetRoot,
-                "provider": provider,
-                "model": model,
-                "requestedContextBudget": 32_000,
-                "responseMode": "SPOCK",
-                "promptEnhancement": "OFF",
-                "humanVerificationRequired": true,
-            ],
+            payload: payload,
             idempotencyKey: "native-approval-" + UUID().uuidString.lowercased()
         )
         try Self.ensureAcceptedOrApplied(response)
@@ -127,16 +130,27 @@ public final class CAPTChatCoordinator {
 
     private static func ensureAcceptedOrApplied(_ response: [String: Any]) throws {
         if response["ok"] as? Bool == false {
-            throw CAPTRuntimeClientError.malformedResponse(
-                response["error"] as? String ?? "runtime rejected command"
-            )
+            throw CAPTRuntimeClientError.malformedResponse(runtimeErrorMessage(response))
         }
         if let status = response["status"] as? String,
            ["rejected", "denied", "failed"].contains(status.lowercased()) {
-            throw CAPTRuntimeClientError.malformedResponse(
-                response["error"] as? String ?? "runtime status \(status)"
-            )
+            throw CAPTRuntimeClientError.malformedResponse(runtimeErrorMessage(response))
         }
+    }
+
+    private static func runtimeErrorMessage(_ response: [String: Any]) -> String {
+        var parts: [String] = []
+        if let error = response["error"] as? [String: Any] {
+            if let code = error["code"] as? String, !code.isEmpty { parts.append(code) }
+            if let message = error["message"] as? String, !message.isEmpty { parts.append(message) }
+        } else if let error = response["error"] as? String, !error.isEmpty {
+            parts.append(error)
+        }
+        if let detail = response["detail"] as? String, !detail.isEmpty { parts.append(detail) }
+        if parts.isEmpty, let status = response["status"] as? String {
+            parts.append("runtime status " + status)
+        }
+        return parts.isEmpty ? "runtime rejected command" : parts.joined(separator: ": ")
     }
 
     private static func extractTaskState(_ response: [String: Any]) -> String {

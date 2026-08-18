@@ -43,7 +43,7 @@ struct ChatView: View {
                 store.submitPrompt(text)
             }
         }
-        .navigationTitle("CAPT Chat")
+        .navigationTitle(store.activeSessionTitle)
     }
 }
 
