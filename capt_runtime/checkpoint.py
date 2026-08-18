@@ -3,6 +3,12 @@
 A checkpoint is a self-verifying description of runtime state at an exact
 ledger position. Replay from a checkpoint plus the tail must equal full replay
 from the origin — asserted by the conformance suite, not assumed.
+
+Sol-Reconciliation extension aggregates are durable in EventStore/replay but
+are not yet versioned in the frozen CheckpointManifest contract. Checkpoint
+creation therefore skips those extension versions rather than fabricating a
+schema field or failing on a valid runtime ledger. This limitation is explicit
+integration debt until the checkpoint contract is deliberately versioned.
 """
 
 from __future__ import annotations
@@ -32,6 +38,10 @@ _KIND_TO_FIELD = {
     "driverrun": "driverRunVersions",
     "claim": "claimVersions",
 }
+
+# These aggregates remain authoritative/durable in EventStore and full replay,
+# but the current frozen checkpoint schema has no version arrays for them.
+_CHECKPOINT_EXTENSION_KINDS = frozenset({"human_approval", "artifact_promotion", "cohort"})
 
 
 def _file_digest(path: Path) -> str:
@@ -68,7 +78,7 @@ def create_checkpoint(
     open_reservation_ids: List[str] = []
 
     for stream_id, kind, version in store.all_aggregates():
-        if kind == "human_approval":
+        if kind in _CHECKPOINT_EXTENSION_KINDS:
             continue
         field = _KIND_TO_FIELD.get(kind)
         if field is None:
