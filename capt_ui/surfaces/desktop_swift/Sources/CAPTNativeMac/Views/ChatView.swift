@@ -145,11 +145,11 @@ private struct ApprovalCard: View {
             }
             HStack {
                 Button("Deny", role: .destructive, action: deny)
-                    .disabled(isBusy || pending.isExpired())
+                    .disabled(isBusy || !pending.isActionable())
                 Spacer()
                 Button("Approve & Run", action: approve)
                     .buttonStyle(.borderedProminent)
-                    .disabled(isBusy || pending.isExpired())
+                    .disabled(isBusy || !pending.isActionable())
             }
         }
         .padding(16)
