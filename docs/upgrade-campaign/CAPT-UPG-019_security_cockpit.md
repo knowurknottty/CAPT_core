@@ -4,7 +4,7 @@
 - **Issue:** #86
 - **PR:** #87
 - **Base:** verified CAPT-UPG-018 @ `5ae86e80e53fa85b12fd29f45c5b25a575ac3aeb`
-- **Disposition before exact-commit gate:** `IMPLEMENTED_PENDING_EXACT_COMMIT_VERIFICATION`
+- **Disposition:** `IMPLEMENTED_VERIFIED_READY_FOR_OWNER_REVIEW`
 
 ## Scope
 
@@ -76,8 +76,26 @@ full non-slow suite: first run had 1 intermittent desktop reconnect failure; iso
 
 The transient desktop reconnect failure is outside UPG-019's changed files and was not reproducible in isolation or immediate full rerun. It is recorded rather than erased.
 
-## Exact-head / package acceptance required
+## Exact-head verification and package acceptance
 
-After commit creation, rerun drift, the focused security gate, and the full non-slow suite. Build/install the wheel and prove `capt-security-cockpit --help`, installed import, headless evaluation over the real repository baseline, and Tk launch smoke on the CAPT-qualified Python 3.12 desktop toolchain.
+Implementation head before this evidence-only update: `4b62cdc8199f4cf9e0b634412a250199dfc48e9b`.
 
-No claim extends to repository tests excluded by the `slow` marker, to CI checks not executed locally (for example hosted gitleaks/pip-audit jobs), or to universal product security.
+```text
+DRIFT CHECK: OK (11 generated files match the schema source)
+focused security cockpit/gate/evidence gate: 17 passed
+full non-slow suite: 1017 passed, 13 skipped, 12 deselected
+```
+
+Installed wheel from that exact implementation head:
+
+```text
+upg019_installed_imports=PASS
+capt-security-cockpit --help: PASS
+upg019_installed_headless=PASS rc=2 decision=BLOCKED
+counts={PASS:0, FAIL:0, NOT_VERIFIED:20, N/A:26}
+upg019_installed_tk_smoke=PASS
+```
+
+The installed headless command intentionally exits 2 because the committed evidence baseline is empty/fail-closed. That is the expected truthful result, not a failed acceptance.
+
+No claim extends to repository tests excluded by the `slow` marker, to CI checks not executed locally (for example hosted gitleaks/pip-audit jobs), or to universal product security. Drift/focused/full gates are rerun after this final evidence-only commit.
