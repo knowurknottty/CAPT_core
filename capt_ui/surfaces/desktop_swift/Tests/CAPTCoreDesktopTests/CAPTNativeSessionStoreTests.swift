@@ -22,7 +22,8 @@ final class CAPTNativeSessionStoreTests: XCTestCase {
             requestID: "approval-1", missionID: "m-native-1", taskID: "task-2",
             driverRunID: "dr-2", objective: "continue", targetRoot: "/repo",
             provider: "ollama", model: "qwen",
-            promptAssemblyDigest: "sha256:" + String(repeating: "a", count: 64)
+            promptAssemblyDigest: "sha256:" + String(repeating: "a", count: 64),
+            expiresAt: Date(timeIntervalSince1970: 1_700_000_120)
         )
         let session = CAPTNativeSession(
             id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!,
@@ -39,6 +40,10 @@ final class CAPTNativeSessionStoreTests: XCTestCase {
         let restored = try store.load()
         XCTAssertEqual(restored, [session])
         XCTAssertEqual(restored.first?.pendingApproval?.requestID, "approval-1")
+        XCTAssertEqual(
+            restored.first?.pendingApproval?.expiresAt,
+            Date(timeIntervalSince1970: 1_700_000_120)
+        )
     }
 
     func testMissingSessionCacheLoadsEmpty() throws {
