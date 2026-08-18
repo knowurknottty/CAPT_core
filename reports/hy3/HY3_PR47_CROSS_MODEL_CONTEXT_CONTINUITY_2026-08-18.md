@@ -81,12 +81,17 @@ Gate script: `reports/hy3/gate.py` (re-runnable).
 
 ## Artifact record (committed, matches working tree == wheel)
 
-- Implementation source head: `e6c3b359035c525e2700b9fa85cdba68cf5714b8`
-- Final commit (adds tests + report): `4fa7cb894e4adc8dd04100efb3f68e447d4a2638`
+- Implementation source head (runtime bytes): `e6c3b359035c525e2700b9fa85cdba68cf5714b8`
+- Clean branch tip (impl + tests + reports, sanitized): `f4d553e1cf0df140a2e5f75dc50eb4448f7c14f6`
 - Wheel: `capt_solo-0.5.0-py3-none-any.whl`
-  SHA-256 `b236fe3188b21212cf624e4c5525aadb8ff7704e72028b52cb2a66d173825796`
+  SHA-256 `c1a7ce900d1302345bac31793ac1b8088998bea1786fdbbb38aaa4de22b844b5`
 - Sdist: `capt_solo-0.5.0.tar.gz`
-  SHA-256 `ebc08f9eab0845856d318e8ad4b43030e14fd62f56a1c33c308026bea08ef73e`
+  SHA-256 `49dc1a4089bbda3e204960440c2dd2e1f34ca460b92b94a26f4b35110807d202`
+
+NOTE: wheel/sdist hashes differ from the earlier `b236fe31…`/`ebc08f9e…` build
+because the clean branch removed the Terra archive and sanitized gate/test/report
+local paths (distribution content changed; runtime `capt_runtime/*.py` bytes are
+identical to `e6c3b35`). Per the gate protocol, the new hashes are recorded here.
 
 ## Test status
 
@@ -100,9 +105,9 @@ Gate script: `reports/hy3/gate.py` (re-runnable).
 
 RETURN: CROSS_MODEL_PROCESS_CONTINUITY_VERIFIED
 IMPL_SOURCE_HEAD: e6c3b359035c525e2700b9fa85cdba68cf5714b8
-FINAL_COMMIT: 4fa7cb894e4adc8dd04100efb3f68e447d4a2638
-WHEEL_SHA256: b236fe3188b21212cf624e4c5525aadb8ff7704e72028b52cb2a66d173825796
-SDIST_SHA256: ebc08f9eab0845856d318e8ad4b43030e14fd62f56a1c33c308026bea08ef73e
+CLEAN_BRANCH_TIP: f4d553e1cf0df140a2e5f75dc50eb4448f7c14f6
+WHEEL_SHA256: c1a7ce900d1302345bac31793ac1b8088998bea1786fdbbb38aaa4de22b844b5
+SDIST_SHA256: 49dc1a4089bbda3e204960440c2dd2e1f34ca460b92b94a26f4b35110807d202
 MARKER_REACHED_B: True
 TRUST_PRESERVED_UNVERIFIED: True
 MANUAL_INJECTION: False

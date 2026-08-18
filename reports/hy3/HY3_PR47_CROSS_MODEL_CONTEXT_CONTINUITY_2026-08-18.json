@@ -81,9 +81,9 @@
     "classification": "internal_failure",
     "status": "rejected"
   },
-  "sdistSha256": "ebc08f9eab0845856d318e8ad4b43030e14fd62f56a1c33c308026bea08ef73e",
+  "sdistSha256": "49dc1a4089bbda3e204960440c2dd2e1f34ca460b92b94a26f4b35110807d202",
   "socketClosed": true,
   "sourceHead": "e6c3b359035c525e2700b9fa85cdba68cf5714b8",
   "unverifiedEvidenceLabelPreserved": true,
-  "wheelSha256": "b236fe3188b21212cf624e4c5525aadb8ff7704e72028b52cb2a66d173825796"
+  "wheelSha256": "c1a7ce900d1302345bac31793ac1b8088998bea1786fdbbb38aaa4de22b844b5"
 }
