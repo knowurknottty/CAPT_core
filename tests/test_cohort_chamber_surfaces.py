@@ -84,7 +84,7 @@ def test_textual_chamber_mounts_projection_and_submits_governed_steer():
             assert "SILENCE_QUORUM" in str(chamber.render())
             app.query_one("#directive", Input).value = "inspect alternate evidence"
             app.query_one("#reason", Input).value = "operator correction"
-            await pilot.click("#submit-steer")
+            app.action_submit_steer()
             await pilot.pause()
             assert op.steers == [
                 ("coh-ui", "inspect alternate evidence", "operator correction")
