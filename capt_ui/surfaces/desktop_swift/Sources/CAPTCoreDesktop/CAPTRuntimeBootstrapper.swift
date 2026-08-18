@@ -31,9 +31,12 @@ public struct CAPTRuntimeBootstrapper {
             self.stateDirectory = URL(fileURLWithPath: home)
                 .appendingPathComponent(".capt", isDirectory: true).path
         }
-        self.executableCandidates = Self.defaultCandidates(
-            home: home, environment: environment
-        )
+        let stateCLI = URL(fileURLWithPath: self.stateDirectory)
+            .appendingPathComponent("runtime-venv/bin/capt").path
+        var candidates = [stateCLI]
+        candidates.append(contentsOf: Self.defaultCandidates(home: home, environment: environment))
+        var seen = Set<String>()
+        self.executableCandidates = candidates.filter { seen.insert($0).inserted }
     }
 
     public static func defaultCandidates(
