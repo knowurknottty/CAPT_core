@@ -9,7 +9,7 @@
  *      node contracts/tools/ts_parity.mjs
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -60,7 +60,9 @@ if (existsSync(distIndex)) {
 
 const { validate, CONTRACT_SCHEMA_VERSION, knownTypes } = await import(indexModule);
 
-const fixtureFiles = ["core_contracts.json", "capability_and_events.json"];
+const fixtureFiles = readdirSync(join(contractsDir, "fixtures"))
+  .filter((name) => name.endsWith(".json"))
+  .sort();
 
 let total = 0;
 let failed = 0;

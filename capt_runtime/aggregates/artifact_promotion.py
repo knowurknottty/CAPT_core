@@ -18,6 +18,21 @@ PROMOTION_TERMINAL: FrozenSet[str] = frozenset({"adopted", "discarded"})
 
 class ArtifactPromotionAggregate(object):
     KIND = "artifact_promotion"
+    OWNED_FIELDS = frozenset(
+        {
+            "artifact_promotion.state",
+            "artifact_promotion.sourcePath",
+            "artifact_promotion.destinationPath",
+            "artifact_promotion.contentDigest",
+            "artifact_promotion.preparedAt",
+            "artifact_promotion.authorization",
+            "artifact_promotion.adoption",
+            "artifact_promotion.discard",
+        }
+    )
+    REFERENCE_FIELDS = frozenset(
+        {"promotionId", "candidateId", "workspaceId", "claimId", "verificationId", "evidenceId"}
+    )
 
     @staticmethod
     def stream_id(promotion_id: str) -> str:

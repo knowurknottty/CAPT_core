@@ -20,7 +20,7 @@
       "title": "StreamId",
       "description": "Aggregate stream identifier. The prefix declares the owning aggregate (ADR-0103) and is enforced by the store.",
       "type": "string",
-      "pattern": "^(mission|task|capability|driverrun|claim|human_approval)-[A-Za-z0-9_.-]{1,96}$"
+      "pattern": "^(mission|task|capability|driverrun|claim|human_approval|artifact_promotion)-[A-Za-z0-9_.-]{1,96}$"
     },
     "Timestamp": {
       "title": "Timestamp",

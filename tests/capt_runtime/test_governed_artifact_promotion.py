@@ -118,9 +118,12 @@ def test_verified_candidate_promotes_without_claimguard_becoming_filesystem_auth
     )
     prepared = store.require_state("artifact_promotion-p-1")
     assert prepared["state"] == "prepared"
-    # ClaimGuard has not accepted this claim. That is intentional: verification
-    # and workspace adoption are separate authority domains.
-    assert store.require_state("claim-cl-1")["promotionState"] == "proposed"
+    # Verification advances the claim to the distinct `verified` state, but
+    # ClaimGuard still has not accepted it. Workspace adoption is a separate
+    # authority domain and must not depend on pretending verification is absent.
+    claim_state = store.require_state("claim-cl-1")
+    assert claim_state["promotionState"] == "verified"
+    assert claim_state["guardVerdict"] is None
 
     svc.authorize_artifact_promotion("p-1", _meta("captain", "human", "5-authorize"))
     authorized = store.require_state("artifact_promotion-p-1")

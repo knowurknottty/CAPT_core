@@ -30,7 +30,11 @@
         "ClaimVerified",
         "ClaimGuardDecided",
         "HumanApprovalRequested",
-        "HumanApprovalDecided"
+        "HumanApprovalDecided",
+        "ArtifactPromotionPrepared",
+        "ArtifactPromotionAuthorized",
+        "ArtifactPromotionAdopted",
+        "ArtifactPromotionDiscarded"
       ]
     },
     "EventPayload": {
@@ -267,6 +271,56 @@
           "properties": {
             "eventType": { "type": "string", "const": "HumanApprovalDecided" },
             "decision": { "$ref": "common.schema.json#/$defs/HumanApprovalDecision" }
+          }
+        },
+        {
+          "title": "ArtifactPromotionPreparedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "promotion"],
+          "properties": {
+            "eventType": { "type": "string", "const": "ArtifactPromotionPrepared" },
+            "promotion": { "$ref": "upgrade.schema.json#/$defs/ArtifactPromotionState" }
+          }
+        },
+        {
+          "title": "ArtifactPromotionAuthorizedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "promotionId", "verificationId", "evidenceId", "contentDigest", "destinationPath", "authorizedBy", "authorizedAt"],
+          "properties": {
+            "eventType": { "type": "string", "const": "ArtifactPromotionAuthorized" },
+            "promotionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+            "verificationId": { "$ref": "common.schema.json#/$defs/Identifier" },
+            "evidenceId": { "$ref": "common.schema.json#/$defs/Identifier" },
+            "contentDigest": { "$ref": "common.schema.json#/$defs/Digest" },
+            "destinationPath": { "$ref": "upgrade.schema.json#/$defs/UpgradeAbsolutePath" },
+            "authorizedBy": { "$ref": "common.schema.json#/$defs/Identifier" },
+            "authorizedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+          }
+        },
+        {
+          "title": "ArtifactPromotionAdoptedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "promotionId", "receipt", "adoptedAt"],
+          "properties": {
+            "eventType": { "type": "string", "const": "ArtifactPromotionAdopted" },
+            "promotionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+            "receipt": { "$ref": "upgrade.schema.json#/$defs/ArtifactAdoptionReceipt" },
+            "adoptedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+          }
+        },
+        {
+          "title": "ArtifactPromotionDiscardedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "promotionId", "reason", "discardedAt"],
+          "properties": {
+            "eventType": { "type": "string", "const": "ArtifactPromotionDiscarded" },
+            "promotionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+            "reason": { "type": "string", "maxLength": 2048 },
+            "discardedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
           }
         }
       ]
