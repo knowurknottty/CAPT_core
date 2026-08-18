@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import CAPTCoreDesktop
+import Security
 
 @MainActor
 final class CAPTOperatorStore: ObservableObject {
@@ -11,7 +12,6 @@ final class CAPTOperatorStore: ObservableObject {
             text: "CAPT native surface ready. Connect to RuntimeService to begin."
         )
     ]
-    @Published var pendingApproval: CAPTPendingApproval?
     @Published var provider = "ollama"
     @Published var model = "qwen3.5-defiant-fable:latest"
     @Published var targetRoot = FileManager.default.homeDirectoryForCurrentUser
@@ -36,6 +36,8 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var reviewedClaimID: String?
     @Published var sessions: [CAPTNativeSession] = []
     @Published var activeSessionID: UUID?
+    @Published private(set) var chatFlows: [UUID: CAPTChatFlow] = [:]
+    @Published var providerCredentialStatus: [String: String] = [:]
 
     private let runtime: CAPTBackgroundRuntime
     private let sessionStore: CAPTEncryptedSessionStore
@@ -59,7 +61,12 @@ final class CAPTOperatorStore: ObservableObject {
             switch result {
             case .success(let restored):
                 sessions = restored.sorted { $0.updatedAt > $1.updatedAt }
-                if activeSessionID == nil, let first = sessions.first { activateSession(first.id) }
+                chatFlows = Dictionary(uniqueKeysWithValues: sessions.map {
+                    ($0.id, CAPTChatFlow(pending: $0.pendingApproval))
+                })
+                if activeSessionID == nil, let first = sessions.first {
+                    activateSession(first.id)
+                }
             case .failure(let error):
                 lastError = "Native session cache: " + error.localizedDescription
             }
@@ -73,6 +80,23 @@ final class CAPTOperatorStore: ObservableObject {
         case .connected: return "Connected"
         case .failed(let message): return "Failed: \(message)"
         }
+    }
+
+    var pendingApproval: CAPTPendingApproval? {
+        guard let id = activeSessionID,
+              let session = sessions.first(where: { $0.id == id }) else { return nil }
+        return session.pendingApproval
+    }
+
+    var activeChatFlow: CAPTChatFlow {
+        guard let id = activeSessionID else { return CAPTChatFlow() }
+        return chatFlows[id] ?? CAPTChatFlow(pending: pendingApproval)
+    }
+
+    var isActiveChatBusy: Bool { activeChatFlow.isBusy }
+
+    var canComposeInActiveChat: Bool {
+        connectionState == .connected && pendingApproval == nil && activeChatFlow.canCompose
     }
 
     func connect() {
@@ -102,23 +126,32 @@ final class CAPTOperatorStore: ObservableObject {
         Task { await runtime.disconnect() }
         connectionState = .disconnected
         runtimeIdentity = "Not connected"
-        pendingApproval = nil
+        chatFlows = Dictionary(uniqueKeysWithValues: sessions.map {
+            ($0.id, CAPTChatFlow(pending: $0.pendingApproval))
+        })
     }
 
     func submitPrompt(_ text: String) {
         let objective = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !objective.isEmpty, connectionState == .connected else { return }
-        guard pendingApproval == nil, !isBusy else { return }
 
         ensureActiveSession(titleFrom: objective)
-        messages.append(CAPTChatMessage(role: .user, text: objective))
-        persistActiveSession()
-        isBusy = true
+        guard let sessionID = activeSessionID,
+              pendingApproval(for: sessionID) == nil,
+              !chatFlow(for: sessionID).isBusy else { return }
+
+        appendMessage(CAPTChatMessage(role: .user, text: objective), to: sessionID)
+        persistSession(sessionID)
+
+        var flow = chatFlow(for: sessionID)
+        flow.beginApprovalRequest()
+        setChatFlow(flow, for: sessionID)
         lastError = nil
+
         let selectedProvider = provider
         let selectedModel = model
         let root = targetRoot
-        let missionID = activeMissionID
+        let missionID = session(for: sessionID)?.missionID
 
         Task {
             do {
@@ -129,66 +162,149 @@ final class CAPTOperatorStore: ObservableObject {
                     model: selectedModel,
                     missionID: missionID
                 )
-                pendingApproval = pending
-                bindActiveSession(to: pending.missionID)
-                taskState = "approval_required"
-                messages.append(CAPTChatMessage(
+                bindSession(sessionID, to: pending.missionID)
+                setPendingApproval(pending, for: sessionID)
+                appendMessage(CAPTChatMessage(
                     role: .system,
                     text: "CAPT prepared a bound execution. Review and approve before dispatch.",
                     authorityState: "approval_required"
-                ))
-                persistActiveSession()
+                ), to: sessionID)
+                var preparedFlow = chatFlow(for: sessionID)
+                preparedFlow.approvalPrepared(pending)
+                setChatFlow(preparedFlow, for: sessionID)
+                if activeSessionID == sessionID { taskState = "approval_required" }
+                persistSession(sessionID)
                 refreshHistory()
             } catch {
-                handle(error)
+                var failedFlow = chatFlow(for: sessionID)
+                _ = failedFlow.executionFailed(message: error.localizedDescription, pending: nil)
+                setChatFlow(failedFlow, for: sessionID)
+                handleChat(error, sessionID: sessionID)
             }
-            isBusy = false
         }
     }
 
     func approvePending() {
-        guard let pending = pendingApproval, !isBusy else { return }
-        isBusy = true
+        guard let sessionID = activeSessionID,
+              let pending = pendingApproval(for: sessionID),
+              !chatFlow(for: sessionID).isBusy else { return }
+
+        if pending.isExpired() {
+            expireLocalApproval(
+                sessionID: sessionID,
+                pending: pending,
+                detail: "Prompt approval expired before dispatch. Submit the prompt again to mint a fresh approval."
+            )
+            return
+        }
+
+        var flow = chatFlow(for: sessionID)
+        flow.beginExecution(pending)
+        setChatFlow(flow, for: sessionID)
         lastError = nil
+
         Task {
             do {
                 let result = try await runtime.approveAndRun(pending)
-                pendingApproval = nil
-                taskState = result.taskState
-                messages.append(CAPTChatMessage(
+                setPendingApproval(nil, for: sessionID)
+                appendMessage(CAPTChatMessage(
                     role: .assistant,
                     text: result.text,
                     authorityState: result.taskState
-                ))
-                persistActiveSession()
+                ), to: sessionID)
+                var completedFlow = chatFlow(for: sessionID)
+                completedFlow.executionCompleted(taskState: result.taskState)
+                setChatFlow(completedFlow, for: sessionID)
+                if activeSessionID == sessionID { taskState = result.taskState }
+                persistSession(sessionID)
                 refreshHistory()
             } catch {
-                handle(error)
+                let message = error.localizedDescription
+                var failedFlow = chatFlow(for: sessionID)
+                let disposition = failedFlow.executionFailed(message: message, pending: pending)
+                setChatFlow(failedFlow, for: sessionID)
+
+                if disposition.isTerminalForLocalActionCursor {
+                    setPendingApproval(nil, for: sessionID)
+                }
+
+                switch disposition {
+                case .expired:
+                    if activeSessionID == sessionID { taskState = "approval_expired" }
+                    handleChat(
+                        error,
+                        sessionID: sessionID,
+                        authorityState: "approval_expired",
+                        messageOverride: "Prompt approval expired before dispatch. Submit the prompt again to mint a fresh approval. Runtime detail: \(message)"
+                    )
+                case .consumed:
+                    if activeSessionID == sessionID { taskState = "approval_consumed" }
+                    handleChat(
+                        error,
+                        sessionID: sessionID,
+                        authorityState: "approval_consumed",
+                        messageOverride: "This approval has already been consumed and cannot be reused. Submit the prompt again for a fresh governed execution. Runtime detail: \(message)"
+                    )
+                case .denied:
+                    if activeSessionID == sessionID { taskState = "denied" }
+                    handleChat(
+                        error,
+                        sessionID: sessionID,
+                        authorityState: "denied",
+                        messageOverride: "This approval is no longer actionable because it was denied. Submit the prompt again if you want a new execution. Runtime detail: \(message)"
+                    )
+                case .retryable:
+                    if activeSessionID == sessionID { taskState = "approval_required" }
+                    handleChat(error, sessionID: sessionID)
+                }
             }
-            isBusy = false
         }
     }
 
     func denyPending() {
-        guard let pending = pendingApproval, !isBusy else { return }
-        isBusy = true
+        guard let sessionID = activeSessionID,
+              let pending = pendingApproval(for: sessionID),
+              !chatFlow(for: sessionID).isBusy else { return }
+
+        if pending.isExpired() {
+            expireLocalApproval(
+                sessionID: sessionID,
+                pending: pending,
+                detail: "Prompt approval expired before it could be denied. The stale local action cursor was cleared."
+            )
+            return
+        }
+
+        var flow = chatFlow(for: sessionID)
+        flow.beginExecution(pending)
+        setChatFlow(flow, for: sessionID)
         lastError = nil
+
         Task {
             do {
                 try await runtime.deny(pending)
-                pendingApproval = nil
-                taskState = "denied"
-                messages.append(CAPTChatMessage(
+                setPendingApproval(nil, for: sessionID)
+                var deniedFlow = chatFlow(for: sessionID)
+                deniedFlow.reset()
+                setChatFlow(deniedFlow, for: sessionID)
+                if activeSessionID == sessionID { taskState = "denied" }
+                appendMessage(CAPTChatMessage(
                     role: .system,
                     text: "Execution denied. No model dispatch was authorized.",
                     authorityState: "denied"
-                ))
-                persistActiveSession()
+                ), to: sessionID)
+                persistSession(sessionID)
                 refreshHistory()
             } catch {
-                handle(error)
+                let message = error.localizedDescription
+                var failedFlow = chatFlow(for: sessionID)
+                let disposition = failedFlow.executionFailed(message: message, pending: pending)
+                setChatFlow(failedFlow, for: sessionID)
+                if disposition.isTerminalForLocalActionCursor {
+                    setPendingApproval(nil, for: sessionID)
+                }
+                handleChat(error, sessionID: sessionID)
             }
-            isBusy = false
         }
     }
 
@@ -266,8 +382,6 @@ final class CAPTOperatorStore: ObservableObject {
         refreshCapabilities()
     }
 
-
-
     var pendingApprovals: [CAPTApprovalSummary] {
         approvals.filter { $0.state == "requested" && $0.decision == nil }
     }
@@ -307,19 +421,65 @@ final class CAPTOperatorStore: ObservableObject {
         guard !isBusy else { return }
         isBusy = true
         Task {
-            do { providers = try await runtime.testProvider(providerID) }
-            catch { handle(error) }
+            do {
+                providers = try await runtime.testProvider(providerID)
+                if let tested = providers.first(where: { $0.id == providerID }),
+                   tested.health == "green" {
+                    let latency = tested.latencyMs.map { " · \($0) ms" } ?? ""
+                    providerCredentialStatus[providerID] = "Authenticated ✓\(latency)"
+                }
+            } catch { handle(error) }
             isBusy = false
         }
     }
 
-    func setProviderKeyReference(providerID: String, reference: String) {
-        guard !isBusy else { return }
+    func setProviderKeyReference(providerID: String, reference: String) async -> Bool {
+        guard !isBusy else { return false }
+        let trimmed = reference.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
         isBusy = true
-        Task {
-            do { providers = try await runtime.setProviderKeyReference(providerID: providerID, reference: reference) }
-            catch { handle(error) }
-            isBusy = false
+        defer { isBusy = false }
+        lastError = nil
+        do {
+            providers = try await runtime.setProviderKeyReference(
+                providerID: providerID,
+                reference: trimmed
+            )
+            return true
+        } catch {
+            handle(error)
+            return false
+        }
+    }
+
+    func configureProviderAPIKey(providerID: String, apiKey: String) async -> Bool {
+        let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !isBusy else { return false }
+        isBusy = true
+        defer { isBusy = false }
+        lastError = nil
+        providerCredentialStatus[providerID] = "Storing securely…"
+
+        do {
+            try Self.storeProviderSecret(trimmed, account: providerID)
+            let reference = "keychain:\(providerID)"
+            providers = try await runtime.setProviderKeyReference(
+                providerID: providerID,
+                reference: reference
+            )
+            providers = try await runtime.testProvider(providerID)
+            if let tested = providers.first(where: { $0.id == providerID }),
+               tested.health == "green" {
+                let latency = tested.latencyMs.map { " · \($0) ms" } ?? ""
+                providerCredentialStatus[providerID] = "Stored securely ✓ · Authenticated ✓\(latency)"
+            } else {
+                providerCredentialStatus[providerID] = "Stored securely ✓ · provider test did not report green"
+            }
+            return true
+        } catch {
+            providerCredentialStatus[providerID] = "Setup failed — key retained for retry"
+            handle(error)
+            return false
         }
     }
 
@@ -451,40 +611,62 @@ final class CAPTOperatorStore: ObservableObject {
     }
 
     func newChat() {
-        guard pendingApproval == nil, !isBusy else { return }
+        persistActiveSession()
         let welcome = CAPTChatMessage(role: .system, text: "New governed CAPT chat ready.")
         let session = CAPTNativeSession(
-            title: "New Chat", messages: [welcome], provider: provider,
-            model: model, targetRoot: targetRoot
+            title: "New Chat",
+            messages: [welcome],
+            provider: provider,
+            model: model,
+            targetRoot: targetRoot,
+            pendingApproval: nil
         )
         sessions.insert(session, at: 0)
         activeSessionID = session.id
         messages = session.messages
         taskState = "—"
-        persistActiveSession()
+        chatFlows[session.id] = CAPTChatFlow()
+        lastError = nil
+        runtimeControlMessage = ""
+        saveSessions()
     }
 
     func activateSession(_ id: UUID) {
-        guard pendingApproval == nil, !isBusy || activeSessionID == nil else { return }
-        guard let session = sessions.first(where: { $0.id == id }) else { return }
+        if activeSessionID != id { persistActiveSession() }
+        guard let selected = session(for: id) else { return }
         activeSessionID = id
-        messages = session.messages
-        provider = session.provider
-        model = session.model
-        targetRoot = session.targetRoot
-        pendingApproval = session.pendingApproval
-        taskState = pendingApproval == nil ? "—" : "approval_required"
+        messages = selected.messages
+        provider = selected.provider
+        model = selected.model
+        targetRoot = selected.targetRoot
+        lastError = nil
+
+        let flow = CAPTChatFlow(pending: selected.pendingApproval)
+        setChatFlow(flow, for: id)
+        if let pending = selected.pendingApproval, pending.isExpired() {
+            expireLocalApproval(
+                sessionID: id,
+                pending: pending,
+                detail: "Prompt approval expired while this chat was inactive. Submit the prompt again to mint a fresh approval."
+            )
+        } else {
+            taskState = selected.pendingApproval == nil ? "—" : "approval_required"
+        }
     }
 
     private func ensureActiveSession(titleFrom objective: String) {
         if activeSessionID == nil {
             let title = String(objective.prefix(72))
             let session = CAPTNativeSession(
-                title: title, messages: messages, provider: provider,
-                model: model, targetRoot: targetRoot
+                title: title,
+                messages: messages,
+                provider: provider,
+                model: model,
+                targetRoot: targetRoot
             )
             sessions.insert(session, at: 0)
             activeSessionID = session.id
+            chatFlows[session.id] = CAPTChatFlow()
         } else if let id = activeSessionID,
                   let index = sessions.firstIndex(where: { $0.id == id }),
                   sessions[index].title == "New Chat" {
@@ -492,10 +674,62 @@ final class CAPTOperatorStore: ObservableObject {
         }
     }
 
-    private func bindActiveSession(to missionID: String) {
-        guard let id = activeSessionID,
-              let index = sessions.firstIndex(where: { $0.id == id }) else { return }
+    private func session(for id: UUID) -> CAPTNativeSession? {
+        sessions.first(where: { $0.id == id })
+    }
+
+    private func pendingApproval(for id: UUID) -> CAPTPendingApproval? {
+        session(for: id)?.pendingApproval
+    }
+
+    private func chatFlow(for id: UUID) -> CAPTChatFlow {
+        chatFlows[id] ?? CAPTChatFlow(pending: pendingApproval(for: id))
+    }
+
+    private func setChatFlow(_ flow: CAPTChatFlow, for id: UUID) {
+        chatFlows[id] = flow
+    }
+
+    private func setPendingApproval(_ pending: CAPTPendingApproval?, for id: UUID) {
+        guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
+        sessions[index].pendingApproval = pending
+    }
+
+    private func appendMessage(_ message: CAPTChatMessage, to id: UUID) {
+        guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
+        sessions[index].messages.append(message)
+        if activeSessionID == id {
+            messages = sessions[index].messages
+        }
+    }
+
+    private func bindSession(_ id: UUID, to missionID: String) {
+        guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
         if sessions[index].missionID == nil { sessions[index].missionID = missionID }
+    }
+
+    private func expireLocalApproval(
+        sessionID: UUID,
+        pending: CAPTPendingApproval,
+        detail: String
+    ) {
+        setPendingApproval(nil, for: sessionID)
+        var flow = chatFlow(for: sessionID)
+        _ = flow.executionFailed(
+            message: "PROMPT_APPROVAL_EXPIRED: \(detail)",
+            pending: pending
+        )
+        setChatFlow(flow, for: sessionID)
+        appendMessage(CAPTChatMessage(
+            role: .system,
+            text: detail,
+            authorityState: "approval_expired"
+        ), to: sessionID)
+        if activeSessionID == sessionID {
+            taskState = "approval_expired"
+            lastError = detail
+        }
+        persistSession(sessionID)
     }
 
     private func persistActiveSession() {
@@ -505,22 +739,63 @@ final class CAPTOperatorStore: ObservableObject {
         sessions[index].provider = provider
         sessions[index].model = model
         sessions[index].targetRoot = targetRoot
-        sessions[index].pendingApproval = pendingApproval
+        persistSession(id)
+    }
+
+    private func persistSession(_ id: UUID) {
+        guard let index = sessions.firstIndex(where: { $0.id == id }) else { return }
         sessions[index].updatedAt = Date()
         let current = sessions.remove(at: index)
         sessions.insert(current, at: 0)
+        saveSessions()
+    }
+
+    private func saveSessions() {
         do { try sessionStore.save(sessions) }
         catch { lastError = "Native session cache: " + error.localizedDescription }
     }
 
     private func handle(_ error: Error) {
-        let message = error.localizedDescription
-        lastError = message
-        messages.append(CAPTChatMessage(
+        lastError = error.localizedDescription
+    }
+
+    private func handleChat(
+        _ error: Error,
+        sessionID: UUID,
+        authorityState: String = "error",
+        messageOverride: String? = nil
+    ) {
+        let message = messageOverride ?? error.localizedDescription
+        if activeSessionID == sessionID { lastError = message }
+        appendMessage(CAPTChatMessage(
             role: .system,
             text: message,
-            authorityState: "error"
-        ))
-        persistActiveSession()
+            authorityState: authorityState
+        ), to: sessionID)
+        persistSession(sessionID)
+    }
+
+    private static func storeProviderSecret(_ secret: String, account: String) throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "capt-provider",
+            kSecAttrAccount as String: account,
+        ]
+        let value = Data(secret.utf8)
+        let updateStatus = SecItemUpdate(
+            query as CFDictionary,
+            [kSecValueData as String: value] as CFDictionary
+        )
+        if updateStatus == errSecSuccess { return }
+        guard updateStatus == errSecItemNotFound else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(updateStatus))
+        }
+        var add = query
+        add[kSecValueData as String] = value
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        let addStatus = SecItemAdd(add as CFDictionary, nil)
+        guard addStatus == errSecSuccess else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(addStatus))
+        }
     }
 }
