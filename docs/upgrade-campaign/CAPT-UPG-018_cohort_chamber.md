@@ -3,7 +3,7 @@
 - **Campaign ID:** `CAPT-UPG-018`
 - **Issue:** #103
 - **Base:** verified CAPT-UPG-017 @ `29ff2794884f54479dc0ce4eaf34cd10006479e2`
-- **Disposition before exact-commit gate:** `IMPLEMENTED_PENDING_EXACT_COMMIT_VERIFICATION`
+- **Disposition:** `IMPLEMENTED_VERIFIED_READY_FOR_OWNER_REVIEW`
 
 ## Product boundary
 
@@ -132,14 +132,27 @@ focused Chamber projection/operator/surface gate: 13 passed
 full non-slow suite: 1011 passed, 13 skipped, 12 deselected
 ```
 
-## Exact-head / package acceptance required
+## Exact-head verification and package acceptance
 
-After commit creation, rerun contract drift, the 13-test focused gate, and the full non-slow suite. Then build/install the wheel and prove:
+Final implementation head before this evidence-only update: `aef05e8282236340c2dfa9d89f8a1fda41f145d5`.
 
-- `capt-cohort --help`;
-- `capt-cohort-tui --help`;
-- installed projection/Tk/Textual imports;
-- installed `capt-cohort --headless` against an authenticated runtime with real durable Cohort state;
-- installed Tk launch smoke on the CAPT-qualified Python 3.12 desktop toolchain.
+```text
+DRIFT CHECK: OK (11 generated files match the schema source)
+focused Chamber projection/operator/surface gate: 13 passed
+full non-slow suite: 1011 passed, 13 skipped, 12 deselected
+```
 
-No claim extends to repository tests excluded by the `slow` marker or to exhaustive visual QA.
+Wheel/install acceptance from the exact implementation head:
+
+```text
+upg018_installed_imports=PASS
+capt-cohort --help: PASS
+capt-cohort-tui --help: PASS
+upg018_installed_headless=PASS
+upg018_installed_tk_smoke=PASS
+upg018_installed_textual_smoke=PASS
+```
+
+The first clean-venv attempt intentionally used `--no-deps` and failed to import the Textual surface because `textual` was absent; the package declares `textual>=0.80` as a runtime dependency. A normal clean wheel install resolved the declared dependency and all installed acceptance paths passed. This is dependency-install evidence, not a CAPT functional failure.
+
+No claim extends to repository tests excluded by the `slow` marker or to exhaustive visual QA. Drift/focused/full gates are rerun after this final evidence-only commit so the PR head itself remains verified.
