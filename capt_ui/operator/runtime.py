@@ -2,7 +2,7 @@
 
 A thin, surface-agnostic wrapper over RuntimeClient that exposes a stable
 operator API consumed by CLI, TUI, Desktop, and future Web surfaces.
-All mutations route through governed command ops; epistemic state is projection only.
+All mutations route through governed command ops; UI-derived state is projection only.
 """
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 from .contract import ApproxRequest, Dashboard, EvidenceView, OperatorStatus, RuntimeHealth, health_of
 from .epistemics import project_epistemic_ladder
+from .leases import project_capability_leases
 
 try:
     from desktop.desktop_runtime_client import (  # type: ignore
@@ -114,6 +115,17 @@ class Operator:
         dash.evidence = EvidenceView(verification=dash.verification)
         return dash
 
+    def capability_leases(self, now: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Project current authoritative capability/lease states for display."""
+        states: List[Dict[str, Any]] = []
+        for aggregate in self._client.list_aggregates():
+            if aggregate.get("kind") != "capability":
+                continue
+            state = self._client.get_state(aggregate["streamId"])
+            if state:
+                states.append(state)
+        return project_capability_leases(states, now=now)
+
     def create_mission(self, payload: Dict[str, Any], idempotency_key: Optional[str] = None) -> Dict[str, Any]:
         return self._client.command("create_mission", payload, idempotency_key)
 
@@ -131,6 +143,27 @@ class Operator:
 
     def steer_deliberation(self, cohort_id: str, directive: str, *, reason: str = "operator steering") -> Dict[str, Any]:
         return self._client.command("steer_deliberation", {"cohortId": cohort_id, "directive": directive, "reason": reason})
+
+    def revoke_capability(
+        self,
+        grant_id: str,
+        *,
+        target_kind: str,
+        target_id: str,
+        reason: str,
+        revocation_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Request governed grant/lease revocation through RuntimeService authority."""
+        payload: Dict[str, Any] = {
+            "grantId": grant_id,
+            "targetKind": target_kind,
+            "targetId": target_id,
+            "reason": reason,
+        }
+        if revocation_id:
+            payload["revocationId"] = revocation_id
+        return self._client.command("revoke_capability", payload, idempotency_key)
 
     def update_memory_policy(self, payload: Dict[str, Any], idempotency_key: Optional[str] = None) -> Dict[str, Any]:
         return self._client.command("update_memory_trigger_policy", payload, idempotency_key)
