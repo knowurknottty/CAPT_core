@@ -1,0 +1,1 @@
+Temporary synchronization target: after repaired CAPT-UPG-007 is merged into CAPT-UPG-008, synchronize the updated CAPT-UPG-008 lineage into CAPT-UPG-009 before exact-head verification.
