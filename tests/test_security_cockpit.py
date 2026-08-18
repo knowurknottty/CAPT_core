@@ -99,3 +99,25 @@ def test_summary_never_emits_universal_security_claim():
     assert "No universal 'CAPT is secure' verdict" in text
     assert "C-FAIL" in text
     assert "C-UNKNOWN" in text
+
+
+def test_missing_or_noncanonical_source_sha_cannot_render_as_verified_pass():
+    raw = _result()
+    raw["sourceSha"] = ""
+    cockpit = project_security_cockpit(raw)
+    by_id = {row["controlId"]: row for row in cockpit["controls"]}
+    assert by_id["C-PASS"]["status"] == "not_verified"
+    assert by_id["C-PASS"]["isPass"] is False
+    assert cockpit["gateDecision"] == "BLOCKED"
+    assert "source SHA" in by_id["C-PASS"]["reason"]
+
+
+def test_pass_without_evidence_reference_cannot_render_as_verified_pass():
+    raw = _result()
+    raw["results"][0]["evidence_refs"] = []
+    cockpit = project_security_cockpit(raw)
+    row = next(r for r in cockpit["controls"] if r["controlId"] == "C-PASS")
+    assert row["status"] == "not_verified"
+    assert row["evidenceMissing"] is True
+    assert row["isPass"] is False
+    assert cockpit["gateDecision"] == "BLOCKED"

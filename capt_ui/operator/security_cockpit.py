@@ -24,14 +24,24 @@ def project_security_cockpit(result: Mapping[str, Any]) -> Dict[str, Any]:
         status = str(raw.get("status") or "not_verified")
         if status not in computed_counts:
             status = "not_verified"
-        computed_counts[status] += 1
         reason = str(raw.get("reason") or "")
-        stale = status == "not_verified" and "stale:" in reason.lower()
-        missing = status == "not_verified" and not stale
         control_id = str(raw.get("control_id") or raw.get("controlId") or "")
         refs = raw.get("evidence_refs")
         if refs is None:
             refs = raw.get("evidenceRefs") or []
+        refs = list(refs or [])
+        # A PASS without an exact source identity or evidence reference cannot
+        # be represented as verified by the Cockpit, even if a malformed or
+        # hand-crafted upstream object says PASS. Fail closed in projection.
+        if status == "pass" and not source_sha:
+            status = "not_verified"
+            reason = "PASS result is missing exact source SHA binding"
+        elif status == "pass" and not refs:
+            status = "not_verified"
+            reason = "PASS result is missing verification evidence reference"
+        computed_counts[status] += 1
+        stale = status == "not_verified" and "stale:" in reason.lower()
+        missing = status == "not_verified" and not stale
         rows.append(
             {
                 "controlId": control_id,
@@ -41,7 +51,7 @@ def project_security_cockpit(result: Mapping[str, Any]) -> Dict[str, Any]:
                 "releaseBlocking": bool(raw.get("release_blocking", raw.get("releaseBlocking", True))),
                 "blocksCurrentGate": control_id in blocking,
                 "reason": reason,
-                "evidenceRefs": list(refs or []),
+                "evidenceRefs": refs,
                 "sourceSha": source_sha,
                 "evidenceStale": stale,
                 "evidenceMissing": missing,
@@ -52,6 +62,11 @@ def project_security_cockpit(result: Mapping[str, Any]) -> Dict[str, Any]:
 
     # Preserve the gate's own decision but label it narrowly. It is a gate
     # decision over this profile/source SHA, not a universal security verdict.
+    projected_blockers = sorted(
+        row["controlId"] for row in rows
+        if row["releaseBlocking"] and row["status"] in ("fail", "not_verified")
+    )
+    blocking.update(projected_blockers)
     decision = str(result.get("decision") or "BLOCKED")
     if blocking and decision == "PASS":
         decision = "BLOCKED"
