@@ -55,8 +55,10 @@ public enum CAPTOperatorCLIError: Error, LocalizedError {
 }
 public struct CAPTOperatorCLI {
     public let executablePath: String
+    public let stateDirectory: String?
 
-    public init(executablePath: String? = nil) {
+    public init(executablePath: String? = nil, stateDirectory: String? = nil) {
+        self.stateDirectory = stateDirectory.map { NSString(string: $0).expandingTildeInPath }
         if let executablePath {
             self.executablePath = executablePath
         } else {
@@ -138,6 +140,11 @@ public struct CAPTOperatorCLI {
         let stderr = Pipe()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = arguments
+        if let stateDirectory {
+            var environment = ProcessInfo.processInfo.environment
+            environment["CAPT_STATE_DIR"] = stateDirectory
+            process.environment = environment
+        }
         process.standardOutput = stdout
         process.standardError = stderr
         do { try process.run() }

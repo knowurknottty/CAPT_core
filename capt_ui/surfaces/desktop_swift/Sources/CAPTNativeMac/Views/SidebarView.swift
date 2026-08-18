@@ -7,6 +7,7 @@ enum CAPTSidebarSection: String, CaseIterable, Identifiable {
     case providers = "Providers"
     case memory = "Memory"
     case evidence = "Evidence"
+    case labs = "Labs"
     case runtime = "Runtime"
     case ledger = "Ledger"
     case settings = "Settings"
@@ -21,6 +22,7 @@ enum CAPTSidebarSection: String, CaseIterable, Identifiable {
         case .providers: return "cpu"
         case .memory: return "brain.head.profile"
         case .evidence: return "checkmark.seal"
+        case .labs: return "flask"
         case .runtime: return "externaldrive.connected.to.line.below"
         case .ledger: return "list.bullet.rectangle.portrait"
         case .settings: return "gearshape"
@@ -97,6 +99,7 @@ struct SidebarView: View {
         case .missions: return store.missions.count
         case .approvals: return store.pendingApprovals.count
         case .evidence: return store.evidenceItems.count
+        case .labs: return store.labEngines.count
         case .ledger: return store.recentEvents.count
         default: return nil
         }

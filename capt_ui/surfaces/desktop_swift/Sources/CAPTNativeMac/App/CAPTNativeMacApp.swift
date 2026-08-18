@@ -1,9 +1,10 @@
 import SwiftUI
 import AppKit
 import OSLog
+import CAPTCoreDesktop
 
 enum CAPTAppTelemetry {
-    static let log = Logger(subsystem: "com.inversionlabs.capt", category: "lifecycle")
+    static let log = Logger(subsystem: "com.inversionlabs.capt.lab", category: "lifecycle")
 }
 
 final class CAPTAppDelegate: NSObject, NSApplicationDelegate {
@@ -24,10 +25,32 @@ final class CAPTAppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct CAPTNativeMacApp: App {
     @NSApplicationDelegateAdaptor(CAPTAppDelegate.self) private var appDelegate
-    @StateObject private var store = CAPTOperatorStore()
+    @StateObject private var store: CAPTOperatorStore
+
+    init() {
+        let environment = ProcessInfo.processInfo.environment
+        let stateRoot: URL
+        if let override = environment["CAPT_LAB_STATE_DIR"], !override.isEmpty {
+            stateRoot = URL(fileURLWithPath: NSString(string: override).expandingTildeInPath, isDirectory: true)
+        } else {
+            stateRoot = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(".capt-inversion-labs", isDirectory: true)
+        }
+        let sessionStore = CAPTEncryptedSessionStore(
+            fileURL: stateRoot.appendingPathComponent("ui/native_sessions.enc"),
+            keyProvider: CAPTKeychainSessionKeyProvider(
+                service: "com.inversionlabs.capt.lab.native-session-cache",
+                account: "signed-session-key-v1"
+            )
+        )
+        _store = StateObject(wrappedValue: CAPTOperatorStore(
+            runtime: CAPTBackgroundRuntime(stateDirectory: stateRoot.path),
+            sessionStore: sessionStore
+        ))
+    }
 
     var body: some Scene {
-        Window("CAPT Chat", id: "capt-main") {
+        Window("Inversion Labs CAPT", id: "capt-lab-main") {
             ContentView(store: store)
                 .frame(minWidth: 1120, minHeight: 720)
                 .onAppear { CAPTAppTelemetry.log.notice("ContentView appeared windows=\(NSApp.windows.count)") }

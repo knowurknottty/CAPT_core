@@ -47,6 +47,8 @@ struct ContentView: View {
             MemoryContextView(store: store)
         case .evidence:
             EvidenceBrowserView(store: store)
+        case .labs:
+            LabsView(store: store)
         case .ledger:
             LedgerView(store: store)
         case .runtime:
@@ -55,7 +57,7 @@ struct ContentView: View {
             InfoSurface(
                 title: "Settings",
                 symbol: "gearshape",
-                detail: "CAPT state paths follow CAPT_STATE_DIR or ~/.capt. Credentials remain outside the app."
+                detail: "Inversion Labs CAPT uses CAPT_LAB_STATE_DIR or ~/.capt-inversion-labs. Child CAPT processes receive that root through the canonical CAPT_STATE_DIR runtime contract; credentials remain outside the app."
             )
         }
     }
