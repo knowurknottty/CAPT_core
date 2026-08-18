@@ -46,6 +46,12 @@ public struct CAPTChatMessage: Identifiable, Codable, Equatable, Sendable {
     }
 }
 
+public enum CAPTApprovalValidity: String, Equatable, Sendable {
+    case valid
+    case expired
+    case unknown
+}
+
 public struct CAPTPendingApproval: Codable, Equatable, Sendable {
     public let requestID: String
     public let missionID: String
@@ -82,8 +88,16 @@ public struct CAPTPendingApproval: Codable, Equatable, Sendable {
         self.expiresAt = expiresAt
     }
 
+    public func validity(at date: Date = Date()) -> CAPTApprovalValidity {
+        guard let expiresAt else { return .unknown }
+        return expiresAt <= date ? .expired : .valid
+    }
+
     public func isExpired(at date: Date = Date()) -> Bool {
-        guard let expiresAt else { return false }
-        return expiresAt <= date
+        validity(at: date) == .expired
+    }
+
+    public func isActionable(at date: Date = Date()) -> Bool {
+        validity(at: date) == .valid
     }
 }
