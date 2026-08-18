@@ -31,7 +31,7 @@ UI = BASE / 'state' / 'ui'; UI.mkdir(parents=True, exist_ok=True)
     {"id": "ollama", "name": "Ollama", "kind": "local", "transport": "ollama",
      "base_url": "http://localhost:11434/v1", "key_ref": "", "context_limit": 8192,
      "enabled": True, "selected": False,
-     "models": ["qwen3.5-defiant-fable:latest", "qwen3.6-fable-fusion:latest"],
+     "models": ["qwen3.5-defiant-fable:latest", "ornith-1.0-9b:latest"],
      "capabilities": ["chat"]}]}, indent=2))
 TARGET = REPO  # read-only target
 EVID = {}
@@ -65,7 +65,7 @@ def connect_client(sock=SOCK, tok=TOKEN, timeout=60):
             time.sleep(0.5)
     raise RuntimeError("cannot connect")
 
-def runc(cmd, payload, key, timeout=120):
+def runc(cmd, payload, key, timeout=600):
     c = connect_client(timeout=timeout)
     try: return c.command(cmd, payload, key)
     finally: c.disconnect()
@@ -157,23 +157,23 @@ EVID['continuationSelected'] = {
 }
 
 # ---------------- MODEL B (different model, SAME mission) ----------------
-print('=== MODEL B: Ollama qwen3.6-fable-fusion:latest (same mission, governed continuation) ===')
+print('=== MODEL B: Ollama ornith-1.0-9b:latest (same mission, governed continuation) ===')
 objB = 'Continue MK-B-' + NONCE_B + '.'
 # Model B must reuse Model A's missionId/taskId (successor task under same mission)
 planB = runc('request_model_prompt_approval', {'objective': objB, 'targetRoot': TARGET,
-    'provider': 'ollama', 'model': 'qwen3.6-fable-fusion:latest',
+    'provider': 'ollama', 'model': 'ornith-1.0-9b:latest',
     'missionId': reqA['missionId'], 'taskId': reqA['taskId'],
     'requestedContextBudget': 32000, 'responseMode': 'SPOCK', 'promptEnhancement': 'OFF',
     'humanVerificationRequired': True}, 'B-approval')
 reqB = planB['result']
 EVID['modelB'] = {'missionId': reqB['missionId'], 'taskId': reqB['taskId'],
                   'driverRunId': reqB['driverRunId'], 'provider': 'ollama',
-                  'model': 'qwen3.6-fable-fusion:latest'}
+                  'model': 'ornith-1.0-9b:latest'}
 EVID['modelB']['sameMissionLineage'] = (reqB['missionId'] == reqA['missionId'])
 runc('submit_approval_decision', {'requestId': reqB['requestId'], 'decision': 'approve',
      'note': 'user-auth Model B continuation'}, 'B-decision')
 runB = runc('run_approved_hermes_inspection', {'objective': objB, 'targetRoot': TARGET,
-    'provider': 'ollama', 'model': 'qwen3.6-fable-fusion:latest',
+    'provider': 'ollama', 'model': 'ornith-1.0-9b:latest',
     'missionId': reqA['missionId'], 'taskId': reqA['taskId'], 'driverRunId': reqB['driverRunId'],
     'approvalRequestId': reqB['requestId'], 'requestedContextBudget': 32000,
     'responseMode': 'SPOCK', 'promptEnhancement': 'OFF', 'humanVerificationRequired': True}, 'B-run')
