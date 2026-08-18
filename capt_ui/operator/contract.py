@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 
 class RuntimeHealth(str, Enum):
@@ -19,8 +19,6 @@ class RuntimeHealth(str, Enum):
 
 
 class Verbosity(str, Enum):
-    """CaveCAPT operator-controlled verbosity (UI-2). Presentation only."""
-
     MINIMAL = "minimal"
     NORMAL = "normal"
     DETAILED = "detailed"
@@ -50,8 +48,6 @@ class ProviderHealth(str, Enum):
 
 
 class ModelScope(str, Enum):
-    """Where a model selection applies (UI-1 / Phase 3)."""
-
     DEFAULT = "default"
     MISSION = "mission"
     TEMPORARY = "temporary"
@@ -60,8 +56,6 @@ class ModelScope(str, Enum):
 
 @dataclass
 class OperatorStatus:
-    """Top-line runtime status shown in every surface."""
-
     health: RuntimeHealth = RuntimeHealth.UNKNOWN
     runtime_version: str = ""
     integrity: str = ""
@@ -107,16 +101,19 @@ class Dashboard:
     tasks: List[Dict[str, Any]] = field(default_factory=list)
     approvals: List[ApproxRequest] = field(default_factory=list)
     driver_runs: List[Dict[str, Any]] = field(default_factory=list)
+    claims: List[Dict[str, Any]] = field(default_factory=list)
     events: List[Dict[str, Any]] = field(default_factory=list)
     evidence: EvidenceView = field(default_factory=EvidenceView)
+    # Compatibility scalar only. Claim-aware surfaces should use the fields below.
     verification: Dict[str, Any] = field(default_factory=dict)
+    verifications_by_claim: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    epistemic_ladder: List[Dict[str, Any]] = field(default_factory=list)
     ledger_chain_digest: str = ""
     provider_status: Dict[str, Any] = field(default_factory=dict)
     memory: Dict[str, Any] = field(default_factory=dict)
 
 
 def health_of(identity: Dict[str, Any], connected: bool) -> RuntimeHealth:
-    """Derive operator health from the authoritative identity."""
     if not connected:
         return RuntimeHealth.STOPPED
     if identity.get("integrity") == "ok":
@@ -125,5 +122,4 @@ def health_of(identity: Dict[str, Any], connected: bool) -> RuntimeHealth:
 
 
 def verdict_ok(evidence: EvidenceView) -> bool:
-    """True when the ClaimGuard/verification accepted the claim."""
     return evidence.verdict in ("accept", "approved", "verified")
