@@ -121,6 +121,8 @@ class GovernedRuntimeService(RuntimeService):
                 "evidenceId": evidence["evidenceId"],
                 "contentDigest": current["contentDigest"],
                 "destinationPath": current["destinationPath"],
+                "authorizedBy": metadata["actor"]["actorId"],
+                "authorizedAt": metadata["issuedAt"],
             },
             metadata=metadata,
             occurred_at=metadata["issuedAt"],
@@ -144,9 +146,6 @@ class GovernedRuntimeService(RuntimeService):
         if current.get("state") != "authorized":
             raise AuthorityViolation("artifact promotion is not authorized for adoption")
 
-        # Re-check current verification if staged source still exists. If the
-        # destination already contains the exact digest, atomic_adopt handles
-        # process-death reconciliation after a prior os.replace.
         destination = str(current["destinationPath"])
         destination_matches = False
         try:
@@ -164,7 +163,12 @@ class GovernedRuntimeService(RuntimeService):
             event_id=metadata["commandId"] + "-ev1",
             stream_id=stream,
             event_type="ArtifactPromotionAdopted",
-            payload={"eventType": "ArtifactPromotionAdopted", "promotionId": promotion_id, "receipt": receipt},
+            payload={
+                "eventType": "ArtifactPromotionAdopted",
+                "promotionId": promotion_id,
+                "receipt": receipt,
+                "adoptedAt": metadata["issuedAt"],
+            },
             metadata=metadata,
             occurred_at=metadata["issuedAt"],
         )
@@ -189,7 +193,12 @@ class GovernedRuntimeService(RuntimeService):
             event_id=metadata["commandId"] + "-ev1",
             stream_id=stream,
             event_type="ArtifactPromotionDiscarded",
-            payload={"eventType": "ArtifactPromotionDiscarded", "promotionId": promotion_id, "reason": reason},
+            payload={
+                "eventType": "ArtifactPromotionDiscarded",
+                "promotionId": promotion_id,
+                "reason": reason,
+                "discardedAt": metadata["issuedAt"],
+            },
             metadata=metadata,
             occurred_at=metadata["issuedAt"],
         )
