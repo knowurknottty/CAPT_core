@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1.0.0",
+  "note": "Template only. Replace with observed trial records; do not cite this file as benchmark evidence.",
+  "trials": [
+    {
+      "trialId": "replace-me",
+      "mode": "independent_reviewer",
+      "defectPresent": true,
+      "flagged": false,
+      "generatorIdentity": "generator-model-id",
+      "reviewerIdentity": "different-reviewer-model-id",
+      "verificationDomain": null,
+      "tokens": 0,
+      "costUsd": 0.0,
+      "latencyMs": 0.0,
+      "evidenceRef": "replace-with-observed-run-evidence"
+    }
+  ]
+}
