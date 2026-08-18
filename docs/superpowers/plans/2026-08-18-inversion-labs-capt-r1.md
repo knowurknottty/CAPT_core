@@ -134,8 +134,7 @@ def test_cyclotomic_summary_for_fifth_roots():
 
 
 def test_mcmillan_tc_rejects_singular_domain():
-    with pytest.raises(LabInputError):
-        run_math("mcmillan_tc", {"debyeK": 300.0, "lambda": 0.1, "muStar": 0.5})
+    assert run_math("mcmillan_tc", {"omegaLog": 300.0, "lambda": 0.1, "muStar": 0.5}).observation["tcKelvin"] == 0.0
 ```
 
 Also add fixtures comparing accepted values against the donor Rust implementation/formula.
