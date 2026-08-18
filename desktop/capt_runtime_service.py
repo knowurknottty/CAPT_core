@@ -728,11 +728,12 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 # model-visible assembly. Client booleans are provenance only;
                 # no client can use OFF/no-transform as a governance bypass.
                 approval_request_id = payload.get("approvalRequestId")
-                if approval_request_id:
-                    svc.require_approved_prompt_assembly(
-                        str(approval_request_id), prompt_assembly.get("promptAssemblyDigest") or prompt_assembly.get("assemblyDigest", ""),
-                        "ModelOperatorInspection",
-                    )
+                if not approval_request_id:
+                    raise AuthorityViolation("MODEL_PROMPT_APPROVAL_RECEIPT_REQUIRED")
+                svc.require_approved_prompt_assembly(
+                    str(approval_request_id), prompt_assembly.get("promptAssemblyDigest") or prompt_assembly.get("assemblyDigest", ""),
+                    "ModelOperatorInspection",
+                )
                 admission = store.claim_command(key, command_fingerprint, command["commandId"])
                 if admission.get("replayed"):
                     return {**admission, "_idempotent": admission.get("status") != "in_progress"}

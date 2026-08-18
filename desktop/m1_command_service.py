@@ -294,10 +294,11 @@ class RuntimeCommandService:
             # Classification comes from the runtime's own error taxonomy
             # (errors.py sets .category). The desktop does not re-derive it.
             classification = getattr(exc, "category", "internal_failure")
+            error_code = str(exc) if str(exc) else type(exc).__name__.upper()
             return self._receipt(
                 cmd, status="rejected", classification=classification,
-                error=self._error_envelope(cmd, classification, type(exc).__name__.upper()),
-                detail=str(exc)[:240],
+                error=self._error_envelope(cmd, classification, error_code),
+                detail=str(exc),
             )
         except Exception as exc:  # noqa: BLE001
             return self._receipt(

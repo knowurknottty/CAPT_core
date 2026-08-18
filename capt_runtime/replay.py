@@ -80,6 +80,7 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         "CapabilityGranted",
         "DriverRunCreated",
         "ClaimCreated",
+        "HumanApprovalRequested",
     )
     if event_type not in _CREATION_EVENTS and current is None:
         # A mutation event on a stream with no prior state means the ledger is
@@ -139,6 +140,12 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         nxt = ClaimAggregate.record_verification(existing(), payload["verification"])
     elif event_type == "ClaimGuardDecided":
         nxt = ClaimAggregate.decide(existing(), payload["decision"])
+    elif event_type == "HumanApprovalRequested":
+        from capt_runtime.aggregates.human_approval import HumanApprovalAggregate
+        nxt = HumanApprovalAggregate.create(payload["request"])
+    elif event_type == "HumanApprovalDecided":
+        from capt_runtime.aggregates.human_approval import HumanApprovalAggregate
+        nxt = HumanApprovalAggregate.decide(existing(), payload["decision"], payload.get("decidedAt") or envelope.get("recordedAt", ""))
     elif event_type in ("CheckpointCreated", "MissionResumed"):
         # Bookkeeping events: they advance the stream version but carry no
         # aggregate state change.

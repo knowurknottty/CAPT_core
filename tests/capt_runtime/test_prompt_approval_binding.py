@@ -1,11 +1,30 @@
 from __future__ import annotations
 
+import os
+import time
 import pytest
 
 from capt_runtime import commands
 from capt_runtime.errors import AuthorityViolation
 from capt_runtime.services import RuntimeService
 from capt_runtime.store import EventStore
+from desktop.capt_runtime_service import serve as serve_runtime
+from desktop.desktop_runtime_client import RuntimeClient
+
+
+def _start(tmp):
+    import tempfile
+    short_dir = tempfile.mkdtemp(prefix="/tmp/cpt_")
+    ledger = os.path.join(short_dir, "rt.db")
+    sock = os.path.join(short_dir, "rt.sock")
+    token_file = os.path.join(short_dir, "token")
+    import threading
+    threading.Thread(target=serve_runtime, args=(ledger, sock, token_file, False), daemon=True).start()
+    for _ in range(100):
+        if os.path.exists(sock):
+            break
+        time.sleep(0.05)
+    return sock, token_file, ledger
 
 DIGEST = "sha256:" + "a" * 64
 
@@ -45,6 +64,25 @@ def test_durable_approved_prompt_digest_is_required_and_survives_restart(tmp_pat
     store = EventStore(db); svc = RuntimeService(store)
     assert svc.require_approved_prompt_assembly("r-1", DIGEST, "ModelOperatorInspection")["promptAssemblyDigest"] == DIGEST
     store.close()
+
+
+def test_missing_approval_receipt_fails_closed(tmp_path):
+    """Negative gate: omission of approvalRequestId must fail closed before dispatch."""
+    sock, token_file, ledger = _start(str(tmp_path))
+    c = RuntimeClient(sock, token_file)
+    c.connect()
+    try:
+        # Calling run_approved_hermes_inspection without approvalRequestId must be rejected with classification authority
+        res = c.command(
+            "run_approved_hermes_inspection",
+            {"objective": "Inspect target", "targetRoot": str(tmp_path)},
+            idempotency_key="idem-no-approval",
+        )
+        assert res["status"] == "rejected"
+        assert res["classification"] == "authority"
+        assert res["error"]["code"] == "MODEL_PROMPT_APPROVAL_RECEIPT_REQUIRED"
+    finally:
+        c.disconnect()
 
 
 def test_unapproved_and_stale_or_wrong_digest_receipts_fail_closed(tmp_path):

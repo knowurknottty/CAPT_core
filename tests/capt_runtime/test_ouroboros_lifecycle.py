@@ -27,6 +27,21 @@ from desktop.desktop_runtime_client import (
 def _start_runtime(tmp: Path, *, env: dict | None = None):
     tmp.mkdir(parents=True, exist_ok=True)
     ledger, token = tmp / "runtime.db", tmp / "token"
+    _seed_approval_for_lifecycle(ledger, "req-ouro-happy")
+    _seed_approval_for_lifecycle(ledger, "req-ouro-failure")
+    _seed_approval_for_lifecycle(ledger, "req-ouro-nodispatch")
+    _seed_approval_for_lifecycle(ledger, "req-ouro-restart")
+    _seed_approval_for_lifecycle(ledger, "req-ouro-projection")
+    _seed_approval_for_lifecycle(ledger, "req-ouro-indeterminate")
+    _seed_approval_for_lifecycle(ledger, "req-ouro-idem")
+    _seed_approval_for_lifecycle(ledger, "req-ouro-crash-reservation")
+    _seed_approval_for_lifecycle(ledger, "req-ouro-crash-dispatch")
+    _seed_approval_for_lifecycle(ledger, "req-ouro-crash-driver_completed")
+    _seed_approval_for_lifecycle(ledger, "req-ouro-crash-capability_finalized")
+    _seed_approval_for_lifecycle(ledger, "req-ouro-crash-evidence_recorded")
+    _seed_approval_for_lifecycle(ledger, "req-ouro-crash-verification_recorded")
+    _seed_approval_for_lifecycle(ledger, "req-ouro-crash-claim_decided")
+    _seed_approval_for_lifecycle(ledger, "req-ouro-crash-task_terminal")
     sock = Path("/tmp") / ("capt-ouro-%s-%s.sock" % (os.getpid(), time.time_ns()))
     root = Path(__file__).resolve().parents[2]
     proc = __import__("subprocess").Popen(
@@ -85,8 +100,67 @@ def _fake_hermes(tmp: Path, *, mutate: bool = False, fail: bool = False, marker:
     return exe
 
 
-def _payload(repo: Path, executable: Path, suffix: str) -> dict:
-    return {
+def _seed_approval_for_lifecycle(ledger_path: Path, req_id: str, objective: str = "Inspect the bounded repository.") -> None:
+    from capt_runtime import commands, contracts
+    from capt_runtime.store import EventStore
+    from capt_runtime.services import RuntimeService
+    from capt_runtime.operator_provenance import build_prompt_assembly
+    prompt_assembly = build_prompt_assembly(
+        human_prompt=str(objective),
+        response_mode="SPOCK",
+        enhancement_engine="OFF",
+        context_pack_digest=contracts.digest({"context": "not-selected-at-admission"}),
+        tool_schema_digest=contracts.digest({"operations": ["RepositoryRead", "FilesystemRead", "ArtifactCreate", "AnalysisOnly"]}),
+    )
+    digest = prompt_assembly.get("promptAssemblyDigest") or prompt_assembly.get("assemblyDigest", "")
+    req = {
+        "schemaVersion": "1.0.0",
+        "requestId": req_id,
+        "missionId": "m-ouro-" + req_id,
+        "taskId": "t-ouro-" + req_id,
+        "requestedCapability": "cap.fs.read",
+        "resource": "/tmp",
+        "operation": "ModelOperatorInspection",
+        "scope": {"kind": "filesystem", "rootPath": "/tmp", "recursive": True},
+        "riskClassification": "low",
+        "policyReason": "Approve exact model-visible prompt.",
+        "requestedBy": {"actorId": "exec-1", "kind": "execution_plane"},
+        "expiresAt": "2030-01-01T00:00:00Z",
+        "correlationId": "corr-" + req_id,
+        "createdAt": "2026-08-16T00:00:00Z",
+        "promptAssemblyDigest": digest,
+    }
+    def _meta(name: str, kind: str):
+        return commands.command(
+            command_id="cmd-" + req_id + "-" + name,
+            idempotency_key="idem-" + req_id + "-" + name,
+            operation_fingerprint=commands.fingerprint(name, {"requestId": req_id}),
+            correlation_id="corr-" + req_id,
+            actor_id="operator",
+            actor_kind=kind,
+            issued_at="2026-08-16T00:00:00Z",
+        )
+    store = EventStore(str(ledger_path))
+    svc = RuntimeService(store)
+    svc.request_human_approval(req, _meta("req", "execution_plane"))
+    decision = {
+        "schemaVersion": "1.0.0",
+        "requestId": req_id,
+        "decision": "approve",
+        "operatorId": "operator",
+        "decidedAt": "2026-08-16T00:00:00Z",
+        "note": "Approved for test lifecycle.",
+        "idempotencyKey": "approve-" + req_id,
+        "correlationId": "corr-" + req_id,
+        "sessionId": "sess-ouro",
+    }
+    svc.submit_human_approval_decision(decision, _meta("dec", "human"))
+    store.close()
+
+
+def _payload(repo: Path, executable: Path, suffix: str, approval_request_id: str | None = None) -> dict:
+    req_id = approval_request_id or ("req-ouro-" + suffix)
+    p = {
         "objective": "Inspect the bounded repository.",
         "targetRoot": str(repo),
         "executable": str(executable),
@@ -97,7 +171,9 @@ def _payload(repo: Path, executable: Path, suffix: str) -> dict:
         "leaseId": "l-ouro-" + suffix,
         "claimId": "cl-ouro-" + suffix,
         "policyDecisionId": "pd-ouro-" + suffix,
+        "approvalRequestId": req_id,
     }
+    return p
 
 
 def _state(client: RuntimeClient, prefix: str, suffix: str) -> dict:
@@ -323,6 +399,7 @@ def test_same_key_replays_durably_and_rejects_different_payload(tmp_path: Path) 
     repo, exe, suffix = _git_repo(tmp_path), _fake_hermes(tmp_path), "idem"
     client, _ledger, proc = _start_runtime(tmp_path / "runtime")
     try:
+        _seed_approval_for_lifecycle(_ledger, "req-ouro-idem-changed", "A different bounded objective.")
         payload = _payload(repo, exe, suffix)
         first = client.command("run_approved_hermes_inspection", payload, "idem-ouro-durable")
         replay = client.command("run_approved_hermes_inspection", payload, "idem-ouro-durable")
@@ -332,6 +409,7 @@ def test_same_key_replays_durably_and_rejects_different_payload(tmp_path: Path) 
         assert [event["payload"]["toState"] for event in states if event["eventType"] == "DriverRunStateChanged"].count("running") == 1
         changed = dict(payload)
         changed["objective"] = "A different bounded objective."
+        changed["approvalRequestId"] = "req-ouro-idem-changed"
         conflict = client.command("run_approved_hermes_inspection", changed, "idem-ouro-durable")
         assert conflict["status"] == "rejected"
         assert conflict["classification"] == "idempotency"
