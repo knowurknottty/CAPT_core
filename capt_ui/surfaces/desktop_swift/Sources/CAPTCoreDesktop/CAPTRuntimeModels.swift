@@ -56,6 +56,7 @@ public struct CAPTPendingApproval: Codable, Equatable, Sendable {
     public let provider: String
     public let model: String
     public let promptAssemblyDigest: String
+    public let expiresAt: Date?
 
     public init(
         requestID: String,
@@ -66,7 +67,8 @@ public struct CAPTPendingApproval: Codable, Equatable, Sendable {
         targetRoot: String,
         provider: String,
         model: String,
-        promptAssemblyDigest: String
+        promptAssemblyDigest: String,
+        expiresAt: Date? = nil
     ) {
         self.requestID = requestID
         self.missionID = missionID
@@ -77,5 +79,11 @@ public struct CAPTPendingApproval: Codable, Equatable, Sendable {
         self.provider = provider
         self.model = model
         self.promptAssemblyDigest = promptAssemblyDigest
+        self.expiresAt = expiresAt
+    }
+
+    public func isExpired(at date: Date = Date()) -> Bool {
+        guard let expiresAt else { return false }
+        return expiresAt <= date
     }
 }
