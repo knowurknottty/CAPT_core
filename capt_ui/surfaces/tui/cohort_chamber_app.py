@@ -59,7 +59,12 @@ class CohortChamberTUI(App):
             self.query_one("#chamber", Static).update("Chamber projection failed: %s" % str(exc)[:240])
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id != "submit-steer" or self._op is None:
+        if event.button.id != "submit-steer":
+            return
+        self.action_submit_steer()
+
+    def action_submit_steer(self) -> None:
+        if self._op is None:
             return
         directive = self.query_one("#directive", Input).value.strip()
         reason = self.query_one("#reason", Input).value.strip()
