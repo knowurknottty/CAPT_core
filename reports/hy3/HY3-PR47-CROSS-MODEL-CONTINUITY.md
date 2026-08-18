@@ -81,7 +81,8 @@ Gate script: `reports/hy3/gate.py` (re-runnable).
 
 ## Artifact record (committed, matches working tree == wheel)
 
-- Source head: `e6c3b359035c525e2700b9fa85cdba68cf5714b8`
+- Implementation source head: `e6c3b359035c525e2700b9fa85cdba68cf5714b8`
+- Final commit (adds tests + report): `4fa7cb894e4adc8dd04100efb3f68e447d4a2638`
 - Wheel: `capt_solo-0.5.0-py3-none-any.whl`
   SHA-256 `b236fe3188b21212cf624e4c5525aadb8ff7704e72028b52cb2a66d173825796`
 - Sdist: `capt_solo-0.5.0.tar.gz`
@@ -98,7 +99,8 @@ Gate script: `reports/hy3/gate.py` (re-runnable).
 ## RETURN
 
 RETURN: CROSS_MODEL_PROCESS_CONTINUITY_VERIFIED
-SOURCE_HEAD: e6c3b359035c525e2700b9fa85cdba68cf5714b8
+IMPL_SOURCE_HEAD: e6c3b359035c525e2700b9fa85cdba68cf5714b8
+FINAL_COMMIT: 4fa7cb894e4adc8dd04100efb3f68e447d4a2638
 WHEEL_SHA256: b236fe3188b21212cf624e4c5525aadb8ff7704e72028b52cb2a66d173825796
 SDIST_SHA256: ebc08f9eab0845856d318e8ad4b43030e14fd62f56a1c33c308026bea08ef73e
 MARKER_REACHED_B: True
