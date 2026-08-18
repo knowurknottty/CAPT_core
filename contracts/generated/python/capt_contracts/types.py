@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:08500b015bfdf9ff176e96ea7ed287beb955dd4b3839d04befbe54cb66e1ba9e
+# source digest:  sha256:dd7c5eacd6332ee0e2ab234622e798056dec9e89d4427a09234c298bf5e65fb1
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -1411,6 +1411,15 @@ class CohortSnapshotPersistedPayload(object):
 
 
 @dataclass(frozen=True)
+class CohortSteeredPayload(object):
+    """CohortSteeredPayload"""
+
+    cohortId: Identifier
+    eventType: Literal["CohortSteered"]
+    steer: CohortSteer
+
+
+@dataclass(frozen=True)
 class DriverRunCreatedPayload(object):
     """DriverRunCreatedPayload"""
 
@@ -1539,7 +1548,7 @@ class TaskTransitionedPayload(object):
 
 
 # discriminated on 'eventType'
-EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload]
+EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload]
 
 
 class EventType(str, Enum):
@@ -1573,6 +1582,7 @@ class EventType(str, Enum):
     ARTIFACTPROMOTIONDISCARDED = "ArtifactPromotionDiscarded"
     COHORTCREATED = "CohortCreated"
     COHORTSNAPSHOTPERSISTED = "CohortSnapshotPersisted"
+    COHORTSTEERED = "CohortSteered"
 
 
 @dataclass(frozen=True)

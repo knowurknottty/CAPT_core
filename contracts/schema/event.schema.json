@@ -36,7 +36,8 @@
         "ArtifactPromotionAdopted",
         "ArtifactPromotionDiscarded",
         "CohortCreated",
-        "CohortSnapshotPersisted"
+        "CohortSnapshotPersisted",
+        "CohortSteered"
       ]
     },
     "EventPayload": {
@@ -343,6 +344,17 @@
           "properties": {
             "eventType": { "type": "string", "const": "CohortSnapshotPersisted" },
             "snapshot": { "$ref": "upgrade.schema.json#/$defs/CohortSnapshot" }
+          }
+        },
+        {
+          "title": "CohortSteeredPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "cohortId", "steer"],
+          "properties": {
+            "eventType": { "type": "string", "const": "CohortSteered" },
+            "cohortId": { "$ref": "common.schema.json#/$defs/Identifier" },
+            "steer": { "$ref": "upgrade.schema.json#/$defs/CohortSteer" }
           }
         }
       ]

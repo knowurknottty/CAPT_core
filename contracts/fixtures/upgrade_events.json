@@ -113,6 +113,42 @@
         "payloadDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
         "extensions": []
       }
+    },
+    {
+      "id": "cohort-steered-event-valid",
+      "type": "EventEnvelope",
+      "expectValid": true,
+      "value": {
+        "schemaVersion": "1.0.0",
+        "eventId": "ev-cohort-steered",
+        "streamId": "cohort-coh-1",
+        "streamVersion": 2,
+        "globalSequence": 3,
+        "eventType": "CohortSteered",
+        "occurredAt": "2026-08-18T00:00:02Z",
+        "actor": {
+          "actorId": "captain",
+          "kind": "human"
+        },
+        "missionId": "m-1",
+        "taskId": "t-1",
+        "claimId": null,
+        "correlationId": "corr-steer",
+        "causationId": null,
+        "payload": {
+          "eventType": "CohortSteered",
+          "cohortId": "coh-1",
+          "steer": {
+            "directive": "Inspect alternate evidence before continuing.",
+            "reason": "operator steering",
+            "steeredBy": "captain",
+            "steeredAt": "2026-08-18T00:00:02Z",
+            "epoch": 1
+          }
+        },
+        "payloadDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "extensions": []
+      }
     }
   ]
 }
