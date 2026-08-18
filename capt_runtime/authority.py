@@ -42,6 +42,17 @@ _PERMITTED: Dict[str, FrozenSet[str]] = {
     "propose_claim": frozenset({COGNITION, EXECUTION, SYSTEM}),
     "decide_claim": frozenset({CLAIM_AUTHORITY}),
     "create_checkpoint": frozenset({SYSTEM}),
+    # Artifact promotion is intentionally separate from ClaimGuard. The
+    # execution plane may prepare a candidate transaction, a human/governance
+    # actor authorizes adoption after verification, and execution/system owns
+    # the consequential filesystem commit/recovery step.
+    "prepare_artifact_promotion": frozenset({EXECUTION, SYSTEM}),
+    "authorize_artifact_promotion": frozenset({HUMAN, GOVERNANCE, SYSTEM}),
+    "adopt_artifact_promotion": frozenset({EXECUTION, SYSTEM}),
+    "discard_artifact_promotion": frozenset({EXECUTION, HUMAN, SYSTEM}),
+    # Cohort lifecycle extensions used by the Sol-Reconciliation campaign.
+    "persist_cohort": frozenset({COGNITION, SYSTEM}),
+    "steer_cohort": frozenset({HUMAN}),
 }
 
 
