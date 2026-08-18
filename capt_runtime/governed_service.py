@@ -9,8 +9,11 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 
 from . import commands
 from .aggregates.artifact_promotion import ArtifactPromotionAggregate
+from .aggregates.claim_driver import ClaimAggregate
+from .aggregates.cohort_state import CohortAggregate
 from .artifact_workspace import atomic_adopt_verified_artifact, file_digest
 from .authority import require_authority
+from .contracts import digest, require
 from .errors import AuthorityViolation, IdempotencyConflict, IntegrityViolation
 from .services import RuntimeService
 from .store import AppendRequest
@@ -206,3 +209,101 @@ class GovernedRuntimeService(RuntimeService):
             [AppendRequest(stream, ArtifactPromotionAggregate.KIND, expected, event, state)], metadata
         )
         return {**result, "promotion": state}
+
+    def persist_cohort_snapshot(
+        self,
+        snapshot: Dict[str, Any],
+        claim_id: str,
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Durably persist Cohort state and admit its evidence atomically.
+
+        The Cohort state stream and Claim evidence link commit under one outer
+        idempotency identity. A crash cannot leave a claim pointing at Cohort
+        evidence whose authoritative Cohort state was never persisted.
+        """
+        require_authority("persist_cohort", metadata["actor"]["kind"])
+        cohort_id = str(snapshot["cohortId"])
+        stream = CohortAggregate.stream_id(cohort_id)
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            offered = metadata.get("operationFingerprint")
+            if offered and prior["operation_fingerprint"] != offered:
+                raise IdempotencyConflict("cohort persistence idempotency conflict")
+            return {
+                "status": "idempotent",
+                "cohort": self.store.load_state(stream),
+                "claim": self.store.load_state(ClaimAggregate.stream_id(claim_id)),
+            }
+
+        expected = self.store.aggregate_version(stream)
+        if expected == 0:
+            state = CohortAggregate.create(snapshot)
+            event_type = "CohortCreated"
+        else:
+            current = self.store.require_state(stream)
+            state = CohortAggregate.replace_snapshot(current, snapshot)
+            event_type = "CohortSnapshotPersisted"
+
+        # Digest excludes evidenceIds so the evidence record is not circular.
+        material = {key: value for key, value in state.items() if key != "evidenceIds"}
+        state_digest = digest(material)
+        evidence_id = "ev-cohort-%s-v%d" % (cohort_id, expected + 1)
+        state = CohortAggregate.attach_evidence(state, evidence_id)
+
+        cohort_event = commands.envelope(
+            event_id=metadata["commandId"] + "-cohort",
+            stream_id=stream,
+            event_type=event_type,
+            payload={"eventType": event_type, "snapshot": state},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+            mission_id=state["missionId"],
+            task_id=state["taskId"],
+        )
+
+        claim_stream = ClaimAggregate.stream_id(claim_id)
+        claim_expected = self.store.aggregate_version(claim_stream)
+        claim_current = self.store.require_state(claim_stream)
+        claim_state = ClaimAggregate.attach_evidence(claim_current, evidence_id)
+        evidence_meta = self._inner_metadata(
+            metadata,
+            "record_evidence",
+            {"claimId": claim_id, "evidenceId": evidence_id},
+            "system",
+            "capt-runtime",
+            "cohort-evidence",
+        )
+        evidence = {
+            "schemaVersion": "1.0.0",
+            "evidenceId": evidence_id,
+            "missionId": state["missionId"],
+            "evidence": {
+                "kind": "artifact_hash",
+                "artifactPath": "/cohort/" + cohort_id,
+                "artifactDigest": state_digest,
+            },
+            "collectedBy": {"actorId": "capt-runtime", "kind": "system"},
+            "collectedAt": metadata["issuedAt"],
+            "trust": "capt_authoritative",
+        }
+        require("EvidenceRecord", evidence)
+        evidence_event = commands.envelope(
+            event_id=metadata["commandId"] + "-evidence",
+            stream_id=claim_stream,
+            event_type="EvidenceRecorded",
+            payload={"eventType": "EvidenceRecorded", "evidence": evidence},
+            metadata=evidence_meta,
+            occurred_at=metadata["issuedAt"],
+            mission_id=state["missionId"],
+            claim_id=claim_id,
+        )
+
+        result = self._commit(
+            [
+                AppendRequest(stream, CohortAggregate.KIND, expected, cohort_event, state),
+                AppendRequest(claim_stream, ClaimAggregate.KIND, claim_expected, evidence_event, claim_state),
+            ],
+            metadata,
+        )
+        return {**result, "cohort": state, "evidence": evidence, "claim": claim_state}
