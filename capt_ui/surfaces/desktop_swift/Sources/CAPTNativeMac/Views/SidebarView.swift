@@ -54,7 +54,7 @@ struct SidebarView: View {
                                 HStack(spacing: 6) {
                                     Text(session.title).lineLimit(1)
                                     if let pending = session.pendingApproval,
-                                       !pending.isExpired() {
+                                       pending.isActionable() {
                                         Image(systemName: "person.crop.circle.badge.checkmark")
                                             .font(.caption2)
                                             .foregroundStyle(.orange)
