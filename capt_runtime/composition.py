@@ -2,7 +2,7 @@
 
 This module owns component lifecycle only. It does not add a runtime, daemon,
 or authority path: the composed RuntimeService remains the sole command
-surface, and RuntimeCommandService remains the authenticated operator relay.
+surface, and the composed command service remains the authenticated operator relay.
 """
 from __future__ import annotations
 
@@ -13,10 +13,10 @@ from typing import Optional
 from .driver_host import DriverHost
 from .drivers.openharness import DESCRIPTOR, OpenHarnessDriver
 from .drivers.registry import DriverRegistry
-from .governed_service import GovernedRuntimeService
 from .memory.engine import MemoryTriggerEngine
 from .memory.store import MemoryStore
 from .services import RuntimeService
+from .steered_service import SteeredRuntimeService
 from .store import EventStore
 from .task_resolver import TaskResolver
 
@@ -33,9 +33,9 @@ class RuntimeComposition:
 
     def command_service(self, operator_id: str, session_id: str):
         # Import lazily to avoid a desktop-to-runtime import cycle at module load.
-        from desktop.m1_command_service import RuntimeCommandService
+        from desktop.governed_m1_command_service import GovernedRuntimeCommandService
 
-        return RuntimeCommandService(
+        return GovernedRuntimeCommandService(
             self.store,
             operator_id,
             session_id,
@@ -104,7 +104,7 @@ def create_runtime(
     )
     return RuntimeComposition(
         store=store,
-        service=GovernedRuntimeService(store),
+        service=SteeredRuntimeService(store),
         registry=DriverRegistry(),
         memory_store=memory_store,
         memory_engine=memory_engine,
