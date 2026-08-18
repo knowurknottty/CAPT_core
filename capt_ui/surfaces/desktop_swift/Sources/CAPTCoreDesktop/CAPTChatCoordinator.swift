@@ -1,0 +1,174 @@
+import Foundation
+
+public struct CAPTExecutionResult: Equatable {
+    public let text: String
+    public let taskState: String
+
+    public init(text: String, taskState: String) {
+        self.text = text
+        self.taskState = taskState
+    }
+}
+
+public final class CAPTChatCoordinator {
+    private let client: CAPTRuntimeCommanding
+
+    public init(client: CAPTRuntimeCommanding) {
+        self.client = client
+    }
+
+    public func requestApproval(
+        objective: String,
+        targetRoot: String,
+        provider: String,
+        model: String
+    ) throws -> CAPTPendingApproval {
+        let response = try client.command(
+            op: "request_model_prompt_approval",
+            payload: [
+                "objective": objective,
+                "targetRoot": targetRoot,
+                "provider": provider,
+                "model": model,
+                "requestedContextBudget": 32_000,
+                "responseMode": "SPOCK",
+                "promptEnhancement": "OFF",
+                "humanVerificationRequired": true,
+            ],
+            idempotencyKey: "native-approval-" + UUID().uuidString.lowercased()
+        )
+        try Self.ensureAcceptedOrApplied(response)
+        guard let result = response["result"] as? [String: Any] else {
+            throw CAPTRuntimeClientError.malformedResponse("approval result missing")
+        }
+        let requestID = try Self.requireString("requestId", from: result)
+        let missionID = try Self.requireString("missionId", from: result)
+        let taskID = try Self.requireString("taskId", from: result)
+        let driverRunID = try Self.requireString("driverRunId", from: result)
+        let digest = try Self.requireString("promptAssemblyDigest", from: result)
+        return CAPTPendingApproval(
+            requestID: requestID,
+            missionID: missionID,
+            taskID: taskID,
+            driverRunID: driverRunID,
+            objective: objective,
+            targetRoot: targetRoot,
+            provider: provider,
+            model: model,
+            promptAssemblyDigest: digest
+        )
+    }
+
+    public func deny(_ pending: CAPTPendingApproval) throws {
+        let response = try client.command(
+            op: "submit_approval_decision",
+            payload: [
+                "requestId": pending.requestID,
+                "decision": "deny",
+                "note": "Denied from CAPT native macOS surface",
+            ],
+            idempotencyKey: "native-deny-" + pending.requestID
+        )
+        try Self.ensureAcceptedOrApplied(response)
+    }
+
+    public func approveAndRun(_ pending: CAPTPendingApproval) throws -> CAPTExecutionResult {
+        let decision = try client.command(
+            op: "submit_approval_decision",
+            payload: [
+                "requestId": pending.requestID,
+                "decision": "approve",
+                "note": "Approved from CAPT native macOS surface",
+            ],
+            idempotencyKey: "native-approve-" + pending.requestID
+        )
+        try Self.ensureAcceptedOrApplied(decision)
+
+        let run = try client.command(
+            op: "run_approved_hermes_inspection",
+            payload: [
+                "objective": pending.objective,
+                "targetRoot": pending.targetRoot,
+                "provider": pending.provider,
+                "model": pending.model,
+                "missionId": pending.missionID,
+                "taskId": pending.taskID,
+                "driverRunId": pending.driverRunID,
+                "approvalRequestId": pending.requestID,
+                "requestedContextBudget": 32_000,
+                "responseMode": "SPOCK",
+                "promptEnhancement": "OFF",
+                "humanVerificationRequired": true,
+            ],
+            idempotencyKey: "native-run-" + pending.driverRunID
+        )
+        try Self.ensureAcceptedOrApplied(run)
+
+        let taskResponse = try client.query(
+            op: "get_state",
+            payload: ["streamId": "task-" + pending.taskID]
+        )
+        let taskState = Self.extractTaskState(taskResponse)
+        return CAPTExecutionResult(
+            text: Self.extractAssistantText(run),
+            taskState: taskState
+        )
+    }
+
+    private static func requireString(
+        _ key: String,
+        from dictionary: [String: Any]
+    ) throws -> String {
+        guard let value = dictionary[key] as? String, !value.isEmpty else {
+            throw CAPTRuntimeClientError.malformedResponse("missing \(key)")
+        }
+        return value
+    }
+
+    private static func ensureAcceptedOrApplied(_ response: [String: Any]) throws {
+        if response["ok"] as? Bool == false {
+            throw CAPTRuntimeClientError.malformedResponse(
+                response["error"] as? String ?? "runtime rejected command"
+            )
+        }
+        if let status = response["status"] as? String,
+           ["rejected", "denied", "failed"].contains(status.lowercased()) {
+            throw CAPTRuntimeClientError.malformedResponse(
+                response["error"] as? String ?? "runtime status \(status)"
+            )
+        }
+    }
+
+    private static func extractTaskState(_ response: [String: Any]) -> String {
+        if let result = response["result"] as? [String: Any],
+           let state = result["state"] as? String {
+            return state
+        }
+        return response["state"] as? String ?? "unknown"
+    }
+
+    private static func extractAssistantText(_ response: [String: Any]) -> String {
+        if let observations = response["observations"] as? [[String: Any]],
+           let first = observations.first,
+           let content = first["content"] as? String,
+           !content.isEmpty {
+            return content
+        }
+        if let result = response["result"] as? [String: Any] {
+            if let text = result["text"] as? String, !text.isEmpty { return text }
+            if let content = result["content"] as? String, !content.isEmpty { return content }
+            if let observations = result["observations"] as? [[String: Any]],
+               let content = observations.first?["content"] as? String,
+               !content.isEmpty {
+                return content
+            }
+        }
+        if let data = try? JSONSerialization.data(
+            withJSONObject: response,
+            options: [.prettyPrinted, .sortedKeys]
+        ), let text = String(data: data, encoding: .utf8) {
+            return text
+        }
+        return "CAPT returned a result without renderable text."
+    }
+}
