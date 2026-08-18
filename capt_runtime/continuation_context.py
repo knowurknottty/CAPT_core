@@ -24,7 +24,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 _MARKER_RE = re.compile(r"(CAPT-CONTINUITY-[A-Za-z0-9_-]+|MK-[A-Za-z0-9_-]+)")
@@ -57,7 +59,30 @@ def _claim_verified(store, claim_id: Optional[str]) -> bool:
     return bool(c and str(c.get("promotionState", "")).lower() == "verified")
 
 
+def _staging_artifact_path(ledger_dir: Optional[str], driver_run_id: str) -> Optional[str]:
+    """Return the CAPT staging artifact for a prior DriverRun, if it exists.
+
+    The execute handler writes the model artifact into the run's staging
+    directory under ``<ledger_parent>/staging/<driverRunId>/``.  The file is
+    durable on disk and survives a full runtime restart, so it is the
+    authoritative source for prior model output during continuation selection.
+    """
+    if not ledger_dir:
+        return None
+    d = Path(ledger_dir) / "staging" / driver_run_id
+    if not d.is_dir():
+        return None
+    # Prefer the run-specific provider-analysis artifact; otherwise any .md.
+    specific = d / ("provider-analysis-%s.md" % driver_run_id)
+    if specific.exists():
+        return str(specific)
+    for cand in sorted(d.glob("*.md")):
+        return str(cand)
+    return None
+
+
 def _artifact_paths_for_claim(claim_state: Optional[Dict[str, Any]]) -> List[str]:
+    """Best-effort inline artifact paths (evidence records may carry them)."""
     if not claim_state:
         return []
     out: List[str] = []
@@ -131,13 +156,37 @@ def select_continuation_context(
             continue
         if st.get("state") != "completed":
             continue
-        rid = st.get("driverRunId")
+        rid = str(st.get("driverRunId") or "")
         if exclude_run_id and rid == exclude_run_id:
             continue
         tid = st.get("taskId") or task_id
         claim_state = _claim_for_task(store, tid)
         trust = "verified" if _claim_verified(store, claim_state.get("claimId") if claim_state else None) else "unverified"
-        for ap in _artifact_paths_for_claim(claim_state):
+        # Prior model output lives in CAPT's durable staging artifact for the
+        # DriverRun (survives restart). Fall back to inline evidence paths.
+        artifact_paths = [p for p in [_staging_artifact_path(ledger_dir, rid)] if p]
+        artifact_paths += _artifact_paths_for_claim(claim_state)
+        if not artifact_paths:
+            records.append(
+                {
+                    "recordId": "cont-" + str(rid),
+                    "kind": "prior_model_evidence",
+                    "trust": trust,
+                    "missionId": mission_id,
+                    "taskId": tid,
+                    "driverRunId": rid,
+                    "artifactPath": None,
+                    "content": "",
+                    "marker": None,
+                    "provenance": {
+                        "source": "prior_driverrun_evidence",
+                        "driverRunId": rid,
+                        "claimId": claim_state.get("claimId") if claim_state else None,
+                    },
+                }
+            )
+            continue
+        for ap in artifact_paths:
             content = _read_file(ap)
             marker = _extract_marker(content)
             records.append(
