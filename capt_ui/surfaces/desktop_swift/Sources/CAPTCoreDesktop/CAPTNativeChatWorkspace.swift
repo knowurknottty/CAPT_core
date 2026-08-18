@@ -39,6 +39,23 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         flows[id] ?? CAPTChatFlow(pending: session(id)?.pendingApproval)
     }
 
+    public mutating func mergeRestoredSessions(
+        _ restored: [CAPTNativeSession],
+        now: Date = Date()
+    ) {
+        var knownIDs = Set(sessions.map(\.id))
+        for restoredSession in restored {
+            guard !knownIDs.contains(restoredSession.id) else { continue }
+            sessions.append(restoredSession)
+            flows[restoredSession.id] = CAPTChatFlow(
+                pending: restoredSession.pendingApproval,
+                now: now
+            )
+            knownIDs.insert(restoredSession.id)
+        }
+        sessions.sort { $0.updatedAt > $1.updatedAt }
+    }
+
     @discardableResult
     public mutating func newChat(
         id: UUID = UUID(),
