@@ -3,38 +3,41 @@
 - **Campaign ID:** `CAPT-UPG-010`
 - **Issue:** #69
 - **PR:** #70
-- **Rebuilt Base:** `upgrade/capt-upg-009-workspace-promotion` @ `24e613f4f982fb72ff9bdd92b63ae50377eca90e`
-- **Status:** `IMPLEMENTED_PENDING_EXACT_HEAD_TEST`
+- **Base:** `upgrade/capt-upg-009-workspace-promotion` @ `98734f9e72910ff2a43c3c81cca2dc872e07a993`
+- **Disposition:** `IMPLEMENTED_VERIFIED_READY_FOR_OWNER_REVIEW`
 
-## Corrected implementation
+## Authoritative implementation
 
-This revision replaces the earlier evidence-only approximation with an authoritative durable Cohort substrate:
+This revision replaces the earlier evidence-only approximation with a durable Cohort substrate:
 
-- `CohortAggregate` owns durable cohort identity, mission/task binding, epoch, round, roster, required participants, participant cursors, contributions, stopping state, evidence links, and latest steering metadata.
-- `GovernedRuntimeService.persist_cohort_snapshot()` commits the `cohort-<id>` state update and the linked Claim `EvidenceRecorded` event in one EventStore command transaction.
+- `CohortAggregate` owns Cohort epoch/round state, roster/required participants, participant cursors, admitted contribution records, stopping state, evidence links, and steering metadata; mission/task/cohort identifiers remain references.
+- `GovernedRuntimeService.persist_cohort_snapshot()` commits `cohort-<id>` state and linked Claim `EvidenceRecorded` admission in one EventStore command transaction.
 - Evidence IDs are deterministic per Cohort stream version (`ev-cohort-<id>-vN`).
-- Contribution deletion, identity rebinding, epoch regression, and participant cursor regression fail closed.
-- `full_replay()` and checkpoint-extension replay understand Cohort create/snapshot/steer events.
-- `load_cohort_state()` reconstructs typed `BoundedCohort` + `DeliberationEpoch` from authoritative EventStore state after reopen.
+- Contribution deletion, identity rebinding, epoch regression, non-admitted cursor identities, negative cursors, contribution-order cursor regression, and declared cursor rollback fail closed.
+- Declared participant cursor summaries are validated separately from historical contribution cursors; valid old contributions are not incorrectly compared against the already-aggregated latest cursor.
+- Full replay and checkpoint-extension replay reconstruct Cohort state.
+- `load_cohort_state()` reconstructs typed `BoundedCohort` + `DeliberationEpoch` after SQLite close/reopen.
 
-## Discriminating tests added
+## Contract integration
 
-`tests/capt_runtime/test_cohort_durability.py` proves:
+The normative EventEnvelope contract now explicitly supports:
 
-1. Cohort state and claim evidence are committed, store closes, SQLite reopens, and typed Cohort state reconstructs.
-2. Full replay reconstructs the same `cohort-<id>` authoritative state.
-3. Deliberation can continue after restart without contribution loss or duplicate evidence admission.
-4. Exact retry is idempotent.
-5. Contribution deletion and cursor regression fail closed.
+- `cohort-*` stream IDs;
+- `CohortCreated`;
+- `CohortSnapshotPersisted`;
+- typed `CohortSnapshot` / contribution / stopping-state structures.
 
-## Exact-head verification required
+`CohortSteered` is intentionally not admitted at this layer; that authoritative event is introduced by CAPT-UPG-011.
 
-Run at the terminal PR head:
+Cross-language fixtures include a valid `CohortCreated` envelope, and the TypeScript parity runner rebuilds current generated source before validation so stale `dist/` output cannot mask schema drift.
 
-```bash
-pytest tests/capt_runtime/test_cohort.py tests/capt_runtime/test_cohort_durability.py
-pytest tests/capt_runtime/test_governed_artifact_promotion.py tests/capt_runtime/test_artifact_workspace.py
-pytest
+## Verification
+
+Focused pre-commit gate on the final UPG-009 ancestry:
+
+```text
+DRIFT CHECK: OK (11 generated files match the schema source)
+32 passed
 ```
 
-Do not promote this item to `IMPLEMENTED_VERIFIED_READY_FOR_OWNER_REVIEW` until exact-head execution evidence exists.
+Exact-commit full-suite verification is required immediately after this manifest/code commit and is recorded on PR #70. Scope excludes slow tests by the repository's configured pytest marker policy.

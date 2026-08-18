@@ -14,6 +14,22 @@ from ..errors import AuthorityViolation, IllegalTransition
 
 class CohortAggregate(object):
     KIND = "cohort"
+    OWNED_FIELDS = frozenset(
+        {
+            "cohort.epoch",
+            "cohort.rounds",
+            "cohort.roundCap",
+            "cohort.participantCap",
+            "cohort.required",
+            "cohort.roster",
+            "cohort.participantCursors",
+            "cohort.contributions",
+            "cohort.stoppingReason",
+            "cohort.evidenceIds",
+            "cohort.latestSteer",
+        }
+    )
+    REFERENCE_FIELDS = frozenset({"cohortId", "missionId", "taskId"})
 
     @staticmethod
     def stream_id(cohort_id: str) -> str:
@@ -41,7 +57,14 @@ class CohortAggregate(object):
             raise ValueError("COHORT_EPOCH_NEGATIVE")
 
         seen = set()
-        cursors: Dict[str, int] = {str(k): int(v) for k, v in (snapshot.get("participantCursors") or {}).items()}
+        declared_cursors: Dict[str, int] = {
+            str(k): int(v) for k, v in (snapshot.get("participantCursors") or {}).items()
+        }
+        if any(participant not in roster for participant in declared_cursors):
+            raise ValueError("COHORT_CURSOR_PARTICIPANT_NOT_ADMITTED")
+        if any(cursor < 0 for cursor in declared_cursors.values()):
+            raise ValueError("COHORT_CURSOR_NEGATIVE")
+        observed_cursors: Dict[str, int] = {}
         contributions = []
         for raw in snapshot.get("contributions") or []:
             item = dict(raw)
@@ -59,10 +82,10 @@ class CohortAggregate(object):
                 raise ValueError("COHORT_POSITION_NEGATIVE")
             if item_round >= round_cap:
                 raise ValueError("COHORT_CONTRIBUTION_ROUND_OUT_OF_RANGE")
-            previous = cursors.get(participant, 0)
+            previous = observed_cursors.get(participant, 0)
             if cursor < previous:
-                raise ValueError("COHORT_CURSOR_CANNOT_REGRESS")
-            cursors[participant] = max(previous, cursor)
+                raise ValueError("COHORT_CONTRIBUTION_CURSOR_CANNOT_REGRESS")
+            observed_cursors[participant] = cursor
             contributions.append({
                 "contributionId": cid,
                 "participant": participant,
@@ -75,6 +98,13 @@ class CohortAggregate(object):
                 "escalation": item.get("escalation"),
             })
 
+        for participant, observed in observed_cursors.items():
+            declared = declared_cursors.get(participant)
+            if declared is None:
+                declared_cursors[participant] = observed
+            elif declared < observed:
+                raise ValueError("COHORT_CURSOR_BEHIND_CONTRIBUTION")
+
         return {
             "cohortId": str(snapshot["cohortId"]),
             "missionId": str(snapshot["missionId"]),
@@ -85,7 +115,7 @@ class CohortAggregate(object):
             "participantCap": participant_cap,
             "required": required,
             "roster": roster,
-            "participantCursors": cursors,
+            "participantCursors": declared_cursors,
             "contributions": contributions,
             "stoppingReason": snapshot.get("stoppingReason"),
             "evidenceIds": list(dict.fromkeys(snapshot.get("evidenceIds") or [])),

@@ -34,7 +34,9 @@
         "ArtifactPromotionPrepared",
         "ArtifactPromotionAuthorized",
         "ArtifactPromotionAdopted",
-        "ArtifactPromotionDiscarded"
+        "ArtifactPromotionDiscarded",
+        "CohortCreated",
+        "CohortSnapshotPersisted"
       ]
     },
     "EventPayload": {
@@ -321,6 +323,26 @@
             "promotionId": { "$ref": "common.schema.json#/$defs/Identifier" },
             "reason": { "type": "string", "maxLength": 2048 },
             "discardedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+          }
+        },
+        {
+          "title": "CohortCreatedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "snapshot"],
+          "properties": {
+            "eventType": { "type": "string", "const": "CohortCreated" },
+            "snapshot": { "$ref": "upgrade.schema.json#/$defs/CohortSnapshot" }
+          }
+        },
+        {
+          "title": "CohortSnapshotPersistedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "snapshot"],
+          "properties": {
+            "eventType": { "type": "string", "const": "CohortSnapshotPersisted" },
+            "snapshot": { "$ref": "upgrade.schema.json#/$defs/CohortSnapshot" }
           }
         }
       ]
