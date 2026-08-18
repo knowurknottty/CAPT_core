@@ -1,9 +1,11 @@
 """Artifact / Workspace Plane tests (Gate 8).
 
-Covers path traversal, symlink escape, write outside lease, stale snapshot,
-digest mismatch, promotion without verification, rollback, malicious rendering.
+Covers path traversal, symlink escape, write outside lease, digest mismatch,
+legacy direct-promotion bypass rejection, rollback, and mechanical atomic-copy
+recovery semantics.
 """
 
+import hashlib
 import os
 import tempfile
 
@@ -80,7 +82,6 @@ def test_stage_candidate_inside_lease_ok():
 
 
 def test_fabricated_authoritative_rejected():
-    # The ingestion guard rejects any driver-supplied authoritative record type.
     from capt_runtime.ingestion import IngestionRejection
     with pytest.raises(IngestionRejection):
         aw.reject_fabricated_authoritative({"eventType": "VerificationResult"})
@@ -94,30 +95,48 @@ def test_promotion_requires_verification():
             aw.decide_promotion(staged, _decision("promote"), verified=False)
 
 
-def test_promote_artifact_to_destination_governed():
+def test_direct_promotion_helper_is_disabled():
     with tempfile.TemporaryDirectory() as staging, tempfile.TemporaryDirectory() as dest_dir:
         cand_file = os.path.join(staging, "artifact.json")
         with open(cand_file, "w") as f:
             f.write('{"test": true}')
-        import hashlib
-        digest = "sha256:" + hashlib.sha256(b'{"test": true}').hexdigest()
-        cand = _candidate(cand_file, digest=digest)
-        staged = aw.stage_candidate(cand, _ws(staging), "2026-08-03T00:00:00Z")
-        
+        content_digest = "sha256:" + hashlib.sha256(b'{"test": true}').hexdigest()
+        staged = aw.stage_candidate(
+            _candidate(cand_file, digest=content_digest), _ws(staging), "2026-08-03T00:00:00Z"
+        )
         target = os.path.join(dest_dir, "promoted.json")
-        rec = aw.promote_artifact_to_destination(staged, _decision("promote"), target, verified=True, expected_digest=digest)
-        assert rec["destinationPath"] == target
-        assert os.path.exists(target)
-        assert open(target).read() == '{"test": true}'
+        with pytest.raises(IntegrityViolation, match="RuntimeService promotion lifecycle"):
+            aw.promote_artifact_to_destination(
+                staged, _decision("promote"), target,
+                verified=True, expected_digest=content_digest,
+            )
+        assert not os.path.exists(target)
 
 
-def test_promotion_verified_ok():
+def test_atomic_adopt_reconciles_exact_existing_destination():
+    with tempfile.TemporaryDirectory() as staging, tempfile.TemporaryDirectory() as dest_dir:
+        source = os.path.join(staging, "artifact.bin")
+        target = os.path.join(dest_dir, "artifact.bin")
+        payload = b"verified bytes"
+        with open(source, "wb") as handle:
+            handle.write(payload)
+        content_digest = "sha256:" + hashlib.sha256(payload).hexdigest()
+        first = aw.atomic_adopt_verified_artifact(source, target, content_digest)
+        assert first["operation"] == "atomic_replace"
+        os.unlink(source)
+        second = aw.atomic_adopt_verified_artifact(source, target, content_digest)
+        assert second["operation"] == "already_present_reconciled"
+        assert aw.file_digest(target) == content_digest
+
+
+def test_promotion_verified_shape_only_not_authority():
     with tempfile.TemporaryDirectory() as d:
         staged = aw.stage_candidate(_candidate(os.path.join(d, "out.txt")),
                                     _ws(d), "2026-08-03T00:00:00Z")
         rec = aw.decide_promotion(staged, _decision("promote"), verified=True,
                                   expected_digest=staged["contentDigest"])
         assert rec["artifactId"].startswith("art-")
+        assert not os.path.exists(staged["path"])
 
 
 def test_quarantine_allowed_without_verification():
@@ -137,8 +156,6 @@ def test_rollback_receipt():
 
 
 def test_malicious_rendering_not_authoritative():
-    # A driver-produced artifact is untrusted; promotion requires verification.
-    # Without verification it can never become authoritative state.
     with tempfile.TemporaryDirectory() as d:
         cand = _candidate(os.path.join(d, "evil.html"))
         staged = aw.stage_candidate(cand, _ws(d), "2026-08-03T00:00:00Z")
