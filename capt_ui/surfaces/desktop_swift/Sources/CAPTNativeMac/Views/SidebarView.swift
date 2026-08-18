@@ -41,7 +41,6 @@ struct SidebarView: View {
                 } label: {
                     Label("New Chat", systemImage: "square.and.pencil")
                 }
-                .disabled(store.pendingApproval != nil || store.isBusy)
             }
 
             if !store.sessions.isEmpty {
@@ -52,7 +51,14 @@ struct SidebarView: View {
                             selection = .chat
                         } label: {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(session.title).lineLimit(1)
+                                HStack(spacing: 6) {
+                                    Text(session.title).lineLimit(1)
+                                    if session.pendingApproval != nil {
+                                        Image(systemName: "person.crop.circle.badge.checkmark")
+                                            .font(.caption2)
+                                            .foregroundStyle(.orange)
+                                    }
+                                }
                                 Text(session.missionID.map(shortMission) ?? "Local draft")
                                     .font(.caption2.monospaced())
                                     .foregroundStyle(.secondary)
@@ -60,7 +66,6 @@ struct SidebarView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .buttonStyle(.plain)
-                        .disabled(store.pendingApproval != nil || store.isBusy)
                         .listRowBackground(
                             store.activeSessionID == session.id
                                 ? Color.accentColor.opacity(0.12) : Color.clear
