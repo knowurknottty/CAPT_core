@@ -909,17 +909,25 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     "riskClassification": "low",
                     "taskId": task_id,
                 }
+                existing_mission = store.load_state("mission-" + str(mission_id))
+                planning_op = (
+                    "plan_task_for_existing_mission" if existing_mission is not None
+                    else "create_mission"
+                )
                 meta = commands.command(
                     command_id=command_id + ":mission",
                     idempotency_key=key + ":mission",
-                    operation_fingerprint=commands.fingerprint("create_mission", intent),
+                    operation_fingerprint=commands.fingerprint(planning_op, intent),
                     correlation_id=correlation_id,
                     actor_id=cmd_svc.operator_id,
                     actor_kind="human",
                     issued_at=now,
                     replay_policy="never",
                 )
-                svc.create_mission_with_approval(intent, meta)
+                if existing_mission is None:
+                    svc.create_mission_with_approval(intent, meta)
+                else:
+                    svc.plan_task_for_existing_mission(intent, meta)
                 exec_meta = lambda step: commands.command(
                     command_id=command_id + ":" + step,
                     idempotency_key=key + ":" + step,

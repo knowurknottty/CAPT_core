@@ -159,10 +159,10 @@ EVID['continuationSelected'] = {
 # ---------------- MODEL B (different model, SAME mission) ----------------
 print('=== MODEL B: Ollama ornith-1.0-9b:latest (same mission, governed continuation) ===')
 objB = 'Continue MK-B-' + NONCE_B + '.'
-# Model B must reuse Model A's missionId/taskId (successor task under same mission)
+# Model B reuses Model A's missionId but MUST receive a distinct successor taskId
 planB = runc('request_model_prompt_approval', {'objective': objB, 'targetRoot': TARGET,
     'provider': 'ollama', 'model': 'ornith-1.0-9b:latest',
-    'missionId': reqA['missionId'], 'taskId': reqA['taskId'],
+    'missionId': reqA['missionId'],
     'requestedContextBudget': 32000, 'responseMode': 'SPOCK', 'promptEnhancement': 'OFF',
     'humanVerificationRequired': True}, 'B-approval')
 reqB = planB['result']
@@ -170,11 +170,14 @@ EVID['modelB'] = {'missionId': reqB['missionId'], 'taskId': reqB['taskId'],
                   'driverRunId': reqB['driverRunId'], 'provider': 'ollama',
                   'model': 'ornith-1.0-9b:latest'}
 EVID['modelB']['sameMissionLineage'] = (reqB['missionId'] == reqA['missionId'])
+EVID['modelB']['distinctSuccessorTask'] = (reqB['taskId'] != reqA['taskId'])
+assert EVID['modelB']['sameMissionLineage'], 'Model B left Model A mission lineage'
+assert EVID['modelB']['distinctSuccessorTask'], 'Model B incorrectly reused Model A task identity'
 runc('submit_approval_decision', {'requestId': reqB['requestId'], 'decision': 'approve',
      'note': 'user-auth Model B continuation'}, 'B-decision')
 runB = runc('run_approved_hermes_inspection', {'objective': objB, 'targetRoot': TARGET,
     'provider': 'ollama', 'model': 'ornith-1.0-9b:latest',
-    'missionId': reqA['missionId'], 'taskId': reqA['taskId'], 'driverRunId': reqB['driverRunId'],
+    'missionId': reqB['missionId'], 'taskId': reqB['taskId'], 'driverRunId': reqB['driverRunId'],
     'approvalRequestId': reqB['requestId'], 'requestedContextBudget': 32000,
     'responseMode': 'SPOCK', 'promptEnhancement': 'OFF', 'humanVerificationRequired': True}, 'B-run')
 assert runB['status'] == 'accepted', runB

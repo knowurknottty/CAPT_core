@@ -57,8 +57,11 @@ def request_model_prompt_approval(
 
     suffix = _attempt_suffix(operator_metadata["idempotencyKey"])
     request_id = str(intent.get("requestId") or ("approval-model-" + suffix))
+    explicit_mission = bool(str(intent.get("missionId") or "").strip())
     mission_id = str(intent.get("missionId") or ("m-model-" + suffix))
-    task_id = str(intent.get("taskId") or (mission_id + "-task-1"))
+    task_id = str(intent.get("taskId") or (
+        mission_id + "-task-" + suffix if explicit_mission else mission_id + "-task-1"
+    ))
     driver_run_id = str(intent.get("driverRunId") or ("dr-model-" + suffix))
     response_mode = str(intent.get("responseMode", "SPOCK"))
     enhancement_engine = str(intent.get("promptEnhancement", "OFF"))

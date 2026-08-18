@@ -272,6 +272,55 @@ class RuntimeService(object):
         result["requestId"] = request_id
         return result
 
+    def plan_task_for_existing_mission(
+        self, intent: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Plan one new governed task under an already-durable mission.
+
+        The outer request is human-authored operator intent, but TaskCreated
+        remains authored by the cognitive plane. The existing Mission stream is
+        never recreated or rewritten by this operation.
+        """
+        require("OperatorMissionIntent", intent)
+        require("CommandMetadata", metadata)
+        if metadata.get("actor", {}).get("kind") != "human":
+            raise AuthorityViolation("EXISTING_MISSION_TASK_REQUEST_MUST_BE_HUMAN_AUTHORED")
+
+        mission_id = str(intent.get("missionId") or "").strip()
+        task_id = str(intent.get("taskId") or "").strip()
+        if not mission_id or not task_id:
+            raise AuthorityViolation("EXISTING_MISSION_OR_SUCCESSOR_TASK_ID_MISSING")
+
+        mission_stream = MissionAggregate.stream_id(mission_id)
+        mission = self.store.load_state(mission_stream)
+        if mission is None:
+            raise AuthorityViolation("EXISTING_MISSION_NOT_FOUND")
+        if mission.get("state") in ("completed", "failed", "cancelled"):
+            raise AuthorityViolation("EXISTING_MISSION_IS_TERMINAL")
+
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            offered = metadata.get("operationFingerprint")
+            if offered and prior["operation_fingerprint"] != offered:
+                raise IdempotencyConflict(
+                    "idempotency key %r reused with a different operation fingerprint"
+                    % metadata["idempotencyKey"]
+                )
+            return {"status": "idempotent", "missionId": mission_id, "taskId": task_id}
+
+        task_stream = TaskAggregate.stream_id(task_id)
+        if self.store.aggregate_version(task_stream) != 0:
+            raise AuthorityViolation("SUCCESSOR_TASK_ID_ALREADY_EXISTS")
+        task = self._build_task_from_intent(intent, task_id)
+        task_meta = self._inner_metadata(
+            metadata, "create_task", {"taskId": task_id, "missionId": mission_id},
+            "cognitive_plane", "cog-1", "task",
+        )
+        result = dict(self._commit([self._append_create_task(task, task_meta)], metadata))
+        result.update({"missionId": mission_id, "taskId": task_id})
+        return result
+
+
     def _reconstruct_mission_result(
         self, mission_id: str, metadata: Dict[str, Any]
     ) -> Dict[str, Any]:
