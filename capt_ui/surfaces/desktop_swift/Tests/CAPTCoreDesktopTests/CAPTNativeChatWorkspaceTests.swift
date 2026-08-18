@@ -223,7 +223,7 @@ final class CAPTNativeChatWorkspaceTests: XCTestCase {
 
         workspace.mergeRestoredSessions([restoredDuplicate])
 
-        XCTAssertEqual(workspace.session(oldID)?.title, "live mutation")
+        XCTAssertEqual(workspace.session(oldID)?.title, "Cached")
         XCTAssertEqual(workspace.session(oldID)?.model, "live-model")
         XCTAssertEqual(workspace.session(oldID)?.messages.last?.text, "live mutation")
         XCTAssertEqual(workspace.flow(for: oldID).phase, .requestingApproval)
