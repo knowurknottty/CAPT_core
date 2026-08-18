@@ -51,12 +51,14 @@ class PreparedApprovedModelExecution:
     provider_model: str | None
     executable: str | None
     data: Mapping[str, Any]
+    context_pack_digest: str = "sha256:" + "0" * 64
     operation: str = "ModelOperatorInspection"
 
     @property
     def approval_identity(self) -> Mapping[str, str]:
         return FrozenDict({
             "promptAssemblyDigest": self.prompt_assembly_digest,
+            "contextPackDigest": self.context_pack_digest,
             "missionId": self.mission_id,
             "taskId": self.task_id,
             "driverRunId": self.driver_run_id,
@@ -73,6 +75,7 @@ class PreparedApprovedModelExecution:
             "issuedAt": self.issued_at,
             "approvalRequestId": self.approval_request_id,
             "promptAssemblyDigest": self.prompt_assembly_digest,
+            "contextPackDigest": self.context_pack_digest,
             "dispatchPromptDigest": self.dispatch_prompt_digest,
             "missionId": self.mission_id,
             "taskId": self.task_id,

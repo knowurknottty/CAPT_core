@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 from .contracts import digest
 from .drivers.hermes import build_prompt as build_hermes_prompt
@@ -53,12 +53,16 @@ def build_bound_model_operator_approval(
     human_verification_required: bool,
     executable: str,
     staging_root: str,
+    context_pack_digest: str = "",
+    continuation_context: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Return the model-visible assembly plus its execution admission binding."""
     assembly = build_model_operator_prompt_assembly(
         human_prompt=human_prompt,
         response_mode=response_mode,
         enhancement_engine=enhancement_engine,
+        context_pack_digest=context_pack_digest or None,
+        continuation_context=continuation_context,
     )
     provider_id = str(provider or "")
     model_id = str(model or "")

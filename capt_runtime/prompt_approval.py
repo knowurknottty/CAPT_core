@@ -9,6 +9,7 @@ RuntimeService; UI state is never accepted as approval authority.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Dict
 
 from . import commands
@@ -18,6 +19,7 @@ from .model_approval_binding import (
     build_bound_model_operator_approval,
     staging_root_for_ledger,
 )
+from .continuation_context import select_continuation_context
 
 
 def _expiry_from(issued_at: str) -> str:
@@ -65,6 +67,15 @@ def request_model_prompt_approval(
     requested_context_budget = int(intent.get("requestedContextBudget", 32_000))
     human_verification_required = bool(intent.get("humanVerificationRequired", True))
     executable = str(intent.get("executable", "") or "")
+    # Governed continuation context selection: the approval binding must be
+    # computed against the SAME prior-evidence selection the run will use, so
+    # the approval digest and the prepared/dispatch digest stay consistent
+    # (context selected before approval == context shown to the model).
+    ledger_dir = str(Path(service.store.path).parent)
+    continuation = select_continuation_context(
+        service.store, mission_id, task_id,
+        exclude_run_id=driver_run_id, ledger_dir=ledger_dir,
+    )
     assembly = build_bound_model_operator_approval(
         human_prompt=objective,
         response_mode=response_mode,
@@ -79,6 +90,8 @@ def request_model_prompt_approval(
         human_verification_required=human_verification_required,
         executable=executable,
         staging_root=staging_root_for_ledger(service.store.path, driver_run_id),
+        context_pack_digest=continuation["contextPackDigest"],
+        continuation_context=continuation["records"],
     )
     expires_at = str(intent.get("expiresAt") or _expiry_from(operator_metadata["issuedAt"]))
     request = {

@@ -45,6 +45,7 @@ def build_prompt_assembly(
     enhancement_engine: str,
     context_pack_digest: str,
     tool_schema_digest: str,
+    continuation_context: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     if response_mode not in RESPONSE_MODES:
         raise ValueError("RESPONSE_MODE_INVALID")
@@ -71,13 +72,44 @@ def build_prompt_assembly(
             "ContextPackDigest: %s" % context_pack_digest,
             "contextpack",
         ),
+    ]
+    # Governed continuation context: prior authoritative mission evidence,
+    # each record labeled with its trust classification. Model A output that
+    # has not been separately verified stays labeled unverified. No silent
+    # upgrade to fact/verified truth.
+    cont_records = continuation_context or []
+    if cont_records:
+        rendered_lines = []
+        for rec in cont_records:
+            trust = rec.get("trust", "unverified")
+            label = "PRIOR UNVERIFIED MODEL EVIDENCE" if trust != "verified" else "PRIOR VERIFIED MODEL EVIDENCE"
+            body = rec.get("content") or rec.get("marker") or ""
+            rendered_lines.append(
+                "[%s] (recordId=%s, source=%s, trust=%s)\n%s"
+                % (
+                    label,
+                    rec.get("recordId"),
+                    rec.get("provenance", {}).get("source", "unknown"),
+                    trust,
+                    body,
+                )
+            )
+        sections.append(
+            _section(
+                "prior-context",
+                35,
+                "\n\n".join(rendered_lines),
+                "continuation_context",
+            )
+        )
+    sections.append(
         _section(
             "tool-surface",
             50,
             "ToolSchemaDigest: %s" % tool_schema_digest,
             "capability_contract",
-        ),
-    ]
+        )
+    )
     rendered = "\n\n".join(
         "[%s]\n%s" % (section["identity"], section["text"])
         for section in sections
@@ -98,19 +130,24 @@ def build_prompt_assembly(
         "modelVisiblePrompt": rendered,
         "modelVisiblePromptDigest": digest(rendered),
         "enhancementEngine": enhancement_engine,
+        "contextPackDigest": context_pack_digest,
+        "continuationContext": cont_records,
     }
 
 
 def build_model_operator_prompt_assembly(
-    *, human_prompt: str, response_mode: str, enhancement_engine: str
+    *, human_prompt: str, response_mode: str, enhancement_engine: str,
+    context_pack_digest: Optional[str] = None,
+    continuation_context: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Build the canonical assembly used for model-operator approval and run."""
     return build_prompt_assembly(
         human_prompt=human_prompt,
         response_mode=response_mode,
         enhancement_engine=enhancement_engine,
-        context_pack_digest=_MODEL_OPERATOR_CONTEXT_REFERENCE,
+        context_pack_digest=context_pack_digest or _MODEL_OPERATOR_CONTEXT_REFERENCE,
         tool_schema_digest=_MODEL_OPERATOR_TOOL_SCHEMA,
+        continuation_context=continuation_context,
     )
 
 

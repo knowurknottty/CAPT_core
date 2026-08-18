@@ -716,11 +716,23 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 response_mode = str(payload.get("responseMode", "SPOCK"))
                 enhancement_engine = str(payload.get("promptEnhancement", "OFF"))
                 human_verification_required = bool(payload.get("humanVerificationRequired", True))
+                # Governed continuation context selection (PR #47 context gate).
+                # Prior authoritative mission evidence is selected HERE, from the
+                # ledger, before approval/admission. No manual injection, no
+                # surviving in-memory object carries it across the restart.
+                from capt_runtime.continuation_context import select_continuation_context
+                ledger_dir = str(Path(ledger_path).parent)
+                continuation = select_continuation_context(
+                    store, str(mission_id), str(task_id),
+                    exclude_run_id=str(run_id), ledger_dir=ledger_dir,
+                )
+                context_pack_digest = continuation["contextPackDigest"]
                 prompt_assembly = build_prompt_assembly(
                     human_prompt=str(objective), response_mode=response_mode,
                     enhancement_engine=enhancement_engine,
-                    context_pack_digest=contracts.digest({"context": "not-selected-at-admission"}),
+                    context_pack_digest=context_pack_digest,
                     tool_schema_digest=contracts.digest({"operations": ["RepositoryRead", "FilesystemRead", "ArtifactCreate", "AnalysisOnly"]}),
+                    continuation_context=continuation["records"],
                 )
                 # Runtime authority binds human approval to the exact
                 # model-visible assembly. Client booleans are provenance only;
@@ -737,6 +749,8 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     human_verification_required=human_verification_required,
                     executable=str(executable or ""),
                     staging_root=staging_root_for_ledger(store.path, str(run_id)),
+                    context_pack_digest=context_pack_digest,
+                    continuation_context=continuation["records"],
                 )
                 if len(bound_assembly["modelVisiblePrompt"]) > 512:
                     raise ValueError("MODEL_VISIBLE_PROMPT_TITLE_TOO_LONG")
@@ -765,7 +779,10 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         "enhancementEngine": enhancement_engine,
                         "humanVerificationRequired": human_verification_required,
                         "promptAssembly": prompt_assembly,
+                        "contextPackDigest": context_pack_digest,
+                        "continuationContext": continuation["records"],
                     }),
+                    context_pack_digest=context_pack_digest,
                 )
 
             def _execute_approved_hermes(prepared: PreparedApprovedModelExecution):
