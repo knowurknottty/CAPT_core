@@ -44,6 +44,20 @@ cat > "$BUNDLE/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
+SIGN_IDENTITY="${CAPT_CODESIGN_IDENTITY:-}"
+if [[ -z "$SIGN_IDENTITY" ]]; then
+  SIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null \
+    | sed -n 's/.*"\(Apple Development:[^"]*\)".*/\1/p' | head -1)"
+fi
+if [[ -n "$SIGN_IDENTITY" ]]; then
+  /usr/bin/codesign --force --sign "$SIGN_IDENTITY" --identifier com.inversionlabs.capt "$BUNDLE"
+  echo "CAPT.app signed: $SIGN_IDENTITY"
+else
+  /usr/bin/codesign --force --sign - --identifier com.inversionlabs.capt "$BUNDLE"
+  echo "CAPT.app signed ad-hoc (no development identity available)"
+fi
+/usr/bin/codesign --verify --strict --verbose=2 "$BUNDLE"
+
 /usr/bin/open -n "$BUNDLE"
 
 if (( VERIFY )); then

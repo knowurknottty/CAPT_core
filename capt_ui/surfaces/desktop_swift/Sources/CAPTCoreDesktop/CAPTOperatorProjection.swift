@@ -46,6 +46,17 @@ public struct CAPTEventSummary: Identifiable, Sendable, Equatable {
     public let actorKind: String
 }
 
+
+public struct CAPTDriverRunSummary: Identifiable, Sendable, Equatable {
+    public let id: String
+    public let missionID: String
+    public let taskID: String
+    public let driverID: String
+    public let state: String
+    public let reconciliationStatus: String
+    public let externalRunID: String?
+}
+
 public enum CAPTOperatorProjection {
     public static func mission(
         _ state: [String: Any],
@@ -98,6 +109,18 @@ public enum CAPTOperatorProjection {
         )
     }
 
+    public static func driverRun(_ raw: [String: Any]) -> CAPTDriverRunSummary {
+        CAPTDriverRunSummary(
+            id: raw["driverRunId"] as? String ?? "unknown-driver-run",
+            missionID: raw["missionId"] as? String ?? "",
+            taskID: raw["taskId"] as? String ?? "",
+            driverID: raw["driverId"] as? String ?? "unknown",
+            state: raw["state"] as? String ?? "unknown",
+            reconciliationStatus: raw["reconciliationStatus"] as? String ?? "unknown",
+            externalRunID: stringOrNil(raw["externalRunId"])
+        )
+    }
+
     public static func event(_ raw: [String: Any]) -> CAPTEventSummary {
         let actor = raw["actor"] as? [String: Any] ?? [:]
         return CAPTEventSummary(
@@ -121,17 +144,20 @@ public struct CAPTHistorySnapshot: Sendable, Equatable {
     public let missions: [CAPTMissionSummary]
     public let evidence: [CAPTEvidenceSummary]
     public let approvals: [CAPTApprovalSummary]
+    public let driverRuns: [CAPTDriverRunSummary]
     public let events: [CAPTEventSummary]
 
     public init(
         missions: [CAPTMissionSummary],
         evidence: [CAPTEvidenceSummary],
         approvals: [CAPTApprovalSummary],
+        driverRuns: [CAPTDriverRunSummary],
         events: [CAPTEventSummary]
     ) {
         self.missions = missions
         self.evidence = evidence
         self.approvals = approvals
+        self.driverRuns = driverRuns
         self.events = events
     }
 }

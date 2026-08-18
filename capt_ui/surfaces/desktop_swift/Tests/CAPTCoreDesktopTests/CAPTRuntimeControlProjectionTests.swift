@@ -6,7 +6,10 @@ final class CAPTRuntimeControlProjectionTests: XCTestCase {
         let policy: [String: Any] = [
             "policyVersion": 1,
             "policyDigest": "sha256:mem",
-            "triggerIntervalTokens": 32768
+            "triggerIntervalTokens": 32768,
+            "retrievalTriggerSteps": 8, "compressionTriggerSteps": 7,
+            "checkpointTriggerSteps": 6, "consolidationTriggerSteps": 5,
+            "hardStopTriggerSteps": 4, "modelSafeLimitSteps": 3
         ]
         let state: [String: Any] = [
             "memoryPathActive": true,
@@ -19,6 +22,12 @@ final class CAPTRuntimeControlProjectionTests: XCTestCase {
         XCTAssertEqual(result.policyVersion, 1)
         XCTAssertEqual(result.triggerIntervalTokens, 32768)
         XCTAssertEqual(result.triggerCount, 1)
+        XCTAssertEqual(result.retrievalTriggerSteps, 8)
+        XCTAssertEqual(result.compressionTriggerSteps, 7)
+        XCTAssertEqual(result.checkpointTriggerSteps, 6)
+        XCTAssertEqual(result.consolidationTriggerSteps, 5)
+        XCTAssertEqual(result.hardStopTriggerSteps, 4)
+        XCTAssertEqual(result.modelSafeLimitSteps, 3)
         XCTAssertNil(result.lastContextPackDigest)
     }
     func testCheckpointProjectionUsesGovernedReceiptFields() {
@@ -38,5 +47,41 @@ final class CAPTRuntimeControlProjectionTests: XCTestCase {
         XCTAssertEqual(result?.ledgerSequence, 184)
         XCTAssertEqual(result?.status, "accepted")
         XCTAssertEqual(result?.integrityDigest, "sha256:integrity")
+    }
+}
+
+extension CAPTRuntimeControlProjectionTests {
+    func testCapabilitiesProjectionPreservesRuntimeSurface() {
+        let result: [String: Any] = [
+            "queryOperations": ["identity", "verification"],
+            "commandOperations": ["cancel_task", "shutdown"],
+            "runtimeComponents": ["eventStore": true, "memory": true, "ctp": false],
+            "lifecycleOperations": ["checkpoint": true, "shutdown": true]
+        ]
+        let caps = CAPTRuntimeControlProjection.capabilities(result)
+        XCTAssertEqual(caps.queryOperations, ["identity", "verification"])
+        XCTAssertEqual(caps.commandOperations, ["cancel_task", "shutdown"])
+        XCTAssertEqual(caps.activeComponents, ["eventStore", "memory"])
+        XCTAssertEqual(caps.lifecycleOperations, ["checkpoint", "shutdown"])
+    }
+}
+
+extension CAPTRuntimeControlProjectionTests {
+    func testClaimReviewProjectionKeepsAdvisorySeparateFromVerification() {
+        let guardResult: [String: Any] = [
+            "statement": "Repository inspected.", "verdict": "accepted",
+            "committed": false, "advisory": true
+        ]
+        let verification: [String: Any] = [
+            "status": ["kind": "not_tested"], "trust": "capt_authoritative"
+        ]
+        let review = CAPTRuntimeControlProjection.claimReview(
+            claimID: "cl-1", guardResult: guardResult, verification: verification
+        )
+        XCTAssertEqual(review.guardVerdict, "accepted")
+        XCTAssertTrue(review.guardAdvisory)
+        XCTAssertFalse(review.guardCommitted)
+        XCTAssertEqual(review.verificationStatus, "not_tested")
+        XCTAssertEqual(review.verificationTrust, "capt_authoritative")
     }
 }

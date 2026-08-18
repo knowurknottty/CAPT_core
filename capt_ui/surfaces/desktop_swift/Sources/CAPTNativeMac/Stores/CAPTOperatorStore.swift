@@ -23,6 +23,7 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var missions: [CAPTMissionSummary] = []
     @Published var evidenceItems: [CAPTEvidenceSummary] = []
     @Published var approvals: [CAPTApprovalSummary] = []
+    @Published var driverRuns: [CAPTDriverRunSummary] = []
     @Published var recentEvents: [CAPTEventSummary] = []
     @Published var providers: [CAPTProviderSnapshot] = []
     @Published var modelSnapshot: CAPTModelSelectionSnapshot?
@@ -30,6 +31,9 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var memorySnapshot: CAPTMemoryRuntimeSnapshot?
     @Published var checkpointSnapshot: CAPTCheckpointSnapshot?
     @Published var runtimeControlMessage = ""
+    @Published var runtimeCapabilities: CAPTRuntimeCapabilitiesSnapshot?
+    @Published var claimReview: CAPTClaimReviewSnapshot?
+    @Published var reviewedClaimID: String?
     @Published var sessions: [CAPTNativeSession] = []
     @Published var activeSessionID: UUID?
 
@@ -42,11 +46,23 @@ final class CAPTOperatorStore: ObservableObject {
     ) {
         self.runtime = runtime
         self.sessionStore = sessionStore
-        do {
-            sessions = try sessionStore.load().sorted { $0.updatedAt > $1.updatedAt }
-            if let first = sessions.first { activateSession(first.id) }
-        } catch {
-            lastError = "Native session cache: " + error.localizedDescription
+        restoreSessionsAsync()
+    }
+
+    private func restoreSessionsAsync() {
+        let store = sessionStore
+        Task {
+            let result = await Task.detached { () -> Result<[CAPTNativeSession], Error> in
+                do { return .success(try store.load()) }
+                catch { return .failure(error) }
+            }.value
+            switch result {
+            case .success(let restored):
+                sessions = restored.sorted { $0.updatedAt > $1.updatedAt }
+                if activeSessionID == nil, let first = sessions.first { activateSession(first.id) }
+            case .failure(let error):
+                lastError = "Native session cache: " + error.localizedDescription
+            }
         }
     }
 
@@ -199,6 +215,7 @@ final class CAPTOperatorStore: ObservableObject {
                 missions = snapshot.missions
                 evidenceItems = snapshot.evidence
                 approvals = snapshot.approvals
+                driverRuns = snapshot.driverRuns
                 recentEvents = snapshot.events
             } catch {
                 lastError = error.localizedDescription
@@ -225,6 +242,14 @@ final class CAPTOperatorStore: ObservableObject {
         }
     }
 
+    func refreshCapabilities() {
+        guard connectionState == .connected else { return }
+        Task {
+            do { runtimeCapabilities = try await runtime.capabilitiesSnapshot() }
+            catch { lastError = error.localizedDescription }
+        }
+    }
+
     func refreshMemory() {
         guard connectionState == .connected else { return }
         Task {
@@ -238,6 +263,7 @@ final class CAPTOperatorStore: ObservableObject {
         refreshHistory()
         refreshOperatorState()
         refreshMemory()
+        refreshCapabilities()
     }
 
 
@@ -338,6 +364,75 @@ final class CAPTOperatorStore: ObservableObject {
                 _ = try await runtime.resume()
                 runtimeControlMessage = "Runtime resume accepted"
                 refreshAll()
+            } catch { handle(error) }
+            isBusy = false
+        }
+    }
+
+    func cancelTask(_ taskID: String) {
+        guard runtimeCapabilities?.supportsCommand("cancel_task") == true, !isBusy else { return }
+        isBusy = true
+        Task {
+            do {
+                _ = try await runtime.cancelTask(taskID)
+                runtimeControlMessage = "Task cancelled: " + taskID
+                refreshHistory()
+            } catch { handle(error) }
+            isBusy = false
+        }
+    }
+
+    func cancelDriverRun(_ driverRunID: String) {
+        guard runtimeCapabilities?.supportsCommand("cancel_driver_run") == true, !isBusy else { return }
+        isBusy = true
+        Task {
+            do {
+                _ = try await runtime.cancelDriverRun(driverRunID)
+                runtimeControlMessage = "DriverRun cancelled: " + driverRunID
+                refreshHistory()
+            } catch { handle(error) }
+            isBusy = false
+        }
+    }
+
+    func updateMemoryPolicy(
+        retrieval: Int, compression: Int, checkpoint: Int,
+        consolidation: Int, hardStop: Int, modelSafe: Int
+    ) {
+        guard runtimeCapabilities?.supportsCommand("update_memory_trigger_policy") == true, !isBusy else { return }
+        isBusy = true
+        Task {
+            do {
+                memorySnapshot = try await runtime.updateMemoryPolicy(
+                    retrieval: retrieval, compression: compression, checkpoint: checkpoint,
+                    consolidation: consolidation, hardStop: hardStop, modelSafe: modelSafe
+                )
+                runtimeControlMessage = "Memory trigger policy accepted by RuntimeService"
+            } catch { handle(error) }
+            isBusy = false
+        }
+    }
+
+    func reviewClaim(_ item: CAPTEvidenceSummary) {
+        guard runtimeCapabilities?.supportsQuery("claimguard") == true,
+              runtimeCapabilities?.supportsQuery("verification") == true else { return }
+        Task {
+            do {
+                claimReview = try await runtime.claimReview(claimID: item.id, statement: item.statement)
+                reviewedClaimID = item.id
+            } catch { handle(error) }
+        }
+    }
+
+    func shutdownRuntime() {
+        guard runtimeCapabilities?.supportsCommand("shutdown") == true, !isBusy else { return }
+        isBusy = true
+        Task {
+            do {
+                _ = try await runtime.shutdown()
+                connectionState = .disconnected
+                runtimeIdentity = "Not connected"
+                runtimeControlMessage = "Runtime shutdown accepted. Connect will bootstrap it again."
             } catch { handle(error) }
             isBusy = false
         }

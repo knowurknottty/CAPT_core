@@ -117,3 +117,29 @@ extension CAPTLiveRuntimeTests {
         XCTAssertEqual(missionEvents.filter { $0["eventType"] as? String == "MissionCreated" }.count, 1)
     }
 }
+
+extension CAPTLiveRuntimeTests {
+    func testRealShutdownThenBootstrapReconnectsSameLedger() throws {
+        try requireLive()
+        let client = CAPTRuntimeClient()
+        let identity = try client.connect()
+        let before = (identity["result"] as? [String: Any] ?? identity)["headSequence"] as? Int ?? 0
+
+        let receipt = try client.command(
+            op: "shutdown", payload: [:],
+            idempotencyKey: "native-live-shutdown-" + UUID().uuidString.lowercased()
+        )
+        XCTAssertEqual(receipt["status"] as? String, "accepted")
+        client.disconnect()
+
+        Thread.sleep(forTimeInterval: 0.5)
+        let bootstrapper = CAPTRuntimeBootstrapper()
+        try bootstrapper.start()
+        let restarted = CAPTRuntimeClient()
+        defer { restarted.disconnect() }
+        let afterIdentity = try restarted.connect()
+        let after = (afterIdentity["result"] as? [String: Any] ?? afterIdentity)
+        XCTAssertEqual(after["integrity"] as? String, "ok")
+        XCTAssertGreaterThanOrEqual(after["headSequence"] as? Int ?? 0, before)
+    }
+}

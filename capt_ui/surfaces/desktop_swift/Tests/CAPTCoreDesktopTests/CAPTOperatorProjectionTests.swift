@@ -65,3 +65,19 @@ extension CAPTOperatorProjectionTests {
         XCTAssertEqual(item.remainingUses, 1)
     }
 }
+
+extension CAPTOperatorProjectionTests {
+    func testDriverRunProjectionPreservesTaskAndRecoveryState() {
+        let raw: [String: Any] = [
+            "driverRunId": "dr-1", "driverId": "provider",
+            "missionId": "m-1", "taskId": "t-1",
+            "state": "running", "reconciliationStatus": "not_required"
+        ]
+        let item = CAPTOperatorProjection.driverRun(raw)
+        XCTAssertEqual(item.id, "dr-1")
+        XCTAssertEqual(item.taskID, "t-1")
+        XCTAssertEqual(item.driverID, "provider")
+        XCTAssertEqual(item.state, "running")
+        XCTAssertEqual(item.reconciliationStatus, "not_required")
+    }
+}

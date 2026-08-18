@@ -38,6 +38,12 @@ actor CAPTBackgroundRuntime {
         try client.query(op: "capabilities", payload: [:])
     }
 
+    func capabilitiesSnapshot() throws -> CAPTRuntimeCapabilitiesSnapshot {
+        let response = try capabilities()
+        let result = response["result"] as? [String: Any] ?? response
+        return CAPTRuntimeControlProjection.capabilities(result)
+    }
+
     func historySnapshot() throws -> CAPTHistorySnapshot {
         let aggregateResponse = try client.query(op: "list_aggregates", payload: [:])
         let aggregates = aggregateResponse["result"] as? [[String: Any]] ?? []
@@ -63,6 +69,13 @@ actor CAPTBackgroundRuntime {
             return CAPTOperatorProjection.mission(state, tasks: taskStates)
         }.reversed()
 
+        let driverRuns = aggregates.compactMap { aggregate -> CAPTDriverRunSummary? in
+            guard aggregate["kind"] as? String == "driverrun",
+                  let stream = aggregate["streamId"] as? String,
+                  let state = states[stream] else { return nil }
+            return CAPTOperatorProjection.driverRun(state)
+        }.reversed()
+
         let evidence = aggregates.compactMap { aggregate -> CAPTEvidenceSummary? in
             guard aggregate["kind"] as? String == "claim",
                   let stream = aggregate["streamId"] as? String,
@@ -84,6 +97,7 @@ actor CAPTBackgroundRuntime {
             missions: Array(missions),
             evidence: Array(evidence),
             approvals: Array(approvals),
+            driverRuns: Array(driverRuns),
             events: Array(events)
         )
     }
@@ -128,6 +142,64 @@ actor CAPTBackgroundRuntime {
 
     func resume() throws -> [String: Any] {
         try client.command(op: "resume_runtime", payload: [:], idempotencyKey: "native-resume-" + UUID().uuidString.lowercased())
+    }
+
+    func shutdown() throws -> [String: Any] {
+        let receipt = try client.command(
+            op: "shutdown", payload: [:],
+            idempotencyKey: "native-shutdown-" + UUID().uuidString.lowercased()
+        )
+        client.disconnect()
+        return receipt
+    }
+
+    func cancelTask(_ taskID: String) throws -> [String: Any] {
+        try client.command(
+            op: "cancel_task",
+            payload: ["taskId": taskID, "reason": "Operator cancelled from CAPT native macOS surface"],
+            idempotencyKey: "native-cancel-task-" + taskID
+        )
+    }
+
+    func cancelDriverRun(_ driverRunID: String) throws -> [String: Any] {
+        try client.command(
+            op: "cancel_driver_run",
+            payload: ["driverRunId": driverRunID, "reason": "Operator cancelled from CAPT native macOS surface"],
+            idempotencyKey: "native-cancel-run-" + driverRunID
+        )
+    }
+
+    func updateMemoryPolicy(
+        retrieval: Int, compression: Int, checkpoint: Int,
+        consolidation: Int, hardStop: Int, modelSafe: Int
+    ) throws -> CAPTMemoryRuntimeSnapshot {
+        _ = try client.command(
+            op: "update_memory_trigger_policy",
+            payload: [
+                "retrievalTriggerSteps": retrieval,
+                "compressionTriggerSteps": compression,
+                "checkpointTriggerSteps": checkpoint,
+                "consolidationTriggerSteps": consolidation,
+                "hardStopTriggerSteps": hardStop,
+                "modelSafeLimitSteps": modelSafe,
+            ],
+            idempotencyKey: "native-memory-policy-" + UUID().uuidString.lowercased()
+        )
+        return try memorySnapshot()
+    }
+
+    func claimReview(claimID: String, statement: String) throws -> CAPTClaimReviewSnapshot {
+        let guardResponse = try client.query(
+            op: "claimguard", payload: ["statement": statement, "claimId": claimID]
+        )
+        let verificationResponse = try client.query(
+            op: "verification", payload: ["claimId": claimID]
+        )
+        return CAPTRuntimeControlProjection.claimReview(
+            claimID: claimID,
+            guardResult: guardResponse["result"] as? [String: Any] ?? guardResponse,
+            verification: verificationResponse["result"] as? [String: Any] ?? verificationResponse
+        )
     }
 
     func decideApproval(requestID: String, decision: String) throws -> [String: Any] {

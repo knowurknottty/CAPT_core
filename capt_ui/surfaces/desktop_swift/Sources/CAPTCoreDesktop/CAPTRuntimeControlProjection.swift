@@ -6,6 +6,12 @@ public struct CAPTMemoryRuntimeSnapshot: Hashable {
     public let policyDigest: String
     public let triggerIntervalTokens: Int
     public let triggerCount: Int
+    public let retrievalTriggerSteps: Int
+    public let compressionTriggerSteps: Int
+    public let checkpointTriggerSteps: Int
+    public let consolidationTriggerSteps: Int
+    public let hardStopTriggerSteps: Int
+    public let modelSafeLimitSteps: Int
     public let policyVersions: [Int]
     public let lastContextPackDigest: String?
     public let lastContextPackID: String?
@@ -21,7 +27,62 @@ public struct CAPTCheckpointSnapshot: Hashable {
     public let ledgerDigest: String
     public let integrityDigest: String
 }
+
+public struct CAPTRuntimeCapabilitiesSnapshot: Hashable, Sendable {
+    public let queryOperations: [String]
+    public let commandOperations: [String]
+    public let activeComponents: [String]
+    public let lifecycleOperations: [String]
+
+    public func supportsCommand(_ operation: String) -> Bool {
+        commandOperations.contains(operation)
+    }
+
+    public func supportsQuery(_ operation: String) -> Bool {
+        queryOperations.contains(operation)
+    }
+}
+
+
+public struct CAPTClaimReviewSnapshot: Hashable, Sendable {
+    public let claimID: String
+    public let guardVerdict: String
+    public let guardAdvisory: Bool
+    public let guardCommitted: Bool
+    public let verificationStatus: String
+    public let verificationTrust: String
+}
+
 public enum CAPTRuntimeControlProjection {
+    public static func claimReview(
+        claimID: String, guardResult: [String: Any], verification: [String: Any]
+    ) -> CAPTClaimReviewSnapshot {
+        let status = verification["status"] as? [String: Any] ?? [:]
+        return CAPTClaimReviewSnapshot(
+            claimID: claimID,
+            guardVerdict: guardResult["verdict"] as? String ?? "unknown",
+            guardAdvisory: guardResult["advisory"] as? Bool ?? false,
+            guardCommitted: guardResult["committed"] as? Bool ?? false,
+            verificationStatus: status["kind"] as? String ?? "unknown",
+            verificationTrust: verification["trust"] as? String ?? "unknown"
+        )
+    }
+
+    public static func capabilities(_ result: [String: Any]) -> CAPTRuntimeCapabilitiesSnapshot {
+        let components = result["runtimeComponents"] as? [String: Any] ?? [:]
+        let lifecycle = result["lifecycleOperations"] as? [String: Any] ?? [:]
+        return CAPTRuntimeCapabilitiesSnapshot(
+            queryOperations: result["queryOperations"] as? [String] ?? [],
+            commandOperations: result["commandOperations"] as? [String] ?? [],
+            activeComponents: components.compactMap { key, value in
+                (value as? Bool) == true ? key : nil
+            }.sorted(),
+            lifecycleOperations: lifecycle.compactMap { key, value in
+                (value as? Bool) == true ? key : nil
+            }.sorted()
+        )
+    }
+
     public static func memory(
         policy: [String: Any], state: [String: Any]
     ) -> CAPTMemoryRuntimeSnapshot {
@@ -34,6 +95,12 @@ public enum CAPTRuntimeControlProjection {
             policyDigest: policy["policyDigest"] as? String ?? "",
             triggerIntervalTokens: policy["triggerIntervalTokens"] as? Int ?? 0,
             triggerCount: (state["triggerLog"] as? [[String: Any]])?.count ?? 0,
+            retrievalTriggerSteps: policy["retrievalTriggerSteps"] as? Int ?? 0,
+            compressionTriggerSteps: policy["compressionTriggerSteps"] as? Int ?? 0,
+            checkpointTriggerSteps: policy["checkpointTriggerSteps"] as? Int ?? 0,
+            consolidationTriggerSteps: policy["consolidationTriggerSteps"] as? Int ?? 0,
+            hardStopTriggerSteps: policy["hardStopTriggerSteps"] as? Int ?? 0,
+            modelSafeLimitSteps: policy["modelSafeLimitSteps"] as? Int ?? 0,
             policyVersions: state["policyVersions"] as? [Int] ?? [],
             lastContextPackDigest: pack?["contextPackDigest"] as? String,
             lastContextPackID: pack?["contextPackId"] as? String,

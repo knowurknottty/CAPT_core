@@ -1,9 +1,10 @@
 # CAPT Native macOS Desktop (SwiftUI)
 
-**Status:** NATIVE_DESKTOP_INTERNAL_DOGFOOD_CANDIDATE — runnable `CAPT.app`
-with authenticated RuntimeService IPC, governed multi-turn model execution,
-cold-start runtime bootstrap, encrypted restartable chat sessions, and live
-mission/approval/evidence/memory/ledger projections.
+**Status:** NATIVE_DESKTOP_CORE_PARITY_INTERNAL_DOGFOOD_READY — runnable
+`CAPT.app` with authenticated RuntimeService IPC, governed multi-turn model
+execution, cold-start bootstrap/recovery, encrypted restartable chat sessions,
+and operator coverage for the meaningful RuntimeService capabilities exposed by
+the current CAPT-core candidate.
 
 **Purpose:** a thin SwiftUI macOS client over the authenticated CAPT runtime
 boundary. It does NOT port RuntimeService to Swift and does NOT duplicate
@@ -72,17 +73,25 @@ Implemented and exercised on macOS:
 - authoritative task state shown without automatic verification/promotion;
 - read-only mission/task lineage, claim/evidence state, and last-250 EventStore timeline projections;
 - authoritative memory-policy/ContextPack inspector via RuntimeService;
-- governed checkpoint/resume controls with checkpoint, ledger, and integrity digests surfaced;
+- governed checkpoint/resume/shutdown + cold rebootstrap controls with checkpoint, ledger, and integrity digests surfaced;
+- task and DriverRun cancellation controls gated by the live capability contract and aggregate state;
+- complete six-threshold governed memory-policy editor; RuntimeService remains validator and policy authority;
+- read-only ClaimGuard + verification drill-down preserving advisory/uncommitted/not-tested distinctions;
+- live RuntimeService capability inventory for queries, commands, components, and lifecycle operations;
 - bounded 4 MiB framed Unix-socket transport;
 - `script/install_local_runtime.sh` builds/installs the exact local CAPT wheel into a private venv;
-- `script/build_and_run.sh --verify` installs that runtime if needed, stages, and launches `dist/CAPT.app`.
+- `script/build_and_run.sh --verify` installs that runtime if needed, stages, signs, verifies, and launches `dist/CAPT.app`.
 
-Remaining core-surface parity work is intentionally bounded to current RuntimeService
-capabilities: active task/DriverRun cancellation, memory-policy mutation,
-ClaimGuard/verification drill-down, and explicit runtime shutdown. After those
-controls are wired, remaining work is productization: onboarding polish, deeper
-artifact/provenance browsing, signing/notarization, icon/visual polish, and
-provider-specific advanced settings. None of those may create alternate runtime authority.
+The meaningful current RuntimeService operator surface is represented. Low-level
+`create_mission` and fixed OpenHarness commands remain visible in the live
+capability inventory but intentionally do not get competing native workflows;
+the governed chat path subsumes their normal operator use. Remaining work is
+productization: onboarding polish, deeper artifact/provenance browsing, icon
+and visual polish, provider-specific advanced settings, and distribution-grade
+notarization. Internal development builds are signed with a stable Apple
+Development identity when available (override with `CAPT_CODESIGN_IDENTITY`),
+falling back to ad-hoc signing only when no development identity exists.
+None of these productization items may create alternate runtime authority.
 
 ## Behavioral reference
 
@@ -91,8 +100,8 @@ Use the current Tk client (`capt_ui/surfaces/desktop/surface.py`) and
 
 ## Layout (per UI_WIREFRAMES.md)
 
-- Sidebar: Sessions / Missions / Memory / Providers / Evidence / Settings /
-  Logs / Help
+- Sidebar: New Chat / Recent Chats / Chat / Missions / Approvals / Providers /
+  Memory / Evidence / Runtime / Ledger / Settings
 - Conversation: familiar chat shell; messages represent mission work, runtime
   state, approvals, evidence, recovery, memory (not just chat)
 - Right inspector (dynamic): current model, provider, mission, checkpoint,

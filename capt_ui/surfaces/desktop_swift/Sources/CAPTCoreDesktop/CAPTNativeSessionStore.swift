@@ -49,7 +49,7 @@ public struct CAPTKeychainSessionKeyProvider: CAPTSessionKeyProviding {
 
     public init(
         service: String = "com.inversionlabs.capt.native-session-cache",
-        account: String = "session-key-v1"
+        account: String = "signed-session-key-v1"
     ) {
         self.service = service
         self.account = account
