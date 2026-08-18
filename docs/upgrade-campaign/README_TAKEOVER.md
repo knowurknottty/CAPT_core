@@ -1,0 +1,1 @@
+This campaign is actively being repaired and continued under the authoritative state in issue #50. Historical item manifests remain evidence records and may be superseded by later exact-head verification.
