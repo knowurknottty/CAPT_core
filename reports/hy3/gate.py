@@ -64,7 +64,7 @@ def connect_client(sock=SOCK, tok=TOKEN, timeout=60):
     raise RuntimeError("cannot connect")
 
 def runc(cmd, payload, key, timeout=120):
-    c = connect_client(); 
+    c = connect_client(timeout=timeout)
     try: return c.command(cmd, payload, key)
     finally: c.disconnect()
 
