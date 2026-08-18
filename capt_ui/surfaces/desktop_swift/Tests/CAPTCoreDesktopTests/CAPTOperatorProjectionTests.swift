@@ -47,3 +47,21 @@ final class CAPTOperatorProjectionTests: XCTestCase {
         XCTAssertEqual(summary.missionID, "m-1")
     }
 }
+
+extension CAPTOperatorProjectionTests {
+    func testApprovalProjectionPreservesDecisionAndBinding() {
+        let raw: [String: Any] = [
+            "requestId": "approval-1", "missionId": "m-1", "taskId": "t-1",
+            "operation": "ModelOperatorInspection", "requestedCapability": "cap.fs.read",
+            "riskClassification": "low", "state": "requested", "remainingUses": 1,
+            "expiresAt": "2026-08-18T14:00:00Z",
+            "scope": ["approvalBinding": ["provider": "ollama", "model": "qwen", "targetRoot": "/repo"]]
+        ]
+        let item = CAPTOperatorProjection.approval(raw)
+        XCTAssertEqual(item.id, "approval-1")
+        XCTAssertEqual(item.provider, "ollama")
+        XCTAssertEqual(item.model, "qwen")
+        XCTAssertEqual(item.state, "requested")
+        XCTAssertEqual(item.remainingUses, 1)
+    }
+}

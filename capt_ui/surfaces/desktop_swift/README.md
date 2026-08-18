@@ -54,8 +54,10 @@ Implemented and exercised on macOS:
 - native sidebar/detail/inspector chat shell with live mission/evidence/ledger counts;
 - authenticated connection to `~/.capt/runtime.sock` + `runtime.token`;
 - cold-start recovery through the private `~/.capt/runtime-venv/bin/capt` CLI;
+- global approval-decision queue with explicit decision-vs-dispatch separation;
 - live provider inventory/health with test + activate controls via the packaged operator layer;
 - live model inventory/default-model control and CaveCAPT verbosity preference;
+- provider credential-reference setup (`env:` / `keychain:` only; raw tokens rejected);
 - explicit target-root selection;
 - governed `request_model_prompt_approval` flow;
 - visible approve/deny decision card;
@@ -70,8 +72,8 @@ Implemented and exercised on macOS:
 - `script/build_and_run.sh --verify` installs that runtime if needed, stages, and launches `dist/CAPT.app`.
 
 Still later native-surface work: onboarding polish, richer mission detail, memory-record
-drill-down, evidence artifact/provenance inspection, approval-queue management,
-provider credential-reference editing, signing/notarization, and visual polish.
+drill-down, evidence artifact/provenance inspection, keychain secret-entry UX,
+provider-specific advanced settings, signing/notarization, and visual polish.
 Those are UI/productization gaps, not alternate runtime authority.
 
 ## Behavioral reference

@@ -3,6 +3,7 @@ import CAPTCoreDesktop
 
 struct ProviderControlView: View {
     @ObservedObject var store: CAPTOperatorStore
+    @State private var credentialReference = ""
 
     private var selectedProvider: CAPTProviderSnapshot? {
         store.providers.first(where: { $0.id == store.provider })
@@ -15,6 +16,7 @@ struct ProviderControlView: View {
                 header
                 providersSection
                 modelSection
+                credentialSection
                 verbositySection
             }
             .padding(24)
@@ -77,6 +79,26 @@ struct ProviderControlView: View {
             } else {
                 Text("No discovered models for the selected provider. Test the provider to refresh inventory.")
                     .font(.callout).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+
+    private var credentialSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Credential reference").font(.headline)
+            if let item = selectedProvider {
+                HStack {
+                    TextField("env:OPENROUTER_API_KEY or keychain:openrouter", text: $credentialReference)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Save Reference") {
+                        store.setProviderKeyReference(providerID: item.id, reference: credentialReference)
+                        credentialReference = ""
+                    }
+                    .disabled(credentialReference.isEmpty)
+                }
+                Text("Stored: \(item.keyRef). Raw keys are rejected; the native app persists only CAPT secret references.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
     }

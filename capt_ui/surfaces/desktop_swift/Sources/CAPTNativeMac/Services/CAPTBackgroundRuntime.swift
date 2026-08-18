@@ -70,12 +70,20 @@ actor CAPTBackgroundRuntime {
             return CAPTOperatorProjection.evidence(state)
         }.reversed()
 
+        let approvals = aggregates.compactMap { aggregate -> CAPTApprovalSummary? in
+            guard aggregate["kind"] as? String == "human_approval",
+                  let stream = aggregate["streamId"] as? String,
+                  let state = states[stream] else { return nil }
+            return CAPTOperatorProjection.approval(state)
+        }.reversed()
+
         let eventResponse = try client.query(op: "event_timeline", payload: ["after": 0])
         let rawEvents = eventResponse["result"] as? [[String: Any]] ?? []
         let events = rawEvents.suffix(250).map(CAPTOperatorProjection.event).reversed()
         return CAPTHistorySnapshot(
             missions: Array(missions),
             evidence: Array(evidence),
+            approvals: Array(approvals),
             events: Array(events)
         )
     }
@@ -90,6 +98,10 @@ actor CAPTBackgroundRuntime {
 
     func testProvider(_ providerID: String) throws -> [CAPTProviderSnapshot] {
         try operatorCLI.testProvider(providerID)
+    }
+
+    func setProviderKeyReference(providerID: String, reference: String) throws -> [CAPTProviderSnapshot] {
+        try operatorCLI.setProviderKeyReference(providerID, reference: reference)
     }
 
     func setDefaultModel(providerID: String, modelID: String) throws -> CAPTModelSelectionSnapshot {
@@ -116,6 +128,18 @@ actor CAPTBackgroundRuntime {
 
     func resume() throws -> [String: Any] {
         try client.command(op: "resume_runtime", payload: [:], idempotencyKey: "native-resume-" + UUID().uuidString.lowercased())
+    }
+
+    func decideApproval(requestID: String, decision: String) throws -> [String: Any] {
+        try client.command(
+            op: "submit_approval_decision",
+            payload: [
+                "requestId": requestID,
+                "decision": decision,
+                "note": "Decision from CAPT native approval queue"
+            ],
+            idempotencyKey: "native-queue-" + decision + "-" + requestID
+        )
     }
 
     func requestApproval(

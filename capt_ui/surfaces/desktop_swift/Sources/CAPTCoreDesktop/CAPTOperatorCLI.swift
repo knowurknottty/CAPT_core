@@ -65,6 +65,10 @@ public struct CAPTOperatorCLI {
         }
     }
 
+    public static func isSafeSecretReference(_ value: String) -> Bool {
+        value.hasPrefix("env:") || value.hasPrefix("keychain:")
+    }
+
     public static func decodeProviders(_ data: Data) throws -> [CAPTProviderSnapshot] {
         do { return try JSONDecoder().decode([CAPTProviderSnapshot].self, from: data) }
         catch { throw CAPTOperatorCLIError.malformedJSON(error.localizedDescription) }
@@ -104,6 +108,14 @@ public struct CAPTOperatorCLI {
 
     public func testProvider(_ providerID: String) throws -> [CAPTProviderSnapshot] {
         _ = try run(["providers", "--test", providerID, "--json"])
+        return try providers()
+    }
+
+    public func setProviderKeyReference(_ providerID: String, reference: String) throws -> [CAPTProviderSnapshot] {
+        guard Self.isSafeSecretReference(reference) else {
+            throw CAPTOperatorCLIError.commandFailed("Credential must be an env: or keychain: reference; raw secrets are rejected")
+        }
+        _ = try run(["providers", "--key-ref", providerID, reference, "--json"])
         return try providers()
     }
 

@@ -39,6 +39,8 @@ struct ContentView: View {
             ChatView(store: store)
         case .missions:
             MissionBrowserView(store: store)
+        case .approvals:
+            ApprovalQueueView(store: store)
         case .providers:
             ProviderControlView(store: store)
         case .memory:

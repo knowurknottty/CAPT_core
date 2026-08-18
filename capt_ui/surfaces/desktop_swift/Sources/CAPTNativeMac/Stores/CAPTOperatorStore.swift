@@ -22,6 +22,7 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var lastError: String?
     @Published var missions: [CAPTMissionSummary] = []
     @Published var evidenceItems: [CAPTEvidenceSummary] = []
+    @Published var approvals: [CAPTApprovalSummary] = []
     @Published var recentEvents: [CAPTEventSummary] = []
     @Published var providers: [CAPTProviderSnapshot] = []
     @Published var modelSnapshot: CAPTModelSelectionSnapshot?
@@ -176,6 +177,7 @@ final class CAPTOperatorStore: ObservableObject {
                 let snapshot = try await runtime.historySnapshot()
                 missions = snapshot.missions
                 evidenceItems = snapshot.evidence
+                approvals = snapshot.approvals
                 recentEvents = snapshot.events
             } catch {
                 lastError = error.localizedDescription
@@ -216,6 +218,24 @@ final class CAPTOperatorStore: ObservableObject {
     }
 
 
+
+    var pendingApprovals: [CAPTApprovalSummary] {
+        approvals.filter { $0.state == "requested" && $0.decision == nil }
+    }
+
+    func decideQueuedApproval(_ item: CAPTApprovalSummary, decision: String) {
+        guard !isBusy, item.state == "requested", item.decision == nil else { return }
+        isBusy = true
+        Task {
+            do {
+                _ = try await runtime.decideApproval(requestID: item.id, decision: decision)
+                runtimeControlMessage = "Approval \(decision) recorded"
+                refreshHistory()
+            } catch { handle(error) }
+            isBusy = false
+        }
+    }
+
     func activateProvider(_ providerID: String) {
         guard !isBusy else { return }
         isBusy = true
@@ -238,6 +258,16 @@ final class CAPTOperatorStore: ObservableObject {
         isBusy = true
         Task {
             do { providers = try await runtime.testProvider(providerID) }
+            catch { handle(error) }
+            isBusy = false
+        }
+    }
+
+    func setProviderKeyReference(providerID: String, reference: String) {
+        guard !isBusy else { return }
+        isBusy = true
+        Task {
+            do { providers = try await runtime.setProviderKeyReference(providerID: providerID, reference: reference) }
             catch { handle(error) }
             isBusy = false
         }

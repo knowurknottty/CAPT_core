@@ -35,3 +35,12 @@ final class CAPTOperatorCLITests: XCTestCase {
         XCTAssertEqual(value, "detailed")
     }
 }
+
+extension CAPTOperatorCLITests {
+    func testSecretReferenceValidationRejectsRawCredential() {
+        XCTAssertTrue(CAPTOperatorCLI.isSafeSecretReference("env:OPENROUTER_API_KEY"))
+        XCTAssertTrue(CAPTOperatorCLI.isSafeSecretReference("keychain:openrouter"))
+        XCTAssertFalse(CAPTOperatorCLI.isSafeSecretReference("sk-raw-secret"))
+        XCTAssertFalse(CAPTOperatorCLI.isSafeSecretReference("OPENROUTER_API_KEY"))
+    }
+}

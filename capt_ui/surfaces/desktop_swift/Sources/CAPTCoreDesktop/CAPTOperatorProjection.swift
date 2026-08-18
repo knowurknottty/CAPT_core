@@ -18,6 +18,23 @@ public struct CAPTEvidenceSummary: Identifiable, Sendable, Equatable {
     public let evidenceCount: Int
 }
 
+
+public struct CAPTApprovalSummary: Identifiable, Sendable, Equatable {
+    public let id: String
+    public let missionID: String
+    public let taskID: String
+    public let operation: String
+    public let capability: String
+    public let risk: String
+    public let state: String
+    public let decision: String?
+    public let remainingUses: Int
+    public let expiresAt: String
+    public let provider: String
+    public let model: String
+    public let targetRoot: String
+}
+
 public struct CAPTEventSummary: Identifiable, Sendable, Equatable {
     public var id: Int { sequence }
     public let sequence: Int
@@ -60,6 +77,27 @@ public enum CAPTOperatorProjection {
         )
     }
 
+
+    public static func approval(_ raw: [String: Any]) -> CAPTApprovalSummary {
+        let scope = raw["scope"] as? [String: Any] ?? [:]
+        let binding = scope["approvalBinding"] as? [String: Any] ?? [:]
+        return CAPTApprovalSummary(
+            id: raw["requestId"] as? String ?? "unknown-approval",
+            missionID: raw["missionId"] as? String ?? "",
+            taskID: raw["taskId"] as? String ?? "",
+            operation: raw["operation"] as? String ?? "",
+            capability: raw["requestedCapability"] as? String ?? "",
+            risk: raw["riskClassification"] as? String ?? "unknown",
+            state: raw["state"] as? String ?? "unknown",
+            decision: stringOrNil(raw["decision"]),
+            remainingUses: raw["remainingUses"] as? Int ?? 0,
+            expiresAt: raw["expiresAt"] as? String ?? "",
+            provider: binding["provider"] as? String ?? "",
+            model: binding["model"] as? String ?? "",
+            targetRoot: binding["targetRoot"] as? String ?? scope["rootPath"] as? String ?? ""
+        )
+    }
+
     public static func event(_ raw: [String: Any]) -> CAPTEventSummary {
         let actor = raw["actor"] as? [String: Any] ?? [:]
         return CAPTEventSummary(
@@ -82,15 +120,18 @@ public enum CAPTOperatorProjection {
 public struct CAPTHistorySnapshot: Sendable, Equatable {
     public let missions: [CAPTMissionSummary]
     public let evidence: [CAPTEvidenceSummary]
+    public let approvals: [CAPTApprovalSummary]
     public let events: [CAPTEventSummary]
 
     public init(
         missions: [CAPTMissionSummary],
         evidence: [CAPTEvidenceSummary],
+        approvals: [CAPTApprovalSummary],
         events: [CAPTEventSummary]
     ) {
         self.missions = missions
         self.evidence = evidence
+        self.approvals = approvals
         self.events = events
     }
 }
