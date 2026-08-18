@@ -60,7 +60,7 @@ Modify:
 - Create: `capt_lab/engines/base.py`
 - Create: `capt_lab/donors/manifest.json`
 - Create: `tests/capt_lab/test_registry.py`
-- Create: `tests/capt_lab/test_contracts.py`
+- Create: `tests/capt_lab/test_lab_contracts.py`
 - Modify: `pyproject.toml`
 
 **Interfaces:**
@@ -84,7 +84,7 @@ def test_registry_describes_epistemic_class_and_provenance():
 
 - [ ] **Step 2: Run focused tests and verify RED**
 
-Run: `/private/tmp/capt-lab-baseline-venv/bin/python -m pytest tests/capt_lab/test_contracts.py tests/capt_lab/test_registry.py -q`
+Run: `/private/tmp/capt-lab-baseline-venv/bin/python -m pytest tests/capt_lab/test_lab_contracts.py tests/capt_lab/test_registry.py -q`
 Expected: import/module failures because `capt_lab` does not exist.
 
 - [ ] **Step 3: Implement canonical contracts/provenance/registry**
@@ -104,7 +104,7 @@ Build/install wheel in a disposable venv and assert `capt_lab.__file__` resolves
 - [ ] **Step 6: Commit**
 
 ```bash
-git add pyproject.toml capt_lab tests/capt_lab/test_contracts.py tests/capt_lab/test_registry.py
+git add pyproject.toml capt_lab tests/capt_lab/test_lab_contracts.py tests/capt_lab/test_registry.py
 git commit -m "feat(lab): add governed engine registry contracts"
 ```
 

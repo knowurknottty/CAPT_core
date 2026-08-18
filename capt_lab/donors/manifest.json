@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.0.0",
+  "engines": {
+    "lab.math": {
+      "donorRepository": "https://github.com/knowurknottty/biocapt-ecosystem.git",
+      "donorCommit": "28e7834982c859731636e733c53df9f84893f897",
+      "sourceFiles": [
+        {"path": "primary/biocapt-desktop/src/captlang/math/lib.rs", "sha256": "sha256:b18cf1ce014f7a949b85dd0aac88beb68ae219ff79e6356bf82a2313caedf740"},
+        {"path": "primary/biocapt-desktop/src/captlang/math/cyclotomic.rs", "sha256": "sha256:667939739e81bdfa56fe7baa33a6e47639fbed8b9947a62dbf973e50d62ce6dd"},
+        {"path": "primary/biocapt-desktop/src/captlang/math/materials.rs", "sha256": "sha256:add976909138f03297e34968c53419fc9aefd91602a6bf7ad2c3c8dacd8ceb79"}
+      ],
+      "validation": ["cargo test --all-features: 17 passed", "cargo check --all-features: passed"],
+      "limitations": ["Several donor routines are placeholders and are excluded from R1 operations."]
+    },
+    "lab.analogy": {
+      "donorRepository": "https://github.com/knowurknottty/biocapt-ecosystem.git",
+      "donorCommit": "28e7834982c859731636e733c53df9f84893f897",
+      "sourceFiles": [
+        {"path": "capt/src/vsa_sme.py", "sha256": "sha256:54eb6f55debf16ed4fb3b10dacafda1a116d4bbb543d2ddafe5db2576dab3018"}
+      ],
+      "limitations": ["Donor built-in hash seeding is process-randomized and must be replaced by SHA-256-derived deterministic seeds."]
+    },
+    "lab.consensus": {
+      "donorRepository": "https://github.com/knowurknottty/biocapt-ecosystem.git",
+      "donorCommit": "28e7834982c859731636e733c53df9f84893f897",
+      "sourceFiles": [
+        {"path": "capt/src/qipc.py", "sha256": "sha256:5114a890339c3731dc0f4888a33cc68850c092387c4ec180a491950fe993b30b"}
+      ],
+      "limitations": ["Consensus diagnostics are advisory and never override CAPT verification or claim authority."]
+    },
+    "lab.forge": {
+      "donorRepository": "https://github.com/knowurknottty/biocapt-ecosystem.git",
+      "donorCommit": "28e7834982c859731636e733c53df9f84893f897",
+      "sourceFiles": [
+        {"path": "frankencapt/frankencapt-base/variants/forge/forge_module.py", "sha256": "sha256:a0e984cbae5badd32071c98483cacde0717933bfbd173c77f30c624a5b7d7f7f"},
+        {"path": "ForgeProof Commons/evaluation-rubric.json", "sha256": "sha256:ed0253ba531ba3d6117b3bb2ac6045d34447238e32d08d36198921c19cfe255b", "supplementaryLocalDonor": true}
+      ],
+      "limitations": ["R1 excludes simulated prior art, patentability, novelty percentages, and fabricated reviewer consensus."]
+    }
+  }
+}
