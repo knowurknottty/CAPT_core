@@ -731,7 +731,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 if not approval_request_id:
                     raise AuthorityViolation("MODEL_PROMPT_APPROVAL_RECEIPT_REQUIRED")
                 svc.require_approved_prompt_assembly(
-                    str(approval_request_id), prompt_assembly["promptAssemblyDigest"],
+                    str(approval_request_id), prompt_assembly.get("assemblyDigest") or prompt_assembly.get("promptAssemblyDigest", ""),
                     "ModelOperatorInspection",
                 )
                 admission = store.claim_command(key, command_fingerprint, command["commandId"])

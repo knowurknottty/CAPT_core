@@ -68,6 +68,8 @@ def create_checkpoint(
     open_reservation_ids: List[str] = []
 
     for stream_id, kind, version in store.all_aggregates():
+        if kind == "human_approval":
+            continue
         field = _KIND_TO_FIELD.get(kind)
         if field is None:
             raise IntegrityViolation("unknown aggregate kind %r in store" % kind)
