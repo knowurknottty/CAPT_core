@@ -16,6 +16,7 @@ from .aggregates import (
     ArtifactPromotionAggregate,
     CapabilityAggregate,
     ClaimAggregate,
+    CohortAggregate,
     DriverRunAggregate,
     MissionAggregate,
     TaskAggregate,
@@ -39,12 +40,7 @@ class ReplayState(object):
 
     def digest(self) -> str:
         """Content digest of the whole rebuilt state, for equivalence tests."""
-        return digest(
-            {
-                "aggregates": self.aggregates,
-                "versions": self.versions,
-            }
-        )
+        return digest({"aggregates": self.aggregates, "versions": self.versions})
 
     def summary(self) -> Dict[str, Any]:
         return {
@@ -64,11 +60,10 @@ _CREATION_EVENTS = frozenset(
         "ClaimCreated",
         "HumanApprovalRequested",
         "ArtifactPromotionPrepared",
+        "CohortCreated",
     }
 )
 
-# Aggregate kinds omitted from the frozen CheckpointManifest must be rebuilt
-# from their events up to the checkpoint before the normal tail is applied.
 _CHECKPOINT_EXTENSION_EVENTS = frozenset(
     {
         "HumanApprovalRequested",
@@ -77,6 +72,9 @@ _CHECKPOINT_EXTENSION_EVENTS = frozenset(
         "ArtifactPromotionAuthorized",
         "ArtifactPromotionAdopted",
         "ArtifactPromotionDiscarded",
+        "CohortCreated",
+        "CohortSnapshotPersisted",
+        "CohortSteered",
     }
 )
 
@@ -113,13 +111,8 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
     if event_type == "MissionCreated":
         nxt = MissionAggregate.create(payload["missionSpec"])
     elif event_type == "PolicyEvaluated":
-        nxt = MissionAggregate.record_policy_decision(
-            existing(), payload["policyDecision"]["policyDecisionId"]
-        )
-        if nxt["state"] == "draft" and payload["policyDecision"]["effect"] in (
-            "allow",
-            "allow_with_conditions",
-        ):
+        nxt = MissionAggregate.record_policy_decision(existing(), payload["policyDecision"]["policyDecisionId"])
+        if nxt["state"] == "draft" and payload["policyDecision"]["effect"] in ("allow", "allow_with_conditions"):
             nxt = MissionAggregate.transition(nxt, "authorized")
     elif event_type == "MissionStateChanged":
         nxt = MissionAggregate.transition(existing(), payload["toState"])
@@ -135,9 +128,7 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
     elif event_type == "CapabilityLeaseActivated":
         nxt = CapabilityAggregate.activate_lease(existing(), payload["lease"])
     elif event_type == "CapabilityUseReserved":
-        nxt = CapabilityAggregate.reserve(
-            existing(), payload["reservation"], payload["reservation"]["reservedAt"]
-        )
+        nxt = CapabilityAggregate.reserve(existing(), payload["reservation"], payload["reservation"]["reservedAt"])
     elif event_type == "CapabilityUseFinalized":
         nxt = CapabilityAggregate.finalize(existing(), payload["consumption"])
     elif event_type in ("CapabilityGrantRevoked", "CapabilityLeaseRevoked"):
@@ -149,9 +140,7 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
     elif event_type == "ClaimCreated":
         nxt = ClaimAggregate.propose(payload["claim"])
     elif event_type == "EvidenceRecorded":
-        nxt = ClaimAggregate.attach_evidence(
-            existing(), payload["evidence"]["evidenceId"]
-        )
+        nxt = ClaimAggregate.attach_evidence(existing(), payload["evidence"]["evidenceId"])
     elif event_type == "ClaimVerified":
         nxt = ClaimAggregate.record_verification(existing(), payload["verification"])
     elif event_type == "ClaimGuardDecided":
@@ -168,16 +157,20 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
     elif event_type == "ArtifactPromotionPrepared":
         nxt = ArtifactPromotionAggregate.prepare(payload["promotion"])
     elif event_type == "ArtifactPromotionAuthorized":
-        nxt = ArtifactPromotionAggregate.authorize(
-            existing(), payload["authorizedBy"], payload["authorizedAt"]
-        )
+        nxt = ArtifactPromotionAggregate.authorize(existing(), payload["authorizedBy"], payload["authorizedAt"])
     elif event_type == "ArtifactPromotionAdopted":
-        nxt = ArtifactPromotionAggregate.adopt(
-            existing(), payload["receipt"], payload["adoptedAt"]
-        )
+        nxt = ArtifactPromotionAggregate.adopt(existing(), payload["receipt"], payload["adoptedAt"])
     elif event_type == "ArtifactPromotionDiscarded":
-        nxt = ArtifactPromotionAggregate.discard(
-            existing(), payload["reason"], payload["discardedAt"]
+        nxt = ArtifactPromotionAggregate.discard(existing(), payload["reason"], payload["discardedAt"])
+    elif event_type == "CohortCreated":
+        nxt = CohortAggregate.create(payload["snapshot"])
+    elif event_type == "CohortSnapshotPersisted":
+        nxt = CohortAggregate.replace_snapshot(existing(), payload["snapshot"])
+    elif event_type == "CohortSteered":
+        steer = payload["steer"]
+        nxt = CohortAggregate.steer(
+            existing(), steer["directive"], steer.get("reason", "operator steering"),
+            steer["steeredBy"], steer["steeredAt"],
         )
     elif event_type in ("CheckpointCreated", "MissionResumed"):
         nxt = existing()
@@ -190,7 +183,6 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
 
 
 def full_replay(store: EventStore) -> ReplayState:
-    """Fold the entire ledger from the origin."""
     store.verify_chain()
     state = ReplayState()
     for envelope in store.read_events(after_sequence=0):
@@ -198,16 +190,8 @@ def full_replay(store: EventStore) -> ReplayState:
     return state
 
 
-def checkpoint_replay(
-    store: EventStore, manifest: Dict[str, Any]
-) -> ReplayState:
-    """Load a verified checkpoint's known streams, rebuild extension streams, fold tail.
-
-    The frozen CheckpointManifest does not yet carry human-approval or
-    Sol-Reconciliation extension stream versions. Those streams are replayed
-    from origin through the checkpoint position; normal checkpointed streams
-    continue using the existing checkpoint seed path.
-    """
+def checkpoint_replay(store: EventStore, manifest: Dict[str, Any]) -> ReplayState:
+    """Load verified checkpointed streams, rebuild extension streams, then fold tail."""
     verify_checkpoint(manifest)
     store.verify_chain()
 
@@ -223,15 +207,12 @@ def checkpoint_replay(
             stream_state = store.load_state(entry["streamId"])
             if stream_state is None:
                 raise IntegrityViolation(
-                    "checkpoint references stream %s that the store does not have"
-                    % entry["streamId"]
+                    "checkpoint references stream %s that the store does not have" % entry["streamId"]
                 )
             state.aggregates[entry["streamId"]] = stream_state
             state.versions[entry["streamId"]] = entry["version"]
 
     position = manifest["ledgerPosition"]["globalSequence"]
-
-    # Rebuild only extension streams omitted by the frozen checkpoint schema.
     for envelope in store.read_events(after_sequence=0):
         if int(envelope["globalSequence"]) > position:
             break
@@ -244,5 +225,4 @@ def checkpoint_replay(
 
 
 def replay_equivalent(left: ReplayState, right: ReplayState) -> bool:
-    """Deterministic state equality by content digest."""
     return left.digest() == right.digest()
