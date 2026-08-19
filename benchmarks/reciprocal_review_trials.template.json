@@ -1,23 +1,28 @@
 {
-  "schemaVersion": "1.1.0",
+  "schemaVersion": "1.2.0",
   "note": "Template only. Replace with observed trial records; do not cite this file as benchmark evidence.",
   "trials": [
     {
       "trialId": "replace-me",
       "caseId": "case-001",
       "caseDigest": "sha256:replace-with-exact-case-digest",
+      "repeatId": "rep-001",
       "runId": "run-001",
       "mode": "independent_reviewer",
       "defectPresent": true,
       "flagged": false,
       "generatorIdentity": "generator-model-id",
       "reviewerIdentity": "different-reviewer-model-id",
+      "reviewerBlindToGroundTruth": true,
+      "reviewerBlindToOtherModes": true,
+      "leakageCheckRef": "replace-with-leakage-control-evidence",
       "verificationDomain": null,
       "verificationRef": null,
       "groundTruthRef": "replace-with-ground-truth-evidence",
-      "tokens": 0,
-      "costUsd": 0.0,
-      "latencyMs": 0.0,
+      "protocolRef": "replace-with-controlled-protocol-evidence",
+      "tokens": null,
+      "costUsd": null,
+      "latencyMs": null,
       "evidenceRef": "replace-with-observed-run-evidence"
     }
   ]

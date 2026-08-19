@@ -29,6 +29,8 @@ The harness enforces:
 
 `benchmarks/reciprocal_review_trials.template.json` is explicitly marked a template/non-evidence artifact.
 
+Schema v1.2 additionally requires a single controlled `protocolRef`, explicit `repeatId`, reviewer blinding assertions plus leakage-control evidence for independent-review modes, identical case+repeat observations across modes, class-balance accounting, and per-mode replicate metrics/variance. A populated five-mode corpus is only `empiricalInferenceEligible` when the case/repeat set is comparable, both defect and clean cases are present, at least two repeats exist in every mode, and blinding controls are satisfied. Eligibility is a methodological gate, not a claim that reciprocal review wins.
+
 ## Tests authored
 
 `tests/test_reciprocal_review_benchmark.py` covers scoring, separation-of-duty validation, verification evidence requirements, duplicate trial rejection, ground-truth provenance, case-fingerprint consistency, zero-denominator handling, optional-metric missingness, and same-case-set comparison without inventing a winner.
@@ -39,7 +41,7 @@ No populated observed CAPT benchmark dataset has been run in the connected envir
 
 Current evidence class:
 
-`BENCHMARK_HARNESS_IMPLEMENTED / TESTS_AUTHORED / EMPIRICAL_EFFECTIVENESS_UNMEASURED`
+`BENCHMARK_HARNESS_HARDENED / TESTS_AUTHORED / EMPIRICAL_EFFECTIVENESS_UNMEASURED`
 
 Required probe completion:
 
