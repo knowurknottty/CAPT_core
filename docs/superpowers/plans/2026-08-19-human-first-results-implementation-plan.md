@@ -6,7 +6,7 @@
 
 **Architecture:** Introduce a typed presentation model in `CAPTCoreDesktop` that separates human text, code blocks, technical fields, and raw JSON. Runtime/Operator responses remain unchanged authority-wise; the native client projects them into display layers. Raw data is retained read-only and collapsed by default.
 
-**Tech Stack:** Swift 6, SwiftUI, Foundation `AttributedString`, `NSPasteboard`, existing CAPT native message/session models and RuntimeService projection.
+**Tech Stack:** Swift 6, SwiftUI, Foundation, AppKit `NSPasteboard`, existing CAPT native message/session models and RuntimeService projection.
 
 **Spec:** `docs/superpowers/specs/2026-08-19-public-release-quarantine-projects-council-design.md` Part II §§14-18.
 
@@ -21,26 +21,24 @@
 ## File Structure
 
 **Create:**
-- `capt_ui/surfaces/desktop_swift/Sources/CAPTCoreDesktop/CAPTResultPresentation.swift`
-- `capt_ui/surfaces/desktop_swift/Sources/CAPTNativeMac/Views/ResultContentView.swift`
-- `capt_ui/surfaces/desktop_swift/Sources/CAPTNativeMac/Views/CodeBlockView.swift`
-- `capt_ui/surfaces/desktop_swift/Sources/CAPTNativeMac/Views/RawDetailsView.swift`
-- `capt_ui/surfaces/desktop_swift/Tests/CAPTCoreDesktopTests/CAPTResultPresentationTests.swift`
+- `CAPTCoreDesktop/CAPTResultPresentation.swift`
+- `CAPTNativeMac/Views/ResultContentView.swift`
+- `CAPTNativeMac/Views/CodeBlockView.swift`
+- `CAPTNativeMac/Views/RawDetailsView.swift`
+- `CAPTCoreDesktopTests/CAPTResultPresentationTests.swift`
 
 **Modify:**
 - `CAPTChatCoordinator.swift` to retain a stable raw response representation in `CAPTExecutionResult`.
-- `CAPTNativeSessionStore.swift` to encode presentation payloads without losing backward compatibility.
-- `ChatView.swift` to delegate message content rendering to `ResultContentView`.
+- `CAPTNativeSessionStore.swift` for backward-compatible presentation payload persistence when needed.
+- `ChatView.swift` to delegate assistant/system message content rendering to `ResultContentView`.
 
 ---
 
 ### Task 1: Define typed presentation payload
 
-**Interfaces:**
-- Produces `CAPTResultPresentation` with `humanText`, `segments`, `technicalDetails`, `rawJSON`, `authorityState`.
-- Produces `CAPTMessageSegment.text(String)` and `.code(language: String?, literal: String)`.
+**Interfaces:** Produces `CAPTPresentationMode`, `CAPTTechnicalField`, `CAPTMessageSegment`, `CAPTResultPresentation`.
 
-- [ ] **Step 1: Write RED parsing tests**
+- [ ] **Step 1: Write RED parsing/default tests**
 
 ```swift
 @Test func parsesCodeFenceWithoutChangingLiteralContent() throws {
@@ -49,24 +47,24 @@
     #expect(p.segments.contains(.code(language: "swift", literal: "let x = \"a  b\"\n    print(x)")))
 }
 
-@Test func defaultModeIsNormalAndRawIsHidden() {
+@Test func defaultModeIsNormal() {
     #expect(CAPTPresentationMode.default == .normal)
 }
 ```
 
-- [ ] **Step 2: Run RED**
-
-```bash
-cd capt_ui/surfaces/desktop_swift
-swift test --filter CAPTResultPresentationTests
-```
-
-- [ ] **Step 3: Implement presentation types and deterministic fence parser**
+- [ ] **Step 2: Implement exact types**
 
 ```swift
 public enum CAPTPresentationMode: String, Codable, CaseIterable, Sendable {
     case normal, detailed, forensic, raw
     public static let `default`: Self = .normal
+}
+
+public struct CAPTTechnicalField: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let label: String
+    public let value: String
+    public let category: String
 }
 
 public enum CAPTMessageSegment: Codable, Equatable, Sendable {
@@ -83,13 +81,16 @@ public struct CAPTResultPresentation: Codable, Equatable, Sendable {
 }
 ```
 
-Fence parsing must preserve the exact content between opening and closing fences except the structural newline directly after the opening fence and directly before the closing fence.
+- [ ] **Step 3: Implement deterministic fence parser**
 
-- [ ] **Step 4: Run GREEN**
-- [ ] **Step 5: Commit**
+`parse(text:rawJSON:authorityState:)` preserves exact code content between the structural opening/closing-fence newlines, supports multiple fenced blocks, and treats an unmatched opening fence as ordinary text rather than dropping content.
+
+- [ ] **Step 4: Run GREEN and commit**
 
 ```bash
-git add capt_ui/surfaces/desktop_swift
+cd capt_ui/surfaces/desktop_swift
+swift test --filter CAPTResultPresentationTests
+git add .
 git commit -m "feat(mac): add result presentation model"
 ```
 
@@ -97,37 +98,34 @@ git commit -m "feat(mac): add result presentation model"
 
 ### Task 2: Preserve raw RuntimeService response without rendering it by default
 
-**Interfaces:**
-- `CAPTExecutionResult` gains `rawResponseJSON: String?`.
-- `extractAssistantText` no longer uses a full JSON dump as the user-facing fallback.
+**Interfaces:** `CAPTExecutionResult` gains `rawResponseJSON: String?`; user-facing fallback is human text.
 
 - [ ] **Step 1: Write RED coordinator tests**
 
-Test a response that contains observations and a response with no renderable text. Assert:
+For a response with observations and one with no renderable text:
 
 ```swift
 #expect(result.rawResponseJSON?.contains("driverRunId") == true)
 #expect(result.text.contains("{\"") == false)
 ```
 
-- [ ] **Step 2: Implement stable sorted JSON serialization**
+- [ ] **Step 2: Implement stable sorted raw JSON**
 
-Use `JSONSerialization.data(withJSONObject:options:[.sortedKeys])` for `rawResponseJSON`. Fallback human text:
+Use `JSONSerialization.data(withJSONObject: options: [.sortedKeys])`. Replace raw-dump chat fallback with:
 
-```swift
-"CAPT returned a structured result without renderable assistant text. Open Raw details to inspect the response."
+```text
+CAPT returned a structured result without renderable assistant text. Open Raw details to inspect the response.
 ```
 
-- [ ] **Step 3: Add backward-compatible session decoding**
+- [ ] **Step 3: Preserve backward compatibility**
 
-If older session messages lack presentation/raw fields, synthesize presentation from existing `text` and `authorityState` during rendering rather than forcing migration of old ciphertext.
+Older session messages with only `text`/`authorityState` synthesize presentation during rendering; no destructive migration of old encrypted session bytes.
 
 - [ ] **Step 4: Run focused tests and commit**
 
 ```bash
 swift test --filter CAPTChatCoordinator
-
-git add capt_ui/surfaces/desktop_swift
+git add .
 git commit -m "fix(mac): preserve raw result without dumping JSON to chat"
 ```
 
@@ -135,12 +133,13 @@ git commit -m "fix(mac): preserve raw result without dumping JSON to chat"
 
 ### Task 3: Exact-copy code block component
 
-**Interfaces:**
-- `CodeBlockView(language:literal:)` owns copy action.
+**Interfaces:** `CodeBlockView(language:literal:)`; `CAPTClipboardPayload.code(_:) -> String`.
 
-- [ ] **Step 1: Write RED helper test for copied content**
+- [ ] **Step 1: Write RED literal-copy tests**
 
-Move clipboard payload production into a testable helper:
+Cover tabs, multiple spaces, Unicode, quotes, trailing blank lines. Returned payload must equal input string byte-for-byte after UTF-8 encoding.
+
+- [ ] **Step 2: Implement clipboard helper/component**
 
 ```swift
 public enum CAPTClipboardPayload {
@@ -148,29 +147,24 @@ public enum CAPTClipboardPayload {
 }
 ```
 
-Test tabs, spaces, Unicode, quotes, trailing blank lines.
-
-- [ ] **Step 2: Implement `CodeBlockView`**
-
-Header: language label at leading edge, `Copy` button at trailing edge. Body uses monospaced selectable text in horizontal scroll when needed. Copy with:
+`CodeBlockView` header shows language and Copy button; body uses monospaced selectable text and horizontal scrolling when needed. Copy:
 
 ```swift
 let pasteboard = NSPasteboard.general
 pasteboard.clearContents()
-pasteboard.setString(literal, forType: .string)
+pasteboard.setString(CAPTClipboardPayload.code(literal), forType: .string)
 ```
 
-- [ ] **Step 3: Add accessibility labels**
+- [ ] **Step 3: Add accessibility/transient feedback**
 
-`Copy code block`; after activation provide a transient `Copied` visual state without modifying literal content.
+Button accessibility label `Copy code block`; transient visual `Copied` state does not mutate stored content.
 
-- [ ] **Step 4: Run tests/build and commit**
+- [ ] **Step 4: Run/build/commit**
 
 ```bash
 swift test --filter CAPTResultPresentationTests
 swift build --product CAPTNativeMac
-
-git add capt_ui/surfaces/desktop_swift
+git add .
 git commit -m "feat(mac): add exact-copy code blocks"
 ```
 
@@ -178,71 +172,69 @@ git commit -m "feat(mac): add exact-copy code blocks"
 
 ### Task 4: Human / technical / raw disclosure UI
 
-**Interfaces:**
-- `ResultContentView(presentation:mode:)`.
-- `RawDetailsView(rawJSON:)` collapsed initially.
+**Interfaces:** `ResultContentView(presentation:mode:)`, `RawDetailsView(rawJSON:)`.
 
-- [ ] **Step 1: Write state-model tests**
+- [ ] **Step 1: Write disclosure state tests**
 
-Define `CAPTDisclosureState` with `technicalExpanded` and `rawExpanded`, both false by default. Assert one action toggles each.
+```swift
+public struct CAPTDisclosureState: Equatable, Sendable {
+    public var technicalExpanded = false
+    public var rawExpanded = false
+}
+```
 
-- [ ] **Step 2: Implement default human rendering**
+Assert both false initially and one explicit action toggles each.
 
-Render text and code segments in order. Authority/evidence status is a compact badge. Debug IDs do not appear in Normal mode unless they are part of the actual human answer.
+- [ ] **Step 2: Implement Normal rendering**
+
+Render text/code segments in order; authority/evidence state is a compact badge. Debug IDs stay out of Normal mode unless they were part of actual human answer text.
 
 - [ ] **Step 3: Implement disclosures**
 
-Buttons:
+Controls exactly:
 
 ```text
 Technical details ▸
 Raw details ▸
 ```
 
-Raw details render read-only monospaced selectable JSON and a `Copy raw JSON` action.
+Raw details are read-only monospaced selectable JSON plus `Copy raw JSON`.
 
 - [ ] **Step 4: Implement modes**
 
-`detailed` expands technical fields by default; `forensic` expands technical plus provenance/evidence state; `raw` opens raw envelope by default but still does not change stored data.
+`detailed`: technical fields expanded. `forensic`: technical + provenance/evidence fields expanded. `raw`: raw envelope expanded. Modes change rendering only.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add capt_ui/surfaces/desktop_swift
+git add .
 git commit -m "feat(mac): add layered CAPT result disclosure"
 ```
 
 ---
 
-### Task 5: Replace ChatView's plain message renderer
+### Task 5: Integrate with ChatView
 
-**Interfaces:**
-- Existing role/layout remains.
-- Assistant/system messages render through `ResultContentView`; user messages remain simple text.
+**Interfaces:** Assistant/system messages delegate to ResultContentView; user messages remain ordinary text.
 
-- [ ] **Step 1: Write View/store projection tests for message presentation**
+- [ ] **Step 1: Write presentation projection tests**
 
-Create a message containing prose + code + raw JSON; assert its presentation has all three segments/layers.
+Message containing prose + two code blocks + raw JSON yields ordered segments and separate raw field.
 
 - [ ] **Step 2: Refactor `MessageRow`**
 
-Do not parse or copy inside `ChatView`; construct/present `CAPTResultPresentation` through focused types.
+Do not leave parsing/copy logic in `ChatView`; construct/use `CAPTResultPresentation` via focused types.
 
-- [ ] **Step 3: Verify long JSON and code do not force whole-window width**
+- [ ] **Step 3: Verify width behavior**
 
-Use horizontal scrolling inside code/raw regions only.
+Large code/raw JSON scrolls internally and does not force full window width.
 
-- [ ] **Step 4: Run full Swift suite/build**
+- [ ] **Step 4: Run full Swift suite/build and commit**
 
 ```bash
 swift test
 swift build --product CAPTNativeMac
-```
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add capt_ui/surfaces/desktop_swift
+git add .
 git commit -m "feat(mac): render human-first chat results"
 ```
 
@@ -250,27 +242,8 @@ git commit -m "feat(mac): render human-first chat results"
 
 ### Task 6: Human-first result subsystem acceptance
 
-- [ ] **Step 1: Run fixture matrix**
-
-Fixtures: ordinary prose; code-only; prose + multiple fenced languages; malformed/unclosed fence; raw-only structured RuntimeService response; large raw envelope; security scan result; verification result.
-
-- [ ] **Step 2: Verify exact copy**
-
-For each code fixture, SHA-256 the source literal and SHA-256 the string returned by the clipboard helper; digests must match.
-
-- [ ] **Step 3: Verify public default**
-
-Fresh app/profile renders Normal mode and no raw JSON is visible without user action.
-
-- [ ] **Step 4: Verify ledger neutrality**
-
-Changing presentation mode, opening Raw details, and copying content must not change RuntimeService ledger head/digest.
-
-- [ ] **Step 5: Run full release regression slice**
-
-```bash
-python -m pytest -q
-cd capt_ui/surfaces/desktop_swift
-swift test
-swift build --product CAPTNativeMac
-```
+- [ ] Fixture matrix: ordinary prose; code-only; prose + multiple fenced languages; unmatched fence; raw-only RuntimeService result; large raw envelope; scan result; verification result.
+- [ ] SHA-256 source literal vs clipboard helper UTF-8 output for every code fixture; digests must match.
+- [ ] Fresh profile defaults to Normal and no raw JSON is visible without user action.
+- [ ] Presentation mode changes, Raw-details expansion, and copy actions leave RuntimeService head/digest unchanged.
+- [ ] Run full Python suite, Swift tests, and `swift build --product CAPTNativeMac` with zero failures.
