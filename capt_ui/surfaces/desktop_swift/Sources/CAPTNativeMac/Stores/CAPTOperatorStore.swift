@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import CAPTCoreDesktop
+import Security
 
 @MainActor
 final class CAPTOperatorStore: ObservableObject {
@@ -20,6 +21,7 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var taskState = "—"
     @Published var isBusy = false
     @Published var lastError: String?
+    @Published var providerCredentialStatus: [String: String] = [:]
     @Published var missions: [CAPTMissionSummary] = []
     @Published var evidenceItems: [CAPTEvidenceSummary] = []
     @Published var approvals: [CAPTApprovalSummary] = []
@@ -342,6 +344,57 @@ final class CAPTOperatorStore: ObservableObject {
             defer { isBusy = false }
             do { providers = try await runtime.setProviderKeyReference(providerID: providerID, reference: reference) }
             catch { handleGlobal(error) }
+        }
+    }
+
+    func configureProviderAPIKey(providerID: String, apiKey: String) async -> Bool {
+        let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, !isBusy else { return false }
+        isBusy = true
+        defer { isBusy = false }
+        lastError = nil
+        providerCredentialStatus[providerID] = "Storing securely…"
+
+        do {
+            try Self.storeProviderSecret(trimmed, account: providerID)
+            let reference = "keychain:\(providerID)"
+            providers = try await runtime.setProviderKeyReference(providerID: providerID, reference: reference)
+            providers = try await runtime.testProvider(providerID)
+            if let provider = providers.first(where: { $0.id == providerID }) {
+                let latency = provider.latencyMs.map { " · \($0) ms" } ?? ""
+                providerCredentialStatus[providerID] = "Stored securely ✓ · Authenticated ✓\(latency)"
+            } else {
+                providerCredentialStatus[providerID] = "Stored securely ✓ · Authenticated ✓"
+            }
+            return true
+        } catch {
+            providerCredentialStatus[providerID] = "Setup failed — key retained for retry"
+            handleGlobal(error)
+            return false
+        }
+    }
+
+    private static func storeProviderSecret(_ secret: String, account: String) throws {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "capt-provider",
+            kSecAttrAccount as String: account,
+        ]
+        let value = Data(secret.utf8)
+        let updateStatus = SecItemUpdate(
+            query as CFDictionary,
+            [kSecValueData as String: value] as CFDictionary
+        )
+        if updateStatus == errSecSuccess { return }
+        guard updateStatus == errSecItemNotFound else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(updateStatus))
+        }
+        var add = query
+        add[kSecValueData as String] = value
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        let addStatus = SecItemAdd(add as CFDictionary, nil)
+        guard addStatus == errSecSuccess else {
+            throw NSError(domain: NSOSStatusErrorDomain, code: Int(addStatus))
         }
     }
 
