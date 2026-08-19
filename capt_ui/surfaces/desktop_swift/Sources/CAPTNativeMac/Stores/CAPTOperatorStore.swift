@@ -34,6 +34,8 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var claimReview: CAPTClaimReviewSnapshot?
     @Published var reviewedClaimID: String?
     @Published var providerCredentialStatus: [String: String] = [:]
+    @Published var providerWarmState = "not_required"
+    @Published var providerWarmLatencyMs: Int?
     @Published private var chatWorkspace = CAPTNativeChatWorkspace()
 
     private let runtime: CAPTBackgroundRuntime
@@ -74,8 +76,20 @@ final class CAPTOperatorStore: ObservableObject {
 
     var canComposeInActiveChat: Bool {
         connectionState == .connected &&
+            providerWarmState != "warming" &&
             pendingApproval == nil &&
             activeChatFlow.canCompose
+    }
+
+    var providerWarmLabel: String {
+        switch providerWarmState {
+        case "warming": return "WARMING"
+        case "warm":
+            if let ms = providerWarmLatencyMs { return "WARM · \(ms) ms" }
+            return "WARM"
+        case "failed": return "WARMUP FAILED"
+        default: return ""
+        }
     }
 
     private func restoreSessionsAsync() {
@@ -124,7 +138,13 @@ final class CAPTOperatorStore: ObservableObject {
                 let integrity = identity["integrity"] as? String ?? "unknown"
                 runtimeIdentity = "\(version) · integrity \(integrity)"
                 connectionState = .connected
-                refreshAll()
+                let operatorSnapshot = try await runtime.operatorSnapshot()
+                applyOperatorSnapshot(operatorSnapshot)
+                await prewarmSelectedProviderIfNeeded()
+                refreshIdentity()
+                refreshHistory()
+                refreshMemory()
+                refreshCapabilities()
             } catch {
                 let message = error.localizedDescription
                 lastError = message
@@ -310,22 +330,48 @@ final class CAPTOperatorStore: ObservableObject {
         }
     }
 
+    private func applyOperatorSnapshot(
+        _ snapshot: (providers: [CAPTProviderSnapshot], models: CAPTModelSelectionSnapshot, verbosity: String)
+    ) {
+        providers = snapshot.providers
+        modelSnapshot = snapshot.models
+        verbosity = snapshot.verbosity
+        if activeSessionID == nil {
+            if let selected = snapshot.providers.first(where: { $0.selected }) {
+                provider = selected.id
+            } else if let selected = snapshot.models.defaultSelection {
+                provider = selected.provider
+            }
+            if !snapshot.models.active.isEmpty { model = snapshot.models.active }
+        }
+    }
+
+    private func prewarmSelectedProviderIfNeeded() async {
+        guard let selected = providers.first(where: { $0.id == provider }) ??
+                providers.first(where: { $0.selected }),
+              CAPTOperatorCLI.requiresPrewarm(selected, modelID: model) else {
+            providerWarmState = "not_required"
+            providerWarmLatencyMs = nil
+            return
+        }
+        providerWarmState = "warming"
+        providerWarmLatencyMs = nil
+        do {
+            let result = try await runtime.prewarmProvider(providerID: selected.id, modelID: model)
+            providerWarmState = result.status
+            providerWarmLatencyMs = result.latencyMs
+            runtimeControlMessage = "Provider warm: \(selected.id)/\(model)"
+        } catch {
+            providerWarmState = "failed"
+            providerWarmLatencyMs = nil
+            runtimeControlMessage = "Provider warmup failed: " + error.localizedDescription
+        }
+    }
+
     func refreshOperatorState() {
         Task {
-            do {
-                let snapshot = try await runtime.operatorSnapshot()
-                providers = snapshot.providers
-                modelSnapshot = snapshot.models
-                verbosity = snapshot.verbosity
-                if activeSessionID == nil {
-                    if let selected = snapshot.providers.first(where: { $0.selected }) {
-                        provider = selected.id
-                    } else if let selected = snapshot.models.defaultSelection {
-                        provider = selected.provider
-                    }
-                    if !snapshot.models.active.isEmpty { model = snapshot.models.active }
-                }
-            } catch { lastError = error.localizedDescription }
+            do { applyOperatorSnapshot(try await runtime.operatorSnapshot()) }
+            catch { lastError = error.localizedDescription }
         }
     }
 
@@ -383,6 +429,7 @@ final class CAPTOperatorStore: ObservableObject {
                     model = first
                 }
                 persistActiveConfiguration()
+                await prewarmSelectedProviderIfNeeded()
             } catch { handle(error) }
             isBusy = false
         }
@@ -398,6 +445,7 @@ final class CAPTOperatorStore: ObservableObject {
                    tested.health == "green" {
                     let latency = tested.latencyMs.map { " · \($0) ms" } ?? ""
                     providerCredentialStatus[providerID] = "Authenticated ✓\(latency)"
+                    if providerID == provider { await prewarmSelectedProviderIfNeeded() }
                 }
             } catch { handle(error) }
             isBusy = false
@@ -466,6 +514,7 @@ final class CAPTOperatorStore: ObservableObject {
                 )
                 model = modelID
                 persistActiveConfiguration()
+                await prewarmSelectedProviderIfNeeded()
             } catch { handle(error) }
             isBusy = false
         }

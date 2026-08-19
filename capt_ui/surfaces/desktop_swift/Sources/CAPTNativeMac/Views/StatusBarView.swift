@@ -24,6 +24,11 @@ struct StatusBarView: View {
             Text(store.model)
                 .lineLimit(1)
                 .truncationMode(.middle)
+            if !store.providerWarmLabel.isEmpty {
+                Text(store.providerWarmLabel)
+                    .fontWeight(store.providerWarmState == "warming" ? .semibold : .regular)
+                    .foregroundStyle(store.providerWarmState == "failed" ? .red : .secondary)
+            }
             Spacer()
             if store.isBusy { ProgressView().controlSize(.small) }
             Text(store.taskState)

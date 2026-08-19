@@ -114,6 +114,10 @@ actor CAPTBackgroundRuntime {
         try operatorCLI.testProvider(providerID)
     }
 
+    func prewarmProvider(providerID: String, modelID: String) throws -> CAPTProviderWarmupSnapshot {
+        try operatorCLI.prewarmProvider(providerID: providerID, modelID: modelID)
+    }
+
     func setProviderKeyReference(providerID: String, reference: String) throws -> [CAPTProviderSnapshot] {
         try operatorCLI.setProviderKeyReference(providerID, reference: reference)
     }
