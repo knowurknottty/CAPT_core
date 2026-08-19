@@ -101,3 +101,31 @@ def test_cancellation_kills_process_and_returns_cancelled(tmp_path: Path) -> Non
         timer.cancel()
     assert result.cancelled is True
     assert result.timed_out is False
+
+
+def test_local_backend_can_send_bounded_stdin_without_inheriting_terminal(tmp_path: Path) -> None:
+    backend = LocalProcessBackend()
+    payload = b"CAPT_STDIN_OK\n"
+    result = backend.execute(
+        LocalProcessRequest(
+            argv=(sys.executable, "-c", "import sys; data=sys.stdin.buffer.read(); sys.stdout.buffer.write(data)"),
+            cwd=tmp_path,
+            filesystem_root=tmp_path,
+            stdin_data=payload,
+        )
+    )
+    assert result.exit_code == 0
+    assert result.stdout == payload.decode()
+
+
+def test_local_backend_rejects_oversized_stdin_before_dispatch(tmp_path: Path) -> None:
+    backend = LocalProcessBackend()
+    with pytest.raises(ValueError, match="stdin_data exceeds"):
+        backend.execute(
+            LocalProcessRequest(
+                argv=(sys.executable, "-c", "print('must not run')"),
+                cwd=tmp_path,
+                filesystem_root=tmp_path,
+                stdin_data=b"x" * (1024 * 1024 + 1),
+            )
+        )

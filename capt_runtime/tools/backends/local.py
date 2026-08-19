@@ -24,6 +24,7 @@ SAFE_PARENT_ENV = frozenset({
     "LANG", "LC_ALL", "LC_CTYPE", "TERM",
 })
 MAX_CAPTURE_BYTES = 16 * 1024 * 1024
+MAX_STDIN_BYTES = 1024 * 1024
 
 
 def _now() -> str:
@@ -42,6 +43,7 @@ class LocalProcessRequest:
     env_overrides: Mapping[str, str] = field(default_factory=dict)
     cancel_event: Optional[threading.Event] = None
     terminate_grace_seconds: float = 0.5
+    stdin_data: Optional[bytes] = None
 
 
 @dataclass(frozen=True)
@@ -124,6 +126,11 @@ def _validate_request(request: LocalProcessRequest) -> Path:
     ):
         if limit < 0 or limit > MAX_CAPTURE_BYTES:
             raise ValueError(f"{name} must be in [0, {MAX_CAPTURE_BYTES}]")
+    if request.stdin_data is not None:
+        if not isinstance(request.stdin_data, bytes):
+            raise ValueError("stdin_data must be bytes or None")
+        if len(request.stdin_data) > MAX_STDIN_BYTES:
+            raise ValueError(f"stdin_data exceeds {MAX_STDIN_BYTES} bytes")
     cwd = require_scoped_path(request.filesystem_root, request.cwd)
     if not cwd.is_dir():
         raise AuthorityViolation(f"process cwd is not a directory: {cwd}")
@@ -173,7 +180,7 @@ class LocalProcessBackend:
             list(request.argv),
             cwd=str(cwd),
             env=env,
-            stdin=subprocess.DEVNULL,
+            stdin=subprocess.PIPE if request.stdin_data is not None else subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             shell=False,
@@ -181,6 +188,24 @@ class LocalProcessBackend:
             start_new_session=True,
         )
         assert proc.stdout is not None and proc.stderr is not None
+        stdin_thread: Optional[threading.Thread] = None
+        if request.stdin_data is not None:
+            assert proc.stdin is not None
+
+            def _write_stdin() -> None:
+                try:
+                    proc.stdin.write(request.stdin_data or b"")
+                    proc.stdin.flush()
+                except (BrokenPipeError, OSError):
+                    pass
+                finally:
+                    try:
+                        proc.stdin.close()
+                    except Exception:
+                        pass
+
+            stdin_thread = threading.Thread(target=_write_stdin, daemon=True)
+            stdin_thread.start()
         stdout = _BoundedCollector(request.stdout_limit_bytes)
         stderr = _BoundedCollector(request.stderr_limit_bytes)
         threads = [
@@ -210,6 +235,10 @@ class LocalProcessBackend:
             thread.join(timeout=max(request.terminate_grace_seconds, 0.5) + 1.0)
             if thread.is_alive():
                 raise RuntimeError("process output reader did not terminate")
+        if stdin_thread is not None:
+            stdin_thread.join(timeout=max(request.terminate_grace_seconds, 0.5) + 1.0)
+            if stdin_thread.is_alive():
+                raise RuntimeError("process stdin writer did not terminate")
 
         return LocalProcessResult(
             exit_code=proc.returncode,
