@@ -26,7 +26,7 @@ TRANSITIONS = {
 }
 
 _MUTABLE_FIELDS = frozenset({
-    "reservationId", "dispatchBoundary", "resultDigest", "sideEffectIdentity",
+    "reservationId", "dispatchBoundary", "result", "resultDigest", "sideEffectIdentity",
     "settlementStatus", "reconciliationReason", "updatedAt",
 })
 
@@ -81,7 +81,7 @@ class ToolExecutionAggregate:
                 to_state,
             )
         if to_state in {"completed", "failed", "cancelled"}:
-            if not nxt.get("resultDigest") or nxt["settlementStatus"] != "settled":
+            if not nxt.get("result") or not nxt.get("resultDigest") or nxt["settlementStatus"] != "settled":
                 raise IllegalTransition(
                     f"tool execution {state['toolExecutionId']} requires settled result",
                     current,

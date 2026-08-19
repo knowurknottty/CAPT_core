@@ -571,6 +571,8 @@ class RuntimeService(object):
         require("CapabilityReservation", reservation)
         require("CommandMetadata", metadata)
         require_authority("reserve_use", metadata["actor"]["kind"])
+        if self.store.find_idempotent(metadata["idempotencyKey"]) is not None:
+            return self._commit([], metadata)
 
         stream = CapabilityAggregate.stream_id(grant_id)
         expected = self.store.aggregate_version(stream)
@@ -597,6 +599,8 @@ class RuntimeService(object):
         require("CapabilityConsumptionRecord", consumption)
         require("CommandMetadata", metadata)
         require_authority("finalize_use", metadata["actor"]["kind"])
+        if self.store.find_idempotent(metadata["idempotencyKey"]) is not None:
+            return self._commit([], metadata)
 
         stream = CapabilityAggregate.stream_id(grant_id)
         expected = self.store.aggregate_version(stream)

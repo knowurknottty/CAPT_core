@@ -14,7 +14,7 @@ TERMINAL_LOCAL_DESCRIPTOR = {
     "operations": ["terminal.exec"],
     "requiredCapabilities": ["terminal.exec"],
     "operationEffects": [
-        {"operation": "terminal.exec", "effectClass": "ephemeral_external"},
+        {"operation": "terminal.exec", "effectClass": "durable_local"},
     ],
     "terminalBackends": ["local"],
     "platforms": ["macos", "linux"],
@@ -51,7 +51,7 @@ CODE_EXECUTION_DESCRIPTOR = {
     "operations": ["code.execute_python"],
     "requiredCapabilities": ["code.execute_python"],
     "operationEffects": [
-        {"operation": "code.execute_python", "effectClass": "ephemeral_external"},
+        {"operation": "code.execute_python", "effectClass": "durable_local"},
     ],
     "terminalBackends": ["local"],
     "platforms": ["macos", "linux"],

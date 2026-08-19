@@ -25,6 +25,8 @@
 - Child environment is explicit/allowlisted; CAPT never inserts `sudo`.
 - stdout/stderr capture is memory-bounded while the process is running, not merely truncated after `communicate()`.
 - Tool output/evidence is not verification; no task/mission completion is implied.
+- Unrestricted `terminal.exec` and `code.execute_python` are `durable_local` for Slice A; command text is never used to downgrade effect class.
+- Durable ToolExecution binds authenticated operator/session identity and persists the exact ToolResult required for restart-safe replay.
 - No mocks/stubs/fake integrations in acceptance paths.
 
 ---## File Structure

@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:8b522291e4e4ff31b4684e1beca67be76c01139ac7493a1d64830b5016bf8acc
+// source digest:  sha256:64287855035c849e1aa4714e00b4965dd611a5df3dfb7ae4175f4a608cd567fc
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -1739,11 +1739,14 @@ export interface ToolExecution {
   readonly leaseId: Identifier | null;
   readonly operation: string;
   readonly operationFingerprint: Digest;
+  readonly operatorId: Identifier;
   readonly preparedAt: Timestamp;
   readonly reconciliationReason: string | null;
   readonly reservationId: Identifier | null;
+  readonly result: ToolResult | null;
   readonly resultDigest: Digest | null;
   readonly schemaVersion: SchemaVersion;
+  readonly sessionId: Identifier;
   readonly settlementStatus: ToolSettlementStatus;
   readonly sideEffectIdentity: string | null;
   readonly state: ToolExecutionState;
@@ -1814,6 +1817,7 @@ export interface ToolRequest {
 /** ToolResult */
 export interface ToolResult {
   readonly completedAt: Timestamp;
+  readonly output: readonly ToolArgument[];
   readonly schemaVersion: SchemaVersion;
   readonly status: ToolResultStatus;
   readonly toolRequestId: Identifier;

@@ -15,7 +15,7 @@ NOW = "2026-08-19T10:00:00Z"
 def _execution() -> dict:
     return {
         "schemaVersion": "1.0.0", "toolExecutionId": "tool-exec-1",
-        "toolRequestId": "tool-req-1", "toolId": "terminal.local",
+        "toolRequestId": "tool-req-1", "operatorId": "operator-1", "sessionId": "session-1", "toolId": "terminal.local",
         "operation": "terminal.exec",
         "operationFingerprint": digest({"operation": "terminal.exec", "argv": ["echo", "ok"]}),
         "descriptorDigest": digest({"toolId": "terminal.local"}),
@@ -23,7 +23,7 @@ def _execution() -> dict:
         "effectClass": "ephemeral_external", "consequential": False,
         "grantId": None, "leaseId": None, "reservationId": None,
         "state": "prepared", "dispatchBoundary": "not_started",
-        "resultDigest": None, "sideEffectIdentity": None,
+        "result": None, "resultDigest": None, "sideEffectIdentity": None,
         "settlementStatus": "not_settled", "reconciliationReason": None,
         "preparedAt": NOW, "updatedAt": NOW,
     }
@@ -40,13 +40,24 @@ def _metadata(command_id: str, actor_kind: str = "execution_plane") -> dict:
     )
 
 
+def _tool_result() -> dict:
+    output = [{"kind": "string", "name": "stdout", "value": "ok"}]
+    return {
+        "schemaVersion": "1.0.0", "toolResultId": "tool-result-1",
+        "toolRequestId": "tool-req-1", "status": "succeeded", "output": output,
+        "exitCode": 0, "outputDigest": digest(output), "sideEffectIdentity": None,
+        "error": None, "completedAt": NOW,
+    }
+
+
 def _settle(state: dict, result_digest: str) -> dict:
+    result = _tool_result()
     state = ToolExecutionAggregate.transition(state, "settling", {
-        "resultDigest": result_digest, "settlementStatus": "settling",
+        "result": result, "resultDigest": result_digest, "settlementStatus": "settling",
         "dispatchBoundary": "response_completed",
     })
     return ToolExecutionAggregate.transition(state, "completed", {
-        "resultDigest": result_digest, "settlementStatus": "settled",
+        "result": result, "resultDigest": result_digest, "settlementStatus": "settled",
         "dispatchBoundary": "response_completed",
     })
 
@@ -72,13 +83,18 @@ def test_dispatching_execution_can_be_marked_indeterminate() -> None:
     assert state["state"] == "indeterminate"
 
 
-def test_completed_requires_settled_result_digest() -> None:
+def test_completed_requires_persisted_settled_result() -> None:
     state = ToolExecutionAggregate.create(_execution())
     state = ToolExecutionAggregate.transition(state, "admitted", {})
     state = ToolExecutionAggregate.transition(state, "dispatching", {"dispatchBoundary": "started"})
-    state = ToolExecutionAggregate.transition(state, "settling", {"settlementStatus": "settling"})
+    result_digest = digest({"status": "succeeded"})
+    state = ToolExecutionAggregate.transition(state, "settling", {
+        "resultDigest": result_digest, "settlementStatus": "settling",
+    })
     with pytest.raises(IllegalTransition):
-        ToolExecutionAggregate.transition(state, "completed", {"settlementStatus": "settled"})
+        ToolExecutionAggregate.transition(state, "completed", {
+            "resultDigest": result_digest, "settlementStatus": "settled",
+        })
 
 
 def test_identity_fields_cannot_be_patched_during_transition() -> None:

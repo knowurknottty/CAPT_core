@@ -141,6 +141,8 @@ The effect may alter live environment state but is not intended as a durable bus
 
 Examples: file write, patch, local artifact creation, cron persistence.
 
+Unrestricted `terminal.exec` and `code.execute_python` are conservatively classified `durable_local` in the release descriptors because arbitrary shell/Python code can persist local mutations. A future read-only command profile must use a distinct operation/descriptor with enforceable restrictions; CAPT must not infer read-only safety from command text.
+
 Settlement must record before/after identity where the adapter can provide it.
 
 ### Durable remote effect

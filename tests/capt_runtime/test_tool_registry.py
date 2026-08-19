@@ -18,7 +18,7 @@ def _descriptor(tool_id: str = "terminal.local") -> dict:
         "family": "terminal",
         "operations": ["terminal.exec"],
         "requiredCapabilities": ["terminal.exec"],
-        "operationEffects": [{"operation": "terminal.exec", "effectClass": "ephemeral_external"}],
+        "operationEffects": [{"operation": "terminal.exec", "effectClass": "durable_local"}],
         "terminalBackends": ["local"],
         "platforms": ["macos", "linux"],
         "supportsTimeout": True,
@@ -81,13 +81,13 @@ def test_slice_a_builtin_descriptors_are_exact() -> None:
     by_id = {d["toolId"]: d for d in SLICE_A_DESCRIPTORS}
     assert set(by_id) == {"terminal.local", "file.operations", "code.execution"}
     assert by_id["terminal.local"]["operationEffects"] == [
-        {"operation": "terminal.exec", "effectClass": "ephemeral_external"}
+        {"operation": "terminal.exec", "effectClass": "durable_local"}
     ]
     assert by_id["file.operations"]["operationEffects"] == [
         {"operation": "file.read", "effectClass": "pure_read_only"},
         {"operation": "file.write", "effectClass": "durable_local"},
     ]
     assert by_id["code.execution"]["operationEffects"] == [
-        {"operation": "code.execute_python", "effectClass": "ephemeral_external"}
+        {"operation": "code.execute_python", "effectClass": "durable_local"}
     ]
     assert all(d["terminalBackends"] == ["local"] for d in by_id.values())
