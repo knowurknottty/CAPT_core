@@ -7,8 +7,9 @@ RuntimeCommandService remains the authenticated operator relay.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from .driver_host import DriverHost
 from .drivers.openharness import DESCRIPTOR, OpenHarnessDriver
@@ -18,6 +19,10 @@ from .memory.store import MemoryStore
 from .services import RuntimeService
 from .store import EventStore
 from .task_resolver import TaskResolver
+from .tool_broker import ToolBroker
+from .tools.adapters import CodeExecutionAdapter, FileToolAdapter, TerminalToolAdapter
+from .tools.builtins import CODE_EXECUTION_DESCRIPTOR, FILE_OPERATIONS_DESCRIPTOR, TERMINAL_LOCAL_DESCRIPTOR
+from .tools.registry import ToolRegistry
 
 
 @dataclass
@@ -29,6 +34,8 @@ class RuntimeComposition:
     registry: DriverRegistry
     memory_store: MemoryStore
     memory_engine: MemoryTriggerEngine
+    tool_registry: ToolRegistry
+    tool_broker: ToolBroker
 
     def command_service(self, operator_id: str, session_id: str):
         # Import lazily to avoid a desktop-to-runtime import cycle at module load.
@@ -40,6 +47,7 @@ class RuntimeComposition:
             session_id,
             memory_engine=self.memory_engine,
             runtime_service=self.service,
+            tool_broker=self.tool_broker,
         )
 
     def openharness_host(
@@ -90,6 +98,10 @@ class RuntimeComposition:
         """Return CAPT's authoritative task-reference resolver."""
         return TaskResolver(self.store)
 
+    def reconcile_stranded_tools(self) -> list[dict[str, Any]]:
+        """Reconcile durable ToolExecutions without redispatching adapters."""
+        return self.tool_broker.reconcile_stranded()
+
     def close(self) -> None:
         self.memory_store.close()
         self.store.close()
@@ -104,16 +116,48 @@ def create_runtime(
     """Construct every operator-owned runtime dependency exactly once."""
     ledger = str(Path(ledger_path))
     store = EventStore(ledger)
+    service = RuntimeService(store)
     memory_store = MemoryStore(memory_path or (ledger + ".memory"))
     memory_engine = MemoryTriggerEngine(
         memory_store,
         model_safe_limit_steps=model_safe_limit_steps,
         ledger_db=ledger + ".memory-policy",
     )
+    tool_registry = ToolRegistry()
+
+    def readiness_probe(tool_id: str, probe: Callable[[], dict[str, object]]):
+        def checked() -> dict[str, object]:
+            state = dict(probe())
+            return {
+                "schemaVersion": "1.0.0",
+                "toolId": tool_id,
+                "status": state["status"],
+                "reason": state["reason"],
+                "checkedAt": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            }
+        return checked
+
+    terminal = TerminalToolAdapter()
+    files = FileToolAdapter()
+    code = CodeExecutionAdapter()
+    for descriptor, adapter in (
+        (TERMINAL_LOCAL_DESCRIPTOR, terminal),
+        (FILE_OPERATIONS_DESCRIPTOR, files),
+        (CODE_EXECUTION_DESCRIPTOR, code),
+    ):
+        tool_registry.register(
+            descriptor,
+            adapter,
+            readiness_probe=readiness_probe(descriptor["toolId"], adapter.readiness),
+        )
+    now = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    tool_broker = ToolBroker(service, tool_registry, now=now)
     return RuntimeComposition(
         store=store,
-        service=RuntimeService(store),
+        service=service,
         registry=DriverRegistry(),
         memory_store=memory_store,
         memory_engine=memory_engine,
+        tool_registry=tool_registry,
+        tool_broker=tool_broker,
     )

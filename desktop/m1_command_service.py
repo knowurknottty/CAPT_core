@@ -12,7 +12,9 @@ import json
 from typing import Any, Dict, Optional
 
 from capt_runtime import commands
-from capt_runtime.errors import CaptRuntimeError, IdempotencyConflict
+from capt_runtime.errors import AuthorityViolation, CaptRuntimeError, IdempotencyConflict
+from capt_runtime.tool_broker import ToolBrokerError, ToolUnavailable
+from capt_runtime.tools.registry import UnknownToolId
 from capt_runtime.approval_dispatch import register_expected_prompt_digest
 from capt_runtime.prompt_approval import request_model_prompt_approval
 from capt_runtime.services import RuntimeService
@@ -44,6 +46,7 @@ _VALID_OPS = (
     "checkpoint_runtime",
     "shutdown",
     "resume_runtime",
+    "run_tool",
 )
 
 
@@ -63,12 +66,14 @@ class RuntimeCommandService:
         session_id: str,
         memory_engine: Any = None,
         runtime_service: Optional[RuntimeService] = None,
+        tool_broker: Any = None,
     ) -> None:
         self.store = store
         self.svc = runtime_service or RuntimeService(store)
         self.operator_id = operator_id
         self.session_id = session_id
         self.memory_engine = memory_engine
+        self.tool_broker = tool_broker
         self.fixed_openharness_runner = None
         self.approved_hermes_runner: Any = None
         self.runtime_checkpoint_runner = None
@@ -125,6 +130,44 @@ class RuntimeCommandService:
         op = cmd["op"]
         meta = self._operator_metadata(cmd)
         try:
+            if op == "run_tool":
+                if self.tool_broker is None:
+                    return self._receipt(
+                        cmd,
+                        status="rejected",
+                        classification="internal",
+                        error=self._error_envelope(
+                            cmd, "internal", "TOOL_BROKER_UNAVAILABLE"
+                        ),
+                    )
+                request = cmd["payload"]
+                if not isinstance(request, dict):
+                    return self._receipt(
+                        cmd,
+                        status="rejected",
+                        classification="validation",
+                        error=self._error_envelope(
+                            cmd, "validation", "TOOL_REQUEST_MALFORMED"
+                        ),
+                    )
+                if request.get("idempotencyKey") != cmd["idempotencyKey"]:
+                    raise AuthorityViolation(
+                        "run_tool envelope and ToolRequest idempotency keys must match"
+                    )
+                result = self.tool_broker.execute(
+                    request,
+                    operator_id=self.operator_id,
+                    session_id=self.session_id,
+                )
+                replayed = bool(result.get("replayed"))
+                return self._receipt(
+                    cmd,
+                    status="idempotent" if replayed else "accepted",
+                    classification="duplicate" if replayed else "accepted",
+                    result=result,
+                    stream_id="tool_execution-" + str(result["toolExecutionId"]),
+                )
+
             if op == "create_mission":
                 if self.memory_engine is not None:
                     mid = cmd["payload"].get("missionId", "")
@@ -417,8 +460,32 @@ class RuntimeCommandService:
 
             return self._receipt_from_runtime(cmd, result)
 
+        except ToolUnavailable as exc:
+            return self._receipt(
+                cmd,
+                status="rejected",
+                classification="internal",
+                error=self._error_envelope(cmd, "internal", "TOOL_UNAVAILABLE"),
+                detail=str(exc)[:240],
+            )
+        except UnknownToolId as exc:
+            return self._receipt(
+                cmd,
+                status="rejected",
+                classification="not_found",
+                error=self._error_envelope(cmd, "not_found", "TOOL_NOT_FOUND"),
+                detail=str(exc)[:240],
+            )
+        except ToolBrokerError as exc:
+            return self._receipt(
+                cmd,
+                status="rejected",
+                classification="internal",
+                error=self._error_envelope(cmd, "internal", "TOOL_BROKER_ERROR"),
+                detail=str(exc)[:240],
+            )
         except CaptRuntimeError as exc:
-            classification = getattr(exc, "category", "internal_failure")
+            classification = getattr(exc, "category", "internal")
             return self._receipt(
                 cmd,
                 status="rejected",
