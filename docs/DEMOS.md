@@ -56,7 +56,7 @@ LOCAL-002 was previously described as a focused Hermes workspace/state-map evide
 
 ## Acceptance target — real provider execution
 
-The active PR #47 path adds bounded Ollama/OpenAI-compatible inference transport and an upgraded TUI run surface. When the stack is merged and exact-head live-provider acceptance is available, a demo should exercise the actual provider rather than a synthetic provider/model name.
+Terminal PR #117 integrates bounded Ollama/local OpenAI-compatible inference and the cumulative operator surface. The fresh cross-surface acceptance uses a deterministic loopback provider to prove authority/transport/idempotency; a production demo should separately exercise the intended real provider and must not relabel loopback proof as model-quality evidence.
 
 ## Flagship acceptance target — true cross-model continuity
 

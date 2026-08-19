@@ -64,14 +64,14 @@ Models may reason, generate, inspect, summarize, or propose actions. Their outpu
 
 ## Operator surfaces
 
-The merged Textual TUI, CLI, and Tk operator MVP share the same operator/runtime boundary. The active PR #47 cockpit adds prompt-enhancement selection, response mode, requested context budget, human review, and cognitive provenance while preserving the same authority boundary.
+The Textual TUI, CLI, Tk operator surface, native `CAPTNativeMac`, and MCP compatibility client all preserve the same operator/runtime boundary. Terminal PR #117 reconciles the cockpit/provider/provenance projections without creating a second authority plane.
 
 ## Cohorts
 
-The active PR #48 Cohort layer coordinates bounded multi-perspective contributions. It is not a second runtime and currently does not claim durable RuntimeService/EventStore reconstruction, restart cursors, evidence admission, or installed-runtime TUI dogfood.
+The terminal convergence Cohort layer now includes durable EventStore persistence/reconstruction, evidence admission, governed steering, epoch handling, and Chamber projection. It is still not a second runtime; quorum or consensus cannot manufacture verification or capability.
 
 ## Security gate
 
-The active PR #49 SecurityGate evaluates evidence fail-closed. It does not grant capabilities or make its own result authoritative. Security evidence must still enter CAPT through normal governed evidence/verification paths.
+The terminal convergence SecurityGate/Security Closure Cockpit evaluates the 47-control catalog fail-closed. It does not grant capabilities or self-authorize release; current release-security status remains BLOCKED until applicable exact-head evidence closes.
 
 For exact state classifications, use [`CURRENT_STATE.md`](CURRENT_STATE.md).

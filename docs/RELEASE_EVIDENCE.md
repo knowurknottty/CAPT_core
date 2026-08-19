@@ -1,47 +1,56 @@
 # Release and Integration Evidence
 
-CAPT keeps evidence scoped to the claim it actually supports.
+CAPT keeps evidence scoped to the claim it actually supports. Historical evidence is not rewritten into current proof, and ordinary test success does not become a security-control attestation.
 
-## Numbered v0.5 evidence
+## Historical v0.5 evidence
 
-`release_evidence/v0.5/` remains the historical proof set for the numbered `0.5.0` package lineage. It includes release readiness, requirement/evidence mapping, test matrix, wheel identity, installed model-operator evidence, and public-claim audit material.
+`release_evidence/v0.5/` remains the proof set for the numbered `0.5.0` lineage. It is historical and intentionally immutable.
 
-Do not rewrite those records to make them describe later `main` or open-PR behavior.
+## Terminal convergence evidence — 2026-08-19
 
-## Merged-main evidence
+Current integration authority is PR #117 with PR #118's provider/model coherence repair reconciled on top of its latest authored-skill-aware head.
 
-Later productization tests establish the normal CLI/TUI/operator/provider-configuration foundations on `main`. Those are source/test claims for merged code, not a retroactive v0.5 wheel claim.
+Fresh local verification on the resulting candidate established:
 
-## Active PR evidence
+- clean Python 3.14 environment, editable source resolved to the isolated convergence worktree;
+- Core full suite: **1,055 passed / 57 skipped / 12 deselected / 0 failed**;
+- generated-contract drift: **PASS** (`11 generated files match the schema source`);
+- `git diff --check`: **PASS**;
+- fatal Python lint subset (`E9/F63/F7/F82`): **PASS**;
+- Swift normal: **64 tests / 7 deliberate opt-in skips / 0 failures**;
+- Swift strict concurrency + warnings-as-errors: **PASS**;
+- ThreadSanitizer: **64 / 7 skipped / 0 failures**, no sanitizer finding;
+- MCP PR #2 full suite against that Core candidate: **PASS**;
+- MCP repository Ruff: **PASS**.
 
-Each active stacked PR has its own evidence boundary. PR #47 now has clean exact-head **source/editable-runtime** verification at `4334657a919f74803e65d9b01aa5054d6d7b9a61`:
+The broad Core repository Ruff F/E9 sweep is not globally clean; legacy unused imports/locals/redefinitions remain outside the terminal fix slice. Do not cite the scoped/fatal lint success as a repo-wide Ruff pass.
 
-- approval-security regressions: 8 passed;
-- focused prompt/provider/TUI/operator suite: 31 passed;
-- Ouroboros lifecycle: 18 passed;
-- `tests/capt_runtime`: 387 passed / 10 skipped / 12 deselected;
-- full repository: 861 passed / 67 skipped / 12 deselected;
-- contract drift and `git diff --check`: passed.
+## Cross-surface authority acceptance
 
-That proof does not convert the source tree into an installed-wheel, live-provider, process-boundary cross-model, destructive rollback, or release artifact proof.
+A disposable RuntimeService/EventStore plus deterministic loopback OpenAI-compatible test provider reproduced `CROSS_SURFACE_PASS` across native Swift and MCP PR #2:
 
-## Hermes LOCAL-002 metadata — quarantined pending retrieval
+1. MCP created a concrete model approval.
+2. Native Swift observed and denied it; MCP then observed authoritative `denied` and provider dispatch stayed zero.
+3. Native Swift created a fresh approval.
+4. MCP approved and executed that exact mission/task/DriverRun binding.
+5. Provider dispatch occurred exactly once.
+6. Exact replay returned idempotently without a second dispatch.
+7. Mismatched reuse failed closed with `AUTHORITYVIOLATION`.
+8. Native observed approval `consumed`, DriverRun completed, task `awaiting_verification`, and `verificationId=null`.
+9. RuntimeService restarted on the same ledger and both surfaces reconstructed the same authority state and chain digest.
 
-The operator supplied branch `evidence/hermes-local-002-r6`, HEAD `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`, report `reports/local-evidence/HERMES_AGENT_TUI_WORKSPACE_TESTS_AND_STATE_MAP_8F97AE9_2026-08-17.md`, classification `HERMES_LOCAL_002_COMPLETE`, and reported 98/0/0 focused plus 174/0/2 broader results with Node/npm environment notes and a no-product/state-map-blocker statement.
+This proves transport, authority, binding, replay, and reconstruction behavior. It is not a model-quality benchmark or a claim that a loopback test provider equals a production external provider.
 
-Terra later verified that the branch, commit, and named report are absent from the current GitHub remote/API. These values are therefore **not independently usable evidence**. The prior explanation that GitHub retrieval was merely lagging is superseded by the later remote/API audit.
+## Security evidence boundary
 
-Historical v0.5 Hermes evidence remains authoritative for its own bounded release lineage. If LOCAL-002 is restored, its report must be retrieved and reviewed before any of its claims re-enter the release ledger. Even a restored LOCAL-002 record would remain adjacent Hermes workspace evidence rather than proof of PR #47 exact head, installed-wheel behavior, live-provider execution, destructive rollback, restart continuity, or release readiness.
+The Security Closure Cockpit is integrated and intentionally fail-closed. The prior terminal-candidate run reported `BLOCKED / releaseAuthorized=false` with applicable controls still `NOT_VERIFIED` rather than manufacturing PASS from general tests.
 
-## What still requires separate proof
+The final exact source/artifact head must rerun the cockpit and record its decision on PR #117. Until it returns authorized, the convergence candidate is **integration-verified but release-security blocked**.
 
-- live intended-provider execution from the exact integrated head;
-- installed-runtime acceptance of that provider path;
-- true process-boundary Model-A -> Model-B continuity;
-- destructive rollback/reconciliation cases where external work may have escaped cancellation;
-- security controls explicitly left BLOCKED by #49;
-- durable Cohort restart/evidence semantics.
+## Artifact evidence boundary
+
+Final wheel, sdist, and native-binary SHA-256 values are recorded only after the final convergence source/docs freeze. PR #117 is the authoritative terminal record for those exact identities.
 
 ## Evidence rule
 
-A successful test suite, source file, controlled HTTP server, installed wheel, live provider, restart test, and destructive failure-injection test are different evidence classes. Claim only what the matching evidence establishes.
+A source test suite, sanitizer run, controlled provider protocol test, installed artifact, real provider run, security-control evidence record, and signed/notarized release are distinct evidence classes. Claim only what the matching evidence establishes.

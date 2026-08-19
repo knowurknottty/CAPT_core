@@ -1,36 +1,49 @@
 # CAPT Functionality Matrix
 
-## Operator surfaces on merged `main`
+This matrix distinguishes protected `main` from the terminal PR #117 convergence candidate. “Candidate” means implemented and integrated on the convergence line; it does not mean release-authorized.
 
-| Capability | CLI | TUI | Tk desktop | SwiftUI |
-|---|---|---|---|---|
-| runtime lifecycle | yes | status/control | yes | contract only |
-| checkpoint/resume | yes | yes | yes | contract only |
-| durable memory | yes | view/control | view/control | contract only |
-| pinned authored-skill verify/list/show | yes | no | no | no |
-| evidence/verification | yes | yes | yes | contract only |
-| provider registry/health/model list | `capt-ui` operator CLI | yes | yes | contract only |
-| model-selection foundation | `capt-ui` | yes | yes | contract only |
-| CaveCAPT verbosity | `capt-ui` | yes | operator-layer dependent | contract only |
-| human approve/deny | expert/runtime paths | yes | yes | contract only |
-| live bounded provider generation | no | no on `main` | no | no |
+| Capability | Protected `main` | Terminal convergence candidate |
+|---|---|---|
+| runtime lifecycle / EventStore authority | yes | yes, reconciled |
+| checkpoint / exact historical replay | foundation | exact prefix replay + governed replay fork |
+| durable memory / ContextPack | yes | yes, approval/context reconciliation included |
+| authored-skill verification | yes | exact selected bytes bound into model-visible approval |
+| evidence / verification / ClaimGuard separation | yes | yes |
+| bounded IPC framing | partial historical baseline | integrated |
+| security rejection audit | partial historical baseline | integrated |
+| capability lease inspect/revoke | foundation | integrated |
+| governed artifact promotion | no | integrated |
+| provider registry/health/model list | yes | yes + legacy backfill/coherence repair |
+| governed Ollama generation | historical/stacked | integrated |
+| local OpenAI-compatible generation | historical/stacked | integrated + prewarm |
+| provider/model session isolation | no | native origin-session bound |
+| generic native MLX adapter | no | **unregistered unless materially configured** |
+| Textual/Tk operator surfaces | yes | yes + UPG projections |
+| native macOS executable target | no/contract-era baseline | `CAPTNativeMac` builds and tests |
+| human approve/deny | yes | exact model-visible approval binding |
+| cross-model continuation context | partial/stacked | integrated |
+| durable Cohorts | no/coordination-era baseline | EventStore persistence + evidence admission + steering |
+| Cohort Chamber | no | integrated |
+| `.capt-flight` forensic bundle | no | integrated |
+| Provenance Lens / DAG | no | integrated |
+| Security Closure Cockpit | no | integrated, fail-closed |
+| macOS ↔ RuntimeService ↔ MCP shared authority | no | acceptance proven |
+| public release authorization | no claim | **BLOCKED pending security evidence** |
 
-## Active integration additions
+## Fresh terminal-candidate verification
 
-PR #47 is the current operator/provider execution slice. It adds provider generation, prompt assembly/provenance, human-reviewed enhancement, response modes, requested context budgets, and current-run cognitive provenance to the TUI path.
+- Core Python: **1,055 passed / 57 skipped / 12 deselected / 0 failures**.
+- Swift normal: **64 / 7 skipped / 0 failures**.
+- Swift strict concurrency/warnings-as-errors: **PASS**.
+- ThreadSanitizer: **64 / 7 skipped / 0 failures**.
+- Contract generation/drift: **PASS**.
+- MCP PR #2 suite against the same Core candidate: **PASS**; MCP Ruff **PASS**.
+- Cross-surface disposable-runtime acceptance: **PASS**.
+- Broad repository Ruff F/E9: **known legacy cleanup debt; not globally clean**.
 
-PR #44 adds governed discovery; #46 hardens execution/recovery; #48 adds bounded Cohort coordination; #49 adds the fail-closed security infrastructure gate.
+## Deliberate non-convergence lines
 
-## Release-gate truth
-
-The following must not be represented as completed merely because pieces exist:
-
-- exact-terminal-head integrated-stack acceptance;
-- installed-runtime/live-provider acceptance for intended provider paths;
-- true process-boundary cross-model continuation with Model A replaced by Model B;
-- durable Cohort persistence/reconstruction/evidence admission;
-- security closure while #49 remains blocked;
-- a shipped native desktop product.
+CAPT-UPG-020→024 remain benchmark/probe/pending-verification work. Inversion Labs/Forge remains a separate governed edition line. Neither is silently counted as Core release functionality.
 
 ## Authority boundary
 
