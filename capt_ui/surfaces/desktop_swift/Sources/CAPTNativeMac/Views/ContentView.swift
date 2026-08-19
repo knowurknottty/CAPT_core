@@ -2,11 +2,10 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var store: CAPTOperatorStore
-    @State private var selection: CAPTSidebarSection = .chat
 
     var body: some View {
         NavigationSplitView {
-            SidebarView(selection: $selection, store: store)
+            SidebarView(selection: $store.selectedSection, store: store)
                 .navigationSplitViewColumnWidth(min: 170, ideal: 210, max: 260)
         } detail: {
             VStack(spacing: 0) {
@@ -34,7 +33,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private var primaryView: some View {
-        switch selection {
+        switch store.selectedSection {
         case .chat:
             ChatView(store: store)
         case .missions:

@@ -35,15 +35,13 @@ struct SidebarView: View {
     @ObservedObject var store: CAPTOperatorStore
 
     var body: some View {
-        List(selection: $selection) {
+        List {
             Section {
                 Button {
                     store.newChat()
-                    selection = .chat
                 } label: {
                     Label("New Chat", systemImage: "square.and.pencil")
                 }
-                .disabled(store.pendingApproval != nil || store.isBusy)
             }
 
             if !store.sessions.isEmpty {
@@ -51,7 +49,6 @@ struct SidebarView: View {
                     ForEach(store.sessions.prefix(20)) { session in
                         Button {
                             store.activateSession(session.id)
-                            selection = .chat
                         } label: {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(session.title).lineLimit(1)
@@ -62,7 +59,6 @@ struct SidebarView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .buttonStyle(.plain)
-                        .disabled(store.pendingApproval != nil || store.isBusy)
                         .listRowBackground(
                             store.activeSessionID == session.id
                                 ? Color.accentColor.opacity(0.12) : Color.clear
@@ -73,16 +69,24 @@ struct SidebarView: View {
 
             Section("CAPT") {
                 ForEach(CAPTSidebarSection.allCases) { item in
-                    HStack {
-                        Label(item.rawValue, systemImage: item.systemImage)
-                        Spacer()
-                        if let count = count(for: item), count > 0 {
-                            Text("\(count)")
-                                .font(.caption.monospacedDigit())
-                                .foregroundStyle(.secondary)
+                    Button {
+                        selection = item
+                    } label: {
+                        HStack {
+                            Label(item.rawValue, systemImage: item.systemImage)
+                            Spacer()
+                            if let count = count(for: item), count > 0 {
+                                Text("\(count)")
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .tag(item)
+                    .buttonStyle(.plain)
+                    .listRowBackground(
+                        selection == item ? Color.accentColor.opacity(0.12) : Color.clear
+                    )
                 }
             }
         }

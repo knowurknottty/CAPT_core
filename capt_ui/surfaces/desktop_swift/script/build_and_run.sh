@@ -15,9 +15,17 @@ for arg in "$@"; do
   esac
 done
 
-if [[ -d "$BUNDLE" ]]; then
-  pkill -f "$BUNDLE/Contents/MacOS/$EXECUTABLE" 2>/dev/null || true
-fi
+BUNDLE_EXECUTABLE="$BUNDLE/Contents/MacOS/$EXECUTABLE"
+bundle_pids() {
+  ps -axo pid=,command= | while read -r pid command; do
+    [[ "$command" == "$BUNDLE_EXECUTABLE" ]] && print -r -- "$pid"
+  done
+}
+
+while IFS= read -r pid; do
+  [[ -z "$pid" ]] && continue
+  kill "$pid" 2>/dev/null || true
+done < <(bundle_pids)
 LAB_STATE_DIR="${CAPT_LAB_STATE_DIR:-$HOME/.capt-inversion-labs}"
 if [[ ! -x "$LAB_STATE_DIR/runtime-venv/bin/capt" ]]; then
   CAPT_LAB_STATE_DIR="$LAB_STATE_DIR" "$ROOT/script/install_local_runtime.sh"
@@ -65,8 +73,9 @@ fi
 
 if (( VERIFY )); then
   for _ in {1..30}; do
-    if pgrep -f "$BUNDLE/Contents/MacOS/$EXECUTABLE" >/dev/null; then
-      echo "Inversion Labs CAPT.app launched: PID $(pgrep -f "$BUNDLE/Contents/MacOS/$EXECUTABLE" | head -1)"
+    PID="$(bundle_pids | head -1 || true)"
+    if [[ -n "$PID" ]]; then
+      echo "Inversion Labs CAPT.app launched: PID $PID"
       exit 0
     fi
     sleep 0.2

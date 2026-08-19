@@ -38,7 +38,7 @@ def _metadata(command: Mapping[str, Any], step: str, actor_id: str, actor_kind: 
     )
 
 
-def _validate_lineage(store: EventStore, request: LabEngineRequest) -> None:
+def _validate_lineage(store: EventStore, request: LabEngineRequest) -> Mapping[str, Any]:
     mission = store.load_state("mission-" + request.mission_id)
     if mission is None:
         raise AuthorityViolation("Lab mission does not exist: %s" % request.mission_id)
@@ -51,6 +51,32 @@ def _validate_lineage(store: EventStore, request: LabEngineRequest) -> None:
         raise AuthorityViolation("Lab mission is terminal: %s" % mission.get("state"))
     if task.get("state") in _TASK_TERMINAL:
         raise AuthorityViolation("Lab task is terminal: %s" % task.get("state"))
+    return task
+
+
+def _validate_filesystem_capability(task: Mapping[str, Any], request: LabEngineRequest) -> None:
+    raw_root = request.input.get("root")
+    if not isinstance(raw_root, str) or not raw_root.strip():
+        raise AuthorityViolation("Lab filesystem capability requires a concrete input root")
+    requested = Path(raw_root).expanduser().resolve()
+    for requirement in task.get("capabilityRequirements") or []:
+        if requirement.get("capabilityId") != "cap.fs.read":
+            continue
+        if "repository.read" not in (requirement.get("operations") or []):
+            continue
+        scope = requirement.get("scope") or {}
+        if scope.get("kind") != "filesystem":
+            continue
+        allowed_raw = scope.get("rootPath")
+        if not isinstance(allowed_raw, str) or not allowed_raw.strip():
+            continue
+        allowed = Path(allowed_raw).expanduser().resolve()
+        recursive = bool(scope.get("recursive"))
+        if requested == allowed or (recursive and allowed in requested.parents):
+            return
+    raise AuthorityViolation(
+        "Lab filesystem capability does not authorize requested root: %s" % requested
+    )
 
 
 def _write_artifact(path: Path, data: bytes) -> None:
@@ -80,8 +106,10 @@ def run_lab_advisory(
     no verification, claim decision, task success, or mission completion occurs.
     """
     request = LabEngineRequest.from_mapping(command.get("payload", {}))
-    _validate_lineage(store, request)
+    task = _validate_lineage(store, request)
     descriptor = registry.resolve(request)
+    if descriptor.requires_filesystem:
+        _validate_filesystem_capability(task, request)
 
     operation_fingerprint = commands.fingerprint(
         "run_lab_engine_advisory", request.to_mapping()
