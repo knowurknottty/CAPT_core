@@ -33,6 +33,37 @@ _MUTABLE_FIELDS = frozenset({
 
 class ToolExecutionAggregate:
     KIND = "tool_execution"
+    # Qualified ownership names keep the cross-aggregate authority map explicit.
+    # Request/identity/descriptor identifiers below are immutable references;
+    # execution lifecycle, observed result, and settlement facts are broker-owned.
+    OWNED_FIELDS = frozenset({
+        "tool_execution.state",
+        "tool_execution.effectClass",
+        "tool_execution.consequential",
+        "tool_execution.reservationId",
+        "tool_execution.dispatchBoundary",
+        "tool_execution.result",
+        "tool_execution.resultDigest",
+        "tool_execution.sideEffectIdentity",
+        "tool_execution.settlementStatus",
+        "tool_execution.reconciliationReason",
+        "tool_execution.preparedAt",
+        "tool_execution.updatedAt",
+    })
+    REFERENCE_FIELDS = frozenset({
+        "toolExecutionId",
+        "toolRequestId",
+        "operatorId",
+        "sessionId",
+        "toolId",
+        "operation",
+        "operationFingerprint",
+        "descriptorDigest",
+        "adapterId",
+        "backendId",
+        "grantId",
+        "leaseId",
+    })
 
     @staticmethod
     def stream_id(tool_execution_id: str) -> str:
