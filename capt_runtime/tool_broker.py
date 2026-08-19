@@ -192,7 +192,12 @@ class ToolBroker:
         return result
 
     def _indeterminate_result(
-        self, tool_request_id: str, material: str, reason: str
+        self,
+        tool_request_id: str,
+        material: str,
+        reason: str,
+        *,
+        side_effect_identity: str | None = None,
     ) -> Dict[str, Any]:
         output = [{"kind": "string", "name": "reconciliation", "value": reason[:16384]}]
         result = {
@@ -203,7 +208,7 @@ class ToolBroker:
             "output": output,
             "exitCode": None,
             "outputDigest": digest(output),
-            "sideEffectIdentity": None,
+            "sideEffectIdentity": side_effect_identity,
             "error": None,
             "completedAt": self._now(),
         }
@@ -433,8 +438,46 @@ class ToolBroker:
             self.metadata(execution_id, "dispatching"),
         )
 
+        observed_identity: str | None = None
+
+        def observe_effect(side_effect_identity: str) -> None:
+            nonlocal observed_identity
+            if not request["consequential"]:
+                raise AuthorityViolation("pure read-only tool may not publish side-effect identity")
+            if not isinstance(side_effect_identity, str) or not side_effect_identity:
+                raise ValueError("observed side-effect identity must be a non-empty string")
+            if len(side_effect_identity) > 2048:
+                raise ValueError("observed side-effect identity exceeds ToolExecution bound")
+            if observed_identity is not None:
+                if side_effect_identity != observed_identity:
+                    raise IntegrityViolation("adapter attempted to replace observed side-effect identity")
+                return
+            self.runtime.transition_tool_execution(
+                execution_id,
+                "effect_observed",
+                {
+                    "sideEffectIdentity": side_effect_identity,
+                    "dispatchBoundary": "effect_observed",
+                },
+                self.metadata(execution_id, "effect-observed"),
+            )
+            observed_identity = side_effect_identity
+
         try:
-            adapter_result = adapter.execute(deepcopy(request))
+            execute_observed = getattr(adapter, "execute_observed", None)
+            if callable(execute_observed):
+                adapter_result = execute_observed(deepcopy(request), observe_effect)
+            else:
+                adapter_result = adapter.execute(deepcopy(request))
+            if observed_identity is not None:
+                returned_identity = adapter_result.get("sideEffectIdentity")
+                if returned_identity is None:
+                    adapter_result = deepcopy(adapter_result)
+                    adapter_result["sideEffectIdentity"] = observed_identity
+                elif returned_identity != observed_identity:
+                    raise IntegrityViolation(
+                        "adapter result side-effect identity disagrees with observed identity"
+                    )
             result = self._result_from_adapter(request, adapter_result)
         except Exception as exc:
             reason = f"{type(exc).__name__}: {exc}"
@@ -442,6 +485,7 @@ class ToolBroker:
                 result = self._indeterminate_result(
                     request["toolRequestId"], request["idempotencyKey"],
                     "adapter failed after dispatch boundary: " + reason,
+                    side_effect_identity=observed_identity,
                 )
             else:
                 result = self._result_from_adapter(request, {
@@ -470,6 +514,7 @@ class ToolBroker:
                     request["toolRequestId"], request["idempotencyKey"],
                     "capability settlement failed after tool dispatch: "
                     f"{type(exc).__name__}: {exc}",
+                    side_effect_identity=result.get("sideEffectIdentity"),
                 )
 
         reason = None
@@ -482,7 +527,10 @@ class ToolBroker:
                 "external effect is indeterminate",
             )
         state = self._transition_terminal(
-            execution_id, "dispatching", result, reconciliation_reason=reason
+            execution_id,
+            "effect_observed" if observed_identity is not None else "dispatching",
+            result,
+            reconciliation_reason=reason,
         )
         return {
             "toolExecutionId": execution_id,
@@ -527,7 +575,10 @@ class ToolBroker:
                 "adapter reconciliation result is available"
             )
             result = self._indeterminate_result(
-                state["toolRequestId"], state["toolExecutionId"], reason
+                state["toolRequestId"],
+                state["toolExecutionId"],
+                reason,
+                side_effect_identity=state.get("sideEffectIdentity"),
             )
 
             if state.get("reservationId") and state.get("grantId") and state.get("leaseId"):

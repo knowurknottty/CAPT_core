@@ -239,3 +239,46 @@ def test_request_specific_preflight_denial_happens_before_reservation_or_dispatc
         assert state["reservationId"] is None
     finally:
         store.close()
+
+
+class EffectObservedCrashAdapter(FakeAdapter):
+    adapter_id = "adapter-effect-observed-crash"
+
+    def execute_observed(self, request: dict, observe_effect) -> dict:
+        self.calls += 1
+        observe_effect('{"containerId":"ctr-test-1","imageId":"sha256:image-test-1"}')
+        raise RuntimeError("crash after durable external identity became known")
+
+
+def test_effect_identity_is_durable_before_adapter_returns_or_crashes(tmp_path) -> None:
+    store = EventStore(str(tmp_path / "runtime.db"))
+    runtime = SpyRuntime(store)
+    registry = ToolRegistry()
+    adapter = EffectObservedCrashAdapter()
+    registry.register(
+        _descriptor(),
+        adapter,
+        lambda: {
+            "schemaVersion": "1.0.0",
+            "toolId": "test.tool",
+            "status": "available",
+            "reason": "observed-effect adapter ready",
+            "checkedAt": NOW,
+        },
+    )
+    broker = ToolBroker(runtime, registry, now=lambda: NOW)
+    try:
+        result = broker.execute(
+            _request(operation="test.write", with_lease=True),
+            operator_id="op",
+            session_id="s",
+        )
+        assert result["status"] == "indeterminate"
+        state = store.require_state("tool_execution-" + result["toolExecutionId"])
+        assert state["state"] == "indeterminate"
+        assert state["dispatchBoundary"] == "effect_observed"
+        assert state["sideEffectIdentity"] == '{"containerId":"ctr-test-1","imageId":"sha256:image-test-1"}'
+        assert result["result"]["sideEffectIdentity"] == state["sideEffectIdentity"]
+        assert runtime.finalizations[0]["sideEffectIdentity"] == state["sideEffectIdentity"]
+    finally:
+        store.close()
