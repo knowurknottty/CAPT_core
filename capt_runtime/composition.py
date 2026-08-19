@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 from .driver_host import DriverHost
 from .drivers.openharness import DESCRIPTOR, OpenHarnessDriver
@@ -20,8 +20,12 @@ from .services import RuntimeService
 from .store import EventStore
 from .task_resolver import TaskResolver
 from .tool_broker import ToolBroker
-from .tools.adapters import CodeExecutionAdapter, FileToolAdapter, TerminalToolAdapter
-from .tools.builtins import CODE_EXECUTION_DESCRIPTOR, FILE_OPERATIONS_DESCRIPTOR, TERMINAL_LOCAL_DESCRIPTOR
+from .tools.adapters import CodeExecutionAdapter, FileToolAdapter, SSHTerminalToolAdapter, TerminalToolAdapter
+from .tools.backends.ssh import SSHProcessBackend, SSHProfile, SSHProfileRegistry
+from .tools.builtins import (
+    CODE_EXECUTION_DESCRIPTOR, FILE_OPERATIONS_DESCRIPTOR,
+    TERMINAL_LOCAL_DESCRIPTOR, TERMINAL_SSH_DESCRIPTOR,
+)
 from .tools.registry import ToolRegistry
 
 
@@ -36,6 +40,7 @@ class RuntimeComposition:
     memory_engine: MemoryTriggerEngine
     tool_registry: ToolRegistry
     tool_broker: ToolBroker
+    ssh_profile_registry: SSHProfileRegistry
 
     def command_service(self, operator_id: str, session_id: str):
         # Import lazily to avoid a desktop-to-runtime import cycle at module load.
@@ -112,6 +117,7 @@ def create_runtime(
     *,
     memory_path: Optional[str] = None,
     model_safe_limit_steps: int = 8,
+    ssh_profiles: Iterable[SSHProfile] = (),
 ) -> RuntimeComposition:
     """Construct every operator-owned runtime dependency exactly once."""
     ledger = str(Path(ledger_path))
@@ -140,8 +146,11 @@ def create_runtime(
     terminal = TerminalToolAdapter()
     files = FileToolAdapter()
     code = CodeExecutionAdapter()
+    ssh_profile_registry = SSHProfileRegistry(ssh_profiles)
+    ssh_terminal = SSHTerminalToolAdapter(SSHProcessBackend(ssh_profile_registry))
     for descriptor, adapter in (
         (TERMINAL_LOCAL_DESCRIPTOR, terminal),
+        (TERMINAL_SSH_DESCRIPTOR, ssh_terminal),
         (FILE_OPERATIONS_DESCRIPTOR, files),
         (CODE_EXECUTION_DESCRIPTOR, code),
     ):
@@ -160,4 +169,5 @@ def create_runtime(
         memory_engine=memory_engine,
         tool_registry=tool_registry,
         tool_broker=tool_broker,
+        ssh_profile_registry=ssh_profile_registry,
     )

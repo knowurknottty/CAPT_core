@@ -24,6 +24,26 @@ TERMINAL_LOCAL_DESCRIPTOR = {
     "artifactOutputs": ["stdout", "stderr"],
 }
 
+TERMINAL_SSH_DESCRIPTOR = {
+    "schemaVersion": "1.0.0",
+    "toolId": "terminal.ssh",
+    "displayName": "SSH Terminal",
+    "family": "terminal",
+    "operations": ["terminal.exec"],
+    "requiredCapabilities": ["terminal.exec"],
+    "operationEffects": [
+        {"operation": "terminal.exec", "effectClass": "durable_remote"},
+    ],
+    "terminalBackends": ["ssh"],
+    "platforms": ["macos", "linux"],
+    "supportsTimeout": True,
+    "supportsCancellation": False,
+    "idempotencySupport": "broker_settled_replay",
+    "artifactOutputs": [
+        "stdout", "stderr", "exit_code", "host_fingerprint", "profile_id", "remote_cwd"
+    ],
+}
+
 FILE_OPERATIONS_DESCRIPTOR = {
     "schemaVersion": "1.0.0",
     "toolId": "file.operations",

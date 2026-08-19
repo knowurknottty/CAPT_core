@@ -150,12 +150,15 @@ def test_runtime_composition_owns_slice_a_registry_and_broker(tmp_path: Path) ->
     runtime = create_runtime(str(tmp_path / "rt.db"))
     try:
         assert [d["toolId"] for d in runtime.tool_registry.list_descriptors()] == [
-            "code.execution", "file.operations", "terminal.local"
+            "code.execution", "file.operations", "terminal.local", "terminal.ssh"
         ]
         assert all(
             runtime.tool_registry.readiness(tool_id)["status"] == "available"
             for tool_id in ("terminal.local", "file.operations", "code.execution")
         )
+        ssh_readiness = runtime.tool_registry.readiness("terminal.ssh")
+        assert ssh_readiness["status"] == "unavailable"
+        assert "no named SSH profiles" in ssh_readiness["reason"]
         relay = runtime.command_service("operator-test", "sess-test")
         assert relay.tool_broker is runtime.tool_broker
     finally:

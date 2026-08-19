@@ -76,7 +76,7 @@ def test_descriptor_is_copied_at_registration_boundary() -> None:
 
 
 def test_slice_a_builtin_descriptors_are_exact() -> None:
-    from capt_runtime.tools.builtins import SLICE_A_DESCRIPTORS
+    from capt_runtime.tools.builtins import SLICE_A_DESCRIPTORS, TERMINAL_SSH_DESCRIPTOR
 
     by_id = {d["toolId"]: d for d in SLICE_A_DESCRIPTORS}
     assert set(by_id) == {"terminal.local", "file.operations", "code.execution"}
@@ -99,3 +99,17 @@ def test_slice_a_builtin_descriptors_are_exact() -> None:
         {"operation": "code.execute_python", "effectClass": "durable_local"}
     ]
     assert all(d["terminalBackends"] == ["local"] for d in by_id.values())
+
+
+def test_ssh_builtin_descriptor_is_durable_remote_and_backend_specific() -> None:
+    from capt_runtime.tools.builtins import TERMINAL_SSH_DESCRIPTOR
+
+    assert TERMINAL_SSH_DESCRIPTOR["toolId"] == "terminal.ssh"
+    assert TERMINAL_SSH_DESCRIPTOR["operationEffects"] == [
+        {"operation": "terminal.exec", "effectClass": "durable_remote"}
+    ]
+    assert TERMINAL_SSH_DESCRIPTOR["terminalBackends"] == ["ssh"]
+    assert TERMINAL_SSH_DESCRIPTOR["supportsTimeout"] is True
+    assert TERMINAL_SSH_DESCRIPTOR["supportsCancellation"] is False
+    assert "host_fingerprint" in TERMINAL_SSH_DESCRIPTOR["artifactOutputs"]
+    assert "profile_id" in TERMINAL_SSH_DESCRIPTOR["artifactOutputs"]
