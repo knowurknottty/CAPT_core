@@ -44,6 +44,27 @@ TERMINAL_SSH_DESCRIPTOR = {
     ],
 }
 
+TERMINAL_DOCKER_DESCRIPTOR = {
+    "schemaVersion": "1.0.0",
+    "toolId": "terminal.docker",
+    "displayName": "Docker Terminal",
+    "family": "terminal",
+    "operations": ["terminal.exec"],
+    "requiredCapabilities": ["terminal.exec"],
+    "operationEffects": [
+        {"operation": "terminal.exec", "effectClass": "durable_local"},
+    ],
+    "terminalBackends": ["docker"],
+    "platforms": ["macos", "linux"],
+    "supportsTimeout": True,
+    "supportsCancellation": False,
+    "idempotencySupport": "broker_settled_replay",
+    "artifactOutputs": [
+        "stdout", "stderr", "exit_code", "container_id", "image_id",
+        "repo_digest", "cleanup_status"
+    ],
+}
+
 FILE_OPERATIONS_DESCRIPTOR = {
     "schemaVersion": "1.0.0",
     "toolId": "file.operations",

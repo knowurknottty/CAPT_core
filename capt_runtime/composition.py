@@ -20,11 +20,15 @@ from .services import RuntimeService
 from .store import EventStore
 from .task_resolver import TaskResolver
 from .tool_broker import ToolBroker
-from .tools.adapters import CodeExecutionAdapter, FileToolAdapter, SSHTerminalToolAdapter, TerminalToolAdapter
+from .tools.adapters import (
+    CodeExecutionAdapter, DockerTerminalToolAdapter, FileToolAdapter,
+    SSHTerminalToolAdapter, TerminalToolAdapter,
+)
+from .tools.backends.docker import DockerProcessBackend, DockerProfile, DockerProfileRegistry
 from .tools.backends.ssh import SSHProcessBackend, SSHProfile, SSHProfileRegistry
 from .tools.builtins import (
     CODE_EXECUTION_DESCRIPTOR, FILE_OPERATIONS_DESCRIPTOR,
-    TERMINAL_LOCAL_DESCRIPTOR, TERMINAL_SSH_DESCRIPTOR,
+    TERMINAL_DOCKER_DESCRIPTOR, TERMINAL_LOCAL_DESCRIPTOR, TERMINAL_SSH_DESCRIPTOR,
 )
 from .tools.registry import ToolRegistry
 
@@ -41,6 +45,7 @@ class RuntimeComposition:
     tool_registry: ToolRegistry
     tool_broker: ToolBroker
     ssh_profile_registry: SSHProfileRegistry
+    docker_profile_registry: DockerProfileRegistry
 
     def command_service(self, operator_id: str, session_id: str):
         # Import lazily to avoid a desktop-to-runtime import cycle at module load.
@@ -118,6 +123,7 @@ def create_runtime(
     memory_path: Optional[str] = None,
     model_safe_limit_steps: int = 8,
     ssh_profiles: Iterable[SSHProfile] = (),
+    docker_profiles: Iterable[DockerProfile] = (),
 ) -> RuntimeComposition:
     """Construct every operator-owned runtime dependency exactly once."""
     ledger = str(Path(ledger_path))
@@ -148,9 +154,12 @@ def create_runtime(
     code = CodeExecutionAdapter()
     ssh_profile_registry = SSHProfileRegistry(ssh_profiles)
     ssh_terminal = SSHTerminalToolAdapter(SSHProcessBackend(ssh_profile_registry))
+    docker_profile_registry = DockerProfileRegistry(docker_profiles)
+    docker_terminal = DockerTerminalToolAdapter(DockerProcessBackend(docker_profile_registry))
     for descriptor, adapter in (
         (TERMINAL_LOCAL_DESCRIPTOR, terminal),
         (TERMINAL_SSH_DESCRIPTOR, ssh_terminal),
+        (TERMINAL_DOCKER_DESCRIPTOR, docker_terminal),
         (FILE_OPERATIONS_DESCRIPTOR, files),
         (CODE_EXECUTION_DESCRIPTOR, code),
     ):
@@ -170,4 +179,5 @@ def create_runtime(
         tool_registry=tool_registry,
         tool_broker=tool_broker,
         ssh_profile_registry=ssh_profile_registry,
+        docker_profile_registry=docker_profile_registry,
     )

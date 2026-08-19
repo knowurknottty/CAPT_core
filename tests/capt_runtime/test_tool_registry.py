@@ -113,3 +113,17 @@ def test_ssh_builtin_descriptor_is_durable_remote_and_backend_specific() -> None
     assert TERMINAL_SSH_DESCRIPTOR["supportsCancellation"] is False
     assert "host_fingerprint" in TERMINAL_SSH_DESCRIPTOR["artifactOutputs"]
     assert "profile_id" in TERMINAL_SSH_DESCRIPTOR["artifactOutputs"]
+
+
+def test_docker_builtin_descriptor_is_durable_local_and_backend_specific() -> None:
+    from capt_runtime.tools.builtins import TERMINAL_DOCKER_DESCRIPTOR
+
+    assert TERMINAL_DOCKER_DESCRIPTOR["toolId"] == "terminal.docker"
+    assert TERMINAL_DOCKER_DESCRIPTOR["operationEffects"] == [
+        {"operation": "terminal.exec", "effectClass": "durable_local"}
+    ]
+    assert TERMINAL_DOCKER_DESCRIPTOR["terminalBackends"] == ["docker"]
+    assert TERMINAL_DOCKER_DESCRIPTOR["supportsTimeout"] is True
+    assert TERMINAL_DOCKER_DESCRIPTOR["supportsCancellation"] is False
+    assert "container_id" in TERMINAL_DOCKER_DESCRIPTOR["artifactOutputs"]
+    assert "image_id" in TERMINAL_DOCKER_DESCRIPTOR["artifactOutputs"]
