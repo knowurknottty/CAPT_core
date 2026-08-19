@@ -258,16 +258,28 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         flows[id] = currentFlow
     }
 
+    public mutating func updateConfiguration(
+        for id: UUID,
+        provider: String,
+        model: String,
+        targetRoot: String
+    ) {
+        guard let index = index(of: id) else { return }
+        sessions[index].provider = provider
+        sessions[index].model = model
+        sessions[index].targetRoot = targetRoot
+        sessions[index].updatedAt = Date()
+    }
+
     public mutating func updateActiveConfiguration(
         provider: String,
         model: String,
         targetRoot: String
     ) {
-        guard let id = activeSessionID, let index = index(of: id) else { return }
-        sessions[index].provider = provider
-        sessions[index].model = model
-        sessions[index].targetRoot = targetRoot
-        sessions[index].updatedAt = Date()
+        guard let id = activeSessionID else { return }
+        updateConfiguration(
+            for: id, provider: provider, model: model, targetRoot: targetRoot
+        )
     }
 
     private mutating func reconcileApprovalValidity(
