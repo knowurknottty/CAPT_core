@@ -83,9 +83,17 @@ def test_slice_a_builtin_descriptors_are_exact() -> None:
     assert by_id["terminal.local"]["operationEffects"] == [
         {"operation": "terminal.exec", "effectClass": "durable_local"}
     ]
+    assert by_id["file.operations"]["operations"] == [
+        "file.read", "file.search", "file.write", "file.patch"
+    ]
+    assert by_id["file.operations"]["requiredCapabilities"] == [
+        "file.read", "file.search", "file.write", "file.patch"
+    ]
     assert by_id["file.operations"]["operationEffects"] == [
         {"operation": "file.read", "effectClass": "pure_read_only"},
+        {"operation": "file.search", "effectClass": "pure_read_only"},
         {"operation": "file.write", "effectClass": "durable_local"},
+        {"operation": "file.patch", "effectClass": "durable_local"},
     ]
     assert by_id["code.execution"]["operationEffects"] == [
         {"operation": "code.execute_python", "effectClass": "durable_local"}

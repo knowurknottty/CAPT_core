@@ -29,18 +29,20 @@ FILE_OPERATIONS_DESCRIPTOR = {
     "toolId": "file.operations",
     "displayName": "File Operations",
     "family": "file",
-    "operations": ["file.read", "file.write"],
-    "requiredCapabilities": ["file.read", "file.write"],
+    "operations": ["file.read", "file.search", "file.write", "file.patch"],
+    "requiredCapabilities": ["file.read", "file.search", "file.write", "file.patch"],
     "operationEffects": [
         {"operation": "file.read", "effectClass": "pure_read_only"},
+        {"operation": "file.search", "effectClass": "pure_read_only"},
         {"operation": "file.write", "effectClass": "durable_local"},
+        {"operation": "file.patch", "effectClass": "durable_local"},
     ],
     "terminalBackends": ["local"],
     "platforms": ["macos", "linux"],
     "supportsTimeout": False,
     "supportsCancellation": False,
     "idempotencySupport": "broker_settled_replay",
-    "artifactOutputs": ["file_digest", "byte_count"],
+    "artifactOutputs": ["file_digest", "byte_count", "search_matches", "replacement_count"],
 }
 
 CODE_EXECUTION_DESCRIPTOR = {
