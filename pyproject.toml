@@ -21,6 +21,7 @@ classifiers = [
 Homepage = "https://github.com/knowurknottty/CAPT_core"
 
 [project.scripts]
+capt-security = "capt_runtime.security_gate:main"
 capt = "capt_cli:main"
 capt-ui = "capt_ui.operator.cli:main"
 

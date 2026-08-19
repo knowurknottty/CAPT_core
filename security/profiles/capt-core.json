@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "1.0.0",
+  "name": "capt-core-local-runtime",
+  "description": "CAPT Core local-first runtime profile including optional paid cloud-provider capability; capability support activates controls even when a provider is not currently selected.",
+  "capabilities": [
+    "local_runtime",
+    "ipc",
+    "database",
+    "local_state",
+    "ai",
+    "prompt_processing",
+    "cli",
+    "record_store",
+    "paid_service"
+  ]
+}

@@ -68,6 +68,7 @@ def test_openrouter_driver_provenance_and_secret_not_persisted(tmp_path: Path):
         )
         assert _Server.seen["path"] == "/v1/chat/completions"
         assert _Server.seen["body"]["model"] == "deepseek/deepseek-v4-flash-0731"
+        assert _Server.seen["body"]["max_tokens"] == 16_384
         assert _Server.seen["auth"] == "Bearer " + secret
         assert out["state"] == "completed"
         assert out["dispatchBoundary"] == "response_completed"
@@ -115,6 +116,7 @@ def test_ollama_driver_uses_native_generate_endpoint(tmp_path: Path):
             "model": "local-model",
             "prompt": "minimal prompt",
             "stream": False,
+            "options": {"num_predict": 16_384},
         }
         assert _Server.seen["auth"] is None
         assert out["state"] == "completed"

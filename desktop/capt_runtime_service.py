@@ -47,6 +47,8 @@ from capt_runtime.scenario import build_scenario
 from capt_runtime.services import RuntimeService
 from capt_runtime.errors import AuthorityViolation
 from capt_runtime.store import EventStore
+from capt_runtime.ipc_framing import FrameProtocolError, recv_json, send_json
+from capt_runtime.resource_governor import TokenCostGovernor
 from capt_runtime.verification import (
     VerificationFailure,
     build_artifact_hash_evidence,
@@ -582,22 +584,14 @@ class RuntimeQueryService:
 # --------------------------------------------------------------------------
 
 def _recv_json(sock: socket.socket) -> Optional[Dict[str, Any]]:
-    header = sock.recv(4)
-    if not header:
+    try:
+        return recv_json(sock)
+    except (FrameProtocolError, ValueError):
         return None
-    length = int.from_bytes(header, "big")
-    buf = b""
-    while len(buf) < length:
-        chunk = sock.recv(length - len(buf))
-        if not chunk:
-            return None
-        buf += chunk
-    return json.loads(buf.decode("utf-8"))
 
 
 def _send_json(sock: socket.socket, payload: Dict[str, Any]) -> None:
-    data = json.dumps(payload).encode("utf-8")
-    sock.sendall(len(data).to_bytes(4, "big") + data)
+    send_json(sock, payload)
 
 
 def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> None:
@@ -656,6 +650,15 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             # Authenticate: first frame must be the session token.
             auth = _recv_json(conn)
             if not auth or auth.get("token") != token:
+                try:
+                    store.record_security_rejection(
+                        rejection_id="rej-" + secrets.token_hex(8),
+                        rejection_kind="unauthenticated_ipc_attempt",
+                        details={"reason": "invalid_or_missing_session_token"},
+                    )
+                except Exception:
+                    # Audit failure must not convert a denial into admission.
+                    pass
                 _send_json(conn, {"ok": False, "error": "unauthenticated"})
                 return
             # Bind operator identity to this authenticated connection.
@@ -666,6 +669,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             operator_id = "operator-" + (getpass.getuser() or "local")
             session_id = "sess-" + secrets.token_hex(8)
             cmd_svc = runtime.command_service(operator_id, session_id)
+            provider_governor = TokenCostGovernor()
             # Fixed v0.5 OpenHarness inspection: service-owned runner uses the
             # already-created canonical RuntimeComposition; no duplicate runtime.
             def _fixed_openharness(command: Dict[str, Any]):
@@ -999,6 +1003,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         provider_id=provider.id, model=str(provider_model),
                         base_url=provider.base_url, api_key=provider_key,
                         dispatch_prompt=str(dispatch_prompt),
+                        governor=provider_governor,
                     )
                 else:
                     host = runtime.hermes_host(

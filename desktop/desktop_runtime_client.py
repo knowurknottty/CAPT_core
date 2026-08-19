@@ -151,22 +151,22 @@ class RuntimeClient:
 
     @staticmethod
     def _send(sock: socket.socket, payload: Dict[str, Any]) -> None:
-        data = json.dumps(payload).encode("utf-8")
-        sock.sendall(len(data).to_bytes(4, "big") + data)
+        from capt_runtime.ipc_framing import FrameProtocolError, send_json
+        try:
+            send_json(sock, payload)
+        except (FrameProtocolError, ValueError) as exc:
+            raise RuntimeClientError(f"IPC send error: {exc}") from exc
 
     @staticmethod
     def _recv(sock: socket.socket) -> Dict[str, Any]:
-        header = sock.recv(4)
-        if not header:
+        from capt_runtime.ipc_framing import FrameProtocolError, recv_json
+        try:
+            message = recv_json(sock)
+        except (FrameProtocolError, ValueError) as exc:
+            raise RuntimeClientError(f"IPC protocol error: {exc}") from exc
+        if message is None:
             raise RuntimeClientError("connection closed by runtime")
-        length = int.from_bytes(header, "big")
-        buf = b""
-        while len(buf) < length:
-            chunk = sock.recv(length - len(buf))
-            if not chunk:
-                raise RuntimeClientError("connection closed mid-frame")
-            buf += chunk
-        return json.loads(buf.decode("utf-8"))
+        return message
 
     def _query(self, request: Dict[str, Any]) -> Dict[str, Any]:
         if self._sock is None:

@@ -74,6 +74,7 @@ class RuntimeComposition:
     def provider_host(
         self, *, target_repo: str, staging_root: str, provider_id: str, model: str,
         base_url: str, api_key: str = "", dispatch_prompt: str = "",
+        governor=None,
     ) -> DriverHost:
         from .drivers.provider import DESCRIPTOR as PROVIDER_DESCRIPTOR, ProviderDriver
         if not self.registry.is_registered(PROVIDER_DESCRIPTOR["driverId"]):
@@ -82,7 +83,7 @@ class RuntimeComposition:
         host.select_driver(ProviderDriver(
             staging_root, provider_id=provider_id, model=model, base_url=base_url,
             api_key=api_key, task_resolver=self.task_resolver(),
-            dispatch_prompt=dispatch_prompt,
+            dispatch_prompt=dispatch_prompt, governor=governor,
         ))
         return host
 

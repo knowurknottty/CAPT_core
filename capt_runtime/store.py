@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
 import threading
 import time
@@ -74,8 +75,18 @@ CREATE TABLE IF NOT EXISTS checkpoints (
     global_sequence INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS security_rejections (
+    rejection_id    TEXT PRIMARY KEY,
+    timestamp       TEXT NOT NULL,
+    rejection_kind  TEXT NOT NULL,
+    source_ip       TEXT,
+    actor_id        TEXT,
+    details_json    TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_events_stream ON events (stream_id, stream_version);
 CREATE INDEX IF NOT EXISTS idx_outbox_pending ON outbox (status, global_sequence);
+CREATE INDEX IF NOT EXISTS idx_security_rejections ON security_rejections (rejection_kind, timestamp);
 """
 
 GENESIS_CHAIN = "sha256:" + "0" * 64
@@ -113,11 +124,19 @@ class EventStore(object):
     def __init__(self, path: str) -> None:
         self.path = path
         if path != ":memory:":
-            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            parent = Path(path).parent
+            if not parent.exists():
+                parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    os.chmod(parent, 0o700)
+                except OSError:
+                    pass
         self._lock = threading.RLock()
         self._conn = sqlite3.connect(
             path, isolation_level=None, check_same_thread=False, timeout=5.0
         )
+        if path != ":memory:":
+            self._harden_permissions()
         self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.row_factory = sqlite3.Row
         # Two runtime processes can open an empty ledger concurrently before
@@ -132,7 +151,21 @@ class EventStore(object):
                     self._conn.close()
                     raise
                 time.sleep(0.05 * (attempt + 1))
+        if path != ":memory:":
+            self._harden_permissions()
         self._subscribers: List[Callable[[Dict[str, Any]], None]] = []
+
+    def _harden_permissions(self) -> None:
+        """Restrict the SQLite database and sidecars to the owning user."""
+        if self.path == ":memory:":
+            return
+        db = Path(self.path)
+        for target in (db, db.with_name(db.name + "-wal"), db.with_name(db.name + "-shm")):
+            if target.exists():
+                try:
+                    os.chmod(target, 0o600)
+                except OSError:
+                    pass
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -518,3 +551,40 @@ class EventStore(object):
             "SELECT manifest_json FROM checkpoints ORDER BY global_sequence DESC, rowid DESC LIMIT 1"
         ).fetchone()
         return json.loads(row["manifest_json"]) if row else None
+
+    def record_security_rejection(
+        self,
+        rejection_id: str,
+        rejection_kind: str,
+        details: Dict[str, Any],
+        source_ip: Optional[str] = None,
+        actor_id: Optional[str] = None,
+        timestamp: Optional[str] = None,
+    ) -> None:
+        """Append one non-secret security rejection to the durable audit trail."""
+        ts = timestamp or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        with self.transaction() as conn:
+            conn.execute(
+                "INSERT INTO security_rejections "
+                "(rejection_id, timestamp, rejection_kind, source_ip, actor_id, details_json) "
+                "VALUES (?,?,?,?,?,?)",
+                (rejection_id, ts, rejection_kind, source_ip, actor_id, canonical_json(details)),
+            )
+
+    def list_security_rejections(self, limit: int = 100) -> List[Dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT rejection_id, timestamp, rejection_kind, source_ip, actor_id, details_json "
+            "FROM security_rejections ORDER BY timestamp DESC, rowid DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [
+            {
+                "rejectionId": row["rejection_id"],
+                "timestamp": row["timestamp"],
+                "rejectionKind": row["rejection_kind"],
+                "sourceIp": row["source_ip"],
+                "actorId": row["actor_id"],
+                "details": json.loads(row["details_json"]),
+            }
+            for row in rows
+        ]

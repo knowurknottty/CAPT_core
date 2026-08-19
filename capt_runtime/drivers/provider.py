@@ -8,10 +8,11 @@ import threading
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from ..approval_dispatch import require_expected_prompt_digest
 from ..provider_endpoint import endpoint_class
+from ..resource_governor import BudgetCeilingExceeded, TokenCostGovernor
 
 DRIVER_ID = "provider"
 DESCRIPTOR = {
@@ -40,6 +41,7 @@ class ProviderDriver:
         api_key: str = "",
         task_resolver=None,
         dispatch_prompt: str = "",
+        governor: Optional[TokenCostGovernor] = None,
     ):
         self.root = Path(staging_root)
         self.root.mkdir(parents=True, exist_ok=True)
@@ -49,6 +51,7 @@ class ProviderDriver:
         self.api_key = api_key
         self.task_resolver = task_resolver
         self.dispatch_prompt = dispatch_prompt
+        self.governor = governor or TokenCostGovernor()
         self.runs: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.RLock()
 
@@ -125,6 +128,17 @@ class ProviderDriver:
             if self.task_resolver
             else "Provide a bounded evidence-backed observation."
         )
+        estimated_prompt_tokens = max(1, len(prompt) // 4)
+        try:
+            self.governor.check_pre_dispatch(
+                estimated_prompt_tokens=estimated_prompt_tokens
+            )
+        except BudgetCeilingExceeded as exc:
+            with self._lock:
+                self.runs[rid]["state"] = "failed"
+                self.runs[rid]["dispatchBoundary"] = "budget_rejected"
+            raise ProviderDriverFailure(f"budget ceiling exceeded: {exc}") from exc
+
         prompt_digest = "sha256:" + hashlib.sha256(prompt.encode()).hexdigest()
         require_expected_prompt_digest(rid, prompt_digest)
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
@@ -132,13 +146,17 @@ class ProviderDriver:
             headers["Authorization"] = "Bearer " + self.api_key
         if self.provider_id == "ollama":
             url = self.base_url.replace("/v1", "") + "/api/generate"
-            body = {"model": self.model, "prompt": prompt, "stream": False}
+            body = {
+                "model": self.model, "prompt": prompt, "stream": False,
+                "options": {"num_predict": self.governor.max_output_tokens_per_request},
+            }
         else:
             url = self.base_url + "/chat/completions"
             body = {
                 "model": self.model,
                 "messages": [{"role": "user", "content": prompt}],
                 "stream": False,
+                "max_tokens": self.governor.max_output_tokens_per_request,
             }
         try:
             req = urllib.request.Request(
@@ -171,6 +189,19 @@ class ProviderDriver:
             with self._lock:
                 self.runs[rid]["state"] = "failed"
             raise ProviderDriverFailure("provider returned no content")
+        usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+        prompt_tokens = usage.get("prompt_tokens")
+        completion_tokens = usage.get("completion_tokens")
+        if self.provider_id == "ollama":
+            prompt_tokens = data.get("prompt_eval_count", prompt_tokens)
+            completion_tokens = data.get("eval_count", completion_tokens)
+        prompt_tokens = int(prompt_tokens) if isinstance(prompt_tokens, (int, float)) else estimated_prompt_tokens
+        completion_tokens = int(completion_tokens) if isinstance(completion_tokens, (int, float)) else max(1, len(text) // 4)
+        raw_cost = usage.get("cost", usage.get("cost_usd", 0.0))
+        cost_usd = float(raw_cost) if isinstance(raw_cost, (int, float)) else 0.0
+        resource_receipt = self.governor.record_usage(
+            prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, cost_usd=cost_usd
+        )
         response_digest = "sha256:" + hashlib.sha256(text.encode()).hexdigest()
         ep_class = endpoint_class(self.base_url)
         artifact = (
@@ -228,5 +259,6 @@ class ProviderDriver:
                 "responseDigest": response_digest,
                 "dispatchBoundary": dispatch_boundary,
                 "cancelRequested": cancel_requested,
+                "resourceUsage": resource_receipt,
             },
         }
