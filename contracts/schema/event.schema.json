@@ -31,7 +31,13 @@
         "ClaimGuardDecided",
         "HumanApprovalRequested",
         "HumanApprovalDecided",
-        "HumanApprovalConsumed"
+        "HumanApprovalConsumed",
+        "ToolExecutionPrepared",
+        "ToolExecutionAdmitted",
+        "ToolExecutionDispatching",
+        "ToolExecutionEffectObserved",
+        "ToolExecutionSettling",
+        "ToolExecutionTerminated"
       ]
     },
     "EventPayload": {
@@ -248,6 +254,66 @@
           "properties": {
             "eventType": { "type": "string", "const": "ClaimGuardDecided" },
             "decision": { "$ref": "claim.schema.json#/$defs/ClaimGuardDecision" }
+          }
+        },
+        {
+          "title": "ToolExecutionPreparedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "execution"],
+          "properties": {
+            "eventType": { "type": "string", "const": "ToolExecutionPrepared" },
+            "execution": { "$ref": "tool.schema.json#/$defs/ToolExecution" }
+          }
+        },
+        {
+          "title": "ToolExecutionAdmittedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "execution"],
+          "properties": {
+            "eventType": { "type": "string", "const": "ToolExecutionAdmitted" },
+            "execution": { "$ref": "tool.schema.json#/$defs/ToolExecution" }
+          }
+        },
+        {
+          "title": "ToolExecutionDispatchingPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "execution"],
+          "properties": {
+            "eventType": { "type": "string", "const": "ToolExecutionDispatching" },
+            "execution": { "$ref": "tool.schema.json#/$defs/ToolExecution" }
+          }
+        },
+        {
+          "title": "ToolExecutionEffectObservedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "execution"],
+          "properties": {
+            "eventType": { "type": "string", "const": "ToolExecutionEffectObserved" },
+            "execution": { "$ref": "tool.schema.json#/$defs/ToolExecution" }
+          }
+        },
+        {
+          "title": "ToolExecutionSettlingPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "execution"],
+          "properties": {
+            "eventType": { "type": "string", "const": "ToolExecutionSettling" },
+            "execution": { "$ref": "tool.schema.json#/$defs/ToolExecution" }
+          }
+        },
+        {
+          "title": "ToolExecutionTerminatedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "execution"],
+          "properties": {
+            "eventType": { "type": "string", "const": "ToolExecutionTerminated" },
+            "execution": { "$ref": "tool.schema.json#/$defs/ToolExecution" }
           }
         },
         {

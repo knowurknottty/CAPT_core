@@ -64,6 +64,8 @@
 **Files:**
 - Modify: `contracts/schema/tool.schema.json`
 - Modify: `contracts/schema/event.schema.json`
+- Modify: `contracts/schema/common.schema.json` — admit `tool_execution-*` streams.
+- Modify: `contracts/tools/ts_parity.mjs` — always rebuild current generated TypeScript before parity.
 - Test: `tests/capt_runtime/test_tool_contracts.py`
 - Regenerate: `contracts/generated/python/capt_contracts/*`, `contracts/generated/typescript/src/*`
 

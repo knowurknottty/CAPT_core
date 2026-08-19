@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:59bf06c0abc36da44f6f6841c1886dcde6b5d470790d65c42f5d5b15bfc0aa95
+// source digest:  sha256:8b522291e4e4ff31b4684e1beca67be76c01139ac7493a1d64830b5016bf8acc
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -1226,12 +1226,18 @@ export type EventPayload =
   | EvidenceRecordedPayload
   | ClaimVerifiedPayload
   | ClaimGuardDecidedPayload
+  | ToolExecutionPreparedPayload
+  | ToolExecutionAdmittedPayload
+  | ToolExecutionDispatchingPayload
+  | ToolExecutionEffectObservedPayload
+  | ToolExecutionSettlingPayload
+  | ToolExecutionTerminatedPayload
   | HumanApprovalRequestedPayload
   | HumanApprovalDecidedPayload
   | HumanApprovalConsumedPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -1256,6 +1262,12 @@ export const EventTypeValues = [
   "HumanApprovalRequested",
   "HumanApprovalDecided",
   "HumanApprovalConsumed",
+  "ToolExecutionPrepared",
+  "ToolExecutionAdmitted",
+  "ToolExecutionDispatching",
+  "ToolExecutionEffectObserved",
+  "ToolExecutionSettling",
+  "ToolExecutionTerminated",
 ] as const;
 
 /** EvidenceRecordedPayload */
@@ -1330,6 +1342,42 @@ export interface TaskTransitionedPayload {
   readonly reason: string;
   readonly taskId: Identifier;
   readonly toState: TaskState;
+}
+
+/** ToolExecutionAdmittedPayload */
+export interface ToolExecutionAdmittedPayload {
+  readonly eventType: "ToolExecutionAdmitted";
+  readonly execution: ToolExecution;
+}
+
+/** ToolExecutionDispatchingPayload */
+export interface ToolExecutionDispatchingPayload {
+  readonly eventType: "ToolExecutionDispatching";
+  readonly execution: ToolExecution;
+}
+
+/** ToolExecutionEffectObservedPayload */
+export interface ToolExecutionEffectObservedPayload {
+  readonly eventType: "ToolExecutionEffectObserved";
+  readonly execution: ToolExecution;
+}
+
+/** ToolExecutionPreparedPayload */
+export interface ToolExecutionPreparedPayload {
+  readonly eventType: "ToolExecutionPrepared";
+  readonly execution: ToolExecution;
+}
+
+/** ToolExecutionSettlingPayload */
+export interface ToolExecutionSettlingPayload {
+  readonly eventType: "ToolExecutionSettling";
+  readonly execution: ToolExecution;
+}
+
+/** ToolExecutionTerminatedPayload */
+export interface ToolExecutionTerminatedPayload {
+  readonly eventType: "ToolExecutionTerminated";
+  readonly execution: ToolExecution;
 }
 
 /** ArtifactHashEvidence */
@@ -1627,6 +1675,14 @@ export interface StringArgument {
   readonly value: string;
 }
 
+/** TerminalBackendId */
+export type TerminalBackendId = "local" | "ssh" | "docker";
+export const TerminalBackendIdValues = [
+  "local",
+  "ssh",
+  "docker",
+] as const;
+
 /** Typed argument. A generic map would allow injection of unvalidated parameters into a consequential call. */
 /** Discriminated on `kind`. */
 export type ToolArgument =
@@ -1634,6 +1690,106 @@ export type ToolArgument =
   | IntegerArgument
   | BooleanArgument
   | PathArgument;
+
+/** ToolDescriptor */
+export interface ToolDescriptor {
+  readonly artifactOutputs: readonly string[];
+  readonly displayName: string;
+  readonly family: string;
+  readonly idempotencySupport: string;
+  readonly operationEffects: readonly ToolOperationEffect[];
+  readonly operations: readonly string[];
+  readonly platforms: readonly string[];
+  readonly requiredCapabilities: readonly string[];
+  readonly schemaVersion: SchemaVersion;
+  readonly supportsCancellation: boolean;
+  readonly supportsTimeout: boolean;
+  readonly terminalBackends: readonly TerminalBackendId[];
+  readonly toolId: Identifier;
+}
+
+/** ToolDispatchBoundary */
+export type ToolDispatchBoundary = "not_started" | "started" | "effect_observed" | "response_completed";
+export const ToolDispatchBoundaryValues = [
+  "not_started",
+  "started",
+  "effect_observed",
+  "response_completed",
+] as const;
+
+/** ToolEffectClass */
+export type ToolEffectClass = "pure_read_only" | "ephemeral_external" | "durable_local" | "durable_remote" | "resource_creation";
+export const ToolEffectClassValues = [
+  "pure_read_only",
+  "ephemeral_external",
+  "durable_local",
+  "durable_remote",
+  "resource_creation",
+] as const;
+
+/** Durable broker-owned execution state. Adapter output is evidence, not verification authority. */
+export interface ToolExecution {
+  readonly adapterId: Identifier;
+  readonly backendId: TerminalBackendId | null;
+  readonly consequential: boolean;
+  readonly descriptorDigest: Digest;
+  readonly dispatchBoundary: ToolDispatchBoundary;
+  readonly effectClass: ToolEffectClass;
+  readonly grantId: Identifier | null;
+  readonly leaseId: Identifier | null;
+  readonly operation: string;
+  readonly operationFingerprint: Digest;
+  readonly preparedAt: Timestamp;
+  readonly reconciliationReason: string | null;
+  readonly reservationId: Identifier | null;
+  readonly resultDigest: Digest | null;
+  readonly schemaVersion: SchemaVersion;
+  readonly settlementStatus: ToolSettlementStatus;
+  readonly sideEffectIdentity: string | null;
+  readonly state: ToolExecutionState;
+  readonly toolExecutionId: Identifier;
+  readonly toolId: Identifier;
+  readonly toolRequestId: Identifier;
+  readonly updatedAt: Timestamp;
+}
+
+/** ToolExecutionState */
+export type ToolExecutionState = "prepared" | "admitted" | "dispatching" | "effect_observed" | "settling" | "completed" | "failed" | "cancelled" | "indeterminate";
+export const ToolExecutionStateValues = [
+  "prepared",
+  "admitted",
+  "dispatching",
+  "effect_observed",
+  "settling",
+  "completed",
+  "failed",
+  "cancelled",
+  "indeterminate",
+] as const;
+
+/** ToolOperationEffect */
+export interface ToolOperationEffect {
+  readonly effectClass: ToolEffectClass;
+  readonly operation: string;
+}
+
+/** ToolReadiness */
+export interface ToolReadiness {
+  readonly checkedAt: Timestamp;
+  readonly reason: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly status: ToolReadinessStatus;
+  readonly toolId: Identifier;
+}
+
+/** ToolReadinessStatus */
+export type ToolReadinessStatus = "available" | "degraded" | "unavailable" | "unverified";
+export const ToolReadinessStatusValues = [
+  "available",
+  "degraded",
+  "unavailable",
+  "unverified",
+] as const;
 
 /** leaseId is REQUIRED for a consequential request: no side effect without a lease (invariant 7). */
 export interface ToolRequest {
@@ -1647,8 +1803,12 @@ export interface ToolRequest {
   readonly schemaVersion: SchemaVersion;
   readonly toolId: Identifier;
   readonly toolRequestId: Identifier;
+  readonly backendId?: TerminalBackendId | null;
+  readonly filesystemScope?: string | null;
+  readonly grantId?: Identifier | null;
   readonly leaseId?: Identifier | null;
   readonly reservationId?: Identifier | null;
+  readonly targetIdentity?: string | null;
 }
 
 /** ToolResult */
@@ -1671,6 +1831,15 @@ export const ToolResultStatusValues = [
   "failed",
   "indeterminate",
   "denied",
+] as const;
+
+/** ToolSettlementStatus */
+export type ToolSettlementStatus = "not_settled" | "settling" | "settled" | "reconciliation_required";
+export const ToolSettlementStatusValues = [
+  "not_settled",
+  "settling",
+  "settled",
+  "reconciliation_required",
 ] as const;
 
 /** ContradictedStatus */
