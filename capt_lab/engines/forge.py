@@ -313,9 +313,17 @@ def _gap_entries(scan: _Scan, expectations: List[str]) -> List[Dict[str, Any]]:
             path for path, text in sorted(scan.texts.items())
             if phrase in text.lower() or (tokens and all(token in text.lower() for token in set(tokens)))
         ][:16]
+        if phrase_found:
+            status = "text_match_found"
+        elif observed_paths:
+            status = "related_text_found"
+        elif coverage > 0.0:
+            status = "partial_text_evidence"
+        else:
+            status = "not_observed"
         entries.append({
             "expectation": expectation,
-            "status": "text_match_found" if phrase_found else "not_observed",
+            "status": status,
             "tokenCoverage": coverage,
             "observedPaths": observed_paths,
         })
@@ -360,8 +368,8 @@ def _gap_result(value: Mapping[str, Any]) -> LabEngineResult:
             "notObservedCount": sum(item["status"] == "not_observed" for item in gaps),
         },
         limitations=(
-            "not_observed means the bounded textual scan did not observe the expectation; it does not prove absence.",
-            "text_match_found is evidence of text presence only and does not prove implementation.",
+            "not_observed means the bounded textual scan observed none of the expectation tokens; it does not prove absence.",
+            "text_match_found, related_text_found, and partial_text_evidence describe lexical evidence only and do not prove implementation.",
         ),
     )
 

@@ -30,7 +30,7 @@ This classification does **not** imply public-release readiness or scientific va
 | Schema abstraction | READY | advisory | Structural recurrence only; no truth/generalization claim |
 | QIPC-inspired belief aggregation | READY | advisory | Probability/entropy/confidence diagnostics only |
 | Repository archaeology | READY | advisory | Read-only, root-bounded, secret/binary/symlink exclusions |
-| Gap analysis | READY | advisory | `text_match_found` / `not_observed`; never “implemented” |
+| Gap analysis | READY | advisory | Distinguishes exact `text_match_found`, co-located `related_text_found`, distributed `partial_text_evidence`, and zero-token `not_observed`; all are lexical evidence only, never “implemented” |
 | SIGMA implementation brief | READY | advisory | Bounded implementation input; not approval or verification |
 | ForgeProof rubric scoring | READY | advisory | Operator-supplied scores; no fabricated reviewer |
 | Native Labs workstation | READY | renderer/controller | Uses only `lab_engines` + `run_lab_engine_advisory` IPC |
