@@ -823,24 +823,42 @@ final class CAPTOperatorStore: ObservableObject {
     }
 
     func newChat() {
-        if let modelSnapshot {
-            let selection = CAPTOperatorCLI.newChatSelection(
-                models: modelSnapshot,
-                selectedProviderID: providers.first(where: { $0.selected })?.id,
-                fallbackProvider: provider,
-                fallbackModel: model
-            )
-            provider = selection.provider
-            model = selection.model
+        Task {
+            var liveModels = modelSnapshot
+            var selectedProviderID = providers.first(where: { $0.selected })?.id
+            do {
+                let snapshot = try await runtime.operatorSnapshot()
+                applyOperatorSnapshot(snapshot)
+                liveModels = snapshot.models
+                selectedProviderID = snapshot.providers.first(where: { $0.selected })?.id
+            } catch {
+                // New Chat must remain available even if the preference read fails.
+                // Cached operator state is a safe fallback; RuntimeService authority
+                // is not involved in this presentation-only selection.
+                runtimeControlMessage = "Using cached provider/model preference: " + error.localizedDescription
+            }
+
+            if let liveModels {
+                let selection = CAPTOperatorCLI.newChatSelection(
+                    models: liveModels,
+                    selectedProviderID: selectedProviderID,
+                    fallbackProvider: provider,
+                    fallbackModel: model
+                )
+                provider = selection.provider
+                model = selection.model
+            }
+            _ = mutateWorkspace {
+                $0.newChat(provider: provider, model: model, targetRoot: targetRoot)
+            }
+            taskState = "—"
+            lastError = nil
+            if !runtimeControlMessage.hasPrefix("Using cached provider/model preference:") {
+                runtimeControlMessage = ""
+            }
+            saveSessions()
+            scheduleSelectedProviderPrewarmIfNeeded()
         }
-        _ = mutateWorkspace {
-            $0.newChat(provider: provider, model: model, targetRoot: targetRoot)
-        }
-        taskState = "—"
-        lastError = nil
-        runtimeControlMessage = ""
-        saveSessions()
-        scheduleSelectedProviderPrewarmIfNeeded()
     }
 
     func activateSession(_ id: UUID) {
