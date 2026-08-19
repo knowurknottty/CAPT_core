@@ -124,6 +124,23 @@ def test_gap_analysis_distinguishes_related_text_from_zero_evidence(tmp_path):
     assert out.observation["notObservedCount"] == 1
 
 
+def test_gap_analysis_uses_whole_tokens_not_substring_matches(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "README.md").write_text(
+        "durable auditing trailer notes\n",
+        encoding="utf-8",
+    )
+    out = execute_forge(req("gap_analysis", {
+        "root": str(root),
+        "expectations": ["durable audit trail"],
+    }), {})
+    gap = out.observation["gaps"][0]
+    assert gap["status"] == "partial_text_evidence"
+    assert gap["tokenCoverage"] == pytest.approx(1 / 3)
+    assert gap["observedPaths"] == []
+
+
 def test_gap_analysis_reports_partial_cross_repository_text_evidence(tmp_path):
     root = tmp_path / "repo"
     root.mkdir()
