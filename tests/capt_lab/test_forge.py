@@ -141,6 +141,48 @@ def test_gap_analysis_uses_whole_tokens_not_substring_matches(tmp_path):
     assert gap["observedPaths"] == []
 
 
+def test_gap_analysis_ignores_nonsemantic_stopword_only_overlap(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "README.md").write_text("the unrelated notes exist\n", encoding="utf-8")
+    out = execute_forge(req("gap_analysis", {
+        "root": str(root),
+        "expectations": ["the quantum banana reactor"],
+    }), {})
+    gap = out.observation["gaps"][0]
+    assert gap["status"] == "not_observed"
+    assert gap["tokenCoverage"] == 0.0
+    assert gap["observedPaths"] == []
+
+
+def test_gap_analysis_matches_simple_inflections_symmetrically(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "README.md").write_text("preserve durable audit trail\n", encoding="utf-8")
+    out = execute_forge(req("gap_analysis", {
+        "root": str(root),
+        "expectations": ["preserves durable audits trail"],
+    }), {})
+    gap = out.observation["gaps"][0]
+    assert gap["status"] == "related_text_found"
+    assert gap["tokenCoverage"] == 1.0
+    assert gap["observedPaths"] == ["README.md"]
+
+
+def test_gap_analysis_does_not_treat_short_lexemes_as_inflections(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "README.md").write_text("news audit\n", encoding="utf-8")
+    out = execute_forge(req("gap_analysis", {
+        "root": str(root),
+        "expectations": ["new audit"],
+    }), {})
+    gap = out.observation["gaps"][0]
+    assert gap["status"] == "partial_text_evidence"
+    assert gap["tokenCoverage"] == 0.5
+    assert gap["observedPaths"] == []
+
+
 def test_gap_analysis_reports_partial_cross_repository_text_evidence(tmp_path):
     root = tmp_path / "repo"
     root.mkdir()
