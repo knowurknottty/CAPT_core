@@ -29,7 +29,7 @@
 
 **Interfaces:**
 - Produces: `capture_verification_baseline(target_root, staging_root, mission_id, task_id, driver_run_id, captured_at) -> dict`
-- Produces: `load_verified_baseline(path, expected_digest, mission_id, task_id, driver_run_id, target_root) -> dict`
+- Produces: `load_verified_baseline(path, expected_digest, staging_root, mission_id, task_id, driver_run_id, target_root) -> dict`
 - Uses: `capt_runtime.driver_host.tree_digest`, `capt_runtime.verification.capture_git_status`, `capt_runtime.contracts.digest`
 
 - [ ] **Step 1: Write failing capture/load tests**
@@ -40,7 +40,7 @@ def test_baseline_round_trip_is_content_addressed(tmp_path):
     staging = tmp_path / "staging"
     rec = capture_verification_baseline(str(repo), staging, "m1", "t1", "dr1", "2026-08-19T12:00:00Z")
     assert Path(rec["artifactPath"]).name == "verification-baseline.json"
-    loaded = load_verified_baseline(rec["artifactPath"], rec["artifactDigest"], "m1", "t1", "dr1", str(repo))
+    loaded = load_verified_baseline(rec["artifactPath"], rec["artifactDigest"], staging, "m1", "t1", "dr1", str(repo))
     assert loaded["beforeDigest"].startswith("sha256:")
 ```
 
