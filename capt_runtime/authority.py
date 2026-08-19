@@ -50,6 +50,8 @@ _PERMITTED: Dict[str, FrozenSet[str]] = {
     "authorize_artifact_promotion": frozenset({HUMAN, GOVERNANCE, SYSTEM}),
     "adopt_artifact_promotion": frozenset({EXECUTION, SYSTEM}),
     "discard_artifact_promotion": frozenset({EXECUTION, HUMAN, SYSTEM}),
+    "persist_cohort": frozenset({COGNITION, SYSTEM}),
+    "steer_cohort": frozenset({HUMAN}),
 }
 
 

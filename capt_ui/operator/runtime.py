@@ -133,6 +133,15 @@ class Operator:
     def cancel_driver_run(self, driver_run_id: str, reason: str = "operator stop") -> Dict[str, Any]:
         return self._client.command("cancel_driver_run", {"driverRunId": driver_run_id, "reason": reason})
 
+    def steer_deliberation(
+        self, cohort_id: str, directive: str, *, reason: str = "operator steering"
+    ) -> Dict[str, Any]:
+        """Submit a governed human steering directive for a durable Cohort."""
+        return self._client.command(
+            "steer_deliberation",
+            {"cohortId": cohort_id, "directive": directive, "reason": reason},
+        )
+
     def update_memory_policy(self, payload: Dict[str, Any], idempotency_key: Optional[str] = None) -> Dict[str, Any]:
         return self._client.command("update_memory_trigger_policy", payload, idempotency_key)
 

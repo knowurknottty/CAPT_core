@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:5bafe06a54ed489dfbf95d825b7ee042bd0bb76fec096846e8aaea7275f23af8
+// source digest:  sha256:8ddc70d1780d8b40aae067db27256219ea549ed76720f3bc79491d5dc4c7bfed
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -235,6 +235,7 @@ export interface CheckpointManifest {
   readonly schemaVersion: SchemaVersion;
   readonly taskVersions: readonly StreamVersionEntry[];
   readonly artifactPromotionVersions?: readonly StreamVersionEntry[];
+  readonly cohortVersions?: readonly StreamVersionEntry[];
   readonly humanApprovalVersions?: readonly StreamVersionEntry[];
 }
 
@@ -1204,6 +1205,25 @@ export interface ClaimVerifiedPayload {
   readonly verification: VerificationResult;
 }
 
+/** CohortCreatedPayload */
+export interface CohortCreatedPayload {
+  readonly eventType: "CohortCreated";
+  readonly snapshot: CohortSnapshot;
+}
+
+/** CohortSnapshotPersistedPayload */
+export interface CohortSnapshotPersistedPayload {
+  readonly eventType: "CohortSnapshotPersisted";
+  readonly snapshot: CohortSnapshot;
+}
+
+/** CohortSteeredPayload */
+export interface CohortSteeredPayload {
+  readonly cohortId: Identifier;
+  readonly eventType: "CohortSteered";
+  readonly steer: CohortSteer;
+}
+
 /** DriverRunCreatedPayload */
 export interface DriverRunCreatedPayload {
   readonly driverRun: DriverRun;
@@ -1267,10 +1287,13 @@ export type EventPayload =
   | ArtifactPromotionPreparedPayload
   | ArtifactPromotionAuthorizedPayload
   | ArtifactPromotionAdoptedPayload
-  | ArtifactPromotionDiscardedPayload;
+  | ArtifactPromotionDiscardedPayload
+  | CohortCreatedPayload
+  | CohortSnapshotPersistedPayload
+  | CohortSteeredPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -1299,6 +1322,9 @@ export const EventTypeValues = [
   "ArtifactPromotionAuthorized",
   "ArtifactPromotionAdopted",
   "ArtifactPromotionDiscarded",
+  "CohortCreated",
+  "CohortSnapshotPersisted",
+  "CohortSteered",
 ] as const;
 
 /** EvidenceRecordedPayload */
@@ -1744,6 +1770,80 @@ export interface ArtifactPromotionState {
   readonly verificationId: Identifier;
   readonly workspaceId: Identifier;
 }
+
+/** Durable structured contribution identity/outcome; raw model token streams are not authoritative Cohort state. */
+export interface CohortContribution {
+  readonly contributionId: Identifier;
+  readonly cursor: number;
+  readonly epoch: number;
+  readonly escalation: CohortEscalationCategory | null;
+  readonly material: boolean;
+  readonly outcome: CohortContributionOutcome;
+  readonly participant: Identifier;
+  readonly round: number;
+  readonly sourceSequences: readonly number[];
+}
+
+/** CohortContributionOutcome */
+export type CohortContributionOutcome = "CONTRIBUTE" | "PASS" | "DISSENT" | "ESCALATE" | "REQUEST_EVIDENCE" | "FAILED" | "UNAVAILABLE" | "TIMED_OUT" | "INDETERMINATE";
+export const CohortContributionOutcomeValues = [
+  "CONTRIBUTE",
+  "PASS",
+  "DISSENT",
+  "ESCALATE",
+  "REQUEST_EVIDENCE",
+  "FAILED",
+  "UNAVAILABLE",
+  "TIMED_OUT",
+  "INDETERMINATE",
+] as const;
+
+/** CohortEscalationCategory */
+export type CohortEscalationCategory = "AUTHORITY_REQUIRED" | "VALUE_JUDGMENT" | "AMBIGUOUS_INTENT" | "MISSING_EVIDENCE" | "IRREVERSIBLE_ACTION" | "COST_APPROVAL" | "CONFLICT_RESOLUTION" | "SAFETY_BOUNDARY";
+export const CohortEscalationCategoryValues = [
+  "AUTHORITY_REQUIRED",
+  "VALUE_JUDGMENT",
+  "AMBIGUOUS_INTENT",
+  "MISSING_EVIDENCE",
+  "IRREVERSIBLE_ACTION",
+  "COST_APPROVAL",
+  "CONFLICT_RESOLUTION",
+  "SAFETY_BOUNDARY",
+] as const;
+
+/** Authoritative bounded Cohort reconstruction state. Aggregate invariants additionally enforce cursor monotonicity, immutable bindings, and contribution retention. */
+export interface CohortSnapshot {
+  readonly cohortId: Identifier;
+  readonly contributions: readonly CohortContribution[];
+  readonly epoch: number;
+  readonly evidenceIds: readonly Identifier[];
+  readonly latestSteer: CohortSteer | null;
+  readonly missionId: Identifier;
+  readonly participantCap: number;
+  readonly participantCursors: Readonly<Record<string, unknown>>;
+  readonly required: readonly Identifier[];
+  readonly roster: readonly Identifier[];
+  readonly roundCap: number;
+  readonly rounds: number;
+  readonly stoppingReason: CohortStoppingReason | null;
+  readonly taskId: Identifier;
+}
+
+/** Durable human steering directive. It changes deliberation epoch but grants no capability. */
+export interface CohortSteer {
+  readonly directive: string;
+  readonly epoch: number;
+  readonly reason: string;
+  readonly steeredAt: Timestamp;
+  readonly steeredBy: Identifier;
+}
+
+/** CohortStoppingReason */
+export type CohortStoppingReason = "SILENCE_QUORUM" | "BOUNDED_INCOMPLETE";
+export const CohortStoppingReasonValues = [
+  "SILENCE_QUORUM",
+  "BOUNDED_INCOMPLETE",
+] as const;
 
 /** Absolute normalized path bound into a governed upgrade transaction. */
 export type UpgradeAbsolutePath = string;

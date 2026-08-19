@@ -16,6 +16,7 @@ from .aggregates import (
     ArtifactPromotionAggregate,
     CapabilityAggregate,
     ClaimAggregate,
+    CohortAggregate,
     DriverRunAggregate,
     HumanApprovalAggregate,
     MissionAggregate,
@@ -84,6 +85,7 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         "ClaimCreated",
         "HumanApprovalRequested",
         "ArtifactPromotionPrepared",
+        "CohortCreated",
     )
     if event_type not in _CREATION_EVENTS and current is None:
         # A mutation event on a stream with no prior state means the ledger is
@@ -169,6 +171,19 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         nxt = ArtifactPromotionAggregate.discard(
             existing(), payload["reason"], payload["discardedAt"]
         )
+    elif event_type == "CohortCreated":
+        nxt = CohortAggregate.replay_create(payload["snapshot"])
+    elif event_type == "CohortSnapshotPersisted":
+        nxt = CohortAggregate.replay_replace(existing(), payload["snapshot"])
+    elif event_type == "CohortSteered":
+        steer = payload["steer"]
+        nxt = CohortAggregate.steer(
+            existing(),
+            steer["directive"],
+            steer.get("reason", "operator steering"),
+            steer["steeredBy"],
+            steer["steeredAt"],
+        )
     elif event_type in ("CheckpointCreated", "MissionResumed"):
         # Bookkeeping events: they advance the stream version but carry no
         # aggregate state change.
@@ -210,6 +225,7 @@ def checkpoint_replay(
         "claimVersions",
         "humanApprovalVersions",
         "artifactPromotionVersions",
+        "cohortVersions",
     ):
         for entry in manifest[field]:
             stream_state = store.load_state(entry["streamId"])

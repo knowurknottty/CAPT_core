@@ -33,6 +33,7 @@ _KIND_TO_FIELD = {
     "claim": "claimVersions",
     "human_approval": "humanApprovalVersions",
     "artifact_promotion": "artifactPromotionVersions",
+    "cohort": "cohortVersions",
 }
 
 
@@ -121,6 +122,9 @@ def create_checkpoint(
         ),
         "artifactPromotionVersions": sorted(
             versions["artifactPromotionVersions"], key=lambda e: e["streamId"]
+        ),
+        "cohortVersions": sorted(
+            versions["cohortVersions"], key=lambda e: e["streamId"]
         ),
         "activeLeaseIds": sorted(active_lease_ids),
         "activeReservationIds": sorted(open_reservation_ids),

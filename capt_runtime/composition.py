@@ -13,7 +13,7 @@ from typing import Optional
 from .driver_host import DriverHost
 from .drivers.openharness import DESCRIPTOR, OpenHarnessDriver
 from .drivers.registry import DriverRegistry
-from .governed_service import GovernedRuntimeService
+from .steered_service import SteeredRuntimeService
 from .memory.engine import MemoryTriggerEngine
 from .memory.store import MemoryStore
 from .services import RuntimeService
@@ -33,9 +33,9 @@ class RuntimeComposition:
 
     def command_service(self, operator_id: str, session_id: str):
         # Import lazily to avoid a desktop-to-runtime import cycle at module load.
-        from desktop.m1_command_service import RuntimeCommandService
+        from desktop.governed_m1_command_service import GovernedRuntimeCommandService
 
-        return RuntimeCommandService(
+        return GovernedRuntimeCommandService(
             self.store,
             operator_id,
             session_id,
@@ -114,7 +114,7 @@ def create_runtime(
     )
     return RuntimeComposition(
         store=store,
-        service=GovernedRuntimeService(store),
+        service=SteeredRuntimeService(store),
         registry=DriverRegistry(),
         memory_store=memory_store,
         memory_engine=memory_engine,

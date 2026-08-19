@@ -3,6 +3,7 @@
 from .artifact_promotion import ArtifactPromotionAggregate
 from .capability import CapabilityAggregate, scope_contains
 from .claim_driver import ClaimAggregate, DriverRunAggregate
+from .cohort_state import CohortAggregate
 from .human_approval import HumanApprovalAggregate
 from .mission_task import MissionAggregate, TaskAggregate
 
@@ -12,6 +13,7 @@ ALL_AGGREGATES = (
     CapabilityAggregate,
     DriverRunAggregate,
     ClaimAggregate,
+    CohortAggregate,
     HumanApprovalAggregate,
     ArtifactPromotionAggregate,
 )
@@ -21,6 +23,7 @@ __all__ = [
     "ArtifactPromotionAggregate",
     "CapabilityAggregate",
     "ClaimAggregate",
+    "CohortAggregate",
     "DriverRunAggregate",
     "HumanApprovalAggregate",
     "MissionAggregate",

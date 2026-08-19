@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:5bafe06a54ed489dfbf95d825b7ee042bd0bb76fec096846e8aaea7275f23af8
+# source digest:  sha256:8ddc70d1780d8b40aae067db27256219ea549ed76720f3bc79491d5dc4c7bfed
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -276,6 +276,7 @@ class CheckpointManifest(object):
     schemaVersion: SchemaVersion
     taskVersions: List[StreamVersionEntry]
     artifactPromotionVersions: List[StreamVersionEntry] = field(default_factory=list)
+    cohortVersions: List[StreamVersionEntry] = field(default_factory=list)
     humanApprovalVersions: List[StreamVersionEntry] = field(default_factory=list)
 
 
@@ -1413,6 +1414,31 @@ class ClaimVerifiedPayload(object):
 
 
 @dataclass(frozen=True)
+class CohortCreatedPayload(object):
+    """CohortCreatedPayload"""
+
+    eventType: Literal["CohortCreated"]
+    snapshot: CohortSnapshot
+
+
+@dataclass(frozen=True)
+class CohortSnapshotPersistedPayload(object):
+    """CohortSnapshotPersistedPayload"""
+
+    eventType: Literal["CohortSnapshotPersisted"]
+    snapshot: CohortSnapshot
+
+
+@dataclass(frozen=True)
+class CohortSteeredPayload(object):
+    """CohortSteeredPayload"""
+
+    cohortId: Identifier
+    eventType: Literal["CohortSteered"]
+    steer: CohortSteer
+
+
+@dataclass(frozen=True)
 class DriverRunCreatedPayload(object):
     """DriverRunCreatedPayload"""
 
@@ -1549,7 +1575,7 @@ class TaskTransitionedPayload(object):
 
 
 # discriminated on 'eventType'
-EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload]
+EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload]
 
 
 class EventType(str, Enum):
@@ -1582,6 +1608,9 @@ class EventType(str, Enum):
     ARTIFACTPROMOTIONAUTHORIZED = "ArtifactPromotionAuthorized"
     ARTIFACTPROMOTIONADOPTED = "ArtifactPromotionAdopted"
     ARTIFACTPROMOTIONDISCARDED = "ArtifactPromotionDiscarded"
+    COHORTCREATED = "CohortCreated"
+    COHORTSNAPSHOTPERSISTED = "CohortSnapshotPersisted"
+    COHORTSTEERED = "CohortSteered"
 
 
 @dataclass(frozen=True)
@@ -1995,6 +2024,86 @@ class ArtifactPromotionState(object):
     state: str
     verificationId: Identifier
     workspaceId: Identifier
+
+
+@dataclass(frozen=True)
+class CohortContribution(object):
+    """Durable structured contribution identity/outcome; raw model token streams are not authoritative Cohort state."""
+
+    contributionId: Identifier
+    cursor: int
+    epoch: int
+    escalation: Optional[CohortEscalationCategory]
+    material: bool
+    outcome: CohortContributionOutcome
+    participant: Identifier
+    round: int
+    sourceSequences: List[int]
+
+
+class CohortContributionOutcome(str, Enum):
+    """CohortContributionOutcome"""
+
+    CONTRIBUTE = "CONTRIBUTE"
+    PASS = "PASS"
+    DISSENT = "DISSENT"
+    ESCALATE = "ESCALATE"
+    REQUEST_EVIDENCE = "REQUEST_EVIDENCE"
+    FAILED = "FAILED"
+    UNAVAILABLE = "UNAVAILABLE"
+    TIMED_OUT = "TIMED_OUT"
+    INDETERMINATE = "INDETERMINATE"
+
+
+class CohortEscalationCategory(str, Enum):
+    """CohortEscalationCategory"""
+
+    AUTHORITY_REQUIRED = "AUTHORITY_REQUIRED"
+    VALUE_JUDGMENT = "VALUE_JUDGMENT"
+    AMBIGUOUS_INTENT = "AMBIGUOUS_INTENT"
+    MISSING_EVIDENCE = "MISSING_EVIDENCE"
+    IRREVERSIBLE_ACTION = "IRREVERSIBLE_ACTION"
+    COST_APPROVAL = "COST_APPROVAL"
+    CONFLICT_RESOLUTION = "CONFLICT_RESOLUTION"
+    SAFETY_BOUNDARY = "SAFETY_BOUNDARY"
+
+
+@dataclass(frozen=True)
+class CohortSnapshot(object):
+    """Authoritative bounded Cohort reconstruction state. Aggregate invariants additionally enforce cursor monotonicity, immutable bindings, and contribution retention."""
+
+    cohortId: Identifier
+    contributions: List[CohortContribution]
+    epoch: int
+    evidenceIds: List[Identifier]
+    latestSteer: Optional[CohortSteer]
+    missionId: Identifier
+    participantCap: int
+    participantCursors: Dict[str, Any]
+    required: List[Identifier]
+    roster: List[Identifier]
+    roundCap: int
+    rounds: int
+    stoppingReason: Optional[CohortStoppingReason]
+    taskId: Identifier
+
+
+@dataclass(frozen=True)
+class CohortSteer(object):
+    """Durable human steering directive. It changes deliberation epoch but grants no capability."""
+
+    directive: str
+    epoch: int
+    reason: str
+    steeredAt: Timestamp
+    steeredBy: Identifier
+
+
+class CohortStoppingReason(str, Enum):
+    """CohortStoppingReason"""
+
+    SILENCE_QUORUM = "SILENCE_QUORUM"
+    BOUNDED_INCOMPLETE = "BOUNDED_INCOMPLETE"
 
 
 UpgradeAbsolutePath = str

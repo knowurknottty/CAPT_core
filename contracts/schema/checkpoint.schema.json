@@ -255,6 +255,13 @@
           "items": {
             "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry"
           }
+        },
+        "cohortVersions": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry"
+          }
         }
       }
     }
