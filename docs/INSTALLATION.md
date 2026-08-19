@@ -1,70 +1,74 @@
 # CAPT Installation
 
-This guide installs the canonical CAPT Core runtime and its operator surfaces
-from the merged `main` lineage. It uses the normal-human CLI.
+This guide installs the current merged `main` operator surfaces. See [`CURRENT_STATE.md`](CURRENT_STATE.md) for the distinction between package version, merged capabilities, and active integration work.
 
-## Prerequisites
+## Recommended development/evaluation install
 
-- Python 3.11+ (3.12 recommended; CI runs 3.10 and 3.12)
-- `git`
-- Optional: a local model provider for model execution — Ollama (default
-  local), LM Studio, or an OpenAI-compatible endpoint. Model execution is a
-  separate release gate; see `docs/PROVIDERS.md`.
-
-## 1. Clone and prepare
-
-```bash
+```zsh
 git clone https://github.com/knowurknottty/CAPT_core.git
 cd CAPT_core
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
-python -m pip install -e '.[ui]'   # includes the Textual TUI
+python -m pip install -e '.[ui]'
 ```
 
-## 2. Verify the install
+Verify resolution:
 
-```bash
-which capt          # must point inside your venv (e.g. .../.venv/bin/capt)
+```zsh
+which capt
+which capt-ui
 capt --version
-capt doctor         # environment diagnostics
-```
-
-> `which capt` must resolve to the venv binary, not a shell function or an
-> unrelated CAPT checkout. `capt doctor` reports environment health.
-
-## 3. First run (normal-human flow)
-
-```bash
 capt doctor
-capt start                          # start the governed runtime (idempotent)
-capt status                         # health + version + capabilities
-capt memory store "CAPT is alive"   # store a durable memory
-capt evidence                       # inspect what is recorded
-capt checkpoint                     # save authoritative state
-capt stop                           # stop the runtime
-capt resume                         # resume from checkpoint (no repeated work)
 ```
 
-State lives under `~/.capt` by default (override with `$CAPT_STATE_DIR`).
-The EventStore ledger `~/.capt/runtime.db` is authoritative.
+`pyproject.toml` currently declares package version `0.5.0`; later productization code is present on `main` without a new numbered package release yet.
 
-## 4. Operator surfaces
+## First run
 
-| Surface | Command | Status |
-|---|---|---|
-| CLI (normal) | `capt ...` | **SHIPPED** |
-| Textual TUI | `capt-ui` | **SHIPPED** (MVP) |
-| Tk desktop | `capt-ui` (operator layer) | **OPERATOR_MVP** (reference/fallback) |
-| Native SwiftUI | `capt_ui/surfaces/desktop_swift` | **LIBRARY ONLY** (not yet a shipped app) |
-| Expert harness | `capt harness ...` | **EXPERT/DEBUG** (requires socket/token paths) |
+```zsh
+capt start
+capt status
+capt memory store "CAPT is alive"
+capt evidence
+capt checkpoint
+capt-ui dashboard
+```
 
-## 5. MCP Gateway (optional)
+Then test restart continuity:
 
-The CAPT MCP Gateway and CAPT Lite live in the companion repository
-`knowurknottty/capt-workspace-mcp`. See that repository's `docs/integration/`
-and `docs/lite/LITE_GUIDE.md`.
+```zsh
+capt stop
+capt start
+capt resume
+capt status
+```
+
+## State paths
+
+Default normal-user state is `~/.capt`, overridable with `$CAPT_STATE_DIR`.
+
+The normal on-ramp creates/uses the canonical local runtime socket/token layout (`runtime.sock` and `runtime.token`). The merged UI bootstrap resolves that same layout.
+
+## Surfaces
+
+| Surface | Status on merged `main` |
+|---|---|
+| `capt` normal CLI | shipped/merged |
+| `capt harness ...` | expert/debug surface |
+| Textual TUI | shipped MVP |
+| Tk desktop | operator MVP/reference fallback |
+| SwiftUI | client-contract library; not a shipped `.app` |
+| active PR #47 cockpit/provider execution | unmerged integration work |
+
+## Provider note
+
+Provider registration/discovery on `main` and provider **execution** in the active PR #47 lineage are different states. Do not treat a configured provider as proof of governed live inference. See [`PROVIDERS.md`](PROVIDERS.md).
+
+## Platform note
+
+macOS is the primary development environment and Linux has established CI/release paths. Windows should remain labeled unverified until separately proven.
 
 ## Troubleshooting
 
-See `docs/TROUBLESHOOTING.md`.
+Run `capt doctor` first, then use [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md).

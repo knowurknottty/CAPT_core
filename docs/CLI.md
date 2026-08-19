@@ -1,74 +1,63 @@
-# CAPT CLI
+# CAPT CLI and Operator Commands
 
-The `capt` command-line interface has two surfaces:
+CAPT exposes a normal runtime CLI, an operator/UI CLI, and an expert harness surface.
 
-1. **Normal-human surface (v0.6, recommended)** — `capt start`, `capt status`,
-   `capt stop`, `capt checkpoint`, `capt resume`, `capt evidence`,
-   `capt doctor`, and `capt memory ...`. No paths or tokens required.
-2. **Expert surface** — `capt harness ...` for full control (explicit
-   socket/token/ledger paths) and `capt runtime mission-begin` for persisted
-   mission transactions.
+## Normal `capt` surface
 
-The CLI is SQL-free: it calls domain methods, never raw SQL.
+```text
+capt start
+capt status
+capt stop
+capt checkpoint
+capt resume
+capt evidence
+capt doctor
+capt memory ...
+```
 
-## Normal-human surface (v0.6)
+These commands use normal local defaults (`~/.capt` unless overridden) and avoid requiring socket/token/ledger paths for ordinary operation.
 
-| Command | What it does |
-|---|---|
-| `capt start [--seed] [--state-dir D]` | start runtime with defaults (`~/.capt`) |
-| `capt status [--state-dir D]` | runtime health + version + capabilities |
-| `capt stop [--state-dir D]` | stop the runtime |
-| `capt checkpoint [--idempotency-key K] [--state-dir D]` | save authoritative state |
-| `capt resume [--idempotency-key K] [--state-dir D]` | resume after restart |
-| `capt evidence [--mission M] [--state-dir D]` | human-readable proof/verification view |
-| `capt doctor` | environment diagnostics |
-| `capt memory store "<text>" [--namespace N] [--tag T]` | store durable memory |
-| `capt memory search "<terms>"` / `capt memory list` | retrieve memories |
-| `capt --version` | version |
+## `capt-ui` operator surface
 
-State directory resolution: `$CAPT_STATE_DIR` overrides, otherwise `~/.capt`.
-Use a short `CAPT_STATE_DIR` if your home path would exceed the Unix socket
-path limit.
+The installed package also declares `capt-ui`.
 
-## Expert surface
+Typical merged commands include:
 
-### harness
+```zsh
+capt-ui status
+capt-ui dashboard
+capt-ui capabilities
+capt-ui providers
+capt-ui models
+capt-ui verbosity
+capt-ui memory
+capt-ui onramp
+```
 
-- `start --ledger L --sock S --token-file T [--seed]` — start the service.
-- `health --sock S --token-file T` — runtime health.
-- `capabilities --sock S --token-file T` — advertised operations.
-- `checkpoint/resume/stop --sock S --token-file T --idempotency-key K`.
-- `command <op> --payload-json J --sock S --token-file T` — send a governed
-  runtime command.
+Use `capt-ui --help` in the exact installed build for authoritative flags and subcommands.
 
-### runtime
+The Textual dashboard requires the `ui` extra.
 
-- `mission-begin --ledger L --objective O [--operator X]` — run one persisted
-  mission transaction and close deterministically.
+## Expert `capt harness` surface
 
-### foundry
+Use the harness when you need explicit runtime paths or raw governed command operations:
 
-- `list-skills`, `skill <id>`, `candidates`, `validate <id>`, `review <id>`,
-  `approve <id>`, `publish <id>`, `list-caps`, `cap <id>`, `verify-cap <id>`,
-  `prove-cap <id>`, `govern-cap <id>`, `list-bubbles`, `bubble-validate <id>`,
-  `bubble-approve <id>`, `bubble-install <id>`, `curate`, `audit`.
+```zsh
+capt harness start ...
+capt harness health ...
+capt harness capabilities ...
+capt harness command ...
+capt harness checkpoint ...
+capt harness resume ...
+capt harness stop ...
+```
 
-### memory / session / procedure / prospective / retrieval
+Installed help is authoritative for exact arguments.
 
-Standard groups (store, search, session begin/checkpoint, procedure runs,
-prospective intents, retrieval feedback). All call domain methods — no raw SQL.
+## Active integration note
 
-## Security boundaries
+PR #47 extends the TUI-run command payload with prompt enhancement, response mode, requested context budget, and human-verification requirements. Those payload fields should not be described as shipped CLI guarantees until the stacked integration merges.
 
-- No raw SQL in the CLI.
-- Governance actions require a named approver/reviewer.
-- Published skills/bubbles record CTP receipts.
-- The runtime surface is authenticated over a local Unix-domain socket; the
-  token file is local session material, not a remote credential.
+## Authority boundary
 
-## Verification
-
-- `tests/test_v04_cli.py` — foundry CLI subcommands.
-- `tests/test_v04_boundary.py` — CLI uses domain methods, not raw SQL.
-- `tests/test_v06_cli_onramp.py` — v0.6 normal-human surface
-  (memory store, doctor, start/status/checkpoint/resume/evidence/stop).
+Neither CLI parses into raw ledger mutation as a public contract. Consequential operations are admitted by RuntimeService/governance, and UI convenience commands do not enlarge capability.

@@ -4,300 +4,110 @@
 
 **Author:** Kirk Brown, Inversion Labs  
 **Repository:** `knowurknottty/CAPT_core`  
-**Status:** Public architecture and v0.5 reference implementation whitepaper  
-**Version:** 2.0
-
----
+**Status:** Public architecture whitepaper; implementation state evolves independently of the numbered `0.5.0` package release  
+**Version:** 2.1
 
 ## Abstract
 
-Most AI systems are organized around a model endpoint. Memory, tools, workflow state, verification, and governance are then attached as wrappers around a temporary inference session. That design is useful for prototypes, but it makes durable continuity depend on one model, one vendor, one runtime, or one opaque transcript.
+Most AI systems organize memory, tools, workflow state, and evaluation around a temporary model session. CAPT inverts that dependency: models remain replaceable inference components, while a durable governed runtime owns state, authority, memory, execution history, evidence, verification, context policy, and recovery.
 
-CAPT Core takes the opposite approach. It separates persistent cognition from transient inference. Models remain valuable reasoning components, but they do not own durable memory, execution authority, evidence, recovery state, or the system of record.
+The core thesis is:
 
-This repository ships two complementary public surfaces:
+> **The model is a component, not the system of record.**
 
-1. **CAPT Solo API** — the local-first in-process reference implementation for memory, CTP, KHSB, and proof-governed domain services.
-2. **CAPT Runtime Harness** — the authenticated local lifecycle and execution service that owns EventStore persistence, checkpoint/restart continuity, Runtime Memory Governor policy, ContextPack construction, TaskResolver, DriverHost, and bounded external-driver execution.
+## Architectural problem
 
-The core thesis is simple:
+Context windows are bounded. Model behavior varies. Providers change. Processes crash. Tool calls can outlive a client request. A system that binds identity, memory, authority, and completion to a probabilistic transcript cannot reliably distinguish fluent output from verified state.
 
-> The model is a component, not the system.
+CAPT externalizes those durable responsibilities.
 
----
+## System responsibilities
 
-## 1. The Architectural Problem
+CAPT separates:
 
-A model session is temporary. Context windows are bounded. Providers change. Tool interfaces drift. Hosted services can disappear or alter terms. A system that binds memory, identity, execution history, and authority to one inference session cannot reliably preserve continuity or accountability.
+- persistent memory from transient context;
+- EventStore runtime authority from operational transaction journaling;
+- capability/lease/approval from model suggestion;
+- driver execution from evidence admission;
+- evidence from verification;
+- verification from claim acceptance;
+- task completion from mission completion;
+- source/test presence from release proof.
 
-The missing layer is not another model. It is persistent cognitive infrastructure that remains stable while inference components change.
-
-CAPT Core keeps durable responsibilities outside the model:
-
-- persistent local memory;
-- bounded working context;
-- authoritative runtime events;
-- operational transaction receipts;
-- evidence and verification;
-- capability lifecycle;
-- checkpoint and recovery state;
-- tool and driver boundaries;
-- human approval, revocation, and final authority.
-
-## 2. Design Principles
-
-### 2.1 Inference is transient
-
-Models generate, classify, summarize, plan, and reason. Their output is useful, but it is not authoritative system state merely because it is fluent or confident.
-
-### 2.2 Durable state belongs outside the model
-
-Memory, evidence, lifecycle state, and execution history must remain usable when a model, vendor, or runtime changes.
-
-### 2.3 Consequential actions require bounded execution
-
-State-changing work requires authenticated commands, transaction boundaries, idempotency, receipts, evidence, checkpointing, and recovery semantics.
-
-### 2.4 Verification requires preserved evidence
-
-Code presence, imports, generated prose, or a successful-looking response are not sufficient proof. Verification must identify the exact claim, evidence, execution environment, and limitation.
-
-### 2.5 Human authority remains external
-
-Humans retain authority to inspect, approve, revoke, export, migrate, repair, and remove persistent state and capabilities.
-
-### 2.6 Reachability must be stated honestly
-
-CAPT distinguishes source presence, packaging, importability, internal runtime use, API availability, operator availability, local real-process proof, and hosted-CI proof.
-
----
-
-## 3. CAPT Core, CAPT Solo, and the Runtime Harness
-
-**CAPT Core** is the architecture and project.
-
-**CAPT Solo** is the local-first reference implementation and supported in-process API package.
-
-**CAPT Runtime Harness** is the governed execution and lifecycle service shipped with CAPT Solo.
-
-These names describe distinct responsibilities. CAPT Solo's API is not the same thing as the runtime harness, and an external compatibility client is not the runtime itself.
-
-Hermes is one possible external caller. It remains outside CAPT authority and reaches CAPT through a bounded compatibility surface.
-
----
-
-## 4. Architecture Overview
+## Runtime architecture
 
 ```text
-Application code
-    |
-    +--> capt_solo.api
-    |       +--> Memory Engine
-    |       +--> CTP
-    |       +--> KHSB
-    |       +--> Proof / Capability Registry / ClaimGuard
-    |       +--> Skill Foundry / Workflow Proof / Knowledge Bubbles
-    |
-Operator or external compatibility client
-    |
-    +--> capt harness CLI
-            +--> authenticated RuntimeService
-            +--> EventStore
-            +--> Runtime Memory Governor
-            +--> ContextPack
-            +--> TaskResolver
-            +--> DriverHost
-            +--> Checkpoint / Recovery
-            +--> bounded external drivers
+Operator / application
+   -> CLI / TUI / desktop / compatibility client
+   -> authenticated RuntimeService
+      -> EventStore
+      -> governance: capability / lease / approval
+      -> memory + ContextPack policy
+      -> checkpoint / replay / recovery
+      -> evidence / verification / ClaimGuard
+      -> DriverHost
+         -> replaceable models/tools
 ```
 
-The architecture deliberately separates durable authority from inference. External model output enters as untrusted data until the runtime records, verifies, and accepts it through a governed path.
+Presentation surfaces do not become alternate runtimes.
 
----
+## Memory and context
 
-## 5. Persistent Memory and Bounded Context
+The CAPT Solo Memory Engine stores durable local knowledge. The Runtime Memory Governor and ContextPack form a separate bounded working-context layer. Durable memory is not dumped indiscriminately into a model merely because it exists.
 
-### 5.1 CAPT Solo Memory Engine
+## Governance and execution
 
-The Memory Engine stores persistent local knowledge in SQLite. Records can include namespace, tags, provenance, confidence, metadata, import/export state, backup, and integrity information.
+RuntimeService owns governed state transitions. DriverHost executes bounded work under runtime authority. External output remains untrusted until admitted through evidence/verification boundaries.
 
-This subsystem is exposed through the CAPT Solo API and related memory surfaces.
+Active lifecycle hardening emphasizes conservative recovery: when CAPT cannot prove whether external dispatch occurred, it should suspend/reconcile rather than silently execute the operation again.
 
-### 5.2 Runtime Memory Governor
+## Operator productization
 
-The Runtime Memory Governor is a separate subsystem. It owns token accounting, trigger policy, ContextPack construction, repeated rotation behavior, stale-pack rejection, budget enforcement, restart continuity, and dispatch gating.
+Merged `main` is substantially newer than the original v0.5 user experience. It includes a normal CLI on-ramp, shared operator layer, provider/model foundations, CaveCAPT presentation verbosity, a Textual TUI MVP, a Tk desktop operator MVP, and a SwiftUI client-contract library.
 
-Persistent memory and bounded working context are related, but they are not the same component.
+The active TUI/provider integration adds inspectable prompt enhancement, response modes, requested context budgets, human review/approval, cognitive provenance, and bounded provider execution transport. Open-PR implementation is not described as a numbered release until it merges and passes the matching acceptance gates.
 
-### 5.3 ContextPack
+## Providers
 
-ContextPack is the bounded working context authorized for runtime use. External drivers receive only the permitted slice or reference defined by the runtime contract, not unrestricted access to durable memory.
+Provider registration, discovery, model listing, execution, and release proof are separate capability levels. Active ProviderDriver work supports Ollama native generation and OpenAI-compatible chat-completions transport; controlled protocol tests do not substitute for exact-head live-provider installed-runtime proof.
 
----
+## Hermes
 
-## 6. EventStore and CTP
+Hermes remains a compatibility/execution client. CAPT does not transfer runtime authority to Hermes.
 
-### 6.1 EventStore
+Historical v0.5 Hermes evidence and active lifecycle hardening remain distinct evidence classes. A later operator-supplied LOCAL-002 record referenced `evidence/hermes-local-002-r6` / `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04` and claimed `HERMES_LOCAL_002_COMPLETE` with 98/0/0 focused and 174/0/2 broader results, but Terra could not retrieve the branch, commit, or named report from the current GitHub remote/API. Those LOCAL-002 statements are therefore **currently unverified metadata**. Destructive external-provider/tool-kill rollback remains independently unproven.
 
-EventStore owns the authoritative ordered runtime event ledger. It provides durable event persistence, sequence ordering, replay, and integrity evidence for runtime lifecycle and verification state.
+## Multi-perspective cognition
 
-### 6.2 Cognitive Transaction Protocol
+Cohorts coordinate bounded contributions, quorum, dissent, and cognitive debt over CAPT authority. The current Cohort slice does not yet claim durable cross-process persistence/reconstruction or evidence admission.
 
-CTP records operational transaction boundaries and recovery state, including begin, validate, commit, abort, note, transaction and correlation identifiers, idempotency keys, receipts, and incomplete-transaction recovery.
+## Security
 
-CTP is not the authoritative runtime EventStore ledger. It is an operational transaction and recovery journal.
+Local-first reduces mandatory cloud dependence but is not itself a security guarantee. Current limitations include incomplete CAPT-managed encryption at rest, lack of multi-user authorization, unsigned independent audit roots, incomplete production IPC/resource-ceiling hardening, and incomplete adversarial prompt/context/provider assurance.
 
-This distinction prevents one subsystem from being credited with guarantees supplied by another.
+The active SecurityGate work is intentionally fail-closed and should remain BLOCKED until each applicable control has exact-head evidence.
 
----
+## Evaluation principle
 
-## 7. KHSB Coordination
+CAPT should be judged by system properties: authority integrity, memory provenance, context boundaries, idempotency/recovery truthfulness, evidence sufficiency, verification correctness, claim discipline, and restart/provider continuity—not by the eloquence of one model response.
 
-KHSB is the current local, in-process coordination bus. It supports publish/subscribe and request/reply behavior with timeout and acknowledgement semantics.
+## Current implementation status
 
-KHSB is not currently durable, cross-process, or distributed. Those remain possible future extension seams rather than present implementation claims.
+The repository has four relevant truth classes:
 
----
+1. numbered package release (`0.5.0`);
+2. newer merged `main` productization capabilities;
+3. active stacked integration work (#44/#46/#47/#48/#49);
+4. exact evidence/release proofs scoped to particular source identities.
 
-## 8. Governed Runtime Execution
+See [`CURRENT_STATE.md`](CURRENT_STATE.md) for the current detailed state.
 
-The standalone harness provides a local authenticated service and installed CLI surface.
+## Conclusion
 
-The runtime includes authenticated service access, command classification, idempotent command handling, TaskResolver, DriverHost, capability and scope enforcement, EventStore persistence, checkpoint creation, restart continuity, resume without repeating completed execution, evidence and VerificationResult persistence, ClaimGuard decisions, and bounded external drivers.
+The model generates and reasons.
 
-The currently proven Hermes-facing operator action is bounded read-only inspection. General unrestricted model-driven repository engineering is not claimed.
+CAPT remembers, governs, records, verifies, and recovers.
 
----
+Humans and explicit runtime policy remain authoritative.
 
-## 9. Proof-Governed Capabilities
-
-Evidence is evaluated against declared requirements. A capability is not reported verified solely because code exists or a model says it succeeded.
-
-Capabilities move through explicit lifecycle states such as candidate, validated, proven, verified, experimental, degraded, deprecated, and revoked.
-
-ClaimGuard applies evidence and lifecycle state to completion and capability claims. Unsupported claims are downgraded rather than represented as verified.
-
-Verification evidence must preserve process outcome, claim identity, supporting evidence identity, execution scope, environment, freshness, limitations, and failure state.
-
----
-
-## 10. Skill Foundry, Workflows, and Knowledge Bubbles
-
-Skill Foundry moves skills through explicit generation, validation, review, approval, publication, deprecation, and revocation states.
-
-A workflow composed from individually verified components is not automatically verified. Composition creates new compatibility, permission, rollback, and environmental risks.
-
-Imported Knowledge Bubbles enter quarantine and are validated manifest-first before approval or installation.
-
-These systems make portable procedures and knowledge inspectable without treating portability as automatic trust.
-
----
-
-## 11. Governance and Human Authority
-
-Consequential actions require named actors, bounded commands or transactions, preserved evidence, and auditable outcomes.
-
-Humans retain authority to approve, deny, revoke, inspect, export, migrate, repair, delete, and refuse capability changes.
-
-CAPT is designed to increase human agency, not transfer final authority to an inference model.
-
----
-
-## 12. Security Model
-
-CAPT Core is local-first by design.
-
-The base runtime requires no cloud service, external database, Docker deployment, or provider API key for core operation. Optional model drivers may require network access or provider credentials.
-
-The current public runtime does **not** claim encryption at rest, multi-user authentication or authorization, protection from a compromised host account, cryptographically signed audit history, or universal isolation for every optional external tool or model runtime.
-
-Hosted security CI explicitly reports a degraded optional-dependency state when the private anti-token-extraction package cannot be verified. A green workflow is therefore not represented as full optional-dependency provenance proof.
-
----
-
-## 13. Recovery and Idempotency
-
-The runtime is designed to make interruption and replay inspectable.
-
-Current evidence covers ordered EventStore persistence, duplicate-command classification, unchanged ledger head on duplicate replay, checkpoint creation, restart and socket cleanup, resume without repeating prior execution, and preserved driver-run and verification identities.
-
-CAPT claims effectively-once governed behavior where evidenced. It does not make a universal exactly-once claim for arbitrary external side effects.
-
----
-
-## 14. Release Evidence and Truth Classes
-
-CAPT v0.5 separates evidence into source-supported, automated-test-supported, installed-wheel-supported, local real-process-supported, hosted-CI-supported, and deferred or unproven classes.
-
-The release evidence records exact wheel hashes, test matrices, skip reasons, runtime lifecycle evidence, requirement-to-evidence mappings, and limitations.
-
-This distinction matters because a local external-model run and a hosted deterministic CI run prove different things.
-
----
-
-## 15. Current v0.5 Implementation
-
-The current release includes CAPT Solo API and local memory services; CTP and KHSB; proof-governed Foundry subsystems; authoritative EventStore runtime history; authenticated standalone harness lifecycle; Runtime Memory Governor and ContextPack rotation; DriverHost and bounded external-driver composition; checkpoint, restart, idempotency, and no-repeat resume behavior; installed-wheel verification; Python 3.10 and 3.12 hosted CI; explicit security degradation reporting; and versioned release evidence.
-
-CAPT Core v0.5 is suitable for local evaluation and development within the documented boundaries. Higher-trust deployment requires additional host, identity, isolation, encryption, and cryptographic controls.
-
----
-
-## 16. Non-Goals and Honest Boundaries
-
-CAPT Core is not a claim that one model provides complete cognition, a replacement for operating-system security, a guarantee that every external tool is safe, a cryptographic trust system in its current public form, a distributed multi-user platform, a claim that every packaged subsystem is operator-facing, or a claim that Hermes is the CAPT runtime.
-
-Reserved seams are not implementation claims.
-
----
-
-## 17. Evaluation Principles
-
-CAPT should be evaluated on system properties rather than model eloquence: memory integrity, provenance preservation, ContextPack boundary enforcement, transaction recoverability, EventStore integrity, idempotency, checkpoint and restart continuity, evidence sufficiency, claim downgrade correctness, capability-state correctness, authority attribution, and audit completeness.
-
-A convincing output is not equivalent to a verified system state.
-
----
-
-## 18. Future Direction
-
-Future work may include encrypted backup and export, cryptographically signed receipts and attestations, stronger process isolation, multi-user authorization profiles, additional model and multimodal drivers, alternate durable stores, distributed coordination transports, and cross-model continuity demonstrations.
-
-These are directions, not current implementation claims.
-
----
-
-## 19. Conclusion
-
-The model-centric architecture of contemporary AI systems places too much durable responsibility inside a transient inference component.
-
-CAPT Core separates those concerns.
-
-The model generates.
-
-CAPT remembers.
-
-CAPT governs.
-
-CAPT verifies.
-
-CAPT records.
-
-CAPT recovers.
-
-Humans remain authoritative.
-
-> The model is a component, not the system.
-
----
-
-## Public Documentation
-
-- [Project overview](../README.md)
-- [Architecture](ARCHITECTURE.md)
-- [Design rationale](DESIGN.md)
-- [Security boundaries](SECURITY.md)
-- [API reference](API.md)
-- [Runtime and integration guide](PLUGIN_GUIDE.md)
-- [Roadmap](ROADMAP.md)
-- [v0.5 release evidence](../release_evidence/v0.5/release-readiness.md)
+> **A convincing answer is not the same thing as a verified system state.**

@@ -1,76 +1,59 @@
-# CAPT UI Foundation
+# CAPT UI / Operator Layer
 
-A thin operator presentation/control layer for CAPT. Every surface — CLI, TUI,
-Desktop, future Web — consumes the same `capt_ui.operator` abstraction. No
-duplicated runtime, provider, or business logic; authority stays in
-RuntimeService.
+`capt_ui` is a thin projection/control layer over CAPT RuntimeService. CLI/TUI/desktop clients share operator concepts; none becomes an alternate ledger or authority source.
+
+## Merged `main`
+
+The package includes:
+
+- shared operator facade;
+- provider manager and adapter registry;
+- model manager/favorites/defaults/overrides;
+- CaveCAPT presentation verbosity;
+- first-run onboarding;
+- Textual TUI MVP;
+- Tk desktop/operator surface;
+- SwiftUI client-contract library;
+- UI continuity scaffolding.
+
+Typical commands:
+
+```zsh
+capt-ui status
+capt-ui dashboard
+capt-ui capabilities
+capt-ui providers
+capt-ui models
+capt-ui verbosity
+capt-ui memory
+capt-ui onramp
+```
+
+Use installed `--help` for exact flags.
+
+## Active PR #47
+
+The current TUI integration lane adds:
+
+- `MAX/SPOCK/CAVE CAPT/MIN` response modes;
+- 32K–256K requested context budgets;
+- `OFF/AUTO/OMNI/META/FORGE/SIGMA` enhancement engines;
+- inspect/review/approve prompt-enhancement flow;
+- requested/effective context provenance and prompt digest;
+- bounded ProviderDriver execution for Ollama native and OpenAI-compatible endpoints.
+
+These features remain active integration until the stack merges. PR #47 head `4334657a919f74803e65d9b01aa5054d6d7b9a61` has clean source/editable full-suite verification, but installed-artifact, live-provider, terminal cumulative-stack, and cross-model restart acceptance remain separate gates.
+
+## Hermes TUI workspace metadata
+
+The previously documented `HERMES_LOCAL_002_COMPLETE` workspace/state-map result is currently **unverified operator-supplied metadata**. Terra could not retrieve `evidence/hermes-local-002-r6`, `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`, or `reports/local-evidence/HERMES_AGENT_TUI_WORKSPACE_TESTS_AND_STATE_MAP_8F97AE9_2026-08-17.md` from the current GitHub remote/API. The supplied 98/0/0 and 174/0/2 counts and no-blocker statement must not be used as evidence unless the record is restored and independently verified.
 
 ## Authority invariant
 
-```
-RuntimeService
-  -> EventStore
-  -> Memory
-  -> Governance
-  -> Drivers
+```text
+UI/operator intent
+      -> RuntimeService
+      -> governance / EventStore / memory / evidence / DriverHost
 ```
 
-The UI is a projection and control surface only. It never writes the ledger,
-never promotes driver output, and never fabricates authoritative state.
-
-## Layout
-
-```
-capt_ui/
-  operator/
-    contract.py    # typed enums + state views (RuntimeHealth, Verbosity, ...)
-    runtime.py     # Operator facade over RuntimeClient (status/dashboard/...)
-    providers.py   # ProviderManager (Phase 2): CRUD, health, local/remote
-    models.py      # ModelManager (Phase 3): default/mission/temp overrides
-    verbosity.py   # CaveCAPT (Phase 4): minimal/normal/detailed/diagnostic
-    onramp.py      # first-run onboarding wizard (Phase 7)
-    cli.py         # `capt-ui` console script (shared CLI surface)
-    bootstrap.py   # runtime socket/token resolution
-  surfaces/
-    tui/app.py     # Textual operator console (Phase 5)
-    desktop/       # desktop view-model over RuntimeClient (Phase 6)
-  acceptance/
-    ui_continuity_demo.py # UI continuity workflow demo (Phase 8)
-```
-
-## Commands
-
-```zsh
-# shared operator CLI (works on base install; no textual required)
-capt-ui status
-capt-ui dashboard
-capt-ui providers --test ollama
-capt-ui providers --activate ollama
-capt-ui models --set ollama/qwen2.5:7b
-capt-ui verbosity --set detailed
-capt-ui memory --store "a durable memory"
-capt-ui onramp
-
-# TUI (requires the 'ui' extra: pip install -e '.[ui]')
-python -m capt_ui.surfaces.tui.app
-```
-
-## Prerequisites
-
-A running CAPT runtime exposing an authenticated local socket + token
-(`RuntimeService`). The operator layer resolves them via `CAPT_STATE_DIR` /
-`CAPT_SOLO_HOME` or `CAPT_SOCK`/`CAPT_TOKEN`.
-
-## Tests
-
-```zsh
-pytest tests/test_ui_operator_layer.py \
-       tests/test_ui_tui.py \
-       tests/test_ui_desktop_surface.py \
-       tests/test_ui_onboarding.py \
-       tests/test_ui_cli.py \
-       tests/test_ui_continuity_demo.py
-```
-
-TUI/desktop/continuity tests that need a live runtime skip cleanly when none is
-running.
+The UI never fabricates authoritative completion state.

@@ -1,86 +1,77 @@
 # Mental Model — How CAPT Works
 
-The shortest correct mental model:
+The shortest correct model is:
 
-> **The model becomes stateless. CAPT becomes stateful.**
-
-Here is the whole system on one screen:
+> **Inference is replaceable; CAPT continuity is durable.**
 
 ```text
-                        Human
-                          |
-                          v
-                  ┌─────────────┐
-                  │ CAPT Runtime │   the thing you interact with
-                  └─────────────┘
-                          |
-        ┌─────────────────┼─────────────────┐
-        |                 |                 |
-   ┌────┴────┐     ┌──────┴──────┐   ┌──────┴──────┐
-   │  Memory  │     │ Governance / │   │   Evidence   │
-   │          │     │  Authority   │   │             │
-   │ durable, │     │ nothing runs │   │ proof,      │
-   │ model-   │     │ without      │   │ verification│
-   │ indep.   │     │ approval     │   │ claims      │
-   └──────────┘     └──────────────┘   └─────────────┘
-                          |
-                  ┌──────┴────────┐
-                  │ Recovery/Event │
-                  │ Store + ckpt   │
-                  └───────────────┘
-                          |
-                          v
-                 Replaceable Models
-          (LM Studio, Ollama, OpenRouter, MLX, ...)
+Human / operator
+      |
+      +--> capt CLI
+      +--> Textual TUI
+      +--> desktop / compatibility client
+      |
+      v
+Authenticated RuntimeService
+      |
+      +--> Governance / capability / lease boundaries
+      +--> EventStore authoritative runtime history
+      +--> Memory + Runtime Memory Governor + ContextPack
+      +--> Evidence -> Verification -> ClaimGuard
+      +--> Checkpoint / replay / recovery / idempotency
+      +--> DriverHost -> bounded drivers
+                        |
+                        v
+                 Replaceable models
 ```
 
-## Reading the diagram
+## What owns what
 
-1. **Human** is the final authority. Nothing consequential happens without the
-   operator's approval.
-2. **CAPT Runtime** is the one surface you talk to. It is not a library you
-   bolt on — it is the stateful core surrounding the model.
-3. Four responsibilities hang off the runtime:
-   - **Memory** — durable knowledge that survives model changes and restarts.
-   - **Governance / Authority** — missions, approvals, grants. Execution is
-     gated; it does not just happen.
-   - **Evidence** — proof, verification results, and claim decisions. This is
-     how CAPT answers "did this really happen?"
-   - **Recovery / EventStore + checkpoints** — the ordered event history that
-     lets you stop, restart, and resume without repeating completed work.
-4. **Replaceable Models** sit below the line. They are transient, pluggable
-   inference components. They never own CAPT state.
-
-## The two sentences that anchor everything
-
-- **A model is transient and replaceable. CAPT owns the durable memory,
-  governed state, evidence, authority, execution history, context policy, and
-  recovery around it.**
-- **The model becomes stateless. CAPT becomes stateful.**
-
-## Terminology you will meet (progressive disclosure)
-
-Only learn these when you need them:
-
-| Term | Meaning (plain) |
+| Concern | Owner |
 |---|---|
-| Runtime | the stateful core you start with `capt start` |
-| Memory | durable knowledge; `capt memory store/search` |
-| Mission | a governed objective that requires approval |
-| Evidence | records that something was done and verified |
-| Approval | the human gate before consequential execution |
-| Checkpoint | a saved, authoritative state snapshot |
-| EventStore | the ordered history CAPT uses for recovery |
-| ClaimGuard | the check that decides whether a claim is supportable |
-| ContextPack | how CAPT decides what context to keep and discard |
-| Driver | a connector to a replaceable model |
+| authoritative runtime transitions | RuntimeService |
+| ordered durable runtime history | EventStore |
+| persistent local knowledge | CAPT Solo Memory Engine |
+| working-context policy | Runtime Memory Governor / ContextPack |
+| operational transaction/recovery journaling | CTP |
+| in-process coordination | KHSB |
+| external execution | DriverHost + bounded drivers |
+| presentation/operator intent | CLI / TUI / desktop |
+| claim support discipline | evidence + verification + ClaimGuard |
 
-Deep subsystem names (CTP, KHSB, Foundry, DriverHost, Memory Governor) are
-implementation details. You do not need them to use CAPT. The glossary in the
-architecture docs explains them for readers who want that depth.
+## Important non-equivalences
 
-## Source of the picture
+Do not collapse these states:
 
-Every deeper document references this same shape and terminology. If you see a
-component in a deep doc, it lives somewhere on this diagram — above the model
-line (CAPT's job) or below it (a replaceable model).
+```text
+source exists
+!= packaged
+!= operator reachable
+!= executed
+!= recorded as evidence
+!= verified
+!= claim accepted
+!= task complete
+!= mission complete
+!= release proven
+```
+
+That distinction is central to CAPT.
+
+## Model relationship
+
+Models may reason, generate, inspect, summarize, or propose actions. Their output remains input to the governed system. A model response does not mint capability, write authoritative state, or verify itself merely by sounding confident.
+
+## Operator surfaces
+
+The merged Textual TUI, CLI, and Tk operator MVP share the same operator/runtime boundary. The active PR #47 cockpit adds prompt-enhancement selection, response mode, requested context budget, human review, and cognitive provenance while preserving the same authority boundary.
+
+## Cohorts
+
+The active PR #48 Cohort layer coordinates bounded multi-perspective contributions. It is not a second runtime and currently does not claim durable RuntimeService/EventStore reconstruction, restart cursors, evidence admission, or installed-runtime TUI dogfood.
+
+## Security gate
+
+The active PR #49 SecurityGate evaluates evidence fail-closed. It does not grant capabilities or make its own result authoritative. Security evidence must still enter CAPT through normal governed evidence/verification paths.
+
+For exact state classifications, use [`CURRENT_STATE.md`](CURRENT_STATE.md).

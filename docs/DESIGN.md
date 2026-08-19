@@ -1,126 +1,53 @@
 # CAPT Core Design Rationale
 
-**Why CAPT exists, in plain language first.**
+CAPT treats a model as a replaceable inference component inside a larger governed system. The model can reason and generate; CAPT owns the durable responsibilities that should survive model/provider/session changes.
 
-CAPT Core treats an AI model as one replaceable component inside a larger system. The model can generate and reason, but CAPT owns the durable parts: memory, state, authority, evidence, recovery, and continuity.
+## Design thesis
 
-## In one minute
+Most AI systems leave too much responsibility inside a bounded probabilistic context window: memory, execution history, tool authority, self-checking, recovery, and completion judgments.
 
-Most AI systems keep too much important state inside a temporary model session. That makes memory fragile, execution hard to inspect, and claims difficult to verify.
+CAPT externalizes those responsibilities into inspectable system components.
 
-CAPT Core moves those durable responsibilities outside the model:
+## Core principles
 
-- memory persists locally
-- consequential actions use transaction boundaries
-- capabilities move through explicit lifecycle states
-- claims require evidence
-- humans retain approval and revocation authority
+### Durable state belongs outside inference
 
-The result is a system that can survive model changes without losing its operating history.
+Persistent memory, mission/task state, evidence, checkpoints, and runtime history must survive model replacement.
 
-## The design in three principles
+### Authority is explicit
 
-### 1. Durable state belongs outside the model
+A model response is not an authorization. Capabilities, leases, approvals, policies, and RuntimeService transitions define what work may occur.
 
-Model context is temporary and bounded. CAPT memory is persistent, inspectable, portable, and governed independently of any model invocation.
+### Evidence is not self-verification
 
-A memory record can carry provenance, confidence, namespace, tags, and metadata. That makes memory a durable system object rather than residue from a conversation window.
+CAPT separates observation, evidence admission, verification, claim support, and completion. A fluent model cannot collapse those boundaries by assertion.
 
-### 2. Consequential actions need evidence and boundaries
+### Recovery must prefer truth over convenience
 
-Actions such as publishing, installing, approving, deprecating, and revoking are not ordinary text generation.
+Idempotency and checkpointing reduce repeated work, but external side effects can become indeterminate. When CAPT cannot prove whether dispatch occurred, the correct design is suspension/reconciliation—not optimistic redispatch.
 
-The Cognitive Transaction Protocol provides explicit begin, validate, commit, abort, and note events, along with idempotency, correlation, receipts, and recovery.
+### Operator surfaces remain thin
 
-The Proof Engine evaluates evidence against declared requirements. Verification is a lifecycle state supported by evidence, not a marketing adjective.
+CLI, TUI, and desktop clients should provide excellent control and visibility without duplicating runtime authority.
 
-### 3. Humans remain authoritative
+### Prompt intelligence remains subordinate to governance
 
-CAPT Core is designed to increase human agency, not replace it.
+The active prompt-enhancement/cognitive-provenance layer may improve and explain a request, but it may not mint capability, bypass human review, fabricate evidence, or redefine mission state.
 
-Humans retain the authority to approve, revoke, inspect, export, migrate, and remove persistent state and capabilities. The runtime should earn trust through evidence and accountable behavior rather than demand trust because a model produced an answer.
+### Multi-perspective cognition does not imply multi-runtime authority
 
-## Why local-first
+Cohorts may coordinate competing perspectives, quorum, dissent, and cognitive debt while RuntimeService/EventStore remain authoritative.
 
-Local-first operation reduces mandatory dependence on remote services and keeps persistent cognitive state under direct control.
+### Local-first is a deployment property, not a security proof
 
-It does **not** mean universally isolated or automatically secure. It means the base runtime can operate without a required cloud service, remote database, or provider credential.
+Keeping core state local reduces mandatory cloud dependence. It does not automatically provide encryption at rest, multi-user isolation, signed audit roots, or protection from a compromised host.
 
-## Why memory is separate
+## Why CAPT uses multiple evidence classes
 
-Persistent memory must survive model replacement, provider changes, runtime migration, and tool evolution.
+A source file, unit test, controlled HTTP protocol test, exact-head integration test, installed-wheel run, live-provider run, and process-boundary restart test prove different things. CAPT documents the smallest claim supported by the strongest matching evidence.
 
-This avoids binding identity, continuity, or authority to one opaque model session.
+## What CAPT is not
 
-## Why CTP exists
+CAPT is not a model, not a prompt wrapper, not Hermes, not a UI-only agent shell, not an operating-system security boundary, and not a claim that every research seam is production-ready.
 
-The Cognitive Transaction Protocol makes state-changing work inspectable and recoverable.
-
-It provides:
-
-- explicit transaction boundaries
-- idempotency protection
-- correlation identifiers
-- append-only receipts
-- crash recovery
-- audit history
-
-This prevents silent double-application and makes interrupted work discoverable.
-
-## Why proof exists
-
-A system should not claim a capability merely because code exists or a model says it succeeded.
-
-The Proof Engine evaluates evidence against declared requirements. Capabilities move through explicit states such as candidate, validated, proven, verified, degraded, deprecated, and revoked.
-
-## Why ClaimGuard exists
-
-AI systems can overstate completion or capability. ClaimGuard applies evidence and lifecycle state to claims, downgrading unsupported assertions and preserving the scope of failures.
-
-A platform-specific failure, for example, should not become a false global-revocation claim.
-
-## Why governance exists
-
-Publishing, installing, approving, deprecating, and revoking capabilities changes what the system is permitted to do.
-
-CAPT governance requires named actors, CTP transaction boundaries, and append-only audit records for consequential actions.
-
-## Why workflows need independent proof
-
-A chain of individually verified components is not automatically a verified workflow.
-
-Composition introduces new risks:
-
-- incompatible inputs and outputs
-- permission unions
-- privilege escalation
-- dependency failures
-- rollback conflicts
-- environmental mismatch
-
-Therefore workflows carry independent proof.
-
-## Why knowledge packages are quarantined
-
-Portable knowledge and skill packages can contain unsafe permissions, secret material, malformed manifests, or dangerous instructions.
-
-Knowledge Bubbles are imported into quarantine and validated manifest-first before approval or installation.
-
-## What CAPT Core is not
-
-CAPT Core is not:
-
-- a claim that one model can provide complete cognition
-- a replacement for operating-system security
-- a guarantee that every external tool is safe
-- a cryptographic trust system in its current public form
-- the entirety of the private CAPT research architecture
-
-It is the public, inspectable foundation for building persistent, governed, model-independent intelligence systems.
-
-## Go deeper
-
-- [Architecture](ARCHITECTURE.md)
-- [Security boundaries](SECURITY.md)
-- [API reference](API.md)
-- [Whitepaper](WHITEPAPER.md)
+See [`ARCHITECTURE.md`](ARCHITECTURE.md), [`CURRENT_STATE.md`](CURRENT_STATE.md), and [`SECURITY.md`](SECURITY.md).

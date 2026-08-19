@@ -1,119 +1,80 @@
-# CAPT Demos — Five Flagship Demonstrations
+# CAPT Demos
 
-Each demo is small, end-to-end, executable, produces observable output, and
-references **only public interfaces** (`capt` commands and public Python APIs).
+These demos separate what is runnable on merged `main` from what remains an acceptance target.
 
-All demos assume [START_HERE](../START_HERE.md) is done and `capt` is installed.
-
----
-
-## Demo 1 — Durable memory (store, restart, retrieve)
-
-**Goal:** prove memory survives process restarts and is independent of any model.
+## Demo 1 — Durable memory
 
 ```zsh
-capt memory store "Demo 1: memory survives restarts." --tag demo1
-# restart is implicit — memory lives on disk
-capt memory search "survives restarts"
-capt memory list --namespace default
+capt memory store "Demo: memory survives model sessions." --tag demo
+capt memory search "survives model sessions"
 ```
 
-**Observable:** the stored fact is retrievable after the process has gone away.
+**Shows:** persistent CAPT memory is not a model transcript.
 
-**Watch for:** the `--namespace`/`--tag` flags round-trip.
-
----
-
-## Demo 2 — Governed execution (request, approve, execute only after approval)
-
-**Goal:** prove nothing consequential runs without human approval.
-
-```zsh
-capt start --seed
-capt evidence          # shows an authorized mission + evidence chain
-```
-
-For a request→approve→execute walk against your own state, drive the governed
-command operations via `capt harness command` (operations `create_mission`,
-`submit_approval_decision`, `run_fixed_openharness_inspection`). See
-[`PLUGIN_GUIDE.md`](PLUGIN_GUIDE.md) for the operation reference.
-
-**Observable:** inspection runs only after an approval decision is submitted.
-
----
-
-## Demo 3 — Checkpoint / recovery (stop, restart, resume)
-
-**Goal:** prove completed work is not repeated after a restart.
+## Demo 2 — Runtime lifecycle
 
 ```zsh
 capt start
-capt checkpoint --idempotency-key demo3-cp
+capt status
+capt evidence
+```
+
+**Shows:** authenticated local runtime + inspectable authoritative state.
+
+## Demo 3 — Checkpoint/restart/no-repeat continuation
+
+```zsh
+capt checkpoint --idempotency-key demo-cp
 capt stop
 capt start
-capt resume --idempotency-key demo3-rs
+capt resume --idempotency-key demo-resume
 capt status
 ```
 
-**Observable:** `resume` returns `accepted` and status shows a healthy runtime
-without re-doing the checkpoint work. Re-running the same idempotency key is
-treated as a duplicate (idempotent), not a second state change.
+**Shows:** continuation is reconstructed from CAPT state.
 
----
+## Demo 4 — Operator TUI
 
-## Demo 4 — Evidence / verification inspection
+```zsh
+capt-ui dashboard
+```
 
-**Goal:** prove CAPT answers "why does this say it is complete?".
+Inspect runtime, mission, memory/context, providers/models, approvals, evidence, and logs. Approve/deny and lifecycle controls remain governed RuntimeService operations.
+
+## Demo 5 — Evidence truth chain
 
 ```zsh
 capt start --seed
 capt --json evidence
 ```
 
-**Observable:** the output contains authoritative state — mission spec, recorded
-evidence, verification result (`verification.status.kind`), and ClaimGuard
-disposition when a real claim exists.
+Use the output to distinguish recorded evidence, verification result, ClaimGuard disposition, and authoritative mission/task state.
 
----
+## Hermes local TUI/workspace metadata
 
-## Demo 5 — Cross-model continuity (the flagship v0.6 proof)
+LOCAL-002 was previously described as a focused Hermes workspace/state-map evidence record. Terra could not retrieve `evidence/hermes-local-002-r6`, `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`, or `reports/local-evidence/HERMES_AGENT_TUI_WORKSPACE_TESTS_AND_STATE_MAP_8F97AE9_2026-08-17.md` from the current remote/API, so `HERMES_LOCAL_002_COMPLETE` and the supplied 98/0/0 and 174/0/2 counts are currently **unverified metadata**, not a demo or acceptance artifact. See [`CURRENT_STATE.md`](CURRENT_STATE.md).
 
-**Goal:** prove continuity belongs to CAPT, not to any model's transcript.
+## Acceptance target — real provider execution
+
+The active PR #47 path adds bounded Ollama/OpenAI-compatible inference transport and an upgraded TUI run surface. When the stack is merged and exact-head live-provider acceptance is available, a demo should exercise the actual provider rather than a synthetic provider/model name.
+
+## Flagship acceptance target — true cross-model continuity
 
 ```text
 Model A
-  -> governed mission
-  -> real work
-  -> evidence persisted
-  -> CAPT checkpoint
-  -> Model A removed
+ -> governed mission/work
+ -> evidence persisted
+ -> checkpoint
+ -> Model A process exits
 
 Model B
-  -> attach to same CAPT runtime state
-  -> recover bounded ContextPack
-  -> inspect prior completed work
-  -> continue without repeating it
-  -> create new evidence -> verification -> ClaimGuard
+ -> attaches to same CAPT state
+ -> reconstructs authorized context
+ -> does not repeat completed work
+ -> performs new governed work
+ -> evidence -> verification -> claim/completion state
 ```
 
-**How to run it today:** the deterministic local expression of this proof is the
-seeded demo mission, because `capt start --seed` materializes a complete
-mission→evidence→verification→claim chain that you can then resume and inspect
-under a fresh process (see Demo 3 + Demo 4). The packaged real two-model variant
-depends on the P1 unified model-provider layer.
+**Current status: not yet release-proven.**
 
-**Observable:** the same runtime state, once checkpointed, yields the same
-mission, evidence, and verification to any subsequent process.
-
----
-
-## Why five demos
-
-Taken together they cover the v0.6 release gate: understand the purpose
-(Demo 1), govern execution (Demo 2), recover state (Demo 3), inspect proof
-(Demo 4), and prove continuity is CAPT's, not the model's (Demo 5).
-
-Demos 1–4 are **fully runnable today** against public interfaces. Demo 5's
-end-to-end two-model form is the flagship cross-model continuity proof
-targeted by the v0.6 source of truth; its deterministic seeded form runs now,
-and its packaged real-model form is scoped to the P1 model-provider slice.
+A seeded deterministic mission, synthetic model IDs, or changing a provider label demonstrates pieces of the architecture but does not prove this full claim.

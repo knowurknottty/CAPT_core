@@ -1,78 +1,57 @@
-# CAPT UI Foundation — Acceptance & Classification Status (RTSP3 reconciliation)
+# CAPT UI — Acceptance and Classification Status
 
-Authoritative, honest status after the branch reconciliation + claim-correction
-pass. This records what is PROVEN vs PENDING for integration and release.
+This document distinguishes merged UI capability, active integration, and release proof.
 
-## 1. Provider support matrix (registered vs operational)
+## Merged operator foundation
 
-| Provider | Transport | Registered | Discoverable | Health probe | Model list | Model execution | Support level |
-|---|---|---|---|---|---|---|---|
-| OpenRouter | openai_compatible | ✅ | – | ✅ | ✅ | ❌ (P1) | HEALTH_AND_MODEL_LIST |
-| Ollama | ollama (native /api/tags) | ✅ | ✅ | ✅ | ✅ | ❌ (P1) | HEALTH_AND_MODEL_LIST |
-| LM Studio | openai_compatible | ✅ | ✅ | ✅ | ✅ | ❌ (P1) | HEALTH_AND_MODEL_LIST |
-| vLLM | openai_compatible | ✅ | – | ✅ | ✅ | ❌ (P1) | HEALTH_AND_MODEL_LIST |
-| llama.cpp-server | openai_compatible | ✅ | ✅ | ✅ | ✅ | ❌ (P1) | HEALTH_AND_MODEL_LIST |
-| MLX / mlx_lm | native | ✅ | ❌ | ❌ | ❌ | ❌ | **REGISTERED_ONLY** |
-| Hermes | subprocess | ✅ | ⚠️ | ❌ | ❌ | bounded-when-governed | **REGISTERED_ONLY** |
+- **Textual TUI MVP:** merged and usable for runtime/mission/memory/evidence/provider/approval/log views and governed operator controls.
+- **Shared Operator facade:** merged; UI does not write EventStore/SQLite directly.
+- **Provider manager:** merged registration/configuration plus health/model discovery where supported.
+- **Model manager:** merged model-selection/favorites/defaults/override foundation.
+- **CaveCAPT verbosity:** merged and presentational only.
+- **Tk desktop:** operator MVP/reference fallback, not native product.
+- **SwiftUI:** client-contract library, not a shipped `.app`.
 
-A provider template alone does NOT imply operational support. `capt-ui
-capabilities` prints this matrix.
+## Provider support boundary on `main`
 
-## 2. Secret storage status
+Provider registration/health/model-list support does **not** equal governed generation. `main` does not yet ship the PR #47 ProviderDriver.
 
-- **Implemented:** secret REFERENCES (`env:VAR` / `keychain:acct`) only in
-  providers.json; raw tokens never persisted; `scrub`/`scrub_obj`/`safe_to_dict`
-  redact secrets from logs/evidence/diagnostics; adapters resolve the secret at
-  call time; deleting a provider is decoupled from the secret store.
-- Resolved via macOS Keychain (`security find-generic-password`) + environment
-  variables. No large credential system; sufficient for v0.6.
+## Active PR #47 acceptance state
 
-## 3. TUI verdict
+Implemented in the active stacked branch:
 
-- **Acceptable for v0.6.** Textual. Panels: runtime/mission/memory/evidence/
-  provider/approvals/logs. Keyboard-first. Interactive keypress smoke passes.
-- Governed actions (approve/deny, checkpoint, resume, cancel) route through the
-  shared Operator facade; the TUI does not touch EventStore/ledger/sqlite.
+- deterministic prompt assembly;
+- cognitive provenance envelope;
+- requested/effective context accounting;
+- TUI response-mode/context/enhancement/human-review controls;
+- bounded ProviderDriver for Ollama native and OpenAI-compatible generation;
+- protocol/lifecycle/provenance/secret-handling tests against controlled HTTP servers.
 
-## 4. Tk desktop verdict
+Current PR #47 source/editable proof at `4334657a919f74803e65d9b01aa5054d6d7b9a61`:
 
-- **DESKTOP_OPERATOR_MVP** — a reference/debug/client/fallback and view-model
-  proving ground. It is **NOT** a native desktop product.
+- 8 approval-security regressions passed;
+- 31 focused prompt/provider/TUI/operator tests passed;
+- 18 Ouroboros lifecycle tests passed;
+- `tests/capt_runtime`: 387 passed / 10 skipped / 12 deselected;
+- full repository: 861 passed / 67 skipped / 12 deselected.
 
-## 5. Native desktop status
+Still outside that proof class:
 
-- **NATIVE_DESKTOP_TRACK_INITIATED.** SwiftUI client contract
-  (`capt_ui/surfaces/desktop_swift/CAPTCoreDesktop`) defines the value-type
-  projections + IPC contract; Swift package builds clean. The shipped native
-  desktop product is NOT yet delivered (P1).
+- installed non-editable wheel/live-provider acceptance;
+- terminal cumulative-stack acceptance beyond this PR head;
+- full restart/process-boundary cross-model continuity;
+- destructive external-provider/tool-kill rollback E2E.
 
-## 6. UI continuity demo (formerly "golden demo")
+## Hermes Agent workspace/TUI metadata — currently unverified
 
-- Renamed → `capt_ui/acceptance/ui_continuity_demo.py`. It is a **UI continuity
-  workflow demo** with SYNTHETIC model ids. It does NOT prove cross-model
-  continuity.
+The operator supplied LOCAL-002 metadata for `evidence/hermes-local-002-r6` / `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04` / `reports/local-evidence/HERMES_AGENT_TUI_WORKSPACE_TESTS_AND_STATE_MAP_8F97AE9_2026-08-17.md`, including `HERMES_LOCAL_002_COMPLETE`, Node/npm details, 98/0/0 focused, 174/0/2 broader, and a no-product/state-map-blocker statement.
 
-## 7. Real cross-model continuity
+Terra could not retrieve the branch, commit, or report from the current GitHub remote/API. Those LOCAL-002 values are therefore **not accepted evidence at this checkpoint**. Historical v0.5 Hermes evidence remains separate and intact. If LOCAL-002 is restored, its claims must be re-read from the repository record before they are promoted back into acceptance status.
 
-- **PENDING / NOT CLAIMED.** Scaffold
-  `capt_ui/acceptance/cross_model_continuity.py` refuses to fabricate success
-  and requires real reachable providers + real model execution to run. This is
-  the flagship v0.6 release-gate item and is NOT satisfied by provider-name
-  switching.
+## Cross-model continuity
 
-## 8. CaveCAPT verbosity
+Still **PENDING / NOT CLAIMED** as a true process-boundary release proof. Synthetic model IDs or provider-name switching do not satisfy the flagship claim.
 
-- **Verified.** Single shared implementation; minimal/normal/detailed/diagnostic
-  change presentation across CLI/TUI/desktop/evidence/logs. Presentational
-  only — never weakens governance, verification, evidence, memory policy, or
-  ClaimGuard.
+## Current verdict
 
-## 9. Remaining normal-human release blockers
-
-1. Real governed model mission through the provider layer (currently only
-   health/model-list; no model execution).
-2. True process-boundary cross-model continuity proof (Model A → shutdown →
-   Model B no-repeat recovery with real providers/models).
-3. MLX/mlx_lm native execution adapter.
-4. Native desktop PRODUCT (SwiftUI) beyond the initiated contract.
-5. Full provider parity / parameter editing (P1).
+The merged TUI foundation is real. The active cockpit/provider integration is substantial and near completion. The remaining release gates are integration/live-provider/restart/security evidence gates, not a license to relabel unmerged code as shipped.

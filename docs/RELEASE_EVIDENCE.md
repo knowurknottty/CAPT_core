@@ -1,52 +1,47 @@
-# Release Evidence
+# Release and Integration Evidence
 
-This page points to the proof that CAPT's claims are backed by real artifacts,
-and how to inspect it yourself.
+CAPT keeps evidence scoped to the claim it actually supports.
 
-## The evidence directory
+## Numbered v0.5 evidence
 
-```text
-release_evidence/
-  v0.5/
-    release-readiness.md               # overall v0.5 release verdict
-    requirement-evidence-matrix.json   # claim -> evidence mapping
-    test-matrix.md                     # what was tested
-    final-wheel-manifest.json          # the shipped wheel + hash
-    installed-model-operator/          # real installed-wheel model proof
-    public-claim-audit-corrected.md    # public-claim accuracy audit
-    branch-pr-disposition.md/json      # branch/PR disposition
-```
+`release_evidence/v0.5/` remains the historical proof set for the numbered `0.5.0` package lineage. It includes release readiness, requirement/evidence mapping, test matrix, wheel identity, installed model-operator evidence, and public-claim audit material.
 
-Start with `release_evidence/v0.5/release-readiness.md`.
+Do not rewrite those records to make them describe later `main` or open-PR behavior.
 
-## How to see the proof yourself
+## Merged-main evidence
 
-1. **Run the automated suite** — every claim that is "Tested" is covered by it:
+Later productization tests establish the normal CLI/TUI/operator/provider-configuration foundations on `main`. Those are source/test claims for merged code, not a retroactive v0.5 wheel claim.
 
-   ```zsh
-   python3 -m pytest tests/ -q
-   ```
+## Active PR evidence
 
-2. **Inspect runtime evidence** — start the runtime and read authoritative state:
+Each active stacked PR has its own evidence boundary. PR #47 now has clean exact-head **source/editable-runtime** verification at `4334657a919f74803e65d9b01aa5054d6d7b9a61`:
 
-   ```zsh
-   capt start --seed
-   capt --json evidence
-   ```
+- approval-security regressions: 8 passed;
+- focused prompt/provider/TUI/operator suite: 31 passed;
+- Ouroboros lifecycle: 18 passed;
+- `tests/capt_runtime`: 387 passed / 10 skipped / 12 deselected;
+- full repository: 861 passed / 67 skipped / 12 deselected;
+- contract drift and `git diff --check`: passed.
 
-3. **Inspect the wheel** — verify the shipped artifact matches the manifest hash.
+That proof does not convert the source tree into an installed-wheel, live-provider, process-boundary cross-model, destructive rollback, or release artifact proof.
 
-## What is and is not claimed
+## Hermes LOCAL-002 metadata — quarantined pending retrieval
 
-- **Proven:** local memory, EventStore replay, governed checkpoint/restart/
-  resume, evidence/verification, ClaimGuard, and a **bounded read-only** real
-  Hermes inspection executed through the installed wheel.
-- **Not claimed:** unrestricted autonomous repository engineering driven by an
-  external model. The strongest current model-facing proof is the bounded
-  read-only inspection under `installed-model-operator/`.
+The operator supplied branch `evidence/hermes-local-002-r6`, HEAD `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`, report `reports/local-evidence/HERMES_AGENT_TUI_WORKSPACE_TESTS_AND_STATE_MAP_8F97AE9_2026-08-17.md`, classification `HERMES_LOCAL_002_COMPLETE`, and reported 98/0/0 focused plus 174/0/2 broader results with Node/npm environment notes and a no-product/state-map-blocker statement.
 
-## Live verification from the command line
+Terra later verified that the branch, commit, and named report are absent from the current GitHub remote/API. These values are therefore **not independently usable evidence**. The prior explanation that GitHub retrieval was merely lagging is superseded by the later remote/API audit.
 
-`capt evidence` is the one command that answers "why does CAPT say this is
-complete?": it shows the mission spec, recorded evidence, verification result,
-and ClaimGuard disposition from authoritative runtime state.
+Historical v0.5 Hermes evidence remains authoritative for its own bounded release lineage. If LOCAL-002 is restored, its report must be retrieved and reviewed before any of its claims re-enter the release ledger. Even a restored LOCAL-002 record would remain adjacent Hermes workspace evidence rather than proof of PR #47 exact head, installed-wheel behavior, live-provider execution, destructive rollback, restart continuity, or release readiness.
+
+## What still requires separate proof
+
+- live intended-provider execution from the exact integrated head;
+- installed-runtime acceptance of that provider path;
+- true process-boundary Model-A -> Model-B continuity;
+- destructive rollback/reconciliation cases where external work may have escaped cancellation;
+- security controls explicitly left BLOCKED by #49;
+- durable Cohort restart/evidence semantics.
+
+## Evidence rule
+
+A successful test suite, source file, controlled HTTP server, installed wheel, live provider, restart test, and destructive failure-injection test are different evidence classes. Claim only what the matching evidence establishes.
