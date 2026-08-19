@@ -27,13 +27,45 @@ The convergence candidate incorporates the security infrastructure and UPG-001â†
 
 These implementation/test facts do **not** automatically mark their corresponding release controls PASS. SecurityGate requires the evidence class specified for each exact-head control.
 
+## CI gate integrity
+
+The terminal convergence work corrected a material CI-authority mismatch: the inherited workflow named `Release Security` did not actually execute the Security Closure Cockpit. It could therefore report workflow success while CAPT's release gate remained blocked.
+
+The workflow now:
+
+1. checks out the exact pull-request head;
+2. runs Python security/regression/build/install/invariant/dependency-audit checks;
+3. runs full-history gitleaks;
+4. verifies SecurityGate/evidence machinery;
+5. generates ephemeral exact-head attestations from checks that really passed;
+6. evaluates the 47-control CAPT Core profile;
+7. uploads `security-evidence.json` and `security-gate-result.json`;
+8. fails the workflow if the exact-head gate is not authorized.
+
+A red `Release Security` workflow is therefore now an intentional release-authority signal when required evidence is incomplete, not a generic test badge.
+
 ## Current release-security verdict
 
 The terminal convergence classification remains:
 
 `IMPLEMENTED_CROSS_SURFACE_VERIFIED_RELEASE_SECURITY_BLOCKED`
 
-The latest terminal-candidate cockpit was **BLOCKED / releaseAuthorized=false** because applicable controls lacked legitimate exact-head closure evidence. A `NOT_VERIFIED` result means evidence is absent/stale/incomplete; it is not equivalent to a discovered vulnerability and must not be silently converted to PASS.
+The current exact-candidate CI gate is:
+
+- **BLOCKED**;
+- `releaseAuthorized=false`;
+- **2 PASS / 0 FAIL / 19 NOT_VERIFIED / 26 NOT_APPLICABLE**.
+
+The two current PASS controls are backed by exact-head ephemeral CI attestations for:
+
+- full-history secret scanning (`gitleaks:full-history`);
+- installed-runtime dependency closure scanning (`pip-audit:installed-runtime-closure`).
+
+The remaining applicable controls stay `NOT_VERIFIED` until their required evidence class is produced. `NOT_VERIFIED` means evidence is absent/stale/incomplete; it is not equivalent to a discovered vulnerability and must not be silently converted to PASS.
+
+Current blocking control IDs are:
+
+`VIBE1-01`, `VIBE1-05`, `VIBE1-06`, `VIBE1-07`, `VIBE1-08`, `VIBE1-13`, `VIBE1-14`, `VIBE1-17`, `VIBE2-09`, `VIBE2-10`, `VIBE2-11`, `VIBE2-13`, `VIBE2-18`, `VIBE2-20`, `CAPT-SUP-01`, `CAPT-SUP-04`, `CAPT-SUP-05`, `CAPT-SUP-06`, `CAPT-SUP-07`.
 
 ## Known substantive/open assurance areas
 
