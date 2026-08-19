@@ -403,7 +403,7 @@ def _gap_result(value: Mapping[str, Any]) -> LabEngineResult:
             "notObservedCount": sum(item["status"] == "not_observed" for item in gaps),
         },
         limitations=(
-            "not_observed means the bounded textual scan observed none of the expectation tokens; it does not prove absence.",
+            "not_observed means the bounded textual scan observed none of the expectation signal tokens after bounded function-word filtering; it does not prove absence.",
             "text_match_found, related_text_found, and partial_text_evidence describe lexical evidence only and do not prove implementation.",
         ),
     )
