@@ -21,12 +21,30 @@ struct InspectorView: View {
                 GroupBox("Next execution") {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Provider").font(.caption).foregroundStyle(.secondary)
-                        TextField("Provider", text: $store.provider)
+                        TextField(
+                            "Provider",
+                            text: Binding(
+                                get: { store.provider },
+                                set: { store.setExecutionProvider($0) }
+                            )
+                        )
                         Text("Model").font(.caption).foregroundStyle(.secondary)
-                        TextField("Model", text: $store.model)
+                        TextField(
+                            "Model",
+                            text: Binding(
+                                get: { store.model },
+                                set: { store.setExecutionModel($0) }
+                            )
+                        )
                         Text("Target root").font(.caption).foregroundStyle(.secondary)
-                        TextField("Target root", text: $store.targetRoot)
-                            .font(.caption.monospaced())
+                        TextField(
+                            "Target root",
+                            text: Binding(
+                                get: { store.targetRoot },
+                                set: { store.setExecutionTargetRoot($0) }
+                            )
+                        )
+                        .font(.caption.monospaced())
                     }
                 }
 

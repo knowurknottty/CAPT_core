@@ -107,6 +107,66 @@ final class CAPTNativeChatWorkspaceTests: XCTestCase {
         XCTAssertEqual(workspace.session(newID)?.model, "new-model")
     }
 
+    func testReconcileActiveApprovalValidityExpiresWhileChatStaysOpen() {
+        let approval = pending(expiresAt: Date(timeIntervalSince1970: 1_000))
+        let old = CAPTNativeSession(
+            id: oldID, missionID: "mission-1", title: "Old",
+            messages: [], provider: "openrouter", model: "model-a",
+            targetRoot: "/repo", pendingApproval: approval
+        )
+        var workspace = CAPTNativeChatWorkspace(
+            sessions: [old], activeSessionID: oldID,
+            now: Date(timeIntervalSince1970: 500)
+        )
+
+        workspace.reconcileActiveApprovalValidity(now: Date(timeIntervalSince1970: 2_000))
+
+        XCTAssertNil(workspace.activePendingApproval)
+        XCTAssertEqual(workspace.activeSession?.missionID, "mission-1")
+        XCTAssertEqual(workspace.activeFlow.phase, .recoverableFailure)
+        XCTAssertEqual(workspace.activeSession?.messages.last?.authorityState, "approval_expired")
+    }
+
+    func testConfigurationMutationInvalidatesBoundApprovalCursor() {
+        let old = CAPTNativeSession(
+            id: oldID, missionID: "mission-1", title: "Old",
+            messages: [], provider: "openrouter", model: "model-a",
+            targetRoot: "/repo", pendingApproval: pending()
+        )
+        var workspace = CAPTNativeChatWorkspace(
+            sessions: [old], activeSessionID: oldID
+        )
+
+        workspace.updateConfiguration(
+            for: oldID, provider: "mtplx", model: "qwen3.8-27b-mtplx", targetRoot: "/repo"
+        )
+
+        XCTAssertNil(workspace.activePendingApproval)
+        XCTAssertEqual(workspace.activeSession?.provider, "mtplx")
+        XCTAssertEqual(workspace.activeSession?.model, "qwen3.8-27b-mtplx")
+        XCTAssertEqual(workspace.activeFlow.phase, .recoverableFailure)
+        XCTAssertEqual(workspace.activeSession?.messages.last?.authorityState, "approval_superseded")
+    }
+
+    func testLateApprovalForSupersededConfigurationIsNotMadeActionable() {
+        var workspace = CAPTNativeChatWorkspace()
+        _ = workspace.newChat(
+            id: oldID, provider: "openrouter", model: "model-a", targetRoot: "/repo"
+        )
+        let origin = workspace.beginPrompt(
+            "first prompt", provider: "openrouter", model: "model-a", targetRoot: "/repo"
+        )!
+
+        workspace.updateConfiguration(
+            for: oldID, provider: "mtplx", model: "qwen3.8-27b-mtplx", targetRoot: "/repo"
+        )
+        workspace.receiveApproval(pending(), for: origin)
+
+        XCTAssertNil(workspace.session(oldID)?.pendingApproval)
+        XCTAssertTrue(workspace.flow(for: oldID).canCompose)
+        XCTAssertEqual(workspace.session(oldID)?.messages.last?.authorityState, "approval_superseded")
+    }
+
     func testActivatingExpiredApprovalClearsLocalCursorButKeepsMission() {
         let approval = pending(expiresAt: Date(timeIntervalSince1970: 1_000))
         let old = CAPTNativeSession(

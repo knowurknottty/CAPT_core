@@ -131,6 +131,10 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         now: Date = Date()
     ) {
         guard let index = index(of: id) else { return }
+        guard approvalMatchesConfiguration(pending, session: sessions[index]) else {
+            supersedeApproval(for: id)
+            return
+        }
         sessions[index].pendingApproval = pending
         if sessions[index].missionID == nil {
             sessions[index].missionID = pending.missionID
@@ -265,10 +269,16 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         targetRoot: String
     ) {
         guard let index = index(of: id) else { return }
+        let changed = sessions[index].provider != provider ||
+            sessions[index].model != model ||
+            sessions[index].targetRoot != targetRoot
         sessions[index].provider = provider
         sessions[index].model = model
         sessions[index].targetRoot = targetRoot
         sessions[index].updatedAt = Date()
+        if changed, sessions[index].pendingApproval != nil || flow(for: id).phase == .requestingApproval {
+            supersedeApproval(for: id)
+        }
     }
 
     public mutating func updateActiveConfiguration(
@@ -282,11 +292,20 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         )
     }
 
+    public mutating func reconcileActiveApprovalValidity(now: Date = Date()) {
+        guard let id = activeSessionID else { return }
+        reconcileApprovalValidity(for: id, now: now)
+    }
+
     private mutating func reconcileApprovalValidity(
         for id: UUID,
         now: Date
     ) {
         guard let pending = session(id)?.pendingApproval else { return }
+        guard let current = session(id), approvalMatchesConfiguration(pending, session: current) else {
+            supersedeApproval(for: id)
+            return
+        }
         switch pending.validity(at: now) {
         case .valid:
             return
@@ -332,6 +351,32 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         ))
         sessions[index].updatedAt = Date()
         flows[id] = CAPTChatFlow(pending: pending)
+    }
+
+    private func approvalMatchesConfiguration(
+        _ pending: CAPTPendingApproval,
+        session: CAPTNativeSession
+    ) -> Bool {
+        pending.provider == session.provider &&
+            pending.model == session.model &&
+            pending.targetRoot == session.targetRoot
+    }
+
+    private mutating func supersedeApproval(for id: UUID) {
+        guard let index = index(of: id) else { return }
+        sessions[index].pendingApproval = nil
+        let message = "Pending approval retired because its bound provider, model, or target changed. Submit the prompt again to mint a fresh approval."
+        if sessions[index].messages.last?.authorityState != "approval_superseded" {
+            sessions[index].messages.append(CAPTChatMessage(
+                role: .system,
+                text: message,
+                authorityState: "approval_superseded"
+            ))
+        }
+        sessions[index].updatedAt = Date()
+        var currentFlow = flow(for: id)
+        currentFlow.approvalSuperseded(message: message)
+        flows[id] = currentFlow
     }
 
     private func index(of id: UUID) -> Int? {

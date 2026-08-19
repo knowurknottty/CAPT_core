@@ -82,6 +82,34 @@ final class CAPTOperatorStore: ObservableObject {
             activeChatFlow.canCompose
     }
 
+    func setExecutionProvider(_ value: String) {
+        persistConfiguration(
+            for: activeSessionID, provider: value, model: model, targetRoot: targetRoot
+        )
+    }
+
+    func setExecutionModel(_ value: String) {
+        persistConfiguration(
+            for: activeSessionID, provider: provider, model: value, targetRoot: targetRoot
+        )
+    }
+
+    func setExecutionTargetRoot(_ value: String) {
+        persistConfiguration(
+            for: activeSessionID, provider: provider, model: model, targetRoot: value
+        )
+    }
+
+    func reconcileActiveApprovalValidity(now: Date = Date()) {
+        let previousRequestID = pendingApproval?.requestID
+        mutateWorkspace { $0.reconcileActiveApprovalValidity(now: now) }
+        guard previousRequestID != pendingApproval?.requestID else { return }
+        updateTaskStateFromActiveFlow()
+        lastError = chatWorkspace.activeSession?.messages.last?.text
+        saveSessions()
+        refreshHistory()
+    }
+
     var providerWarmLabel: String {
         switch providerWarmState {
         case "warming": return "WARMING"
@@ -744,6 +772,10 @@ final class CAPTOperatorStore: ObservableObject {
             }
             saveSessions()
             guard activeSessionID == sessionID else { return }
+            updateTaskStateFromActiveFlow()
+            lastError = activeChatFlow.phase == .recoverableFailure
+                ? chatWorkspace.activeSession?.messages.last?.text
+                : nil
         }
         provider = newProvider
         model = newModel

@@ -131,6 +131,12 @@ public struct CAPTChatFlow: Equatable, Sendable {
         return disposition
     }
 
+    public mutating func approvalSuperseded(message: String) {
+        phase = .recoverableFailure
+        requestID = nil
+        failureMessage = message
+    }
+
     public mutating func reset() {
         phase = .idle
         requestID = nil

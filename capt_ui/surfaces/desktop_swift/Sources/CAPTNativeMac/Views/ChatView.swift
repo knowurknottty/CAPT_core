@@ -61,6 +61,15 @@ struct ChatView: View {
             }
         }
         .navigationTitle(store.activeSessionTitle)
+        .task(id: store.pendingApproval?.requestID) {
+            guard let expiresAt = store.pendingApproval?.expiresAt else { return }
+            let delay = expiresAt.timeIntervalSinceNow
+            if delay > 0 {
+                try? await Task.sleep(for: .seconds(delay))
+            }
+            guard !Task.isCancelled else { return }
+            store.reconcileActiveApprovalValidity()
+        }
     }
 }
 
