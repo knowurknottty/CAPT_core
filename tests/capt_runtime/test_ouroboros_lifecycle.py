@@ -381,3 +381,31 @@ def test_long_approved_dispatch_is_decoupled_from_bounded_task_title(tmp_path: P
         assert task["title"] == "x" * 512
     finally:
         _stop_runtime(client, proc)
+
+
+def test_model_operator_records_baseline_and_result_evidence(tmp_path: Path) -> None:
+    repo = _git_repo(tmp_path, dirty=True)
+    exe, suffix = _fake_hermes(tmp_path), "baseline-evidence"
+    client, _ledger, proc = _start_runtime(tmp_path / "runtime")
+    try:
+        payload = _authorize_model_run(client, _payload(repo, exe, suffix), suffix)
+        receipt = client.command(
+            "run_approved_hermes_inspection", payload, "idem-ouro-baseline-evidence"
+        )
+        claim = _state(client, "cl", suffix)
+        evidence = project_evidence(client, "m-ouro-" + suffix)
+        attached = [item for item in evidence if item["evidenceId"] in claim["evidenceIds"]]
+        assert receipt["status"] == "accepted"
+        assert len(attached) == 2
+        baseline = [
+            item for item in attached
+            if Path(item["evidence"]["artifactPath"]).name == "verification-baseline.json"
+        ]
+        assert len(baseline) == 1
+        assert Path(baseline[0]["evidence"]["artifactPath"]).resolve() != repo.resolve()
+        assert claim["promotionState"] == "proposed"
+        assert _state(client, "t", suffix)["state"] == "awaiting_verification"
+        result = receipt["result"]
+        assert result["verificationBaselineDigest"] == baseline[0]["evidence"]["artifactDigest"]
+    finally:
+        _stop_runtime(client, proc)
