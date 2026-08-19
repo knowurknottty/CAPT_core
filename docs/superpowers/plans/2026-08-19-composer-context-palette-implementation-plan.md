@@ -4,15 +4,15 @@
 
 **Goal:** Add the approved prompt-box capability inventory—Search, Deep Research, Council, Attach Files, Folder/Repo Workspace, Active Apps, Screenshots, Clipboard History, Project/Shared context, Model Selector, and Voice Input—with visible removable pre-send chips.
 
-**Architecture:** The composer owns a local `CAPTComposerContextDraft` describing user-selected eligible inputs/modes. It contains references, not ambient app data or raw quarantined bytes. On Send, the draft is normalized and bound into the approval request; selections can be removed before binding. RuntimeService remains authoritative about actual context/admission.
+**Architecture:** The composer owns a local `CAPTComposerContextDraft` describing user-selected eligible references/modes. It contains references, not ambient app data or raw quarantined bytes. On Send, the draft is normalized and frozen into the approval request. RuntimeService remains authoritative about actual context/admission.
 
-**Tech Stack:** Swift 6/SwiftUI/AppKit; Secure Intake `FileReference`; Projects; existing provider/model registry; existing native chat approval flow; macOS APIs for file/folder picker, screen/window enumeration, pasteboard, and speech input where available.
+**Tech Stack:** Swift 6/SwiftUI/AppKit; Secure Intake `FileReference`; Projects; provider/model registry; existing native approval flow; macOS file/folder, screen/window, pasteboard, and speech APIs behind testable protocols.
 
 **Spec:** `docs/superpowers/specs/2026-08-19-public-release-composer-parity-contract.md` and parent design Part IV.
 
 ## Global Constraints
 
-- Every required inventory item is directly discoverable from the composer or immediate menu.
+- Every required inventory item is directly discoverable from composer/immediate menu.
 - Search and Deep Research are mutually exclusive.
 - Council and ordinary single-model execution are distinct modes.
 - Attach Files never bypasses Secure Intake.
@@ -36,16 +36,15 @@
 
 **Modify:**
 - `ChatView.swift` / `ComposerView` integration only.
-- `CAPTOperatorStore.swift` to own active composer draft per active chat/new chat.
-- `CAPTNativeSessionStore.swift` only if the design chooses persistence of user-selected draft chips; default plan persists selected Project/workspace references but does not persist transient Active App/clipboard selections.
-- `CAPTChatCoordinator.swift` request payload to include normalized `composerContext` binding.
+- `CAPTOperatorStore.swift` for active draft state.
+- `CAPTNativeSessionStore.swift` only for durable Project/workspace selections; transient app/clipboard selection is not persisted by default.
+- `CAPTChatCoordinator.swift` to carry normalized `composerContext` binding.
 
 ---
 
 ### Task 1: Composer draft domain model and precedence
 
-**Interfaces:**
-- Produces `CAPTComposerContextDraft` and `CAPTExecutionMode`.
+**Interfaces:** Produces `CAPTComposerContextDraft`, `CAPTExecutionMode`, `CAPTComposerChipID`.
 
 - [ ] **Step 1: Write RED model tests**
 
@@ -58,39 +57,69 @@
 }
 
 @Test func removingFileChipRemovesReference() {
-    var draft = CAPTComposerContextDraft(fileReferences: [.fixture("upl-1")])
+    var draft = CAPTComposerContextDraft(fileReferenceIDs: ["upl-1"])
     draft.remove(.file("upl-1"))
-    #expect(draft.fileReferences.isEmpty)
+    #expect(draft.fileReferenceIDs.isEmpty)
 }
 ```
 
-- [ ] **Step 2: Implement exact types**
+- [ ] **Step 2: Implement exact types/methods**
 
 ```swift
 public enum CAPTExecutionMode: String, Codable, Sendable { case normal, search, deepResearch }
-public struct CAPTWorkspaceSelection: Codable, Equatable, Sendable { let rootPath: String; let gitHead: String?; let writeRequested: Bool }
-public struct CAPTActiveAppSelection: Codable, Equatable, Sendable { let bundleID: String; let windowID: String?; let snapshotRef: String }
-public struct CAPTClipboardSelection: Codable, Equatable, Sendable { let itemID: String; let contentDigest: String; let preview: String }
-public struct CAPTScreenshotSelection: Codable, Equatable, Sendable { let captureID: String; let fileReferenceID: String }
+
+public struct CAPTWorkspaceSelection: Codable, Equatable, Sendable {
+    public let rootPath: String
+    public let gitHead: String?
+    public let dirtyDigest: String?
+    public let writeRequested: Bool
+}
+
+public struct CAPTActiveAppSelection: Codable, Equatable, Sendable {
+    public let bundleID: String
+    public let windowID: String?
+    public let snapshotRef: String
+}
+
+public struct CAPTClipboardSelection: Codable, Equatable, Sendable {
+    public let itemID: String
+    public let contentDigest: String
+    public let preview: String
+}
+
+public struct CAPTScreenshotSelection: Codable, Equatable, Sendable {
+    public let captureID: String
+    public let fileReferenceID: String
+}
+
+public enum CAPTComposerChipID: Hashable, Sendable {
+    case file(String), workspace, activeApp(String), screenshot(String), clipboard(String), project(UUID), council(UUID), executionMode
+}
+
 public struct CAPTComposerContextDraft: Codable, Equatable, Sendable {
-    var executionMode: CAPTExecutionMode = .normal
-    var fileReferenceIDs: [String] = []
-    var workspace: CAPTWorkspaceSelection?
-    var activeApps: [CAPTActiveAppSelection] = []
-    var screenshots: [CAPTScreenshotSelection] = []
-    var clipboardItems: [CAPTClipboardSelection] = []
-    var projectID: UUID?
-    var councilID: UUID?
+    public var executionMode: CAPTExecutionMode = .normal
+    public var fileReferenceIDs: [String] = []
+    public var workspace: CAPTWorkspaceSelection?
+    public var activeApps: [CAPTActiveAppSelection] = []
+    public var screenshots: [CAPTScreenshotSelection] = []
+    public var clipboardItems: [CAPTClipboardSelection] = []
+    public var projectID: UUID?
+    public var councilID: UUID?
+
+    public init(fileReferenceIDs: [String] = []) { self.fileReferenceIDs = fileReferenceIDs }
+    public mutating func setExecutionMode(_ mode: CAPTExecutionMode) { executionMode = mode }
+    public mutating func remove(_ chip: CAPTComposerChipID) { /* implement exhaustive mutation in this task */ }
 }
 ```
 
-Normalize arrays by stable ID before binding.
+Implement `remove` exhaustively: remove matching stable ID or nil the singleton field; `.executionMode` resets to `.normal`. Normalize arrays by stable ID before binding.
 
 - [ ] **Step 3: Run GREEN and commit**
 
 ```bash
+cd capt_ui/surfaces/desktop_swift
 swift test --filter CAPTComposerContextTests
-git add capt_ui/surfaces/desktop_swift
+git add .
 git commit -m "feat(mac): add composer context draft"
 ```
 
@@ -98,13 +127,9 @@ git commit -m "feat(mac): add composer context draft"
 
 ### Task 2: Capability menu and removable chips
 
-**Interfaces:**
-- `ComposerCapabilityMenu` exposes the literal approved inventory.
-- `ComposerContextChips` renders only active selections.
+**Interfaces:** `ComposerCapabilityMenu` exposes literal approved inventory; `ComposerContextChips` renders active selections.
 
-- [ ] **Step 1: Write menu inventory test**
-
-Define `CAPTComposerCapability.allCases` and assert exact required identifiers:
+- [ ] **Step 1: Write exact inventory test**
 
 ```swift
 #expect(Set(CAPTComposerCapability.allCases.map(\.rawValue)) == Set([
@@ -115,8 +140,6 @@ Define `CAPTComposerCapability.allCases` and assert exact required identifiers:
 
 - [ ] **Step 2: Implement grouped menu**
 
-Visible grouping:
-
 ```text
 Research: Search, Deep Research
 Council: Cohort Council
@@ -124,17 +147,15 @@ Context: Attach Files, Folder / Repo Workspace, Active Apps, Screenshots, Clipbo
 Project: Current Project, Switch Project…
 ```
 
-Model selector and microphone remain visible primary composer controls rather than hidden only in the plus menu.
+Model selector and microphone remain visible primary controls rather than being hidden only in the plus menu.
 
-- [ ] **Step 3: Implement chips**
+- [ ] **Step 3: Implement inspect/remove chips**
 
-Each chip has inspect/remove semantics and accessible labels. Examples: `Search`, `Workspace: CAPT_core`, `2 files`, `Safari window`, `Council: 4C/12V`, `Project: Release Sprint`.
+Examples: `Search`, `Workspace: CAPT_core`, `2 files`, `Safari window`, `Council: 4C/12V`, `Project: Release Sprint`.
 
-- [ ] **Step 4: Verify chip removal mutates only local draft**
+- [ ] **Step 4: Verify local-only mutation and commit**
 
-No runtime call, no Project store mutation, no ledger change.
-
-- [ ] **Step 5: Commit**
+Opening/removing chips makes no runtime call and no ledger change.
 
 ```bash
 git add capt_ui/surfaces/desktop_swift
@@ -145,20 +166,19 @@ git commit -m "feat(mac): add composer capability palette"
 
 ### Task 3: Attach Files integration through Secure Intake
 
-**Interfaces:**
-- Composer action invokes Quarantine intake flow and receives only eligible `FileReference` IDs.
+**Interfaces:** Attach action receives only eligible `FileReference` IDs from Secure Intake.
 
 - [ ] **Step 1: Write RED no-bypass test**
 
-Select a file, stop after `SCANNING`, inspect composer draft: no file reference ID present. Complete `use_in_chat` disposition: exact eligible reference appears.
+Selected file in `SCANNING` state -> no file ref in draft. After explicit `use_in_chat` disposition -> exact cleared ref appears.
 
-- [ ] **Step 2: Wire Attach Files action**
+- [ ] **Step 2: Reuse `AttachmentQuarantineView`**
 
-Reuse `AttachmentQuarantineView`; do not create a second file picker/intake implementation.
+Do not create a second picker/intake implementation.
 
-- [ ] **Step 3: Add pending-scan visual state outside bound chips**
+- [ ] **Step 3: Distinguish scan status from execution chips**
 
-Show `Scanning 1 file…` as intake status, not an active execution chip. Only eligible references become chips.
+`Scanning 1 file…` is status, not a bound chip. Only eligible `FileReference`s become chips.
 
 - [ ] **Step 4: Commit**
 
@@ -171,20 +191,24 @@ git commit -m "feat(mac): route composer attachments through quarantine"
 
 ### Task 4: Folder / Repo Workspace selection
 
-**Interfaces:**
-- Produces `CAPTWorkspaceSelection` with canonical root, repo HEAD when Git, dirty state summary, requested read/write mode.
+**Interfaces:** Produces canonical `CAPTWorkspaceSelection` with root, Git HEAD/dirty digest when applicable, and read/write request.
 
-- [ ] **Step 1: Write RED workspace projection tests**
+- [ ] **Step 1: Write RED projection tests**
 
-Folder selection defaults `writeRequested == false`. Git repo projection captures exact `git rev-parse HEAD` and `git status --porcelain` digest/summary without modifying repo.
+Folder defaults `writeRequested == false`; Git repo captures exact HEAD and digest of `git status --porcelain=v1` without mutation.
 
-- [ ] **Step 2: Implement picker**
+- [ ] **Step 2: Implement folder picker/canonicalization**
 
-Use folder-selection panel. Resolve symlinks/canonical root. When `.git` is present, invoke `git -C <root> rev-parse HEAD` and `git -C <root> status --porcelain=v1` via argument arrays, bounded timeout, sanitized environment.
+Resolve symlinks. Invoke Git via argument arrays with bounded timeout/sanitized environment:
 
-- [ ] **Step 3: Add explicit write request control**
+```text
+git -C <root> rev-parse HEAD
+git -C <root> status --porcelain=v1
+```
 
-UI wording: `Read-only` default; `Request write access…` creates a request flag only. It is not a capability grant.
+- [ ] **Step 3: Add explicit write request**
+
+UI default `Read-only`; `Request write access…` sets only `writeRequested=true`. It does not grant capability.
 
 - [ ] **Step 4: Commit**
 
@@ -197,24 +221,23 @@ git commit -m "feat(mac): add workspace selection to composer"
 
 ### Task 5: Active Apps, Screenshots, Clipboard History
 
-**Interfaces:**
-- Each selection produces a bounded snapshot/reference, not ambient live authority.
+**Interfaces:** Each creates a bounded selected reference; no ambient live authority.
 
-- [ ] **Step 1: Implement explicit Active App/window inventory**
+- [ ] **Step 1: Active App explicit inventory**
 
-Use `NSWorkspace.shared.runningApplications` for app listing. Window/screen capture capability must remain subject to macOS privacy permissions. Selecting an app alone stores bundle ID/display metadata; selecting content produces a bounded snapshot reference.
+Use `NSWorkspace.shared.runningApplications` for app listing. Window/screen content requires explicit selection and macOS privacy permission. App selection stores bundle/display identity only until a bounded snapshot is actually captured.
 
-- [ ] **Step 2: Implement Screenshot flow**
+- [ ] **Step 2: Screenshot flow**
 
-Choices: Screen, Window, Region, Recent Screenshot. Persisted captures route their resulting file through Secure Intake and produce a cleared `FileReference` before context eligibility.
+Choices exactly: Screen, Window, Region, Recent Screenshot. Persisted capture file routes through Secure Intake before becoming a `FileReference`.
 
-- [ ] **Step 3: Implement Clipboard picker**
+- [ ] **Step 3: Clipboard picker**
 
-Initial public release reads the current pasteboard plus an in-app history only for items CAPT itself observed while enabled. Persistent history remains opt-in. Each selected item stores digest + preview + selected payload reference; never auto-add all history.
+Initial public release exposes current pasteboard plus an in-app history of items CAPT observed while history was explicitly enabled. Persistent history is opt-in. Each selected item carries digest + bounded preview + payload reference.
 
-- [ ] **Step 4: Write privacy tests**
+- [ ] **Step 4: Privacy tests**
 
-No selection -> no app/screenshot/clipboard context. Clearing a chip removes context. Disconnect/new chat clears transient app/clipboard selections unless user intentionally pins them to Project context.
+No selection -> no context. Removing chip -> no context. New Chat/disconnect clears transient Active App/clipboard selections unless user explicitly stores them in a Project-compatible artifact flow.
 
 - [ ] **Step 5: Commit**
 
@@ -227,26 +250,23 @@ git commit -m "feat(mac): add explicit app screenshot and clipboard context"
 
 ### Task 6: Project selector, model selector, voice input
 
-**Interfaces:**
-- Project chip references Projects subsystem.
-- Model selector keeps existing provider/model behavior and warm state.
-- Voice creates editable text only.
+**Interfaces:** Project consumes Projects subsystem; model keeps current provider/model + warm-state behavior; voice produces editable draft text only.
 
-- [ ] **Step 1: Add Project selection**
+- [ ] **Step 1: Add current Project control**
 
-Current Project visible near composer. Switching updates local draft/session organization; it does not dispatch or mutate RuntimeService.
+Switching Project updates local organizational/context draft only.
 
-- [ ] **Step 2: Preserve model/provider selector and warm indicator**
+- [ ] **Step 2: Preserve model selector / Council distinction**
 
-When Council is off, selected provider/model is the single-model path. When Council is on, label primary model as default/synthesis Cohort if configured; never silently disable Council.
+Council off: provider/model is the single-model path. Council on: primary model may serve as explicit default/synthesis Cohort but cannot silently collapse Council.
 
-- [ ] **Step 3: Add voice input adapter**
+- [ ] **Step 3: Add speech adapter protocol**
 
-Use platform speech support behind a protocol so tests inject transcripts. Transcript inserts into `draft` and remains editable. Send still follows the normal approval path.
+Tests inject transcripts. Captured transcript is inserted into the editable composer draft; ordinary Send/approval flow remains mandatory.
 
-- [ ] **Step 4: Add voice persistence test**
+- [ ] **Step 4: Verify audio retention default**
 
-Audio bytes are not stored in session model by default; only the edited text is submitted/persisted unless a future explicit retention setting says otherwise.
+Session persistence contains edited text, not raw audio bytes, unless a future explicit retention setting changes policy.
 
 - [ ] **Step 5: Commit**
 
@@ -257,30 +277,27 @@ git commit -m "feat(mac): complete composer project model and voice controls"
 
 ---
 
-### Task 7: Bind normalized composer context into approval
+### Task 7: Freeze/bind normalized composer context at Send
 
-**Interfaces:**
-- `CAPTChatCoordinator.requestApproval` adds deterministic `composerContext`/digest.
-- Runtime approval binding persists/validates the offered context-selection digest.
+**Interfaces:** `CAPTChatCoordinator.requestApproval` carries deterministic `composerContext` + digest.
 
-- [ ] **Step 1: Write RED binding mutation test**
+- [ ] **Step 1: Write RED mutation test**
 
-Approve with file ref A + workspace HEAD X; run with file ref B or HEAD Y. Expect pre-dispatch `AUTHORITYVIOLATION` with context-binding mismatch and zero DriverRuns created.
+Approve file A + workspace HEAD X; offer file B or HEAD Y at run -> pre-dispatch `AUTHORITYVIOLATION`, zero DriverRuns.
 
-- [ ] **Step 2: Implement deterministic normalization**
+- [ ] **Step 2: Normalize only stable execution inputs**
 
-Only stable IDs/digests/canonical roots enter binding. Exclude UI previews, chip order, colors, window positions.
+Include stable IDs/digests/canonical roots. Exclude UI previews, chip order, colors, window positions, warm latency.
 
-- [ ] **Step 3: Make `submitPrompt` snapshot draft before async approval request**
+- [ ] **Step 3: Snapshot draft synchronously on Send**
 
-Once Send is pressed, freeze the normalized draft for that pending approval. Subsequent UI edits apply to the next prompt and cannot mutate the in-flight binding.
+Freeze normalized draft before async approval begins. Later UI edits apply only to the next request.
 
 - [ ] **Step 4: Run authority tests and commit**
 
 ```bash
 python -m pytest tests/capt_runtime/test_prompt_approval_binding.py -q
 cd capt_ui/surfaces/desktop_swift && swift test
-
 git add capt_runtime desktop capt_ui/surfaces/desktop_swift tests
 git commit -m "feat(runtime): bind composer context to approved execution"
 ```
@@ -289,27 +306,10 @@ git commit -m "feat(runtime): bind composer context to approved execution"
 
 ### Task 8: Composer parity acceptance
 
-- [ ] **Step 1: UI inventory acceptance**
-
-Verify every required capability is reachable from the composer or immediate menu.
-
-- [ ] **Step 2: Precedence acceptance**
-
-Search -> Deep Research replaces mode; Council remains distinct from primary model; cleared Project + explicit attachments combine as eligible references; no pending scan is bound.
-
-- [ ] **Step 3: Privacy acceptance**
-
-No app/clipboard/screenshot data enters draft absent explicit selection. Removing each chip removes the corresponding normalized input.
-
-- [ ] **Step 4: Ledger neutrality**
-
-Opening menus, selecting/removing local context, switching Project/model, and editing voice transcript do not change EventStore state. Only governed Send/approval/admission may do so.
-
-- [ ] **Step 5: Full tests/build**
-
-```bash
-python -m pytest -q
-cd capt_ui/surfaces/desktop_swift
-swift test
-swift build --product CAPTNativeMac
-```
+- [ ] Verify every required capability is reachable from composer/immediate menu.
+- [ ] Verify Search -> Deep Research replacement and Council/model distinction.
+- [ ] Verify no pending scan becomes bound context.
+- [ ] Verify no app/clipboard/screenshot data enters context absent explicit selection.
+- [ ] Verify chip removal removes normalized input.
+- [ ] Verify menu/context editing remains EventStore-ledger neutral.
+- [ ] Run full Python suite, Swift tests, and `swift build --product CAPTNativeMac` with zero failures.
