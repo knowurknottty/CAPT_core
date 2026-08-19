@@ -70,6 +70,17 @@ extension CAPTOperatorCLITests {
         XCTAssertFalse(CAPTOperatorCLI.requiresPrewarm(local, modelID: ""))
     }
 
+    func testProviderActionRemainsAvailableWhenGlobalSelectionDiffersFromChat() throws {
+        let provider = try CAPTOperatorCLI.decodeProviders(Data(#"[{"id":"mtplx","name":"MTPLX","kind":"local","transport":"openai_compatible","key_ref":"","context_limit":262144,"enabled":true,"selected":true,"health":"green","models":["qwen3.8-27b-mtplx"],"capabilities":["chat"]}]"#.utf8))[0]
+        XCTAssertEqual(
+            CAPTOperatorCLI.providerActionLabel(provider: provider, executionProviderID: "ollama"),
+            "Use"
+        )
+        XCTAssertNil(
+            CAPTOperatorCLI.providerActionLabel(provider: provider, executionProviderID: "mtplx")
+        )
+    }
+
     func testNewChatSelectionPrefersGlobalDefaultOverLegacySession() throws {
         let models = try CAPTOperatorCLI.decodeModels(Data(#"{"active":"qwen3.8-27b-mtplx","provider":"Qwen3.8-27B MTPLX (Local MLX)","kind":"LOCAL","default":{"provider":"mtplx","model":"qwen3.8-27b-mtplx"},"available":["qwen3.8-27b-mtplx"],"favorites":[]}"#.utf8))
         let selection = CAPTOperatorCLI.newChatSelection(

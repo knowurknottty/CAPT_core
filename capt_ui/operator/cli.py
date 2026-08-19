@@ -102,6 +102,14 @@ def cmd_providers(args) -> int:
         _out(res.to_dict(), args.json)
         return 0
     if args.activate:
+        target = pm.get(args.activate)
+        if target is not None and target.models:
+            mm = ModelManager(_cfg(), providers=pm)
+            current_default = mm.summary().get("default") or {}
+            model_id = current_default.get("model")
+            if current_default.get("provider") != target.id or model_id not in target.models:
+                model_id = target.models[0]
+            mm.set_default(target.id, model_id)
         p = pm.activate(args.activate)
         _out({"activated": args.activate, "kind": pm.label(p) if p else "?"}, args.json)
         return 0

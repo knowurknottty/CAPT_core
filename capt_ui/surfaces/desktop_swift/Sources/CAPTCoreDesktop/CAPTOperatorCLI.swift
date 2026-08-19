@@ -110,6 +110,13 @@ public struct CAPTOperatorCLI {
             provider.enabled && !modelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    public static func providerActionLabel(
+        provider: CAPTProviderSnapshot, executionProviderID: String
+    ) -> String? {
+        guard provider.id != executionProviderID else { return nil }
+        return provider.selected ? "Use" : "Activate"
+    }
+
     public static func newChatSelection(
         models: CAPTModelSelectionSnapshot, selectedProviderID: String?,
         fallbackProvider: String, fallbackModel: String
