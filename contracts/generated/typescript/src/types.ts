@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:8ddc70d1780d8b40aae067db27256219ea549ed76720f3bc79491d5dc4c7bfed
+// source digest:  sha256:78f03c5d27dbb4605e8cdb2596956ccdc7eee31c2918356108a7d7dc91efb8f9
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -237,6 +237,7 @@ export interface CheckpointManifest {
   readonly artifactPromotionVersions?: readonly StreamVersionEntry[];
   readonly cohortVersions?: readonly StreamVersionEntry[];
   readonly humanApprovalVersions?: readonly StreamVersionEntry[];
+  readonly replayForkVersions?: readonly StreamVersionEntry[];
 }
 
 /** CleanRecoveryState */
@@ -1290,10 +1291,11 @@ export type EventPayload =
   | ArtifactPromotionDiscardedPayload
   | CohortCreatedPayload
   | CohortSnapshotPersistedPayload
-  | CohortSteeredPayload;
+  | CohortSteeredPayload
+  | ReplayForkCreatedPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "ReplayForkCreated";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -1325,6 +1327,7 @@ export const EventTypeValues = [
   "CohortCreated",
   "CohortSnapshotPersisted",
   "CohortSteered",
+  "ReplayForkCreated",
 ] as const;
 
 /** EvidenceRecordedPayload */
@@ -1376,6 +1379,12 @@ export interface MissionStateChangedPayload {
 export interface PolicyEvaluatedPayload {
   readonly eventType: "PolicyEvaluated";
   readonly policyDecision: PolicyDecision;
+}
+
+/** ReplayForkCreatedPayload */
+export interface ReplayForkCreatedPayload {
+  readonly eventType: "ReplayForkCreated";
+  readonly fork: ReplayForkState;
 }
 
 /** TaskCreatedPayload */
@@ -1603,6 +1612,30 @@ export const PolicyEffectValues = [
   "allow_with_conditions",
   "escalate",
 ] as const;
+
+/** High-level human request to create a new draft mission bound to an exact historical replay position. RuntimeService builds the MissionSpec; transport/UI may not fabricate aggregate state. */
+export interface ReplayForkIntent {
+  readonly forkId: Identifier;
+  readonly missionIntent: OperatorMissionIntent;
+  readonly reason: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly sourceSequence: number;
+}
+
+/** Durable provenance binding for a new governed continuation. Historical authority is never reactivated by this record. */
+export interface ReplayForkState {
+  readonly createdAt: Timestamp;
+  readonly createdBy: ActorRef;
+  readonly forkId: Identifier;
+  readonly historicalAuthorityReactivated: boolean;
+  readonly newMissionId: Identifier;
+  readonly reason: string;
+  readonly sourceChainDigest: Digest;
+  readonly sourceEventId: string | null;
+  readonly sourceSequence: number;
+  readonly sourceStateDigest: Digest;
+  readonly state: "created";
+}
 
 /** Spec 8: 'parallel' is NOT an edge type. Parallelism emerges when predecessor conditions are simultaneously satisfied. */
 export type DependencyCondition = "completed" | "succeeded" | "failed" | "verified" | "approved";

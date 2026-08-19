@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:8ddc70d1780d8b40aae067db27256219ea549ed76720f3bc79491d5dc4c7bfed
+# source digest:  sha256:78f03c5d27dbb4605e8cdb2596956ccdc7eee31c2918356108a7d7dc91efb8f9
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -278,6 +278,7 @@ class CheckpointManifest(object):
     artifactPromotionVersions: List[StreamVersionEntry] = field(default_factory=list)
     cohortVersions: List[StreamVersionEntry] = field(default_factory=list)
     humanApprovalVersions: List[StreamVersionEntry] = field(default_factory=list)
+    replayForkVersions: List[StreamVersionEntry] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -1546,6 +1547,14 @@ class PolicyEvaluatedPayload(object):
 
 
 @dataclass(frozen=True)
+class ReplayForkCreatedPayload(object):
+    """ReplayForkCreatedPayload"""
+
+    eventType: Literal["ReplayForkCreated"]
+    fork: ReplayForkState
+
+
+@dataclass(frozen=True)
 class TaskCreatedPayload(object):
     """TaskCreatedPayload"""
 
@@ -1575,7 +1584,7 @@ class TaskTransitionedPayload(object):
 
 
 # discriminated on 'eventType'
-EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload]
+EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, ReplayForkCreatedPayload]
 
 
 class EventType(str, Enum):
@@ -1611,6 +1620,7 @@ class EventType(str, Enum):
     COHORTCREATED = "CohortCreated"
     COHORTSNAPSHOTPERSISTED = "CohortSnapshotPersisted"
     COHORTSTEERED = "CohortSteered"
+    REPLAYFORKCREATED = "ReplayForkCreated"
 
 
 @dataclass(frozen=True)
@@ -1839,6 +1849,34 @@ class PolicyEffect(str, Enum):
     DENY = "deny"
     ALLOW_WITH_CONDITIONS = "allow_with_conditions"
     ESCALATE = "escalate"
+
+
+@dataclass(frozen=True)
+class ReplayForkIntent(object):
+    """High-level human request to create a new draft mission bound to an exact historical replay position. RuntimeService builds the MissionSpec; transport/UI may not fabricate aggregate state."""
+
+    forkId: Identifier
+    missionIntent: OperatorMissionIntent
+    reason: str
+    schemaVersion: SchemaVersion
+    sourceSequence: int
+
+
+@dataclass(frozen=True)
+class ReplayForkState(object):
+    """Durable provenance binding for a new governed continuation. Historical authority is never reactivated by this record."""
+
+    createdAt: Timestamp
+    createdBy: ActorRef
+    forkId: Identifier
+    historicalAuthorityReactivated: bool
+    newMissionId: Identifier
+    reason: str
+    sourceChainDigest: Digest
+    sourceEventId: Optional[str]
+    sourceSequence: int
+    sourceStateDigest: Digest
+    state: Literal["created"]
 
 
 class DependencyCondition(str, Enum):

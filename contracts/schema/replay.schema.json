@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.capt.dev/replay.schema.json",
+  "title": "CAPT historical replay and fork contracts",
+  "x-domain": "replay",
+  "$defs": {
+    "ReplayForkState": {
+      "title": "ReplayForkState",
+      "description": "Durable provenance binding for a new governed continuation. Historical authority is never reactivated by this record.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "forkId",
+        "sourceSequence",
+        "sourceEventId",
+        "sourceStateDigest",
+        "sourceChainDigest",
+        "newMissionId",
+        "reason",
+        "createdBy",
+        "createdAt",
+        "historicalAuthorityReactivated",
+        "state"
+      ],
+      "properties": {
+        "forkId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "sourceSequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sourceEventId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "sourceStateDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "newMissionId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "createdBy": {
+          "$ref": "common.schema.json#/$defs/ActorRef"
+        },
+        "createdAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "historicalAuthorityReactivated": {
+          "type": "boolean",
+          "const": false
+        },
+        "state": {
+          "type": "string",
+          "const": "created"
+        },
+        "sourceChainDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        }
+      }
+    },
+    "ReplayForkIntent": {
+      "title": "ReplayForkIntent",
+      "description": "High-level human request to create a new draft mission bound to an exact historical replay position. RuntimeService builds the MissionSpec; transport/UI may not fabricate aggregate state.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "forkId",
+        "sourceSequence",
+        "reason",
+        "missionIntent"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "forkId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "sourceSequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "missionIntent": {
+          "$ref": "common.schema.json#/$defs/OperatorMissionIntent"
+        }
+      }
+    }
+  }
+}

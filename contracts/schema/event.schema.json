@@ -38,7 +38,8 @@
         "ArtifactPromotionDiscarded",
         "CohortCreated",
         "CohortSnapshotPersisted",
-        "CohortSteered"
+        "CohortSteered",
+        "ReplayForkCreated"
       ]
     },
     "EventPayload": {
@@ -676,6 +677,24 @@
             },
             "steer": {
               "$ref": "upgrade.schema.json#/$defs/CohortSteer"
+            }
+          }
+        },
+        {
+          "title": "ReplayForkCreatedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "fork"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "ReplayForkCreated"
+            },
+            "fork": {
+              "$ref": "replay.schema.json#/$defs/ReplayForkState"
             }
           }
         }

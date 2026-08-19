@@ -141,6 +141,22 @@ class Operator:
         return project_capability_leases(states, now=now)
 
     # -- governed controls ------------------------------------------------
+    def replay_state_at(self, global_sequence: int, stream_id: Optional[str] = None) -> Dict[str, Any]:
+        """Read deterministic historical state without mutating RuntimeService."""
+        request: Dict[str, Any] = {
+            "op": "replay_state_at",
+            "globalSequence": int(global_sequence),
+        }
+        if stream_id is not None:
+            request["streamId"] = stream_id
+        return self._client._query(request)["result"]  # type: ignore
+
+    def create_replay_fork(
+        self, payload: Dict[str, Any], idempotency_key: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Submit governed replay-fork intent; RuntimeService builds authority state."""
+        return self._client.command("create_replay_fork", payload, idempotency_key)
+
     def create_mission(self, payload: Dict[str, Any], idempotency_key: Optional[str] = None) -> Dict[str, Any]:
         return self._client.command("create_mission", payload, idempotency_key)
 

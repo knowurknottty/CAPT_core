@@ -20,12 +20,13 @@ from .aggregates import (
     DriverRunAggregate,
     HumanApprovalAggregate,
     MissionAggregate,
+    ReplayForkAggregate,
     TaskAggregate,
 )
 from .checkpoint import verify_checkpoint
 from .contracts import digest
 from .errors import IntegrityViolation
-from .store import EventStore
+from .store import EventStore, GENESIS_CHAIN, chain_next
 
 
 class ReplayState(object):
@@ -86,6 +87,7 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         "HumanApprovalRequested",
         "ArtifactPromotionPrepared",
         "CohortCreated",
+        "ReplayForkCreated",
     )
     if event_type not in _CREATION_EVENTS and current is None:
         # A mutation event on a stream with no prior state means the ledger is
@@ -184,6 +186,8 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
             steer["steeredBy"],
             steer["steeredAt"],
         )
+    elif event_type == "ReplayForkCreated":
+        nxt = ReplayForkAggregate.create(payload["fork"])
     elif event_type in ("CheckpointCreated", "MissionResumed"):
         # Bookkeeping events: they advance the stream version but carry no
         # aggregate state change.
@@ -196,28 +200,77 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
     state.applied += 1
 
 
-def full_replay(store: EventStore) -> ReplayState:
-    """Fold the entire ledger from the origin."""
+def ledger_identity_to_sequence(store: EventStore, target_sequence: int) -> Dict[str, Any]:
+    """Return immutable append-only ledger-prefix identity through a sequence."""
     store.verify_chain()
+    head = store.head_sequence()
+    if target_sequence < 0:
+        raise ValueError("target_sequence must be >= 0")
+    if target_sequence > head:
+        raise ValueError(
+            "target_sequence %d exceeds ledger head %d" % (target_sequence, head)
+        )
+    chain = GENESIS_CHAIN
+    event_id = None
+    for envelope in store.read_events(after_sequence=0):
+        sequence = int(envelope["globalSequence"])
+        if sequence > target_sequence:
+            break
+        chain = chain_next(chain, envelope["payloadDigest"], envelope["eventId"])
+        event_id = envelope["eventId"]
+    return {
+        "globalSequence": int(target_sequence),
+        "eventId": event_id,
+        "chainDigest": chain,
+    }
+
+
+def replay_to_sequence(store: EventStore, target_sequence: int) -> ReplayState:
+    """Reconstruct authoritative state exactly through ``target_sequence``."""
+    store.verify_chain()
+    head = store.head_sequence()
+    if target_sequence < 0:
+        raise ValueError("target_sequence must be >= 0")
+    if target_sequence > head:
+        raise ValueError(
+            "target_sequence %d exceeds ledger head %d" % (target_sequence, head)
+        )
     state = ReplayState()
     for envelope in store.read_events(after_sequence=0):
+        if int(envelope["globalSequence"]) > target_sequence:
+            break
         _apply(state, envelope)
     return state
 
 
-def checkpoint_replay(
-    store: EventStore, manifest: Dict[str, Any]
-) -> ReplayState:
-    """Load a verified checkpoint's aggregate versions, then fold the tail.
+def full_replay(store: EventStore) -> ReplayState:
+    """Fold the entire verified ledger from origin."""
+    return replay_to_sequence(store, store.head_sequence())
 
-    The checkpoint is verified BEFORE it is trusted. A corrupted manifest
-    aborts recovery rather than seeding replay with bad state.
+
+def checkpoint_replay(store: EventStore, manifest: Dict[str, Any]) -> ReplayState:
+    """Verify exact checkpoint history, reconstruct its prefix, then fold tail.
+
+    Never seeds a historical version with the present-day aggregate snapshot.
     """
     verify_checkpoint(manifest)
-    store.verify_chain()
+    position = int(manifest["ledgerPosition"]["globalSequence"])
+    state = replay_to_sequence(store, position)
 
-    state = ReplayState()
-    for field in (
+    prefix_identity = ledger_identity_to_sequence(store, position)
+    if prefix_identity["chainDigest"] != manifest["ledgerDigest"]:
+        raise IntegrityViolation(
+            "checkpoint ledger digest mismatch at globalSequence %d" % position
+        )
+    if prefix_identity["eventId"] != manifest["ledgerPosition"].get("eventId"):
+        raise IntegrityViolation(
+            "checkpoint ledgerPosition.eventId mismatch at globalSequence %d" % position
+        )
+
+    # Required canonical fields plus optional extension arrays. The ledger
+    # prefix digest binds every event even when an older compatible manifest
+    # predates a newer optional version-array field.
+    fields = (
         "missionVersions",
         "taskVersions",
         "capabilityVersions",
@@ -226,22 +279,20 @@ def checkpoint_replay(
         "humanApprovalVersions",
         "artifactPromotionVersions",
         "cohortVersions",
-    ):
-        for entry in manifest[field]:
-            stream_state = store.load_state(entry["streamId"])
-            if stream_state is None:
+        "replayForkVersions",
+    )
+    for field in fields:
+        for entry in manifest.get(field, []):
+            actual = state.versions.get(entry["streamId"])
+            if actual != entry["version"]:
                 raise IntegrityViolation(
-                    "checkpoint references stream %s that the store does not have"
-                    % entry["streamId"]
+                    "checkpoint stream %s version mismatch: manifest %s, replay %s"
+                    % (entry["streamId"], entry["version"], actual)
                 )
-            state.aggregates[entry["streamId"]] = stream_state
-            state.versions[entry["streamId"]] = entry["version"]
 
-    position = manifest["ledgerPosition"]["globalSequence"]
     for envelope in store.read_events(after_sequence=position):
         _apply(state, envelope)
     return state
-
 
 def replay_equivalent(left: ReplayState, right: ReplayState) -> bool:
     """Deterministic state equality by content digest."""
