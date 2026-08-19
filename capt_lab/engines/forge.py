@@ -300,18 +300,29 @@ def _tokens(text: str) -> List[str]:
     return [token for token in re.findall(r"[A-Za-z0-9_]+", text.lower()) if len(token) > 2]
 
 
+def _token_observed(token: str, observed: set[str]) -> bool:
+    # Keep lexical matching conservative: simple s/es inflections are related;
+    # arbitrary substrings (audit/auditing, trail/trailer) are not token hits.
+    if token in observed or f"{token}s" in observed:
+        return True
+    return token.endswith(("s", "x", "z", "ch", "sh")) and f"{token}es" in observed
+
+
 def _gap_entries(scan: _Scan, expectations: List[str]) -> List[Dict[str, Any]]:
     corpus = "\n".join(scan.texts[path] for path in sorted(scan.texts)).lower()
+    corpus_tokens = set(_tokens(corpus))
+    path_tokens = {path: set(_tokens(text)) for path, text in scan.texts.items()}
     entries = []
     for expectation in expectations:
         phrase = expectation.lower()
         phrase_found = phrase in corpus
-        tokens = _tokens(expectation)
-        token_hits = sum(1 for token in set(tokens) if token in corpus)
-        coverage = token_hits / len(set(tokens)) if tokens else 0.0
+        tokens = set(_tokens(expectation))
+        token_hits = sum(1 for token in tokens if _token_observed(token, corpus_tokens))
+        coverage = token_hits / len(tokens) if tokens else 0.0
         observed_paths = [
             path for path, text in sorted(scan.texts.items())
-            if phrase in text.lower() or (tokens and all(token in text.lower() for token in set(tokens)))
+            if phrase in text.lower()
+            or (tokens and all(_token_observed(token, path_tokens[path]) for token in tokens))
         ][:16]
         if phrase_found:
             status = "text_match_found"
