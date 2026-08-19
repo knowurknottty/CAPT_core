@@ -304,8 +304,12 @@ _LEXICAL_STOPWORDS = frozenset({
 
 
 def _tokens(text: str) -> List[str]:
+    # Treat common code-identifier boundaries as lexical separators so bounded
+    # repository evidence can relate DriverRun/driver_run to "driver run".
+    separated = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", " ", text)
+    separated = re.sub(r"(?<=[A-Z])(?=[A-Z][a-z])", " ", separated)
     return [
-        token for token in re.findall(r"[A-Za-z0-9_]+", text.lower())
+        token for token in re.findall(r"[A-Za-z0-9]+", separated.lower())
         if len(token) > 2 and token not in _LEXICAL_STOPWORDS
     ]
 
@@ -333,13 +337,13 @@ def _token_observed(token: str, observed: set[str]) -> bool:
 
 
 def _gap_entries(scan: _Scan, expectations: List[str]) -> List[Dict[str, Any]]:
-    corpus = "\n".join(scan.texts[path] for path in sorted(scan.texts)).lower()
+    corpus = "\n".join(scan.texts[path] for path in sorted(scan.texts))
     corpus_tokens = set(_tokens(corpus))
     path_tokens = {path: set(_tokens(text)) for path, text in scan.texts.items()}
     entries = []
     for expectation in expectations:
         phrase = expectation.lower()
-        phrase_found = phrase in corpus
+        phrase_found = phrase in corpus.lower()
         tokens = set(_tokens(expectation))
         token_hits = sum(1 for token in tokens if _token_observed(token, corpus_tokens))
         coverage = token_hits / len(tokens) if tokens else 0.0
