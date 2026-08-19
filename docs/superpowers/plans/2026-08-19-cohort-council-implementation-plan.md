@@ -4,9 +4,9 @@
 
 **Goal:** Add configurable multi-model Cohort Councils with up to 10 distinct Cohorts and 111 logical Vessels, governed scheduling, dissent-preserving synthesis, and no conflation of majority with verification.
 
-**Architecture:** The UI builds a pure Council definition. RuntimeService validates hard limits, provider/model availability, capability requirements, and workload ceilings before creating execution work. Vessels are logical perspective/configuration units scheduled under Execution Governor concurrency; they are not processes and do not mint authority. Council observations remain evidence; synthesis records agreement/disagreement without auto-verification.
+**Architecture:** UI builds a pure Council definition. RuntimeService validates hard limits/provider-model availability/capabilities/workload ceilings before canonical admission. Vessels are logical perspective/configuration units scheduled under resource/provider concurrency; they are not processes or authority principals. Every external call remains a governed execution record. Council synthesis is an untrusted observation that preserves disagreement.
 
-**Tech Stack:** Python RuntimeService/provider registry/Execution Governor/EventStore; existing approval and DriverRun concepts; Swift 6/SwiftUI builder; ResultPresentation; workload budgets; pytest/Swift tests.
+**Tech Stack:** Python RuntimeService/provider registry/Execution Governor/EventStore; approval/DriverRun concepts; workload budgets; Swift 6/SwiftUI; Human-First Results; pytest/Swift tests.
 
 **Spec:** Parent design §§30-35 and composer parity contract Cohort Council section.
 
@@ -14,13 +14,14 @@
 
 - `MAX_DISTINCT_COHORTS = 10`.
 - `MAX_LOGICAL_VESSELS = 111`.
-- Cohort is a model/provider cognitive source.
-- Vessel is a bounded execution perspective/configuration; Vessel != model/process/authority principal.
-- Logical Vessel count and execution concurrency are different limits.
-- Council majority does not create Verification/ClaimGuard acceptance.
-- Minority findings and abstentions/insufficient-evidence positions survive synthesis.
-- Every external model call is still a governed DriverRun/equivalent canonical execution record.
-- Council definition mutation after approval requires a fresh approval.
+- Cohort = provider/model cognitive source.
+- Vessel = bounded execution perspective/configuration; Vessel != model/process/authority principal.
+- Logical Vessel count != execution concurrency.
+- Council majority never creates Verification or ClaimGuard acceptance.
+- Minority, abstention, insufficient-evidence, and unresolved positions survive synthesis.
+- Each external model call has canonical DriverRun/provenance linkage.
+- Council mutation after approval requires a fresh approval.
+- Child Vessels inherit, and may narrow but never expand, parent approved scope/capabilities.
 
 ## File Structure
 
@@ -35,29 +36,26 @@
 **Modify:**
 - `capt_runtime/model_approval_binding.py`
 - `desktop/capt_runtime_service.py`
-- provider/model registry projection used by native app.
+- current provider/model registry projection.
 - `CAPTOperatorStore.swift`
 - `ComposerCapabilityMenu.swift`
 - `CAPTChatCoordinator.swift`
 
 ---
 
-### Task 1: Council/Cohort/Vessel immutable models and hard limits
+### Task 1: Immutable Council/Cohort/Vessel models and hard limits
 
-**Interfaces:**
-- Python: `CouncilDefinition`, `CohortDefinition`, `VesselDefinition`, `validate_council()`.
-- Swift mirrors the same stable identifiers/limits for local UX validation.
+**Interfaces:** Python `CouncilDefinition`, `CohortDefinition`, `VesselDefinition`, `validate_council()`; Swift mirrors IDs/limits for UX validation.
 
-- [ ] **Step 1: Write RED Python hard-limit tests**
+- [ ] **Step 1: Write RED hard-limit tests**
 
 ```python
 from capt_runtime.council import CouncilValidationError, validate_council
 
 
 def test_rejects_more_than_ten_distinct_cohorts():
-    council = make_council(cohort_count=11, vessel_count=11)
     with pytest.raises(CouncilValidationError, match="MAX_DISTINCT_COHORTS"):
-        validate_council(council)
+        validate_council(make_council(cohort_count=11, vessel_count=11))
 
 
 def test_allows_111_logical_vessels_but_rejects_112():
@@ -66,11 +64,16 @@ def test_allows_111_logical_vessels_but_rejects_112():
         validate_council(make_council(cohort_count=10, vessel_count=112))
 ```
 
-- [ ] **Step 2: Implement Python dataclasses/constants**
+- [ ] **Step 2: Implement exact Python types/constants**
 
 ```python
+from dataclasses import dataclass
+
 MAX_DISTINCT_COHORTS = 10
 MAX_LOGICAL_VESSELS = 111
+SYNTHESIS_MODES = frozenset({"convergent", "debate", "independent_vote", "adversarial_tournament"})
+
+class CouncilValidationError(ValueError): pass
 
 @dataclass(frozen=True)
 class CohortDefinition:
@@ -94,11 +97,11 @@ class CouncilDefinition:
     synthesis_cohort_id: str | None
 ```
 
-Validate unique IDs, Vessel cohort references, distinct provider/model identities, allowed synthesis modes: `convergent`, `debate`, `independent_vote`, `adversarial_tournament`.
+`validate_council` enforces non-empty/unique IDs, <=10 Cohorts, <=111 Vessels, distinct `(provider_id, model_id)` Cohort identities, every Vessel cohort ref exists, synthesis mode allowed, optional synthesis Cohort exists, role/instructions bounded and non-empty after trim.
 
-- [ ] **Step 3: Implement Swift mirrors and tests**
+- [ ] **Step 3: Implement Swift mirrors/tests**
 
-Local UI prevents obvious over-limit configuration but RuntimeService validation remains authoritative.
+Local builder prevents obvious over-limit edits, but RuntimeService validation stays authoritative.
 
 - [ ] **Step 4: Commit**
 
@@ -109,59 +112,86 @@ git commit -m "feat(council): add cohort and vessel contracts"
 
 ---
 
-### Task 2: Council digest and approval binding
+### Task 2: Canonical Council digest and approval binding
 
-**Interfaces:**
-- Produces `council_digest(definition) -> sha256:...`.
-- Approval binding carries `councilId` and exact `councilDigest` when Council mode is enabled.
+**Interfaces:** `council_digest(definition) -> sha256:...`; approval carries `councilId`/`councilDigest` when enabled.
 
 - [ ] **Step 1: Write RED canonicalization/mutation tests**
 
-Same Council with different input array ordering normalizes to one digest after sorting by stable IDs. Changing a Vessel instruction, model, synthesis mode, or membership changes digest.
+Reordered input arrays normalize to same digest. Changing Vessel instruction, provider/model, synthesis mode, synthesis Cohort, or membership changes digest.
 
-- [ ] **Step 2: Implement canonical digest**
+- [ ] **Step 2: Implement canonical representation**
 
-Canonical JSON contains stable IDs/provider/model/role/instructions/synthesis only. Exclude display colors, UI ordering, warm latency, and transient provider health.
+Sort Cohorts/Vessels by stable ID; JSON sorted keys/compact separators; include stable semantic fields only. Exclude display order/colors, warm latency, provider health.
 
 - [ ] **Step 3: Bind into approval**
 
-Approve Council A then offer Council B to execution; reject before any child DriverRun creation.
+Approve Council A then execute Council B -> `MODEL_PROMPT_APPROVAL_COUNCIL_MISMATCH` before parent/child dispatch.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add capt_runtime desktop tests
+git add capt_runtime/model_approval_binding.py capt_runtime/council.py desktop tests
 git commit -m "feat(runtime): bind council definition to approval"
 ```
 
 ---
 
-### Task 3: Provider/model availability and resource-plan validation
+### Task 3: Typed bounded execution planner
 
-**Interfaces:**
-- Produces `CouncilExecutionPlan` with logical Vessel queue and max concurrency.
+**Interfaces:** Produces `VesselScheduleItem`, `CouncilWave`, `CouncilExecutionPlan`, `plan_council()`.
 
-- [ ] **Step 1: Write RED resource tests**
+- [ ] **Step 1: Write RED concurrency test**
 
 ```python
 def test_111_vessels_do_not_imply_111_concurrency():
-    p = plan_council(make_council(10, 111), max_concurrency=4)
+    p = plan_council(
+        make_council(10, 111),
+        provider_available=all_available,
+        provider_concurrency={"mtplx": 1, "remote": 4},
+        global_max_concurrency=4,
+    )
     assert p.logical_vessel_count == 111
-    assert p.max_concurrency == 4
-    assert len(p.waves) >= 28
+    assert p.global_max_concurrency == 4
+    assert max(len(w.items) for w in p.waves) <= 4
 ```
 
-Test missing provider/model rejects before admission; duplicate Cohorts using identical provider/model identity reject as not distinct.
+- [ ] **Step 2: Implement exact schedule types**
 
-- [ ] **Step 2: Implement planner**
+```python
+@dataclass(frozen=True)
+class VesselScheduleItem:
+    vessel_id: str
+    cohort_id: str
+    provider_id: str
+    model_id: str
+    ordinal: int
 
-Inputs: validated Council, provider registry snapshot, workload profile, Execution Governor/resource ceiling. Output immutable ordered Vessel schedule/waves. Default local max concurrency must be conservative and derive from resource policy, never `len(vessels)`.
+@dataclass(frozen=True)
+class CouncilWave:
+    wave_index: int
+    items: tuple[VesselScheduleItem, ...]
 
-- [ ] **Step 3: Add local-provider serialization rule where required**
+@dataclass(frozen=True)
+class CouncilExecutionPlan:
+    council_id: str
+    council_digest: str
+    logical_vessel_count: int
+    global_max_concurrency: int
+    waves: tuple[CouncilWave, ...]
+```
 
-For MTPLX current serial server configuration, planner max concurrency for that provider is 1 even if overall Council concurrency is higher; other remote providers may occupy other slots according to policy.
+- [ ] **Step 3: Implement deterministic wave planner**
 
-- [ ] **Step 4: Commit**
+Validate first. Sort Vessels by stable `vessel_id`; greedily fill each wave up to `global_max_concurrency` while not exceeding per-provider concurrency. Provider unavailable/missing model rejects planning before admission. `(provider,model)` duplicate Cohort identity is invalid from Task 1.
+
+For current MTPLX serial endpoint, provider concurrency input is 1. This is configuration/resource policy, not a hard-coded special case inside generic planner.
+
+- [ ] **Step 4: Add impossible-policy test**
+
+`global_max_concurrency < 1` or provider concurrency <1 for a referenced provider rejects rather than creating empty/infinite scheduling loops.
+
+- [ ] **Step 5: Commit**
 
 ```bash
 git add capt_runtime/council.py tests/capt_runtime/test_council.py
@@ -170,26 +200,25 @@ git commit -m "feat(council): plan bounded vessel execution"
 
 ---
 
-### Task 4: Native Council builder UI without dispatch
+### Task 4: Native Council builder without dispatch authority
 
-**Interfaces:**
-- User can add/remove up to 10 Cohorts and up to 111 Vessels, assign Vessel->Cohort, role/instructions, synthesis mode/cohort.
+**Interfaces:** Add/remove <=10 Cohorts, <=111 Vessels, assign Vessel->Cohort, role/instructions, synthesis mode/cohort.
 
-- [ ] **Step 1: Write Swift builder state tests**
+- [ ] **Step 1: Write builder state tests**
 
-Attempt Cohort #11 and Vessel #112 -> local validation error; existing definition unchanged. Removing a Cohort with assigned Vessels requires explicit reassignment/removal rather than silently orphaning them.
+Cohort #11/Vessel #112 yields local validation error with existing definition unchanged. Removing a Cohort with assigned Vessels requires explicit reassignment/removal.
 
-- [ ] **Step 2: Implement `CouncilBuilderView`**
+- [ ] **Step 2: Implement builder**
 
-Display counts `Cohorts n/10`, `Vessels n/111`. Cohort picker reads live provider/model registry. Vessel editor exposes role/instructions and Cohort association. Explain Cohort/Vessel in tooltips/plain-language secondary copy.
+Display `Cohorts n/10`, `Vessels n/111`. Cohort picker reads live provider/model registry. Vessel editor shows role/instructions/Cohort. Plain-language secondary text explains Cohort vs Vessel.
 
-- [ ] **Step 3: Add synthesis controls**
+- [ ] **Step 3: Implement exact synthesis controls**
 
-Modes exactly: Convergent adjudication, Debate, Independent vote, Adversarial tournament. Optional synthesis Cohort defaults to primary selected model when valid but remains explicit in the saved definition.
+Convergent adjudication, Debate, Independent vote, Adversarial tournament. Optional synthesis Cohort may prefill from primary selected model but is explicitly saved in Council definition.
 
-- [ ] **Step 4: Save Council definitions locally**
+- [ ] **Step 4: Persistence semantics**
 
-Store in Project defaults when user chooses `Save to Project`; otherwise retain per-chat/composer draft. No RuntimeService ledger mutation.
+`Save to Project` writes Council defaults through Project store. Otherwise Council remains per-chat/composer draft. Both are ledger-neutral.
 
 - [ ] **Step 5: Commit**
 
@@ -200,28 +229,31 @@ git commit -m "feat(mac): add cohort council builder"
 
 ---
 
-### Task 5: RuntimeService governed Council admission and child executions
+### Task 5: RuntimeService governed parent admission + child Vessel executions
 
-**Interfaces:**
-- One approved Council request produces a canonical parent task/plan and governed child Vessel executions linked to parent Council ID.
+**Interfaces:** One approved Council execution creates canonical parent plan intent and linked governed child DriverRuns.
 
-- [ ] **Step 1: Write RED lifecycle test with two Cohorts/three Vessels**
+- [ ] **Step 1: Write RED lifecycle test: 2 Cohorts / 3 Vessels**
 
-Assert approval -> admission creates canonical parent execution intent; each dispatched Vessel receives its own DriverRun identity/provenance. No Vessel output is automatically verification.
+Approval/admission binds parent Council digest. Each dispatched Vessel has unique DriverRun + parent Council/task reference + Cohort/Vessel provenance. No Vessel observation is Verification.
 
-- [ ] **Step 2: Implement Council runner inside RuntimeService composition**
+- [ ] **Step 2: Implement immutable preparation/admission**
 
-Prepare full immutable Council plan before consuming approval. Admission atomically binds parent Council digest/intent. Scheduler dispatches child work according to waves/resource leases. On restart, persisted child DriverRun states follow existing no-repeat/reconciliation semantics.
+Prepare/validate entire CouncilExecutionPlan before consuming approval. Admission persists parent execution identity/digest before any child external boundary. Child schedule is derived from the admitted immutable plan, not re-read UI state.
 
-- [ ] **Step 3: Preserve failure isolation**
+- [ ] **Step 3: Execute waves using canonical DriverRun semantics**
 
-One Vessel failure yields failed/abstained Vessel result and does not silently cancel successful siblings unless policy says fail-fast. Exhausted provider/time/resource budget becomes an explicit Council partial-result state.
+For each item, RuntimeService creates/adopts the canonical child run path, capability/resource reservation, dispatch, observation/evidence recording, and finalization. Scope inherits/narrows parent approved scope.
 
-- [ ] **Step 4: Add restart test**
+- [ ] **Step 4: Preserve failure isolation/partial results**
 
-Crash after child A completion and child B running; on recovery, A is not repeated, B follows persisted indeterminate reconciliation, remaining undispatched Vessels resume only if parent task/policy permits and no approval replay is required beyond the already admitted parent plan.
+One Vessel failure marks that Vessel failed/abstained according to result reason and does not erase successful siblings. Exhausted wall-clock/cost/provider ceiling leaves undispatched Vessel IDs in explicit partial state.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Add restart/no-repeat test**
+
+Crash after A complete/B running: A never repeats; B follows persisted indeterminate reconciliation; undispatched C may continue only from admitted parent plan under remaining resource policy. No UI reconstruction or new model choice occurs.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add capt_runtime desktop tests
@@ -230,40 +262,60 @@ git commit -m "feat(runtime): execute governed cohort councils"
 
 ---
 
-### Task 6: Dissent-preserving synthesis and result envelope
+### Task 6: Typed dissent-preserving Council result
 
-**Interfaces:**
-- Produces `CouncilResult` with per-Vessel observations, agreement groups, dissent, abstentions, unresolved conflicts, synthesis observation, verification state separate.
+**Interfaces:** Produces `VesselObservation`, `CouncilAgreementGroup`, `CouncilResult`.
 
 - [ ] **Step 1: Write RED conflict test**
 
-Three Vessels: two say A, one says B with cited evidence. Assert result contains majority group A and minority group B; no `verified=true` field appears solely because 2/3 agree.
+Two Vessels support A, one supports B. Result contains both groups. No verified flag/status is derived from 2/3 agreement.
 
-- [ ] **Step 2: Implement aggregation before synthesis**
+- [ ] **Step 2: Implement exact result types**
 
-Group claims by normalized statement/digest relation, preserving source Vessel IDs and evidence refs. `agreementCount` is descriptive only.
+```python
+@dataclass(frozen=True)
+class VesselObservation:
+    vessel_id: str
+    cohort_id: str
+    driver_run_id: str
+    statement: str
+    evidence_refs: tuple[str, ...]
+    disposition: str  # observed | failed | abstained | insufficient_evidence
 
-- [ ] **Step 3: Implement synthesis prompt/context**
+@dataclass(frozen=True)
+class CouncilAgreementGroup:
+    normalized_statement_digest: str
+    statement: str
+    supporting_vessel_ids: tuple[str, ...]
+    contradicting_vessel_ids: tuple[str, ...]
 
-Synthesis Cohort receives all bounded observations plus explicit instruction to report converged, minority, abstained/insufficient-evidence, and unresolved findings. Synthesis itself is another untrusted observation.
-
-- [ ] **Step 4: Integrate with Human-First Results**
-
-Default card:
-
-```text
-7/10 cohorts agree
-2 disagree
-1 insufficient evidence
-
-Converged findings
-Minority findings
-Unresolved conflicts
+@dataclass(frozen=True)
+class CouncilResult:
+    council_id: str
+    observations: tuple[VesselObservation, ...]
+    agreement_groups: tuple[CouncilAgreementGroup, ...]
+    abstained_vessel_ids: tuple[str, ...]
+    failed_vessel_ids: tuple[str, ...]
+    unresolved_group_digests: tuple[str, ...]
+    synthesis_observation: VesselObservation | None
+    verification_id: str | None
 ```
 
-Technical/raw disclosure contains Vessel/DriverRun IDs and provenance.
+Council aggregation always initializes `verification_id=None`; only a separate VerificationPipeline action may produce one.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Aggregate before synthesis**
+
+Group normalized claim statements/digests preserving all source Vessel IDs/evidence refs. Agreement count is descriptive only.
+
+- [ ] **Step 4: Synthesis remains another governed observation**
+
+Synthesis Cohort receives bounded observations/groups and instruction to report converged, minority, abstained/insufficient, unresolved positions. Its output is stored as `synthesis_observation`, not promoted to truth.
+
+- [ ] **Step 5: Human-first rendering**
+
+Default card shows agreement/dissent counts and sections; Raw details exposes Vessel/Cohort/DriverRun provenance.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add capt_runtime capt_ui/surfaces/desktop_swift tests
@@ -272,22 +324,21 @@ git commit -m "feat(council): preserve dissent in council synthesis"
 
 ---
 
-### Task 7: Council capability/resource/security gates
+### Task 7: Council authority/resource/security gates
 
-**Interfaces:**
-- Each Cohort/provider call must respect provider credentials, local/remote classification, workload/time ceilings, and project/workspace/file capabilities inherited from the approved parent execution.
+**Interfaces:** Every child respects provider credentials/classification, workload/cost ceilings, and parent Project/workspace/file capabilities.
 
-- [ ] **Step 1: Write unauthorized-context test**
+- [ ] **Step 1: Unauthorized scope test**
 
-A Vessel cannot expand filesystem/workspace/file scope beyond the parent approved execution. Attempted scope mutation rejects before child dispatch.
+Vessel attempts filesystem/workspace/file expansion beyond parent approval -> rejection before child dispatch.
 
-- [ ] **Step 2: Write cost/resource ceiling test**
+- [ ] **Step 2: Resource ceiling test**
 
-Set Council budget lower than total requested calls; planner/runtime stops before exceeding ceiling and returns partial Council state with undispatched Vessel IDs.
+Budget expires before all scheduled calls -> stop before exceeding ceiling; explicit partial `undispatched_vessel_ids`; no fabricated results.
 
-- [ ] **Step 3: Write provider-loss test**
+- [ ] **Step 3: Provider-loss test**
 
-Provider disappears after planning but before its Vessel dispatch: mark affected Vessel unavailable; do not substitute another provider/model silently.
+Provider unavailable after planning but before dispatch -> affected Vessel unavailable/failed with evidence; no silent substitution.
 
 - [ ] **Step 4: Commit**
 
@@ -300,27 +351,9 @@ git commit -m "test(council): harden council authority and resource limits"
 
 ### Task 8: Council acceptance
 
-- [ ] **Step 1: Limit matrix**
-
-Validate 1C/1V, 10C/111V, 11C rejection, 112V rejection, invalid Vessel->Cohort reference, duplicate Cohort identity.
-
-- [ ] **Step 2: Local scheduling proof**
-
-With MTPLX + remote cohorts, prove MTPLX Vessel calls serialize at provider concurrency 1 while overall Council can execute other provider slots within policy.
-
-- [ ] **Step 3: Dissent proof**
-
-Construct controlled conflicting outputs; result preserves minority/unresolved state and `verificationId` remains absent until separate VerificationPipeline action.
-
-- [ ] **Step 4: Restart/no-repeat proof**
-
-Prove persisted completed child DriverRuns are never repeated after restart.
-
-- [ ] **Step 5: Full suites/build**
-
-```bash
-python -m pytest -q
-cd capt_ui/surfaces/desktop_swift
-swift test
-swift build --product CAPTNativeMac
-```
+- [ ] Limits: 1C/1V, 10C/111V, reject 11C, reject 112V, invalid Vessel->Cohort, duplicate Cohort identity.
+- [ ] Scheduling: MTPLX concurrency input 1; overall Council may use other provider slots within global policy; never > configured limits.
+- [ ] Dissent: controlled conflicting observations preserve minority/unresolved; `verification_id` stays `None` until separate verification.
+- [ ] Restart: completed child DriverRuns never repeat.
+- [ ] Authority: child scopes cannot expand parent scope; Council config edits alone are ledger-neutral.
+- [ ] Run full Python suite, Swift tests, and `swift build --product CAPTNativeMac` with zero failures.
