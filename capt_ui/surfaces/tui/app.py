@@ -17,6 +17,7 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.css.query import NoMatches
 from textual.reactive import reactive
 from textual.widgets import Button, Checkbox, Footer, Header, Input, Select, Static, TextArea
 
@@ -254,7 +255,14 @@ class CaptTUI(App):
         self._set_status(dashboard.status.health.value)
 
     def _set_status(self, health: str) -> None:
-        self.query_one("#status", StatusBar).status = {
+        try:
+            status_bar = self.query_one("#status", StatusBar)
+        except NoMatches:
+            # Select/Input events may still drain while Textual is unmounting the
+            # screen. Status is presentation-only, so teardown must not turn a
+            # stale UI callback into an application failure.
+            return
+        status_bar.status = {
             "health": health,
             "provider": self._selected_provider,
             "model": self._selected_model,
