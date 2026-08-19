@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add persistent CAPT Projects with instructions, chats, quarantined-cleared files, Skill Foundry references, links, workspace defaults, governance defaults, and Council defaults without turning Project state into RuntimeService authority.
+**Goal:** Add persistent CAPT Projects with instructions, chats, cleared files, Skill Foundry references, links, workspace defaults, governance defaults, and Council defaults without turning Project state into RuntimeService authority.
 
-**Architecture:** Projects are a dedicated encrypted/private local metadata store, separate from the native session cache and EventStore. Project content is eligible context only. RuntimeService/context assembly receives an explicit `ProjectContextReference` snapshot/digest at approval time and chooses what enters the governed ContextPack.
+**Architecture:** Projects use a dedicated encrypted local metadata store, separate from native session cache and EventStore. Project content is eligible context only. RuntimeService/context assembly receives an explicit deterministic `ProjectContextReference` at approval time and remains authoritative about what enters ContextPack.
 
-**Tech Stack:** Swift 6/CryptoKit/Keychain for native Project persistence and UI; Python operator projection only where RuntimeService/context assembly needs deterministic Project references; existing Skill Foundry IDs, `FileReference`, Workspace descriptors, native session IDs.
+**Tech Stack:** Swift 6/CryptoKit/Keychain; Python deterministic Project-context projection; existing Skill Foundry IDs, Secure Intake `FileReference`, Workspace descriptors, native sessions.
 
 **Spec:** `docs/superpowers/specs/2026-08-19-public-release-quarantine-projects-council-design.md` Part III §§19-23.
 
@@ -14,11 +14,11 @@
 
 - Project != Mission.
 - Project membership != ContextPack inclusion.
-- Project instructions are visible user-editable context, never hidden system authority.
-- Project Files must reference Secure Intake `FileReference`s only.
+- Project instructions are visible user-editable context, never hidden authority.
+- Project Files reference Secure Intake `FileReference`s only.
 - Project Skills do not bypass Skill Foundry lifecycle/permissions.
 - Workspace selection does not imply write permission.
-- Project edits must be RuntimeService-ledger neutral.
+- Project CRUD/membership must be RuntimeService-ledger neutral.
 
 ## File Structure
 
@@ -34,18 +34,17 @@
 - `tests/capt_ui/test_project_context.py`
 
 **Modify:**
-- `CAPTNativeSessionStore.swift` to add non-authoritative Project membership references to sessions.
+- `CAPTNativeSessionStore.swift` for backward-compatible Project membership refs.
 - `CAPTNativeChatWorkspace.swift` for add/move/remove membership helpers.
-- `CAPTOperatorStore.swift` for Project selection/store coordination.
-- `SidebarView.swift` for Projects navigation and chat context menu.
-- `CAPTBackgroundRuntime.swift` / approval request bridge to carry explicit Project context reference when present.
+- `CAPTOperatorStore.swift` for Project store/selection coordination.
+- `SidebarView.swift` for Projects navigation + chat context menu.
+- `CAPTBackgroundRuntime.swift` / approval bridge for optional Project context ref.
 
 ---
 
 ### Task 1: Project domain model
 
-**Interfaces:**
-- Produces `CAPTProject`, `CAPTProjectGovernanceDefaults`, `CAPTProjectWorkspace`, `CAPTProjectLink`, `CAPTProjectFileRef`, `CAPTProjectSkillRef`.
+**Interfaces:** Produces `CAPTProject`, `CAPTProjectGovernanceDefaults`, `CAPTProjectWorkspace`, `CAPTProjectLink`, `CAPTProjectFileRef`, `CAPTProjectSkillRef`.
 
 - [ ] **Step 1: Write RED Codable/equality tests**
 
@@ -62,24 +61,39 @@
         governance: .default,
         councilDefaults: nil
     )
-    let encoded = try JSONEncoder.captDeterministic.encode(p)
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    let encoded = try encoder.encode(p)
     #expect(try JSONDecoder().decode(CAPTProject.self, from: encoded) == p)
 }
 ```
 
-- [ ] **Step 2: Implement focused Sendable/Codable types**
+- [ ] **Step 2: Implement exact model/defaults**
 
-`CAPTProject` fields match the approved conceptual model. `instructions` is plain user-visible text. Links store stable IDs + URL + optional snapshot metadata, not fetched page bytes.
+```swift
+public struct CAPTProjectGovernanceDefaults: Codable, Equatable, Sendable {
+    public var verificationRequired: Bool
+    public var allowedProviderIDs: [String]
+    public var maxWallClockSeconds: Int?
+    public var maxCostUSD: Double?
+    public static let `default` = CAPTProjectGovernanceDefaults(
+        verificationRequired: true, allowedProviderIDs: [], maxWallClockSeconds: nil, maxCostUSD: nil
+    )
+}
+```
 
-- [ ] **Step 3: Add hard validation**
+`CAPTProject` mirrors the approved conceptual fields. `instructions` is plain visible text. Links store stable ID + URL + optional retrieval metadata, not fetched page bodies.
 
-Project name trimmed/non-empty/max 128 chars; link URLs require `http` or `https`; duplicate ref IDs collapse deterministically; `workspace.writeAllowed` defaults false.
+- [ ] **Step 3: Add validation**
+
+Name trimmed/non-empty/max 128 chars. URLs require `http`/`https`. Duplicate refs collapse deterministically. Workspace `writeAllowed` defaults false.
 
 - [ ] **Step 4: Run GREEN and commit**
 
 ```bash
+cd capt_ui/surfaces/desktop_swift
 swift test --filter CAPTProjectModelsTests
-git add capt_ui/surfaces/desktop_swift
+git add .
 git commit -m "feat(projects): add project domain model"
 ```
 
@@ -87,42 +101,37 @@ git commit -m "feat(projects): add project domain model"
 
 ### Task 2: Dedicated encrypted Project store
 
-**Interfaces:**
-- Produces `CAPTEncryptedProjectStore.load() -> [CAPTProject]` and `save(_:)`.
-- Storage file: `~/.capt/ui/classic_native_projects.enc`.
-- Keychain service/account distinct from session cache.
+**Interfaces:** `CAPTEncryptedProjectStore.load() -> [CAPTProject]`, `save(_:)`; file `~/.capt/ui/classic_native_projects.enc`.
 
-- [ ] **Step 1: Write RED store tests with injected key provider**
+- [ ] **Step 1: Write RED store tests**
 
-Test create/load, atomic replacement, malformed ciphertext, permissions, and schema-version rejection.
+Use injected key provider. Cover create/load, atomic replacement, malformed ciphertext, unknown schema version, and permissions.
 
-- [ ] **Step 2: Implement encrypted store using existing session-store pattern without sharing keys**
-
-Keychain defaults:
+- [ ] **Step 2: Implement store using the existing session-store cryptographic pattern but a separate key**
 
 ```swift
 service: "com.inversionlabs.capt.native-project-store"
 account: "project-store-key-v1"
 ```
 
-File/directory permissions remain `0600`/`0700`.
+Directory/file permissions `0700`/`0600`.
 
-- [ ] **Step 3: Add explicit envelope schema**
+- [ ] **Step 3: Add versioned envelope**
 
 ```swift
 struct CAPTProjectStoreEnvelope: Codable, Sendable {
-    let schemaVersion: Int // initial 1
+    let schemaVersion: Int
     let projects: [CAPTProject]
 }
 ```
 
-Reject unknown future schema versions with a typed error; do not silently decode as v1.
+Initial schema is 1. Unknown future schema versions throw a typed store error; do not silently coerce.
 
-- [ ] **Step 4: Run tests/commit**
+- [ ] **Step 4: Run GREEN and commit**
 
 ```bash
 swift test --filter CAPTProjectStoreTests
-git add capt_ui/surfaces/desktop_swift
+git add .
 git commit -m "feat(projects): persist encrypted project metadata"
 ```
 
@@ -130,45 +139,39 @@ git commit -m "feat(projects): persist encrypted project metadata"
 
 ### Task 3: Session Project membership semantics
 
-**Interfaces:**
-- `CAPTNativeSession` gains `projectIDs: [UUID]` and `primaryProjectID: UUID?` with backward-compatible defaults.
-- Workspace methods: `addSession(_:toProject:)`, `moveSession(_:toProject:)`, `removeSession(_:fromProject:)`.
+**Interfaces:** `CAPTNativeSession` gains `projectIDs: [UUID]` and `primaryProjectID: UUID?` with decode defaults. Workspace gains add/move/remove helpers.
 
-- [ ] **Step 1: Write RED migration/backward tests**
+- [ ] **Step 1: Write RED backward-compatibility tests**
 
-Decode a legacy session fixture without Project fields and assert empty membership. Add/move/remove must not alter `missionID`, messages, provider/model, pending approval, or timestamps except the session's own `updatedAt`.
+Decode legacy session JSON with no Project fields -> empty memberships. Add/move/remove cannot change `missionID`, messages, provider/model, or pending approval.
 
-- [ ] **Step 2: Implement membership operations**
+- [ ] **Step 2: Implement semantics**
 
-`Add` preserves existing memberships. `Move` sets primary Project and optionally removes prior primary membership only; other memberships remain. `Remove` clears membership and primary if matching.
+`Add`: preserve all current memberships. `Move`: set new primary and remove only prior primary membership if present; preserve secondary memberships. `Remove`: remove one membership and clear primary if it matches.
 
-- [ ] **Step 3: Run session/workspace tests and commit**
+- [ ] **Step 3: Run/commit**
 
 ```bash
 swift test --filter CAPTNative
-
-git add capt_ui/surfaces/desktop_swift
+git add .
 git commit -m "feat(projects): add chat project membership"
 ```
 
 ---
 
-### Task 4: Projects and Customize UI
+### Task 4: Projects / Customize UI
 
-**Interfaces:**
-- Produces Projects navigation and `ProjectCustomizeView` tabs/sections.
+**Interfaces:** Project list/navigation plus Customize sections.
 
 - [ ] **Step 1: Write store/view-model tests**
 
-Create/update/delete Project, edit instructions, attach existing FileReference, Skill ID, link, Workspace, governance defaults. Assert changes persist and no runtime calls are made.
+Create/update/delete Project; edit instructions; add cleared FileReference, Skill ID, link, Workspace, governance defaults. Assert persistence and zero runtime calls.
 
 - [ ] **Step 2: Implement `ProjectsView`**
 
-Project list + New Project button. Selecting opens Sessions / Customize-style navigation.
+Project list + New Project. Selecting Project exposes Sessions and Customize.
 
-- [ ] **Step 3: Implement Customize sections**
-
-Exactly:
+- [ ] **Step 3: Implement exact Customize sections**
 
 ```text
 Instructions
@@ -180,31 +183,26 @@ Governance
 Council Defaults
 ```
 
-Files picker here lists already-cleared FileReferences and may invoke Attach Files -> Secure Intake, never direct Project byte ingestion.
+Files list only cleared refs and may launch Secure Intake. Skills list Skill Foundry refs. Workspace write defaults off.
 
-- [ ] **Step 4: Implement validation UX**
-
-Invalid URL/name shows local human-readable error. Workspace write toggle defaults off and uses explicit confirmation copy before enabling.
-
-- [ ] **Step 5: Run Swift tests/build and commit**
+- [ ] **Step 4: Run/build/commit**
 
 ```bash
 swift test
 swift build --product CAPTNativeMac
-git add capt_ui/surfaces/desktop_swift
+git add .
 git commit -m "feat(mac): add CAPT Projects customize surface"
 ```
 
 ---
 
-### Task 5: Chat right-click menu and Project navigation
+### Task 5: Chat right-click Project menu
 
-**Interfaces:**
-- Existing chat/session rows gain `.contextMenu` actions.
+**Interfaces:** Existing chat rows gain `.contextMenu` Project actions.
 
 - [ ] **Step 1: Write command-state tests**
 
-Given projects A/B and session S, assert menu commands call only workspace/project-store operations.
+Given Projects A/B and Session S, Add/Move/Remove modify membership/project store only.
 
 - [ ] **Step 2: Implement menu**
 
@@ -221,18 +219,18 @@ Export
 Delete
 ```
 
-Keep existing actions wired to current implementations where present; only add missing operations required by this plan.
+Wire existing actions to existing implementations; add only missing actions required here.
 
-- [ ] **Step 3: Add Project-filtered session list**
+- [ ] **Step 3: Add Project-filtered Sessions view**
 
-Inside a Project Sessions view show member chats without duplicating session storage.
+Show member chats by reference; do not duplicate session content.
 
-- [ ] **Step 4: Verify no ledger mutation and commit**
+- [ ] **Step 4: Ledger-neutrality proof and commit**
 
-Capture RuntimeService head/digest before/after Add/Move/Remove. Must be identical.
+Record head/digest before and after Add/Move/Remove; identical.
 
 ```bash
-git add capt_ui/surfaces/desktop_swift
+git add .
 git commit -m "feat(mac): add chat project context menu"
 ```
 
@@ -240,8 +238,7 @@ git commit -m "feat(mac): add chat project context menu"
 
 ### Task 6: Deterministic Project context reference
 
-**Interfaces:**
-- Python produces `ProjectContextReference`:
+**Interfaces:** Python `ProjectContextReference` with stable digest.
 
 ```python
 @dataclass(frozen=True)
@@ -255,28 +252,26 @@ class ProjectContextReference:
     workspace_ref: str | None
 ```
 
-- Swift sends the reference only when a Project is selected for a governed request.
-
 - [ ] **Step 1: Write RED digest tests**
 
-Same normalized Project -> same digest regardless of internal dictionary ordering. Updating instructions/file refs changes digest. Project membership alone does not become prompt text.
+Same normalized Project -> same digest regardless of input ordering. Instructions/file/workspace changes -> new digest. Membership alone is never prompt text.
 
-- [ ] **Step 2: Implement `capt_ui/operator/project_context.py` normalization**
+- [ ] **Step 2: Implement canonical normalization**
 
-Use sorted IDs/normalized URL strings and canonical JSON before SHA-256. Do not include mutable UI display state.
+Sorted IDs and normalized URLs; canonical JSON before SHA-256. Exclude UI display state.
 
-- [ ] **Step 3: Bind reference into approval/context selection**
+- [ ] **Step 3: Bind optional reference into approval/context selection**
 
-Extend the model approval intent/binding with optional `projectContextRef` and its digest. RuntimeService reads only the referenced eligible material through the context pipeline; it never trusts the UI to claim that content was included.
+Approval intent carries exact Project reference/digest. Runtime context pipeline resolves eligible material and records what was actually selected.
 
-- [ ] **Step 4: Add digest-mutation authority test**
+- [ ] **Step 4: Mutation test**
 
-Approve with Project digest A, mutate offered digest/content to B at execution; expect `AUTHORITYVIOLATION` / project-context binding mismatch before DriverRun dispatch.
+Approve digest A, offer B at execution -> `AUTHORITYVIOLATION` before DriverRun dispatch.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add capt_ui/operator capt_runtime desktop tests capt_ui/surfaces/desktop_swift
+git add capt_ui/operator/project_context.py capt_runtime desktop tests capt_ui/surfaces/desktop_swift
 git commit -m "feat(projects): bind project context eligibility to approval"
 ```
 
@@ -284,30 +279,8 @@ git commit -m "feat(projects): bind project context eligibility to approval"
 
 ### Task 7: Project subsystem acceptance
 
-- [ ] **Step 1: Full Swift store/UI regression**
-
-```bash
-cd capt_ui/surfaces/desktop_swift
-swift test
-swift build --product CAPTNativeMac
-```
-
-- [ ] **Step 2: Python context-binding tests**
-
-```bash
-python -m pytest tests/capt_ui/test_project_context.py tests/capt_runtime/test_prompt_approval_binding.py -q
-```
-
-- [ ] **Step 3: Public workflow acceptance**
-
-Create Project → set instructions → add cleared file → add Skill ref → add link → select read-only repo workspace → add existing chat → create new chat inside Project → verify visible Project chip/context.
-
-- [ ] **Step 4: Authority acceptance**
-
-Project CRUD and membership keep EventStore head/digest unchanged. Governed prompt using Project context advances ledger only through ordinary approval/admission execution.
-
-- [ ] **Step 5: Full Python suite alone**
-
-```bash
-python -m pytest -q
-```
+- [ ] Run full Swift tests/build.
+- [ ] Run `python -m pytest tests/capt_ui/test_project_context.py tests/capt_runtime/test_prompt_approval_binding.py -q`.
+- [ ] Workflow: create Project -> instructions -> cleared file -> Skill -> link -> read-only repo -> existing chat -> new Project chat.
+- [ ] Verify Project CRUD/membership alone leaves EventStore head/digest unchanged.
+- [ ] Run full Python suite alone with zero failures.
