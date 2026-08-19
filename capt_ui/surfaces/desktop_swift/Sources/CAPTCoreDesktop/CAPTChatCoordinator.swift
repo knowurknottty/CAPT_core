@@ -1,6 +1,6 @@
 import Foundation
 
-public struct CAPTExecutionResult: Equatable {
+public struct CAPTExecutionResult: Equatable, Sendable {
     public let text: String
     public let taskState: String
 

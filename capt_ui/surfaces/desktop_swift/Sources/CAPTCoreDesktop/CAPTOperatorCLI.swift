@@ -1,6 +1,6 @@
 import Foundation
 
-public struct CAPTProviderSnapshot: Codable, Identifiable, Hashable {
+public struct CAPTProviderSnapshot: Codable, Identifiable, Hashable, Sendable {
     public let id: String
     public let name: String
     public let kind: String
@@ -21,8 +21,8 @@ public struct CAPTProviderSnapshot: Codable, Identifiable, Hashable {
         case latencyMs = "latency_ms"
     }
 }
-public struct CAPTModelSelectionSnapshot: Codable, Hashable {
-    public struct Selection: Codable, Hashable {
+public struct CAPTModelSelectionSnapshot: Codable, Hashable, Sendable {
+    public struct Selection: Codable, Hashable, Sendable {
         public let provider: String
         public let model: String
     }
@@ -37,6 +37,22 @@ public struct CAPTModelSelectionSnapshot: Codable, Hashable {
     enum CodingKeys: String, CodingKey {
         case active, provider, kind, available, favorites
         case defaultSelection = "default"
+    }
+}
+
+public struct CAPTOperatorStateSnapshot: Equatable, Sendable {
+    public let providers: [CAPTProviderSnapshot]
+    public let models: CAPTModelSelectionSnapshot
+    public let verbosity: String
+
+    public init(
+        providers: [CAPTProviderSnapshot],
+        models: CAPTModelSelectionSnapshot,
+        verbosity: String
+    ) {
+        self.providers = providers
+        self.models = models
+        self.verbosity = verbosity
     }
 }
 

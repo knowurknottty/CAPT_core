@@ -15,7 +15,17 @@ for arg in "$@"; do
   esac
 done
 
-pkill -x "$EXECUTABLE" 2>/dev/null || true
+BUNDLE_EXECUTABLE="$BUNDLE/Contents/MacOS/$EXECUTABLE"
+bundle_pids() {
+  ps -axo pid=,command= | while read -r pid command; do
+    [[ "$command" == "$BUNDLE_EXECUTABLE" ]] && print -r -- "$pid"
+  done
+}
+
+while IFS= read -r pid; do
+  [[ -z "$pid" ]] && continue
+  kill "$pid" 2>/dev/null || true
+done < <(bundle_pids)
 if [[ ! -x "$HOME/.capt/runtime-venv/bin/capt" ]]; then
   "$ROOT/script/install_local_runtime.sh"
 fi
@@ -62,8 +72,9 @@ fi
 
 if (( VERIFY )); then
   for _ in {1..30}; do
-    if pgrep -x "$EXECUTABLE" >/dev/null; then
-      echo "CAPT.app launched: PID $(pgrep -x "$EXECUTABLE" | head -1)"
+    PID="$(bundle_pids | head -1 || true)"
+    if [[ -n "$PID" ]]; then
+      echo "CAPT.app launched: PID $PID"
       exit 0
     fi
     sleep 0.2

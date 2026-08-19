@@ -18,23 +18,27 @@ actor CAPTBackgroundRuntime {
         self.operatorCLI = operatorCLI
     }
 
-    func connect() throws -> [String: Any] {
+    func connect() throws -> CAPTRuntimeIdentitySnapshot {
+        let response: [String: Any]
         do {
-            return try client.connect()
+            response = try client.connect()
         } catch {
             client.disconnect()
             try bootstrapper.start()
-            return try client.connect()
+            response = try client.connect()
         }
+        return CAPTRuntimeControlProjection.identity(response)
     }
 
     func disconnect() { client.disconnect() }
 
-    func identity() throws -> [String: Any] {
-        try client.query(op: "identity", payload: [:])
+    func identity() throws -> CAPTRuntimeIdentitySnapshot {
+        CAPTRuntimeControlProjection.identity(
+            try client.query(op: "identity", payload: [:])
+        )
     }
 
-    func capabilities() throws -> [String: Any] {
+    private func capabilities() throws -> [String: Any] {
         try client.query(op: "capabilities", payload: [:])
     }
 
@@ -102,8 +106,12 @@ actor CAPTBackgroundRuntime {
         )
     }
 
-    func operatorSnapshot() throws -> (providers: [CAPTProviderSnapshot], models: CAPTModelSelectionSnapshot, verbosity: String) {
-        (try operatorCLI.providers(), try operatorCLI.models(), try operatorCLI.verbosity())
+    func operatorSnapshot() throws -> CAPTOperatorStateSnapshot {
+        CAPTOperatorStateSnapshot(
+            providers: try operatorCLI.providers(),
+            models: try operatorCLI.models(),
+            verbosity: try operatorCLI.verbosity()
+        )
     }
 
     func activateProvider(_ providerID: String) throws -> [CAPTProviderSnapshot] {
@@ -140,29 +148,28 @@ actor CAPTBackgroundRuntime {
         return snapshot
     }
 
-    func resume() throws -> [String: Any] {
-        try client.command(op: "resume_runtime", payload: [:], idempotencyKey: "native-resume-" + UUID().uuidString.lowercased())
+    func resume() throws {
+        _ = try client.command(op: "resume_runtime", payload: [:], idempotencyKey: "native-resume-" + UUID().uuidString.lowercased())
     }
 
-    func shutdown() throws -> [String: Any] {
-        let receipt = try client.command(
+    func shutdown() throws {
+        _ = try client.command(
             op: "shutdown", payload: [:],
             idempotencyKey: "native-shutdown-" + UUID().uuidString.lowercased()
         )
         client.disconnect()
-        return receipt
     }
 
-    func cancelTask(_ taskID: String) throws -> [String: Any] {
-        try client.command(
+    func cancelTask(_ taskID: String) throws {
+        _ = try client.command(
             op: "cancel_task",
             payload: ["taskId": taskID, "reason": "Operator cancelled from CAPT native macOS surface"],
             idempotencyKey: "native-cancel-task-" + taskID
         )
     }
 
-    func cancelDriverRun(_ driverRunID: String) throws -> [String: Any] {
-        try client.command(
+    func cancelDriverRun(_ driverRunID: String) throws {
+        _ = try client.command(
             op: "cancel_driver_run",
             payload: ["driverRunId": driverRunID, "reason": "Operator cancelled from CAPT native macOS surface"],
             idempotencyKey: "native-cancel-run-" + driverRunID
@@ -202,8 +209,8 @@ actor CAPTBackgroundRuntime {
         )
     }
 
-    func decideApproval(requestID: String, decision: String) throws -> [String: Any] {
-        try client.command(
+    func decideApproval(requestID: String, decision: String) throws {
+        _ = try client.command(
             op: "submit_approval_decision",
             payload: [
                 "requestId": requestID,

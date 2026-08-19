@@ -1,6 +1,12 @@
 import Foundation
 
-public struct CAPTMemoryRuntimeSnapshot: Hashable {
+public struct CAPTRuntimeIdentitySnapshot: Hashable, Sendable {
+    public let runtimeVersion: String
+    public let integrity: String
+    public let headSequence: Int
+}
+
+public struct CAPTMemoryRuntimeSnapshot: Hashable, Sendable {
     public let active: Bool
     public let policyVersion: Int
     public let policyDigest: String
@@ -19,7 +25,7 @@ public struct CAPTMemoryRuntimeSnapshot: Hashable {
     public let unresolvedConflictCount: Int
 }
 
-public struct CAPTCheckpointSnapshot: Hashable {
+public struct CAPTCheckpointSnapshot: Hashable, Sendable {
     public let status: String
     public let checkpointID: String
     public let createdAt: String
@@ -54,6 +60,15 @@ public struct CAPTClaimReviewSnapshot: Hashable, Sendable {
 }
 
 public enum CAPTRuntimeControlProjection {
+    public static func identity(_ response: [String: Any]) -> CAPTRuntimeIdentitySnapshot {
+        let result = response["result"] as? [String: Any] ?? response
+        return CAPTRuntimeIdentitySnapshot(
+            runtimeVersion: result["runtimeVersion"] as? String ?? "CAPT",
+            integrity: result["integrity"] as? String ?? "unknown",
+            headSequence: result["headSequence"] as? Int ?? 0
+        )
+    }
+
     public static func claimReview(
         claimID: String, guardResult: [String: Any], verification: [String: Any]
     ) -> CAPTClaimReviewSnapshot {
