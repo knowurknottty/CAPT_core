@@ -40,6 +40,7 @@ final class CAPTOperatorStore: ObservableObject {
 
     private let runtime: CAPTBackgroundRuntime
     private let sessionStore: CAPTEncryptedSessionStore
+    private var providerWarmIdentity: String?
 
     init(
         runtime: CAPTBackgroundRuntime = CAPTBackgroundRuntime(),
@@ -346,26 +347,52 @@ final class CAPTOperatorStore: ObservableObject {
         }
     }
 
+    private func warmupTarget() -> CAPTProviderSnapshot? {
+        let selected = providers.first(where: { $0.id == provider }) ??
+            providers.first(where: { $0.selected })
+        guard let selected, CAPTOperatorCLI.requiresPrewarm(selected, modelID: model) else {
+            return nil
+        }
+        return selected
+    }
+
     private func prewarmSelectedProviderIfNeeded() async {
-        guard let selected = providers.first(where: { $0.id == provider }) ??
-                providers.first(where: { $0.selected }),
-              CAPTOperatorCLI.requiresPrewarm(selected, modelID: model) else {
+        guard let selected = warmupTarget() else {
             providerWarmState = "not_required"
             providerWarmLatencyMs = nil
+            providerWarmIdentity = nil
             return
         }
+        let identity = selected.id + "/" + model
+        if providerWarmState == "warm", providerWarmIdentity == identity { return }
         providerWarmState = "warming"
         providerWarmLatencyMs = nil
         do {
             let result = try await runtime.prewarmProvider(providerID: selected.id, modelID: model)
             providerWarmState = result.status
             providerWarmLatencyMs = result.latencyMs
-            runtimeControlMessage = "Provider warm: \(selected.id)/\(model)"
+            providerWarmIdentity = identity
+            runtimeControlMessage = "Provider warm: \(identity)"
         } catch {
             providerWarmState = "failed"
             providerWarmLatencyMs = nil
+            providerWarmIdentity = nil
             runtimeControlMessage = "Provider warmup failed: " + error.localizedDescription
         }
+    }
+
+    private func scheduleSelectedProviderPrewarmIfNeeded() {
+        guard let selected = warmupTarget() else {
+            providerWarmState = "not_required"
+            providerWarmLatencyMs = nil
+            providerWarmIdentity = nil
+            return
+        }
+        let identity = selected.id + "/" + model
+        if providerWarmState == "warm", providerWarmIdentity == identity { return }
+        providerWarmState = "warming"
+        providerWarmLatencyMs = nil
+        Task { await prewarmSelectedProviderIfNeeded() }
     }
 
     func refreshOperatorState() {
@@ -637,6 +664,16 @@ final class CAPTOperatorStore: ObservableObject {
     }
 
     func newChat() {
+        if let modelSnapshot {
+            let selection = CAPTOperatorCLI.newChatSelection(
+                models: modelSnapshot,
+                selectedProviderID: providers.first(where: { $0.selected })?.id,
+                fallbackProvider: provider,
+                fallbackModel: model
+            )
+            provider = selection.provider
+            model = selection.model
+        }
         _ = mutateWorkspace {
             $0.newChat(provider: provider, model: model, targetRoot: targetRoot)
         }
@@ -644,6 +681,7 @@ final class CAPTOperatorStore: ObservableObject {
         lastError = nil
         runtimeControlMessage = ""
         saveSessions()
+        scheduleSelectedProviderPrewarmIfNeeded()
     }
 
     func activateSession(_ id: UUID) {

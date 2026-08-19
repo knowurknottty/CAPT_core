@@ -70,4 +70,14 @@ extension CAPTOperatorCLITests {
         XCTAssertFalse(CAPTOperatorCLI.requiresPrewarm(local, modelID: ""))
     }
 
+    func testNewChatSelectionPrefersGlobalDefaultOverLegacySession() throws {
+        let models = try CAPTOperatorCLI.decodeModels(Data(#"{"active":"qwen3.8-27b-mtplx","provider":"Qwen3.8-27B MTPLX (Local MLX)","kind":"LOCAL","default":{"provider":"mtplx","model":"qwen3.8-27b-mtplx"},"available":["qwen3.8-27b-mtplx"],"favorites":[]}"#.utf8))
+        let selection = CAPTOperatorCLI.newChatSelection(
+            models: models, selectedProviderID: "mtplx",
+            fallbackProvider: "mlx", fallbackModel: "nvidia/nemotron-3.5-lightning:free"
+        )
+        XCTAssertEqual(selection.provider, "mtplx")
+        XCTAssertEqual(selection.model, "qwen3.8-27b-mtplx")
+    }
+
 }
