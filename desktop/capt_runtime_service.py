@@ -56,6 +56,7 @@ from capt_runtime.verification import (
     guard_claim,
 )
 from capt_runtime.composition import RuntimeComposition, create_runtime
+from capt_runtime.provider_endpoint import credential_required
 from capt_runtime.operator_provenance import (
     build_cognitive_provenance, build_prompt_assembly, effective_context_budget,
 )
@@ -708,7 +709,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     if provider is None or not provider_model:
                         raise ValueError("PROVIDER_OR_MODEL_UNAVAILABLE")
                     provider_key = resolve(provider.id, provider.key_ref)
-                    if provider.id != "ollama" and not provider_key:
+                    if credential_required(provider.id, provider.kind, provider.base_url) and not provider_key:
                         raise ValueError("PROVIDER_CREDENTIAL_UNAVAILABLE")
                 requested_context_budget = int(payload.get("requestedContextBudget", 32_000))
                 effective_budget = effective_context_budget(
@@ -809,7 +810,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     if provider is None or not provider_model:
                         raise ValueError("PROVIDER_OR_MODEL_UNAVAILABLE")
                     provider_key = resolve(provider.id, provider.key_ref)
-                    if provider.id != "ollama" and not provider_key:
+                    if credential_required(provider.id, provider.kind, provider.base_url) and not provider_key:
                         raise ValueError("PROVIDER_CREDENTIAL_UNAVAILABLE")
                 requested_context_budget = prepared.data["requestedContextBudget"]
                 effective_budget = prepared.data["effectiveBudget"]

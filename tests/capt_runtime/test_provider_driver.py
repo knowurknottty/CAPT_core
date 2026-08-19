@@ -214,3 +214,31 @@ def test_governed_provider_explicit_prompt_still_fails_closed_on_digest_mismatch
             "taskId": "t-1", "contextSlice": {},
             "submittedAt": "2026-01-01T00:00:00Z",
         }))
+
+
+def test_openai_compatible_loopback_driver_reports_local_endpoint(tmp_path: Path):
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _Server)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        driver = ProviderDriver(
+            str(tmp_path),
+            provider_id="mtplx",
+            model="qwen3.8-27b-mtplx",
+            base_url=f"http://127.0.0.1:{server.server_port}/v1",
+            task_resolver=_resolver(),
+        )
+        out = asyncio.run(driver.submit({
+            "driverRunId": "dr-local-openai",
+            "missionId": "m-local",
+            "taskId": "t-local",
+            "contextSlice": {},
+            "submittedAt": "2026-08-18T00:00:00Z",
+        }))
+        assert _Server.seen["path"] == "/v1/chat/completions"
+        assert _Server.seen["auth"] is None
+        assert out["diagnostics"]["endpointClass"] == "local"
+        assert "EndpointClass: local" in Path(out["artifactCandidate"]["artifactPath"]).read_text()
+    finally:
+        server.shutdown()
+        server.server_close()
