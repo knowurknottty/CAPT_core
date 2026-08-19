@@ -93,6 +93,10 @@ def cmd_providers(args) -> int:
         p = pm.update(args.key_ref[0], {"key_ref": args.key_ref[1]})
         _out({"provider": p.id if p else "", "key_ref": "configured" if p else ""}, args.json)
         return 0
+    if args.prewarm:
+        res = pm.prewarm(args.prewarm, args.model or "")
+        _out(res, args.json)
+        return 0
     if args.test:
         res = pm.test(args.test)
         _out(res.to_dict(), args.json)
@@ -177,6 +181,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     pr = sub.add_parser("providers")
     pr.add_argument("--test")
+    pr.add_argument("--prewarm")
+    pr.add_argument("--model")
     pr.add_argument("--activate")
     pr.add_argument("--key-ref", nargs=2, metavar=("PROVIDER", "REF"))
     pr.add_argument("--json", action="store_true")

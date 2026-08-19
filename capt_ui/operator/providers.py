@@ -262,6 +262,54 @@ class ProviderManager:
         self.save()
         return p
 
+    def prewarm(self, provider_id: str, model_id: str) -> Dict[str, Any]:
+        """Warm a selected loopback OpenAI-compatible provider without ledger mutation.
+
+        This is operator-plane readiness work, analogous to a health probe. The
+        response is discarded and must never be promoted to CAPT evidence.
+        """
+        p = self._providers.get(provider_id)
+        if p is None:
+            raise ValueError("unknown provider: %s" % provider_id)
+        if p.kind != ProviderKind.LOCAL or p.transport != "openai_compatible":
+            raise ValueError("prewarm requires a local OpenAI-compatible provider")
+        from capt_runtime.provider_endpoint import endpoint_class
+        if endpoint_class(p.base_url) != "local":
+            raise ValueError("prewarm requires a loopback endpoint")
+        model = str(model_id or "").strip()
+        if not model:
+            raise ValueError("prewarm requires a model id")
+
+        import time
+        import urllib.request
+        from .adapters import resolve_secret
+
+        body = json.dumps({
+            "model": model,
+            "messages": [{"role": "user", "content": "CAPT provider prewarm. Reply OK."}],
+            "max_tokens": 8,
+            "temperature": 0,
+            "stream": False,
+        }).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        key = resolve_secret(p, "")
+        if key:
+            headers["Authorization"] = "Bearer " + key
+        req = urllib.request.Request(
+            p.base_url.rstrip("/") + "/chat/completions",
+            data=body, headers=headers, method="POST",
+        )
+        started = time.monotonic()
+        with urllib.request.urlopen(req, timeout=120) as response:
+            response.read()
+        return {
+            "status": "warm",
+            "provider": p.id,
+            "model": model,
+            "endpoint_class": "local",
+            "latency_ms": int((time.monotonic() - started) * 1000),
+        }
+
     # -- discovery ---------------------------------------------------------
     def discover_local(self) -> List[str]:
         """Return ids of local providers whose transport adapter detected a
