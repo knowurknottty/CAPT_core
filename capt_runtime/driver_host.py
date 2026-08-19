@@ -11,11 +11,16 @@ and does NOT grant the driver any aggregate-mutation authority.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .context_slice import build_context_slice
+from .authored_skills import (
+    AuthoredSkillPackViolation, build_skill_context, load_capt_skills_lock,
+    summarize_skill_context,
+)
 from .contracts import require
 from .capability import check_work_order_operations, verify_lease
 from .drivers.registry import DriverRegistry
@@ -34,16 +39,55 @@ class DriverHost:
         staging_root: str,
         target_repo: str,
         memory_engine: Any = None,
+        authored_skill_pack_root: Optional[str] = None,
+        authored_skill_pack_lock: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.registry = registry
         self.staging_root = staging_root
         self.target_repo = target_repo
         self._driver = None  # set by select_driver
         self.memory_engine = memory_engine  # optional MemoryTriggerEngine
+        self.authored_skill_pack_root = authored_skill_pack_root
+        self.authored_skill_pack_lock = authored_skill_pack_lock
+        self._prepared_skill_context: Optional[Dict[str, Any]] = None
+        self._prepared_skill_names: tuple[str, ...] = ()
 
     def select_driver(self, driver) -> None:
         # driver is an ExecutionDriver instance (e.g. OpenHarnessDriver)
         self._driver = driver
+
+    def prepare_authored_skills(self, skill_names: List[str]) -> Dict[str, Any]:
+        """Verify and freeze selected authored-skill bytes before mutation.
+
+        The returned value is provenance-only. The full verified text remains in
+        memory on this host and is later copied into the governed ContextSlice;
+        disk is not re-read between preflight and dispatch.
+        """
+        if not self.authored_skill_pack_root:
+            raise AuthoredSkillPackViolation(
+                "authored skill pack root is required when skills are selected"
+            )
+        lock = self.authored_skill_pack_lock or load_capt_skills_lock()
+        context = build_skill_context(
+            self.authored_skill_pack_root, lock, selected_names=skill_names
+        )
+        return self.bind_prepared_authored_skills(context, skill_names)
+
+    def bind_prepared_authored_skills(
+        self, context: Dict[str, Any], skill_names: List[str]
+    ) -> Dict[str, Any]:
+        """Bind an already verified execution snapshot without re-reading disk."""
+        require("AuthoredSkillContext", context)
+        actual_names = [str(item.get("name", "")) for item in context.get("skills", [])]
+        if actual_names != list(skill_names):
+            raise AuthoredSkillPackViolation(
+                "prepared authored skill names differ from the verified snapshot"
+            )
+        self._prepared_skill_context = copy.deepcopy(context)
+        self._prepared_skill_names = tuple(skill_names)
+        summary = summarize_skill_context(context)
+        assert summary is not None
+        return summary
 
     # -- scenario steps ----------------------------------------------------
 
@@ -54,6 +98,8 @@ class DriverHost:
         budgets: Dict[str, Any],
         expected_artifacts: List[Dict[str, Any]],
         termination: Dict[str, Any],
+        *,
+        skill_names: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         fs_policy = {
             "rootPath": self.target_repo,
@@ -61,6 +107,25 @@ class DriverHost:
             "writesAllowed": False,
         }
         net_policy = {"egressAllowed": False, "allowedHosts": []}
+        skill_context = None
+        if self._prepared_skill_context is not None:
+            if skill_names is not None and tuple(skill_names) != self._prepared_skill_names:
+                raise AuthoredSkillPackViolation(
+                    "requested authored skills differ from the prepared snapshot"
+                )
+            skill_context = copy.deepcopy(self._prepared_skill_context)
+        elif skill_names:
+            # Direct/conformance callers may still request a one-shot verified
+            # context. The governed model-operator path MUST preflight via
+            # prepare_authored_skills() before authoritative mutation.
+            if not self.authored_skill_pack_root:
+                raise AuthoredSkillPackViolation(
+                    "authored skill pack root is required when skills are selected"
+                )
+            lock = self.authored_skill_pack_lock or load_capt_skills_lock()
+            skill_context = build_skill_context(
+                self.authored_skill_pack_root, lock, selected_names=skill_names
+            )
         return build_context_slice(
             lease=lease,
             filesystem_policy=fs_policy,
@@ -69,6 +134,7 @@ class DriverHost:
             expected_artifacts=expected_artifacts,
             termination_conditions=termination,
             network_policy=net_policy,
+            skill_context=skill_context,
         )
 
     def dispatch(

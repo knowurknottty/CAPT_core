@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from . import commands
+from .authored_skills import prepare_authored_skill_context, summarize_skill_context
 from .contracts import require
 from .errors import AuthorityViolation
 from .model_approval_binding import (
@@ -70,6 +71,9 @@ def request_model_prompt_approval(
     requested_context_budget = int(intent.get("requestedContextBudget", 32_000))
     human_verification_required = bool(intent.get("humanVerificationRequired", True))
     executable = str(intent.get("executable", "") or "")
+    # Explicit authored-skill selection is verified before approval state exists.
+    # The resulting exact bytes are included in the approved model-visible prompt.
+    skill_context, _skill_names = prepare_authored_skill_context(intent)
     # Governed continuation context selection: the approval binding must be
     # computed against the SAME prior-evidence selection the run will use, so
     # the approval digest and the prepared/dispatch digest stay consistent
@@ -95,6 +99,7 @@ def request_model_prompt_approval(
         staging_root=staging_root_for_ledger(service.store.path, driver_run_id),
         context_pack_digest=continuation["contextPackDigest"],
         continuation_context=continuation["records"],
+        authored_skill_context=skill_context,
     )
     expires_at = str(intent.get("expiresAt") or _expiry_from(operator_metadata["issuedAt"]))
     request = {
@@ -152,5 +157,6 @@ def request_model_prompt_approval(
         "basePromptAssemblyDigest": assembly["basePromptAssemblyDigest"],
         "dispatchPromptDigest": assembly["dispatchPromptDigest"],
         "modelVisiblePromptDigest": assembly["modelVisiblePromptDigest"],
+        "authoredSkills": summarize_skill_context(skill_context),
         "expiresAt": authoritative["expiresAt"],
     }

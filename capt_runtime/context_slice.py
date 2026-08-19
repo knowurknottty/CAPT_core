@@ -63,6 +63,7 @@ def build_context_slice(
     expected_artifacts: list,
     termination_conditions: Dict[str, Any],
     network_policy: Dict[str, Any] | None = None,
+    skill_context: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     """Construct a validated ContextSlice. Forbidden objects are rejected."""
     # Guard against accidental leakage of authority objects.
@@ -72,6 +73,7 @@ def build_context_slice(
     _scan_forbidden(permitted_tools)
     _scan_forbidden(expected_artifacts)
     _scan_forbidden(termination_conditions)
+    _scan_forbidden(skill_context)
 
     slice_: Dict[str, Any] = {
         "schemaVersion": "1.0.0",
@@ -84,4 +86,6 @@ def build_context_slice(
     }
     if network_policy is not None:
         slice_["networkPolicy"] = network_policy
+    if skill_context is not None:
+        slice_["skillContext"] = skill_context
     return require("ContextSlice", slice_)

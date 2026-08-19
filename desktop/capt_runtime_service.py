@@ -27,7 +27,6 @@ import argparse
 from datetime import datetime, timezone
 UTC = timezone.utc
 import getpass
-import hashlib
 import json
 import os
 import secrets
@@ -40,22 +39,15 @@ from typing import Any, Dict, List, Optional
 import capt_runtime
 from capt_runtime import commands, contracts
 from capt_runtime.checkpoint import create_checkpoint
-from capt_runtime.driver_host import DriverHost, tree_digest
-from capt_runtime.drivers.openharness import OpenHarnessDriver, DESCRIPTOR as REF
-from capt_runtime.drivers.registry import DriverRegistry
-from capt_runtime.scenario import build_scenario
-from capt_runtime.services import RuntimeService
+from capt_runtime.driver_host import tree_digest
 from capt_runtime.errors import AuthorityViolation
 from capt_runtime.store import EventStore
 from capt_runtime.ipc_framing import FrameProtocolError, recv_json, send_json
 from capt_runtime.resource_governor import TokenCostGovernor
 from capt_runtime.replay import replay_to_sequence
 from capt_runtime.verification import (
-    VerificationFailure,
     build_artifact_hash_evidence,
-    build_contradicted_verification_result,
     build_verification_result,
-    capture_git_status,
     guard_claim,
 )
 from capt_runtime.composition import RuntimeComposition, create_runtime
@@ -68,8 +60,10 @@ from capt_runtime.model_approval_binding import (
 )
 from capt_runtime.prepared_execution import PreparedApprovedModelExecution, freeze
 from capt_runtime.verification_baseline import capture_verification_baseline
+from capt_runtime.authored_skills import (
+    parse_authored_skill_request, prepare_authored_skill_context, summarize_skill_context,
+)
 
-from desktop.m1_command_service import RuntimeCommandService
 
 RUNTIME_VERSION = getattr(capt_runtime, "RUNTIME_VERSION", "0.1.0")
 CONTRACT_SCHEMA_VERSION = "1.0.0"
@@ -152,6 +146,23 @@ DEMO_GRANT_ID = "g-desktop-m0-demo"
 DEMO_LEASE_ID = "l-desktop-m0-demo"
 DEMO_CLAIM_ID = "cl-desktop-m0-demo"
 DEMO_WORKTREE = "/tmp/capt-desktop-m0-demo-worktree"
+
+
+def _prepare_hermes_host_with_authored_skills(
+    runtime: RuntimeComposition, payload: Dict[str, Any], *, target_repo: str,
+    staging_root: str, executable: Optional[str] = None,
+    authored_skill_pack_lock: Optional[Dict[str, Any]] = None,
+):
+    """Bind explicit command skill selection to a pin-verifying DriverHost."""
+    skill_root, skill_names = parse_authored_skill_request(payload)
+    host = runtime.hermes_host(
+        target_repo=target_repo, staging_root=staging_root, executable=executable,
+        enforce_memory=False, authored_skill_pack_root=skill_root,
+        authored_skill_pack_lock=authored_skill_pack_lock,
+    )
+    if skill_names:
+        host.prepare_authored_skills(skill_names)
+    return host, skill_names
 
 
 # --------------------------------------------------------------------------
@@ -715,6 +726,10 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 target_root = payload.get("targetRoot")
                 if not objective or not target_root:
                     raise ValueError("MODEL_TASK_OBJECTIVE_OR_TARGET_MISSING")
+                # All deterministic execution inputs are frozen before CAPT consumes
+                # the one-use approval. Authored skill bytes are independently
+                # re-verified here, then carried in the immutable prepared object;
+                # dispatch never re-reads the skill checkout.
                 command_id = command["commandId"]
                 now = command.get("timestamp") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                 mission_id = payload.get("missionId") or ("m-model-" + command_id)
@@ -738,6 +753,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     provider_key = resolve(provider.id, provider.key_ref)
                     if credential_required(provider.id, provider.kind, provider.base_url) and not provider_key:
                         raise ValueError("PROVIDER_CREDENTIAL_UNAVAILABLE")
+                skill_context, skill_names = prepare_authored_skill_context(payload)
                 requested_context_budget = int(payload.get("requestedContextBudget", 32_000))
                 effective_budget = effective_context_budget(
                     requested_context_budget, provider.context_limit if provider is not None else 0)
@@ -761,6 +777,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     context_pack_digest=context_pack_digest,
                     tool_schema_digest=contracts.digest({"operations": ["RepositoryRead", "FilesystemRead", "ArtifactCreate", "AnalysisOnly"]}),
                     continuation_context=continuation["records"],
+                    authored_skill_context=skill_context,
                 )
                 # Runtime authority binds human approval to the exact
                 # model-visible assembly. Client booleans are provenance only;
@@ -779,6 +796,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     staging_root=staging_root_for_ledger(store.path, str(run_id)),
                     context_pack_digest=context_pack_digest,
                     continuation_context=continuation["records"],
+                    authored_skill_context=skill_context,
                 )
                 # This read-only check catches a mismatched approval before the
                 # command service consumes the one-use receipt.
@@ -808,6 +826,8 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         "dispatchPrompt": bound_assembly["dispatchPrompt"],
                         "contextPackDigest": context_pack_digest,
                         "continuationContext": continuation["records"],
+                        "authoredSkillContext": skill_context,
+                        "skillNames": skill_names,
                     }),
                     context_pack_digest=context_pack_digest,
                 )
@@ -841,12 +861,14 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         raise ValueError("PROVIDER_CREDENTIAL_UNAVAILABLE")
                 requested_context_budget = prepared.data["requestedContextBudget"]
                 effective_budget = prepared.data["effectiveBudget"]
-                response_mode = prepared.data["responseMode"]
-                enhancement_engine = prepared.data["enhancementEngine"]
                 human_verification_required = prepared.data["humanVerificationRequired"]
                 prompt_assembly = prepared.data["promptAssembly"]
-                model_visible_objective = prompt_assembly["modelVisiblePrompt"]
                 dispatch_prompt = prepared.data["dispatchPrompt"]
+                skill_context = (
+                    json.loads(json.dumps(prepared.data["authoredSkillContext"]))
+                    if prepared.data.get("authoredSkillContext") else None
+                )
+                skill_names = list(prepared.data.get("skillNames") or ())
                 task_title = str(objective).strip()[:512] or "Model operator task"
                 cognitive_provenance = build_cognitive_provenance(
                     assembly=prompt_assembly, provider_id=provider.id if provider is not None else "hermes",
@@ -1017,8 +1039,10 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 dispatch_lease = dict(lease)
                 dispatch_lease["scope"] = {**lease["scope"], "allowedPaths": [target_root]}
                 # 3. DriverHost dispatch with the resolved authoritative task.
+                # Authored skill bytes were verified and frozen in `prepare`, before
+                # approval consumption. Binding them here does not re-read disk.
                 worktree = Path(target_root)
-                staging = Path(ledger_path).parent / "staging" / run_id
+                staging = Path(staging_root_for_ledger(store.path, str(run_id)))
                 staging.mkdir(parents=True, exist_ok=True)
                 if provider is not None:
                     host = runtime.provider_host(
@@ -1034,6 +1058,8 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         executable=executable, enforce_memory=False,
                         dispatch_prompt=str(dispatch_prompt),
                     )
+                if skill_context is not None:
+                    host.bind_prepared_authored_skills(skill_context, skill_names)
                 ctx = host.build_context(
                     {"leaseId": lease["leaseId"], "operations": lease["operations"],
                      "scope": lease["scope"], "validFrom": lease["validFrom"],
@@ -1041,6 +1067,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     ["terminal"], {"maxSeconds": 600, "maxArtifacts": 1, "maxObservations": 10},
                     [{"artifactPath": str(staging / "model-analysis.md"), "artifactKind": "report"}],
                     {"onUnexpectedWrite": "fail"},
+                    skill_names=skill_names or None,
                 )
                 wo = {
                     "schemaVersion": "1.0.0", "driverRunId": run_id, "driverId": "provider" if provider is not None else "hermes",
@@ -1165,9 +1192,11 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     "verificationBaselineDigest": baseline["artifactDigest"],
                     "verificationBaselineEvidenceId": baseline_ev_id,
                     "resultEvidenceId": result_ev_id,
-                    "observations": out.get("observations", []), "driver": "provider" if provider is not None else "hermes",
+                    "observations": out.get("observations", []),
+                    "driver": "provider" if provider is not None else "hermes",
                     "providerProvenance": out.get("diagnostics", {}) if provider is not None else {},
                     "cognitiveProvenance": cognitive_provenance,
+                    "authoredSkills": summarize_skill_context(ctx.get("skillContext")),
                 }
                 store.complete_claimed_command(key, command_fingerprint, receipt)
                 return receipt
