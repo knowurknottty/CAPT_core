@@ -117,12 +117,10 @@ final class CAPTOperatorStore: ObservableObject {
         isBusy = true
         lastError = nil
         Task {
+            defer { isBusy = false }
             do {
-                let response = try await runtime.connect()
-                let identity = response["result"] as? [String: Any] ?? response
-                let version = identity["runtimeVersion"] as? String ?? "CAPT"
-                let integrity = identity["integrity"] as? String ?? "unknown"
-                runtimeIdentity = "\(version) · integrity \(integrity)"
+                let identity = try await runtime.connect()
+                runtimeIdentity = "\(identity.runtimeVersion) · integrity \(identity.integrity)"
                 connectionState = .connected
                 refreshAll()
             } catch {
@@ -130,7 +128,6 @@ final class CAPTOperatorStore: ObservableObject {
                 lastError = message
                 connectionState = .failed(message)
             }
-            isBusy = false
         }
     }
 
@@ -283,13 +280,10 @@ final class CAPTOperatorStore: ObservableObject {
         guard connectionState == .connected, !isBusy else { return }
         Task {
             do {
-                let response = try await runtime.identity()
-                let identity = response["result"] as? [String: Any] ?? response
-                let version = identity["runtimeVersion"] as? String ?? "CAPT"
-                let integrity = identity["integrity"] as? String ?? "unknown"
-                runtimeIdentity = "\(version) · integrity \(integrity)"
+                let identity = try await runtime.identity()
+                runtimeIdentity = "\(identity.runtimeVersion) · integrity \(identity.integrity)"
             } catch {
-                handle(error)
+                handleGlobal(error)
             }
         }
     }
@@ -361,30 +355,36 @@ final class CAPTOperatorStore: ObservableObject {
         guard !isBusy, item.isActionable() else { return }
         isBusy = true
         Task {
+            defer { isBusy = false }
             do {
-                _ = try await runtime.decideApproval(requestID: item.id, decision: decision)
+                try await runtime.decideApproval(requestID: item.id, decision: decision)
                 runtimeControlMessage = "Approval \(decision) recorded"
                 refreshHistory()
-            } catch { handle(error) }
-            isBusy = false
+            } catch { handleGlobal(error) }
         }
     }
 
     func activateProvider(_ providerID: String) {
         guard !isBusy else { return }
+        let originSessionID = activeSessionID
+        let originTargetRoot = originSessionID.flatMap { chatWorkspace.session($0)?.targetRoot } ?? targetRoot
+        let originModel = originSessionID.flatMap { chatWorkspace.session($0)?.model } ?? model
         isBusy = true
         Task {
+            defer { isBusy = false }
             do {
                 providers = try await runtime.activateProvider(providerID)
-                provider = providerID
                 let snapshot = try await runtime.operatorSnapshot()
                 modelSnapshot = snapshot.models
-                if let first = providers.first(where: { $0.id == providerID })?.models.first {
-                    model = first
-                }
-                persistActiveConfiguration()
-            } catch { handle(error) }
-            isBusy = false
+                let selectedModel = providers.first(where: { $0.id == providerID })?.models.first
+                    ?? originModel
+                persistConfiguration(
+                    for: originSessionID,
+                    provider: providerID,
+                    model: selectedModel,
+                    targetRoot: originTargetRoot
+                )
+            } catch { handleGlobal(error) }
         }
     }
 
@@ -392,6 +392,7 @@ final class CAPTOperatorStore: ObservableObject {
         guard !isBusy else { return }
         isBusy = true
         Task {
+            defer { isBusy = false }
             do {
                 providers = try await runtime.testProvider(providerID)
                 if let tested = providers.first(where: { $0.id == providerID }),
@@ -399,8 +400,7 @@ final class CAPTOperatorStore: ObservableObject {
                     let latency = tested.latencyMs.map { " · \($0) ms" } ?? ""
                     providerCredentialStatus[providerID] = "Authenticated ✓\(latency)"
                 }
-            } catch { handle(error) }
-            isBusy = false
+            } catch { handleGlobal(error) }
         }
     }
 
@@ -418,7 +418,7 @@ final class CAPTOperatorStore: ObservableObject {
             )
             return true
         } catch {
-            handle(error)
+            handleGlobal(error)
             return false
         }
     }
@@ -449,7 +449,7 @@ final class CAPTOperatorStore: ObservableObject {
             return true
         } catch {
             providerCredentialStatus[providerID] = "Setup failed — key retained for retry"
-            handle(error)
+            handleGlobal(error)
             return false
         }
     }
@@ -457,24 +457,30 @@ final class CAPTOperatorStore: ObservableObject {
     func setDefaultModel(_ modelID: String) {
         guard !isBusy else { return }
         let providerID = provider
+        let originSessionID = activeSessionID
+        let originTargetRoot = originSessionID.flatMap { chatWorkspace.session($0)?.targetRoot } ?? targetRoot
         isBusy = true
         Task {
+            defer { isBusy = false }
             do {
                 modelSnapshot = try await runtime.setDefaultModel(
                     providerID: providerID,
                     modelID: modelID
                 )
-                model = modelID
-                persistActiveConfiguration()
-            } catch { handle(error) }
-            isBusy = false
+                persistConfiguration(
+                    for: originSessionID,
+                    provider: providerID,
+                    model: modelID,
+                    targetRoot: originTargetRoot
+                )
+            } catch { handleGlobal(error) }
         }
     }
 
     func setVerbosity(_ value: String) {
         Task {
             do { verbosity = try await runtime.setVerbosity(value) }
-            catch { handle(error) }
+            catch { handleGlobal(error) }
         }
     }
 
@@ -482,11 +488,11 @@ final class CAPTOperatorStore: ObservableObject {
         guard connectionState == .connected, !isBusy else { return }
         isBusy = true
         Task {
+            defer { isBusy = false }
             do {
                 checkpointSnapshot = try await runtime.checkpoint()
                 runtimeControlMessage = "Checkpoint committed"
-            } catch { handle(error) }
-            isBusy = false
+            } catch { handleGlobal(error) }
         }
     }
 
@@ -494,12 +500,12 @@ final class CAPTOperatorStore: ObservableObject {
         guard connectionState == .connected, !isBusy else { return }
         isBusy = true
         Task {
+            defer { isBusy = false }
             do {
-                _ = try await runtime.resume()
+                try await runtime.resume()
                 runtimeControlMessage = "Runtime resume accepted"
                 refreshAll()
-            } catch { handle(error) }
-            isBusy = false
+            } catch { handleGlobal(error) }
         }
     }
 
@@ -507,12 +513,12 @@ final class CAPTOperatorStore: ObservableObject {
         guard runtimeCapabilities?.supportsCommand("cancel_task") == true, !isBusy else { return }
         isBusy = true
         Task {
+            defer { isBusy = false }
             do {
-                _ = try await runtime.cancelTask(taskID)
+                try await runtime.cancelTask(taskID)
                 runtimeControlMessage = "Task cancelled: " + taskID
                 refreshHistory()
-            } catch { handle(error) }
-            isBusy = false
+            } catch { handleGlobal(error) }
         }
     }
 
@@ -520,12 +526,12 @@ final class CAPTOperatorStore: ObservableObject {
         guard runtimeCapabilities?.supportsCommand("cancel_driver_run") == true, !isBusy else { return }
         isBusy = true
         Task {
+            defer { isBusy = false }
             do {
-                _ = try await runtime.cancelDriverRun(driverRunID)
+                try await runtime.cancelDriverRun(driverRunID)
                 runtimeControlMessage = "DriverRun cancelled: " + driverRunID
                 refreshHistory()
-            } catch { handle(error) }
-            isBusy = false
+            } catch { handleGlobal(error) }
         }
     }
 
@@ -536,6 +542,7 @@ final class CAPTOperatorStore: ObservableObject {
         guard runtimeCapabilities?.supportsCommand("update_memory_trigger_policy") == true, !isBusy else { return }
         isBusy = true
         Task {
+            defer { isBusy = false }
             do {
                 memorySnapshot = try await runtime.updateMemoryPolicy(
                     retrieval: retrieval,
@@ -546,8 +553,7 @@ final class CAPTOperatorStore: ObservableObject {
                     modelSafe: modelSafe
                 )
                 runtimeControlMessage = "Memory trigger policy accepted by RuntimeService"
-            } catch { handle(error) }
-            isBusy = false
+            } catch { handleGlobal(error) }
         }
     }
 
@@ -561,7 +567,7 @@ final class CAPTOperatorStore: ObservableObject {
                     statement: item.statement
                 )
                 reviewedClaimID = item.id
-            } catch { handle(error) }
+            } catch { handleGlobal(error) }
         }
     }
 
@@ -569,13 +575,13 @@ final class CAPTOperatorStore: ObservableObject {
         guard runtimeCapabilities?.supportsCommand("shutdown") == true, !isBusy else { return }
         isBusy = true
         Task {
+            defer { isBusy = false }
             do {
-                _ = try await runtime.shutdown()
+                try await runtime.shutdown()
                 connectionState = .disconnected
                 runtimeIdentity = "Not connected"
                 runtimeControlMessage = "Runtime shutdown accepted. Connect will bootstrap it again."
-            } catch { handle(error) }
-            isBusy = false
+            } catch { handleGlobal(error) }
         }
     }
 
@@ -614,15 +620,27 @@ final class CAPTOperatorStore: ObservableObject {
         targetRoot = session.targetRoot
     }
 
-    private func persistActiveConfiguration() {
-        mutateWorkspace {
-            $0.updateActiveConfiguration(
-                provider: provider,
-                model: model,
-                targetRoot: targetRoot
-            )
+    private func persistConfiguration(
+        for sessionID: UUID?,
+        provider newProvider: String,
+        model newModel: String,
+        targetRoot newTargetRoot: String
+    ) {
+        if let sessionID {
+            mutateWorkspace {
+                $0.updateConfiguration(
+                    for: sessionID,
+                    provider: newProvider,
+                    model: newModel,
+                    targetRoot: newTargetRoot
+                )
+            }
+            saveSessions()
+            guard activeSessionID == sessionID else { return }
         }
-        saveSessions()
+        provider = newProvider
+        model = newModel
+        targetRoot = newTargetRoot
     }
 
     private func updateTaskStateFromActiveFlow() {
@@ -657,7 +675,7 @@ final class CAPTOperatorStore: ObservableObject {
         catch { lastError = "Native session cache: " + error.localizedDescription }
     }
 
-    private func handle(_ error: Error) {
+    private func handleGlobal(_ error: Error) {
         lastError = error.localizedDescription
     }
 

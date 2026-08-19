@@ -2,6 +2,20 @@ import XCTest
 @testable import CAPTCoreDesktop
 
 final class CAPTRuntimeControlProjectionTests: XCTestCase {
+    func testIdentityProjectionPreservesRuntimeSurface() {
+        let response: [String: Any] = [
+            "result": [
+                "runtimeVersion": "0.1.0",
+                "integrity": "ok",
+                "headSequence": 937
+            ]
+        ]
+        let identity = CAPTRuntimeControlProjection.identity(response)
+        XCTAssertEqual(identity.runtimeVersion, "0.1.0")
+        XCTAssertEqual(identity.integrity, "ok")
+        XCTAssertEqual(identity.headSequence, 937)
+    }
+
     func testMemoryProjectionPreservesPolicyAndContextState() {
         let policy: [String: Any] = [
             "policyVersion": 1,

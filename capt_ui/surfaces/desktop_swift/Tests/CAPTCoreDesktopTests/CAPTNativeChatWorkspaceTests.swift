@@ -87,6 +87,26 @@ final class CAPTNativeChatWorkspaceTests: XCTestCase {
         XCTAssertEqual(workspace.flow(for: oldID).phase, .awaitingApproval)
     }
 
+    func testLateConfigurationUpdateTargetsOriginatingSessionAfterSwitch() {
+        var workspace = CAPTNativeChatWorkspace()
+        _ = workspace.newChat(
+            id: oldID, provider: "ollama", model: "old-model", targetRoot: "/old"
+        )
+        _ = workspace.newChat(
+            id: newID, provider: "openrouter", model: "new-model", targetRoot: "/new"
+        )
+
+        workspace.updateConfiguration(
+            for: oldID, provider: "mlx", model: "late-model", targetRoot: "/old"
+        )
+
+        XCTAssertEqual(workspace.activeSessionID, newID)
+        XCTAssertEqual(workspace.session(oldID)?.provider, "mlx")
+        XCTAssertEqual(workspace.session(oldID)?.model, "late-model")
+        XCTAssertEqual(workspace.session(newID)?.provider, "openrouter")
+        XCTAssertEqual(workspace.session(newID)?.model, "new-model")
+    }
+
     func testActivatingExpiredApprovalClearsLocalCursorButKeepsMission() {
         let approval = pending(expiresAt: Date(timeIntervalSince1970: 1_000))
         let old = CAPTNativeSession(

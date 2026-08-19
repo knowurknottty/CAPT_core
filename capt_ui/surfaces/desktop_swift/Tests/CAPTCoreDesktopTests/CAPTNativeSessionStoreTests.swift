@@ -135,6 +135,25 @@ final class CAPTNativeSessionStoreTests: XCTestCase {
         XCTAssertEqual(restored.first?.pendingApproval?.expiresAt, expiresAt)
     }
 
+    func testEncryptedSessionStoreUsesPrivateFilesystemPermissions() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let file = root.appendingPathComponent("ui/native_sessions.enc")
+        let store = CAPTEncryptedSessionStore(
+            fileURL: file,
+            keyProvider: StaticSessionKeyProvider(bytes: Data(repeating: 0x51, count: 32))
+        )
+        try store.save([CAPTNativeSession(
+            title: "permission probe", provider: "ollama", model: "qwen", targetRoot: "/repo"
+        )])
+        let dirAttributes = try FileManager.default.attributesOfItem(
+            atPath: file.deletingLastPathComponent().path
+        )
+        let fileAttributes = try FileManager.default.attributesOfItem(atPath: file.path)
+        XCTAssertEqual((dirAttributes[.posixPermissions] as? NSNumber)?.intValue, 0o700)
+        XCTAssertEqual((fileAttributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
+    }
+
     func testMissingSessionCacheLoadsEmpty() throws {
         let file = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
