@@ -63,6 +63,7 @@ from capt_runtime.model_approval_binding import (
     build_bound_model_operator_approval, staging_root_for_ledger,
 )
 from capt_runtime.prepared_execution import PreparedApprovedModelExecution, freeze
+from capt_runtime.verification_baseline import capture_verification_baseline
 
 from desktop.m1_command_service import RuntimeCommandService
 
@@ -1035,10 +1036,13 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 svc.transition_driver_run(run_id, "submitted", exec_meta("drsubmit"))
                 svc.transition_driver_run(run_id, "running", exec_meta("drrun"))
                 # The integrity baseline is CAPT-side evidence captured before the
-                # external process.  Existing operator dirt is part of the
-                # baseline; only a delta is attributed to the driver.
-                before = tree_digest(str(worktree))
-                before_git_status = capture_git_status(str(worktree))
+                # external process. Existing operator dirt is part of the baseline;
+                # only a delta is attributed to the driver. Persist it in CAPT
+                # staging now so later verification does not depend on this receipt.
+                baseline = capture_verification_baseline(
+                    str(worktree), staging, mission_id, task_id, run_id, now
+                )
+                before = baseline["manifest"]["beforeDigest"]
                 reservation_id = "res-" + command_id
                 reservation = {
                     "schemaVersion": "1.0.0", "reservationId": reservation_id,
@@ -1097,25 +1101,36 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                                      actor_id="cog-1", actor_kind="cognitive_plane",
                                      issued_at=now, replay_policy="never"),
                 )
-                ev_id = "ev-" + commands.fingerprint("artifact_hash", {"artifact": artifact_digest})
-                evidence = build_artifact_hash_evidence(
+                baseline_ev_id = "ev-" + commands.fingerprint(
+                    "artifact_hash", {"artifact": baseline["artifactDigest"], "role": "verification_baseline"}
+                )
+                result_ev_id = "ev-" + commands.fingerprint(
+                    "artifact_hash", {"artifact": artifact_digest, "role": "driver_result"}
+                )
+                baseline_evidence = build_artifact_hash_evidence(
+                    mission_id=mission_id, artifact_path=baseline["artifactPath"],
+                    artifact_digest=baseline["artifactDigest"],
+                    collected_by={"actorId": "verification_pipeline", "kind": "verification_plane"},
+                    evidence_id=baseline_ev_id, task_id=task_id, collected_at=now,
+                )
+                result_evidence = build_artifact_hash_evidence(
                     mission_id=mission_id, artifact_path=artifact_path, artifact_digest=artifact_digest,
                     collected_by={"actorId": "verification_pipeline", "kind": "verification_plane"},
-                    evidence_id=ev_id, task_id=task_id, collected_at=now,
+                    evidence_id=result_ev_id, task_id=task_id, collected_at=now,
                 )
-                verification_meta = lambda step, verification_id: commands.command(
-                    command_id=command_id + ":" + step, idempotency_key=key + ":" + step,
-                    operation_fingerprint=commands.fingerprint("record_verification", {"verificationId": verification_id}),
-                    correlation_id=correlation_id,
-                    actor_id="verification_pipeline", actor_kind="verification_plane",
-                    issued_at=now, replay_policy="never",
+                def evidence_meta(step: str, evidence_id: str) -> Dict[str, Any]:
+                    return commands.command(
+                        command_id=command_id + ":" + step, idempotency_key=key + ":" + step,
+                        operation_fingerprint=commands.fingerprint("record_evidence", {"evidenceId": evidence_id}),
+                        correlation_id=correlation_id,
+                        actor_id="verification_pipeline", actor_kind="verification_plane",
+                        issued_at=now, replay_policy="never",
+                    )
+                svc.record_evidence(
+                    claim_id, baseline_evidence, evidence_meta("evidence-baseline", baseline_ev_id)
                 )
-                svc.record_evidence(claim_id, evidence,
-                    commands.command(command_id=command_id + ":evidence", idempotency_key=key + ":evidence",
-                                     operation_fingerprint=commands.fingerprint("record_evidence", {"evidenceId": ev_id}),
-                                     correlation_id=correlation_id,
-                                     actor_id="verification_pipeline", actor_kind="verification_plane",
-                                     issued_at=now, replay_policy="never"),
+                svc.record_evidence(
+                    claim_id, result_evidence, evidence_meta("evidence-result", result_ev_id)
                 )
                 _test_fault("evidence_recorded")
                 # A provider response and its immutable artifact are evidence, not
@@ -1130,6 +1145,10 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     "claimId": claim_id, "verificationId": None,
                     "artifactPath": artifact_path, "artifactDigest": artifact_digest,
                     "targetPath": str(worktree), "beforeDigest": before,
+                    "verificationBaselinePath": baseline["artifactPath"],
+                    "verificationBaselineDigest": baseline["artifactDigest"],
+                    "verificationBaselineEvidenceId": baseline_ev_id,
+                    "resultEvidenceId": result_ev_id,
                     "observations": out.get("observations", []), "driver": "provider" if provider is not None else "hermes",
                     "providerProvenance": out.get("diagnostics", {}) if provider is not None else {},
                     "cognitiveProvenance": cognitive_provenance,
