@@ -15,12 +15,15 @@
 - deterministic verification;
 - independent reviewer + deterministic verification.
 
-It computes confusion-matrix counts, precision, recall, F1, false-rejection rate, trial count, and optional mean token/cost/latency values.
+It computes confusion-matrix counts, precision, recall, F1, false-rejection rate, trial count, and optional mean token/cost/latency values. Undefined ratios and unrecorded optional metrics remain `null` rather than being misreported as measured zero.
 
 The harness enforces:
 
 - independent reviewer identity must differ from generator identity;
-- deterministic verification modes must name a verification domain;
+- deterministic verification modes must name both a verification domain and verification evidence reference;
+- every observed trial must identify its case, exact case digest, run, ground-truth evidence, and run evidence;
+- a case ID may not silently change digest, defect label, or ground-truth reference across modes;
+- all five modes must cover the same case set before cross-mode comparison is eligible;
 - consensus is explicitly not verification;
 - no model calls or fabricated trial results occur in the scorer.
 
@@ -28,7 +31,7 @@ The harness enforces:
 
 ## Tests authored
 
-`tests/test_reciprocal_review_benchmark.py` covers scoring, separation-of-duty validation, verification-domain requirements, and all-five-mode comparison without inventing a winner.
+`tests/test_reciprocal_review_benchmark.py` covers scoring, separation-of-duty validation, verification evidence requirements, duplicate trial rejection, ground-truth provenance, case-fingerprint consistency, zero-denominator handling, optional-metric missingness, and same-case-set comparison without inventing a winner.
 
 ## Evidence boundary
 
@@ -42,6 +45,7 @@ Required probe completion:
 
 1. generate a controlled defect corpus;
 2. execute all five modes under recorded model/verification identities;
-3. save exact run receipts and evidence refs;
+3. preserve case digests and ground-truth provenance, and save exact run receipts/evidence refs;
 4. score them with this harness;
-5. compare defect-detection benefit against false-rejection/token/cost/latency tradeoffs.
+5. verify reviewer blinding / leakage controls in the execution protocol;
+6. compare defect-detection benefit against false-rejection/token/cost/latency tradeoffs, including class balance and repeated-run variance.
