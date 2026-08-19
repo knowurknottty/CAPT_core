@@ -296,26 +296,69 @@ def _expectations(raw: Any) -> List[str]:
     return sorted(set(values), key=lambda x: x.lower())
 
 
+_LEXICAL_STOPWORDS = frozenset({
+    "and", "are", "but", "for", "from", "had", "has", "have", "into", "its",
+    "that", "the", "their", "then", "these", "this", "those", "was", "were",
+    "will", "with", "would",
+})
+
+
 def _tokens(text: str) -> List[str]:
-    return [token for token in re.findall(r"[A-Za-z0-9_]+", text.lower()) if len(token) > 2]
+    return [
+        token for token in re.findall(r"[A-Za-z0-9_]+", text.lower())
+        if len(token) > 2 and token not in _LEXICAL_STOPWORDS
+    ]
+
+
+def _token_forms(token: str) -> set[str]:
+    forms = {token}
+    # Avoid tiny lexical collisions such as new/news. Inflection matching is
+    # advisory and deliberately conservative rather than a stemming engine.
+    if len(token) >= 4:
+        if token.endswith(("s", "x", "z", "ch", "sh")):
+            forms.add(f"{token}es")
+        else:
+            forms.add(f"{token}s")
+    if token.endswith("es") and len(token) > 5:
+        forms.add(token[:-2])
+    if token.endswith("s") and not token.endswith("ss") and len(token) > 4:
+        forms.add(token[:-1])
+    return forms
+
+
+def _token_observed(token: str, observed: set[str]) -> bool:
+    # Keep lexical matching conservative: only whole-token identity and simple
+    # s/es inflections are related; arbitrary substrings remain non-matches.
+    return bool(_token_forms(token) & observed)
 
 
 def _gap_entries(scan: _Scan, expectations: List[str]) -> List[Dict[str, Any]]:
     corpus = "\n".join(scan.texts[path] for path in sorted(scan.texts)).lower()
+    corpus_tokens = set(_tokens(corpus))
+    path_tokens = {path: set(_tokens(text)) for path, text in scan.texts.items()}
     entries = []
     for expectation in expectations:
         phrase = expectation.lower()
         phrase_found = phrase in corpus
-        tokens = _tokens(expectation)
-        token_hits = sum(1 for token in set(tokens) if token in corpus)
-        coverage = token_hits / len(set(tokens)) if tokens else 0.0
+        tokens = set(_tokens(expectation))
+        token_hits = sum(1 for token in tokens if _token_observed(token, corpus_tokens))
+        coverage = token_hits / len(tokens) if tokens else 0.0
         observed_paths = [
             path for path, text in sorted(scan.texts.items())
-            if phrase in text.lower() or (tokens and all(token in text.lower() for token in set(tokens)))
+            if phrase in text.lower()
+            or (tokens and all(_token_observed(token, path_tokens[path]) for token in tokens))
         ][:16]
+        if phrase_found:
+            status = "text_match_found"
+        elif observed_paths:
+            status = "related_text_found"
+        elif coverage > 0.0:
+            status = "partial_text_evidence"
+        else:
+            status = "not_observed"
         entries.append({
             "expectation": expectation,
-            "status": "text_match_found" if phrase_found else "not_observed",
+            "status": status,
             "tokenCoverage": coverage,
             "observedPaths": observed_paths,
         })
@@ -360,8 +403,8 @@ def _gap_result(value: Mapping[str, Any]) -> LabEngineResult:
             "notObservedCount": sum(item["status"] == "not_observed" for item in gaps),
         },
         limitations=(
-            "not_observed means the bounded textual scan did not observe the expectation; it does not prove absence.",
-            "text_match_found is evidence of text presence only and does not prove implementation.",
+            "not_observed means the bounded textual scan observed none of the expectation signal tokens after bounded function-word filtering; it does not prove absence.",
+            "text_match_found, related_text_found, and partial_text_evidence describe lexical evidence only and do not prove implementation.",
         ),
     )
 
