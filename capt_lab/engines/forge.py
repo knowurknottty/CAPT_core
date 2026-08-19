@@ -296,16 +296,40 @@ def _expectations(raw: Any) -> List[str]:
     return sorted(set(values), key=lambda x: x.lower())
 
 
+_LEXICAL_STOPWORDS = frozenset({
+    "and", "are", "but", "for", "from", "had", "has", "have", "into", "its",
+    "that", "the", "their", "then", "these", "this", "those", "was", "were",
+    "will", "with", "would",
+})
+
+
 def _tokens(text: str) -> List[str]:
-    return [token for token in re.findall(r"[A-Za-z0-9_]+", text.lower()) if len(token) > 2]
+    return [
+        token for token in re.findall(r"[A-Za-z0-9_]+", text.lower())
+        if len(token) > 2 and token not in _LEXICAL_STOPWORDS
+    ]
+
+
+def _token_forms(token: str) -> set[str]:
+    forms = {token}
+    # Avoid tiny lexical collisions such as new/news. Inflection matching is
+    # advisory and deliberately conservative rather than a stemming engine.
+    if len(token) >= 4:
+        if token.endswith(("s", "x", "z", "ch", "sh")):
+            forms.add(f"{token}es")
+        else:
+            forms.add(f"{token}s")
+    if token.endswith("es") and len(token) > 5:
+        forms.add(token[:-2])
+    if token.endswith("s") and not token.endswith("ss") and len(token) > 4:
+        forms.add(token[:-1])
+    return forms
 
 
 def _token_observed(token: str, observed: set[str]) -> bool:
-    # Keep lexical matching conservative: simple s/es inflections are related;
-    # arbitrary substrings (audit/auditing, trail/trailer) are not token hits.
-    if token in observed or f"{token}s" in observed:
-        return True
-    return token.endswith(("s", "x", "z", "ch", "sh")) and f"{token}es" in observed
+    # Keep lexical matching conservative: only whole-token identity and simple
+    # s/es inflections are related; arbitrary substrings remain non-matches.
+    return bool(_token_forms(token) & observed)
 
 
 def _gap_entries(scan: _Scan, expectations: List[str]) -> List[Dict[str, Any]]:
