@@ -6,7 +6,7 @@ from capt_lab.contracts import LabEngineRequest, LabEngineResult
 from capt_lab.registry import LabEngineDescriptor, LabEngineRegistry, LabOperationDescriptor, build_default_registry
 from capt_lab.runtime import run_lab_advisory
 from capt_runtime import commands
-from capt_runtime.errors import IdempotencyConflict, IntegrityViolation
+from capt_runtime.errors import AuthorityViolation, IdempotencyConflict, IntegrityViolation
 from capt_runtime.services import RuntimeService
 from capt_runtime.store import EventStore
 
@@ -134,6 +134,115 @@ def test_mission_task_spoof_rejected_before_driver_run(runtime):
     with pytest.raises(Exception, match="mission|task"):
         run_lab_advisory(store, svc, build_default_registry(), staging, bad)
     assert not [s for s in store.all_aggregates() if s[1] == "driverrun"]
+
+
+def test_filesystem_engine_rejects_root_outside_task_capability_scope(tmp_path):
+    store = EventStore(str(tmp_path / "runtime.db")); svc = RuntimeService(store)
+    svc.create_mission(mission(), meta("mission-fs-scope"))
+    scoped_task = task()
+    scoped_task["capabilityRequirements"] = [{
+        "requirementId": "req-fs", "capabilityId": "cap.fs.read",
+        "operations": ["repository.read"],
+        "scope": {"kind": "filesystem", "rootPath": str(tmp_path / "allowed"), "recursive": True},
+    }]
+    svc.create_task(scoped_task, meta("task-fs-scope", "cognitive_plane", "cog-test"))
+    outside = tmp_path / "outside"; outside.mkdir(); (outside / "README.md").write_text("outside")
+    payload = {
+        "engineId": "lab.forge", "operation": "repository_archaeology",
+        "input": {"root": str(outside)}, "missionId": "m-lab", "taskId": "t-lab",
+    }
+    try:
+        with pytest.raises(AuthorityViolation, match="filesystem capability"):
+            run_lab_advisory(store, svc, build_default_registry(), tmp_path / "staging",
+                             command(payload, key="idem-fs-outside", command_id="cmd-fs-outside"))
+        assert not [s for s in store.all_aggregates() if s[1] == "driverrun"]
+    finally:
+        store.close()
+
+
+def test_filesystem_engine_rejects_symlink_escape_from_authorized_scope(tmp_path):
+    store = EventStore(str(tmp_path / "runtime.db")); svc = RuntimeService(store)
+    svc.create_mission(mission(), meta("mission-fs-symlink"))
+    allowed = tmp_path / "allowed"; allowed.mkdir()
+    outside = tmp_path / "outside"; outside.mkdir(); (outside / "README.md").write_text("outside")
+    link = allowed / "escape"; link.symlink_to(outside, target_is_directory=True)
+    scoped_task = task()
+    scoped_task["capabilityRequirements"] = [{
+        "requirementId": "req-fs", "capabilityId": "cap.fs.read",
+        "operations": ["repository.read"],
+        "scope": {"kind": "filesystem", "rootPath": str(allowed), "recursive": True},
+    }]
+    svc.create_task(scoped_task, meta("task-fs-symlink", "cognitive_plane", "cog-test"))
+    payload = {"engineId":"lab.forge","operation":"repository_archaeology",
+               "input":{"root":str(link)},"missionId":"m-lab","taskId":"t-lab"}
+    try:
+        with pytest.raises(AuthorityViolation, match="filesystem capability"):
+            run_lab_advisory(store, svc, build_default_registry(), tmp_path / "staging",
+                             command(payload, key="idem-fs-symlink", command_id="cmd-fs-symlink"))
+        assert not [s for s in store.all_aggregates() if s[1] == "driverrun"]
+    finally:
+        store.close()
+
+
+def test_filesystem_engine_rejects_child_when_scope_is_non_recursive(tmp_path):
+    store = EventStore(str(tmp_path / "runtime.db")); svc = RuntimeService(store)
+    svc.create_mission(mission(), meta("mission-fs-nonrecursive"))
+    allowed = tmp_path / "allowed"; child = allowed / "repo"; child.mkdir(parents=True)
+    scoped_task = task()
+    scoped_task["capabilityRequirements"] = [{
+        "requirementId": "req-fs", "capabilityId": "cap.fs.read",
+        "operations": ["repository.read"],
+        "scope": {"kind": "filesystem", "rootPath": str(allowed), "recursive": False},
+    }]
+    svc.create_task(scoped_task, meta("task-fs-nonrecursive", "cognitive_plane", "cog-test"))
+    payload = {"engineId":"lab.forge","operation":"repository_archaeology",
+               "input":{"root":str(child)},"missionId":"m-lab","taskId":"t-lab"}
+    try:
+        with pytest.raises(AuthorityViolation, match="filesystem capability"):
+            run_lab_advisory(store, svc, build_default_registry(), tmp_path / "staging",
+                             command(payload, key="idem-fs-nonrecursive", command_id="cmd-fs-nonrecursive"))
+    finally:
+        store.close()
+
+
+def test_filesystem_engine_requires_explicit_read_capability(tmp_path):
+    store = EventStore(str(tmp_path / "runtime.db")); svc = RuntimeService(store)
+    svc.create_mission(mission(), meta("mission-fs-none"))
+    svc.create_task(task(), meta("task-fs-none", "cognitive_plane", "cog-test"))
+    repo = tmp_path / "repo"; repo.mkdir(); (repo / "README.md").write_text("repo")
+    payload = {"engineId":"lab.forge","operation":"repository_archaeology",
+               "input":{"root":str(repo)},"missionId":"m-lab","taskId":"t-lab"}
+    try:
+        with pytest.raises(AuthorityViolation, match="filesystem capability"):
+            run_lab_advisory(store, svc, build_default_registry(), tmp_path / "staging",
+                             command(payload, key="idem-fs-none", command_id="cmd-fs-none"))
+    finally:
+        store.close()
+
+
+def test_filesystem_engine_accepts_root_inside_recursive_task_capability_scope(tmp_path):
+    store = EventStore(str(tmp_path / "runtime.db")); svc = RuntimeService(store)
+    svc.create_mission(mission(), meta("mission-fs-inside"))
+    allowed = tmp_path / "allowed"; target = allowed / "repo"; target.mkdir(parents=True)
+    (target / "README.md").write_text("inside")
+    scoped_task = task()
+    scoped_task["capabilityRequirements"] = [{
+        "requirementId": "req-fs", "capabilityId": "cap.fs.read",
+        "operations": ["repository.read"],
+        "scope": {"kind": "filesystem", "rootPath": str(allowed), "recursive": True},
+    }]
+    svc.create_task(scoped_task, meta("task-fs-inside", "cognitive_plane", "cog-test"))
+    payload = {
+        "engineId": "lab.forge", "operation": "repository_archaeology",
+        "input": {"root": str(target)}, "missionId": "m-lab", "taskId": "t-lab",
+    }
+    try:
+        receipt = run_lab_advisory(store, svc, build_default_registry(), tmp_path / "staging",
+                                   command(payload, key="idem-fs-inside", command_id="cmd-fs-inside"))
+        assert receipt["promotionState"] == "proposed"
+        assert store.require_state("driverrun-" + receipt["driverRunId"])["state"] == "completed"
+    finally:
+        store.close()
 
 
 def test_terminal_task_rejected_before_driver_run(tmp_path):
