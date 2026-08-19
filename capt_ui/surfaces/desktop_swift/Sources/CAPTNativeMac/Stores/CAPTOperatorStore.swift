@@ -126,7 +126,6 @@ final class CAPTOperatorStore: ObservableObject {
         default: return ""
         }
     }
-    }
 
     private func restoreSessionsAsync() {
         let store = sessionStore
@@ -361,9 +360,7 @@ final class CAPTOperatorStore: ObservableObject {
         }
     }
 
-    private func applyOperatorSnapshot(
-        _ snapshot: (providers: [CAPTProviderSnapshot], models: CAPTModelSelectionSnapshot, verbosity: String)
-    ) {
+    private func applyOperatorSnapshot(_ snapshot: CAPTOperatorStateSnapshot) {
         providers = snapshot.providers
         modelSnapshot = snapshot.models
         verbosity = snapshot.verbosity
