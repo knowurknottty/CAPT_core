@@ -10,11 +10,13 @@ def _trial(trial_id, mode, defect, flagged, case_id=None, **extra):
         "trialId": trial_id,
         "caseId": case_id or trial_id,
         "caseDigest": "sha256:case-%s" % (case_id or trial_id),
+        "repeatId": extra.pop("repeatId", "rep-1"),
         "runId": "run-%s" % trial_id,
         "mode": mode,
         "defectPresent": defect,
         "flagged": flagged,
         "groundTruthRef": "ground-truth://%s" % (case_id or trial_id),
+        "protocolRef": extra.pop("protocolRef", "protocol://upg020-v1"),
         "evidenceRef": "ledger://%s" % trial_id,
     }
     row.update(extra)
@@ -46,6 +48,7 @@ def test_independent_review_requires_separate_identities():
     trial = _trial(
         "i1", "independent_reviewer", True, True,
         generatorIdentity="model-a", reviewerIdentity="model-a",
+        reviewerBlindToGroundTruth=True, reviewerBlindToOtherModes=True, leakageCheckRef="proof://leakage",
     )
     with pytest.raises(ValueError, match="must differ"):
         score_trials([trial])
@@ -117,13 +120,13 @@ def test_all_modes_require_same_case_set_for_comparison_eligibility():
     trials = [
         _trial("s", "self_review", True, False, case_id="case-a", **common),
         _trial("n", "naive_agreement", True, True, case_id="case-b", **common),
-        _trial("i", "independent_reviewer", True, True, case_id="case-a", generatorIdentity="a", reviewerIdentity="b"),
+        _trial("i", "independent_reviewer", True, True, case_id="case-a", generatorIdentity="a", reviewerIdentity="b", reviewerBlindToGroundTruth=True, reviewerBlindToOtherModes=True, leakageCheckRef="proof://leakage"),
         _trial("d", "deterministic_verification", True, True, case_id="case-a", verificationDomain="tests", verificationRef="proof://d"),
-        _trial("c", "reviewer_plus_verification", True, True, case_id="case-a", generatorIdentity="a", reviewerIdentity="b", verificationDomain="tests", verificationRef="proof://c"),
+        _trial("c", "reviewer_plus_verification", True, True, case_id="case-a", generatorIdentity="a", reviewerIdentity="b", reviewerBlindToGroundTruth=True, reviewerBlindToOtherModes=True, leakageCheckRef="proof://leakage", verificationDomain="tests", verificationRef="proof://c"),
     ]
     result = score_trials(trials)
     assert result["allRequiredModesPopulated"] is True
-    assert result["comparableCaseSet"] is False
+    assert result["comparableCaseSetAndRepeats"] is False
     assert result["comparisonEligible"] is False
 
 
@@ -131,13 +134,65 @@ def test_all_five_modes_can_be_compared_without_inventing_winner():
     trials = [
         _trial("s", "self_review", True, False, case_id="case-1"),
         _trial("n", "naive_agreement", True, True, case_id="case-1"),
-        _trial("i", "independent_reviewer", True, True, case_id="case-1", generatorIdentity="a", reviewerIdentity="b"),
+        _trial("i", "independent_reviewer", True, True, case_id="case-1", generatorIdentity="a", reviewerIdentity="b", reviewerBlindToGroundTruth=True, reviewerBlindToOtherModes=True, leakageCheckRef="proof://leakage"),
         _trial("d", "deterministic_verification", True, True, case_id="case-1", verificationDomain="tests", verificationRef="proof://d"),
-        _trial("c", "reviewer_plus_verification", True, True, case_id="case-1", generatorIdentity="a", reviewerIdentity="b", verificationDomain="tests", verificationRef="proof://c"),
+        _trial("c", "reviewer_plus_verification", True, True, case_id="case-1", generatorIdentity="a", reviewerIdentity="b", reviewerBlindToGroundTruth=True, reviewerBlindToOtherModes=True, leakageCheckRef="proof://leakage", verificationDomain="tests", verificationRef="proof://c"),
     ]
     result = score_trials(trials)
     assert result["allRequiredModesPopulated"] is True
-    assert result["comparableCaseSet"] is True
+    assert result["comparableCaseSetAndRepeats"] is True
     assert result["comparisonEligible"] is True
+    assert result["empiricalInferenceEligible"] is False
     assert set(result["populatedModes"]) == set(result["modes"])
     assert "winner" not in result
+
+
+def test_independent_review_requires_explicit_blinding_and_leakage_evidence():
+    trial = _trial(
+        "i-blind", "independent_reviewer", True, True,
+        generatorIdentity="model-a", reviewerIdentity="model-b",
+    )
+    with pytest.raises(ValueError, match="reviewerBlindToGroundTruth"):
+        score_trials([trial])
+
+
+def test_protocol_mismatch_fails_closed():
+    trials = [
+        _trial("s", "self_review", True, True, case_id="case-1", protocolRef="protocol://a"),
+        _trial("n", "naive_agreement", True, True, case_id="case-1", protocolRef="protocol://b"),
+    ]
+    with pytest.raises(ValueError, match="one protocolRef"):
+        score_trials(trials)
+
+
+def test_comparison_requires_matching_case_repeat_observations():
+    trials = [
+        _trial("s", "self_review", True, True, case_id="case-1", repeatId="rep-1"),
+        _trial("n", "naive_agreement", True, True, case_id="case-1", repeatId="rep-2"),
+        _trial("i", "independent_reviewer", True, True, case_id="case-1", repeatId="rep-1", generatorIdentity="a", reviewerIdentity="b", reviewerBlindToGroundTruth=True, reviewerBlindToOtherModes=True, leakageCheckRef="proof://leakage"),
+        _trial("d", "deterministic_verification", True, True, case_id="case-1", repeatId="rep-1", verificationDomain="tests", verificationRef="proof://d"),
+        _trial("c", "reviewer_plus_verification", True, True, case_id="case-1", repeatId="rep-1", generatorIdentity="a", reviewerIdentity="b", reviewerBlindToGroundTruth=True, reviewerBlindToOtherModes=True, leakageCheckRef="proof://leakage", verificationDomain="tests", verificationRef="proof://c"),
+    ]
+    result = score_trials(trials)
+    assert result["comparisonEligible"] is False
+
+
+def test_balanced_repeated_observations_expose_variance_and_inference_eligibility():
+    trials = []
+    for repeat_id in ("rep-1", "rep-2"):
+        for case_id, defect in (("defect", True), ("clean", False)):
+            trials.extend([
+                _trial(f"s-{repeat_id}-{case_id}", "self_review", defect, defect, case_id=case_id, repeatId=repeat_id),
+                _trial(f"n-{repeat_id}-{case_id}", "naive_agreement", defect, defect, case_id=case_id, repeatId=repeat_id),
+                _trial(f"i-{repeat_id}-{case_id}", "independent_reviewer", defect, defect, case_id=case_id, repeatId=repeat_id, generatorIdentity="a", reviewerIdentity="b", reviewerBlindToGroundTruth=True, reviewerBlindToOtherModes=True, leakageCheckRef="proof://leakage"),
+                _trial(f"d-{repeat_id}-{case_id}", "deterministic_verification", defect, defect, case_id=case_id, repeatId=repeat_id, verificationDomain="tests", verificationRef="proof://d"),
+                _trial(f"c-{repeat_id}-{case_id}", "reviewer_plus_verification", defect, defect, case_id=case_id, repeatId=repeat_id, generatorIdentity="a", reviewerIdentity="b", reviewerBlindToGroundTruth=True, reviewerBlindToOtherModes=True, leakageCheckRef="proof://leakage", verificationDomain="tests", verificationRef="proof://c"),
+            ])
+    result = score_trials(trials)
+    assert result["comparisonEligible"] is True
+    assert result["classBalancePresent"] is True
+    assert result["repeatedRunsPresent"] is True
+    assert result["blindingControlsSatisfied"] is True
+    assert result["empiricalInferenceEligible"] is True
+    assert result["claimStatus"] == "empirical_inference_eligible"
+    assert result["modes"]["self_review"]["replicateVariance"]["recall"]["populationStdDev"] == 0.0
