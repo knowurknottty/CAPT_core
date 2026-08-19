@@ -253,7 +253,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--mission", default=None, help="mission id to inspect (default: most recent)")
 
     p = sub.add_parser("run", help="run a governed provider inference")
-    p.add_argument("--provider", required=True, choices=["ollama", "openrouter"])
+    p.add_argument("--provider", required=True, help="registered CAPT provider id")
     p.add_argument("--model", required=True)
     p.add_argument("--prompt", required=True)
     p.add_argument("--state-dir", default=None)

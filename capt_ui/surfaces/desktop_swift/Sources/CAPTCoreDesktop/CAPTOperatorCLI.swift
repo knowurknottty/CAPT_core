@@ -21,6 +21,20 @@ public struct CAPTProviderSnapshot: Codable, Identifiable, Hashable, Sendable {
         case latencyMs = "latency_ms"
     }
 }
+public struct CAPTProviderWarmupSnapshot: Codable, Hashable, Sendable {
+    public let status: String
+    public let provider: String
+    public let model: String
+    public let endpointClass: String
+    public let latencyMs: Int
+
+    enum CodingKeys: String, CodingKey {
+        case status, provider, model
+        case endpointClass = "endpoint_class"
+        case latencyMs = "latency_ms"
+    }
+}
+
 public struct CAPTModelSelectionSnapshot: Codable, Hashable, Sendable {
     public struct Selection: Codable, Hashable, Sendable {
         public let provider: String
@@ -92,6 +106,42 @@ public struct CAPTOperatorCLI {
         catch { throw CAPTOperatorCLIError.malformedJSON(error.localizedDescription) }
     }
 
+    public static func requiresPrewarm(_ provider: CAPTProviderSnapshot, modelID: String) -> Bool {
+        provider.kind.lowercased() == "local" &&
+            provider.transport == "openai_compatible" &&
+            provider.enabled && !modelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    public static func providerActionLabel(
+        provider: CAPTProviderSnapshot, executionProviderID: String
+    ) -> String? {
+        guard provider.id != executionProviderID else { return nil }
+        return provider.selected ? "Use" : "Activate"
+    }
+
+    public static func newChatSelection(
+        models: CAPTModelSelectionSnapshot, selectedProviderID: String?,
+        fallbackProvider: String, fallbackModel: String
+    ) -> CAPTModelSelectionSnapshot.Selection {
+        if let configured = models.defaultSelection,
+           !configured.provider.isEmpty, !configured.model.isEmpty {
+            return configured
+        }
+        if let selectedProviderID, !selectedProviderID.isEmpty, !models.active.isEmpty {
+            return .init(provider: selectedProviderID, model: models.active)
+        }
+        return .init(provider: fallbackProvider, model: fallbackModel)
+    }
+
+    public static func prewarmArguments(providerID: String, modelID: String) -> [String] {
+        ["providers", "--prewarm", providerID, "--model", modelID, "--json"]
+    }
+
+    public static func decodeProviderWarmup(_ data: Data) throws -> CAPTProviderWarmupSnapshot {
+        do { return try JSONDecoder().decode(CAPTProviderWarmupSnapshot.self, from: data) }
+        catch { throw CAPTOperatorCLIError.malformedJSON(error.localizedDescription) }
+    }
+
     public static func decodeModels(_ data: Data) throws -> CAPTModelSelectionSnapshot {
         do { return try JSONDecoder().decode(CAPTModelSelectionSnapshot.self, from: data) }
         catch { throw CAPTOperatorCLIError.malformedJSON(error.localizedDescription) }
@@ -127,6 +177,10 @@ public struct CAPTOperatorCLI {
     public func testProvider(_ providerID: String) throws -> [CAPTProviderSnapshot] {
         _ = try run(["providers", "--test", providerID, "--json"])
         return try providers()
+    }
+
+    public func prewarmProvider(providerID: String, modelID: String) throws -> CAPTProviderWarmupSnapshot {
+        try Self.decodeProviderWarmup(run(Self.prewarmArguments(providerID: providerID, modelID: modelID)))
     }
 
     public func setProviderKeyReference(_ providerID: String, reference: String) throws -> [CAPTProviderSnapshot] {
