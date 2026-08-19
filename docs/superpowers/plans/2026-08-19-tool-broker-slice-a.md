@@ -57,7 +57,9 @@
 **Tests**
 - Create focused tests under `tests/capt_runtime/test_tool_*.py` as specified below.
 
----### Task 1: Contract the ToolBroker vocabulary
+---
+
+### Task 1: Contract the ToolBroker vocabulary
 
 **Files:**
 - Modify: `contracts/schema/tool.schema.json`
@@ -120,7 +122,9 @@ git add contracts tests/capt_runtime/test_tool_contracts.py
 git commit -m "feat(tool): define governed ToolBroker contracts"
 ```
 
----### Task 2: Registry and truthful readiness
+---
+
+### Task 2: Registry and truthful readiness
 
 **Files:**
 - Create: `capt_runtime/tools/__init__.py`
@@ -309,7 +313,9 @@ def test_write_through_escape_symlink_is_denied(adapter, scoped_request, escape_
 - [ ] **Step 5:** Run `python -m pytest tests/capt_runtime/test_file_tool.py tests/capt_runtime/test_tool_broker.py -q`; expect PASS.
 - [ ] **Step 6:** Commit `feat(tool): add governed file operations adapter`.
 
----### Task 7: Real Python Code Execution adapter
+---
+
+### Task 7: Real Python Code Execution adapter
 
 **Files:**
 - Create: `capt_runtime/tools/adapters/code.py`
@@ -375,7 +381,9 @@ def test_run_tool_without_broker_fails_closed(command_service):
 - [ ] **Step 6:** Run `python -m pytest tests/capt_runtime/test_tool_runtime_command.py tests/capt_runtime/test_desktop_m1_security.py -q`; expect PASS.
 - [ ] **Step 7:** Commit `feat(tool): expose ToolBroker through authenticated runtime`.
 
----### Task 9: Slice-A falsification and release evidence
+---
+
+### Task 9: Slice-A falsification and release evidence
 
 **Files:**
 - Create: `tests/capt_runtime/test_tool_slice_a_acceptance.py`
@@ -471,4 +479,4 @@ git push origin feat/release-tool-broker-terminal-v1
 - Interface names are consistent across tasks: `ToolRegistry`, `ToolExecutionAggregate`, `ToolBroker`, `LocalProcessBackend`, `FileToolAdapter`, `CodeExecutionAdapter`, and `run_tool`.
 - No task authorizes direct adapter calls from a normal operator path.
 - No environmental limitation is allowed to become a fabricated PASS.
-- No TODO/TBD/placeholder implementation step is permitted.
+- No unresolved placeholder implementation step is permitted.
