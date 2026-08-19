@@ -29,6 +29,8 @@ _PERMITTED: Dict[str, FrozenSet[str]] = {
     "activate_lease": frozenset({GOVERNANCE}),
     "reserve_use": frozenset({EXECUTION}),
     "finalize_use": frozenset({EXECUTION}),
+    "prepare_tool_execution": frozenset({EXECUTION, SYSTEM}),
+    "transition_tool_execution": frozenset({EXECUTION, SYSTEM}),
     "create_mission": frozenset({HUMAN, SYSTEM}),
     "plan_tasks": frozenset({COGNITION, SYSTEM}),
     "transition_task": frozenset({EXECUTION, SYSTEM}),
