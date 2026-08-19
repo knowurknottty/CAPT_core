@@ -30,7 +30,7 @@ This classification does **not** imply public-release readiness or scientific va
 | Schema abstraction | READY | advisory | Structural recurrence only; no truth/generalization claim |
 | QIPC-inspired belief aggregation | READY | advisory | Probability/entropy/confidence diagnostics only |
 | Repository archaeology | READY | advisory | Read-only, root-bounded, secret/binary/symlink exclusions |
-| Gap analysis | READY | advisory | Distinguishes exact `text_match_found`, co-located `related_text_found`, distributed `partial_text_evidence`, and zero-signal-token `not_observed`; lexical coverage excludes a bounded set of common function words, uses whole tokens plus conservative symmetric `s`/`es` inflections, and suppresses short-lexeme collisions such as `new`/`news`; all states are lexical evidence only, never “implemented” |
+| Gap analysis | READY | advisory | Distinguishes exact `text_match_found`, co-located `related_text_found`, distributed `partial_text_evidence`, and zero-signal-token `not_observed`; lexical coverage excludes a bounded set of common function words, uses whole tokens with camel/Pascal/snake identifier boundaries plus conservative symmetric `s`/`es` inflections, and suppresses short-lexeme collisions such as `new`/`news`; all states are lexical evidence only, never “implemented” |
 | SIGMA implementation brief | READY | advisory | Bounded implementation input; not approval or verification |
 | ForgeProof rubric scoring | READY | advisory | Operator-supplied scores; no fabricated reviewer |
 | Native Labs workstation | READY | renderer/controller | Uses only `lab_engines` + `run_lab_engine_advisory` IPC |
