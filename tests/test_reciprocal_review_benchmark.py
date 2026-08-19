@@ -5,8 +5,18 @@ import pytest
 from benchmarks.reciprocal_review import score_trials
 
 
-def _trial(trial_id, mode, defect, flagged, **extra):
-    row = {"trialId": trial_id, "mode": mode, "defectPresent": defect, "flagged": flagged}
+def _trial(trial_id, mode, defect, flagged, case_id=None, **extra):
+    row = {
+        "trialId": trial_id,
+        "caseId": case_id or trial_id,
+        "caseDigest": "sha256:case-%s" % (case_id or trial_id),
+        "runId": "run-%s" % trial_id,
+        "mode": mode,
+        "defectPresent": defect,
+        "flagged": flagged,
+        "groundTruthRef": "ground-truth://%s" % (case_id or trial_id),
+        "evidenceRef": "ledger://%s" % trial_id,
+    }
     row.update(extra)
     return row
 
@@ -29,7 +39,7 @@ def test_scores_observed_trials_without_treating_consensus_as_verification():
     assert self_review["f1"] == 0.5
     assert self_review["falseRejectionRate"] == 0.5
     assert result["consensusIsVerification"] is False
-    assert result["allRequiredModesPopulated"] is False
+    assert result["comparisonEligible"] is False
 
 
 def test_independent_review_requires_separate_identities():
@@ -41,21 +51,93 @@ def test_independent_review_requires_separate_identities():
         score_trials([trial])
 
 
-def test_verification_modes_require_explicit_domain():
-    trial = _trial("v1", "deterministic_verification", True, True)
+def test_verification_modes_require_explicit_domain_and_evidence_reference():
     with pytest.raises(ValueError, match="verificationDomain"):
+        score_trials([_trial("v1", "deterministic_verification", True, True)])
+    trial = _trial(
+        "v2", "deterministic_verification", True, True,
+        verificationDomain="tests", verificationRef="",
+    )
+    with pytest.raises(ValueError, match="verificationRef"):
         score_trials([trial])
+
+
+def test_duplicate_trial_ids_fail_closed():
+    trials = [
+        _trial("dup", "self_review", True, True, case_id="c1"),
+        _trial("dup", "self_review", False, False, case_id="c2"),
+    ]
+    with pytest.raises(ValueError, match="duplicate trialId"):
+        score_trials(trials)
+
+
+def test_missing_evidence_ref_fails_closed():
+    trial = _trial("s1", "self_review", True, True)
+    trial.pop("evidenceRef")
+    with pytest.raises(ValueError, match="evidenceRef"):
+        score_trials([trial])
+
+
+
+def test_case_fingerprint_must_match_across_modes():
+    trials = [
+        _trial("s", "self_review", True, True, case_id="case-1", caseDigest="sha256:a"),
+        _trial("n", "naive_agreement", False, False, case_id="case-1", caseDigest="sha256:b"),
+    ]
+    with pytest.raises(ValueError, match="case fingerprint mismatch"):
+        score_trials(trials)
+
+
+def test_ground_truth_reference_is_required():
+    trial = _trial("s1", "self_review", True, True)
+    trial["groundTruthRef"] = ""
+    with pytest.raises(ValueError, match="groundTruthRef"):
+        score_trials([trial])
+
+
+def test_unrecorded_optional_metrics_are_not_coerced_to_zero():
+    result = score_trials([_trial("s1", "self_review", True, True)])
+    mode = result["modes"]["self_review"]
+    assert mode["meanTokens"] is None
+    assert mode["meanCostUsd"] is None
+    assert mode["meanLatencyMs"] is None
+    assert mode["recordedTokensCount"] == 0
+
+
+def test_zero_denominator_metrics_are_unknown_not_measured_zero():
+    result = score_trials([_trial("s1", "self_review", True, True)])
+    mode = result["modes"]["self_review"]
+    assert mode["precision"] == 1.0
+    assert mode["recall"] == 1.0
+    assert mode["falseRejectionRate"] is None
+
+
+def test_all_modes_require_same_case_set_for_comparison_eligibility():
+    common = dict(generatorIdentity="generator-a")
+    trials = [
+        _trial("s", "self_review", True, False, case_id="case-a", **common),
+        _trial("n", "naive_agreement", True, True, case_id="case-b", **common),
+        _trial("i", "independent_reviewer", True, True, case_id="case-a", generatorIdentity="a", reviewerIdentity="b"),
+        _trial("d", "deterministic_verification", True, True, case_id="case-a", verificationDomain="tests", verificationRef="proof://d"),
+        _trial("c", "reviewer_plus_verification", True, True, case_id="case-a", generatorIdentity="a", reviewerIdentity="b", verificationDomain="tests", verificationRef="proof://c"),
+    ]
+    result = score_trials(trials)
+    assert result["allRequiredModesPopulated"] is True
+    assert result["comparableCaseSet"] is False
+    assert result["comparisonEligible"] is False
 
 
 def test_all_five_modes_can_be_compared_without_inventing_winner():
     trials = [
-        _trial("s", "self_review", True, False),
-        _trial("n", "naive_agreement", True, True),
-        _trial("i", "independent_reviewer", True, True, generatorIdentity="a", reviewerIdentity="b"),
-        _trial("d", "deterministic_verification", True, True, verificationDomain="tests"),
-        _trial("c", "reviewer_plus_verification", True, True, generatorIdentity="a", reviewerIdentity="b", verificationDomain="tests"),
+        _trial("s", "self_review", True, False, case_id="case-1"),
+        _trial("n", "naive_agreement", True, True, case_id="case-1"),
+        _trial("i", "independent_reviewer", True, True, case_id="case-1", generatorIdentity="a", reviewerIdentity="b"),
+        _trial("d", "deterministic_verification", True, True, case_id="case-1", verificationDomain="tests", verificationRef="proof://d"),
+        _trial("c", "reviewer_plus_verification", True, True, case_id="case-1", generatorIdentity="a", reviewerIdentity="b", verificationDomain="tests", verificationRef="proof://c"),
     ]
     result = score_trials(trials)
     assert result["allRequiredModesPopulated"] is True
+    assert result["comparableCaseSet"] is True
+    assert result["comparisonEligible"] is True
     assert set(result["populatedModes"]) == set(result["modes"])
     assert "winner" not in result
