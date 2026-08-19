@@ -33,9 +33,9 @@ class RuntimeComposition:
 
     def command_service(self, operator_id: str, session_id: str):
         # Import lazily to avoid a desktop-to-runtime import cycle at module load.
-        from desktop.governed_m1_command_service import GovernedRuntimeCommandService
+        from desktop.lease_command_service import LeaseRuntimeCommandService
 
-        return GovernedRuntimeCommandService(
+        return LeaseRuntimeCommandService(
             self.store,
             operator_id,
             session_id,

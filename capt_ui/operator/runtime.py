@@ -12,6 +12,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from .epistemics import project_epistemic_ladder
+from .leases import project_capability_leases
+
 from .contract import (
     ApproxRequest,
     Dashboard,
@@ -95,14 +98,29 @@ class Operator:
             return Dashboard()
         st = project_authoritative_state(self._client)  # type: ignore
         approvals = project_approval_queue(self._client)  # type: ignore
+        claims = list(st.get("claims", []))
+        verifications_by_claim = dict(st.get("verificationsByClaim", {}))
+        if len(verifications_by_claim) == 1:
+            compatibility_verification = next(iter(verifications_by_claim.values()))
+        elif len(verifications_by_claim) > 1:
+            compatibility_verification = {
+                "status": {"kind": "claim_scoped"},
+                "claimCount": len(verifications_by_claim),
+                "note": "Use verifications_by_claim / epistemic_ladder; no global verification scalar exists.",
+            }
+        else:
+            compatibility_verification = {}
         dash = Dashboard(
             status=OperatorStatus(health=health_of(self._client.identity(), True)),
             missions=st.get("missions", []),
             tasks=st.get("tasks", []),
             approvals=[_to_approval(a) for a in approvals],
             driver_runs=st.get("driverRuns", []),
+            claims=claims,
             events=st.get("eventTimeline", []),
-            verification=st.get("verification", {}),
+            verification=compatibility_verification,
+            verifications_by_claim=verifications_by_claim,
+            epistemic_ladder=project_epistemic_ladder(claims, verifications_by_claim),
             ledger_chain_digest=st.get("identity", {}).get("ledgerChainDigest", ""),
         )
         dash.status.head_sequence = st.get("identity", {}).get("headSequence", 0) or 0
@@ -110,6 +128,17 @@ class Operator:
         dash.status.approvals_pending = len(dash.approvals)
         dash.evidence = EvidenceView(verification=dash.verification)
         return dash
+
+    def capability_leases(self, now: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Project current authoritative capability/lease states for display."""
+        states: List[Dict[str, Any]] = []
+        for aggregate in self._client.list_aggregates():
+            if aggregate.get("kind") != "capability":
+                continue
+            state = self._client.get_state(aggregate["streamId"])
+            if state:
+                states.append(state)
+        return project_capability_leases(states, now=now)
 
     # -- governed controls ------------------------------------------------
     def create_mission(self, payload: Dict[str, Any], idempotency_key: Optional[str] = None) -> Dict[str, Any]:
@@ -141,6 +170,27 @@ class Operator:
             "steer_deliberation",
             {"cohortId": cohort_id, "directive": directive, "reason": reason},
         )
+
+    def revoke_capability(
+        self,
+        grant_id: str,
+        *,
+        target_kind: str,
+        target_id: str,
+        reason: str,
+        revocation_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Request governed grant/lease revocation through RuntimeService authority."""
+        payload: Dict[str, Any] = {
+            "grantId": grant_id,
+            "targetKind": target_kind,
+            "targetId": target_id,
+            "reason": reason,
+        }
+        if revocation_id:
+            payload["revocationId"] = revocation_id
+        return self._client.command("revoke_capability", payload, idempotency_key)
 
     def update_memory_policy(self, payload: Dict[str, Any], idempotency_key: Optional[str] = None) -> Dict[str, Any]:
         return self._client.command("update_memory_trigger_policy", payload, idempotency_key)

@@ -12,3 +12,14 @@ def test_runtime_capabilities_advertise_governed_steering():
         assert "steer_deliberation" in ops
     finally:
         store.close()
+
+
+def test_runtime_capabilities_advertise_governed_revocation():
+    store = EventStore(":memory:")
+    try:
+        result = RuntimeQueryService(store).handle({"op": "capabilities"})
+        assert result["ok"] is True
+        ops = set(result["result"]["commandOperations"])
+        assert "revoke_capability" in ops
+    finally:
+        store.close()
