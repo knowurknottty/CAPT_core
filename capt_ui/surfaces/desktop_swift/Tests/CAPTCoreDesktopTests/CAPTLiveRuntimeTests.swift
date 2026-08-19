@@ -60,9 +60,10 @@ final class CAPTLiveRuntimeTests: XCTestCase {
         let operatorCLI = CAPTOperatorCLI()
         let providers = try operatorCLI.providers()
         let models = try operatorCLI.models()
-        XCTAssertTrue(providers.contains(where: { $0.id == "ollama" && $0.selected }))
+        XCTAssertTrue(providers.contains(where: { $0.id == "ollama" }))
         XCTAssertFalse(models.active.isEmpty)
-        _ = try operatorCLI.activateProvider("ollama")
+        let activatedProviders = try operatorCLI.activateProvider("ollama")
+        XCTAssertTrue(activatedProviders.contains(where: { $0.id == "ollama" && $0.selected }))
         if let defaultModel = models.defaultSelection?.model {
             let after = try operatorCLI.setDefaultModel(providerID: "ollama", modelID: defaultModel)
             XCTAssertEqual(after.defaultSelection?.model, defaultModel)
