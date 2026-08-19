@@ -112,6 +112,20 @@ public struct CAPTOperatorCLI {
             provider.enabled && !modelID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    public static func newChatSelection(
+        models: CAPTModelSelectionSnapshot, selectedProviderID: String?,
+        fallbackProvider: String, fallbackModel: String
+    ) -> CAPTModelSelectionSnapshot.Selection {
+        if let configured = models.defaultSelection,
+           !configured.provider.isEmpty, !configured.model.isEmpty {
+            return configured
+        }
+        if let selectedProviderID, !selectedProviderID.isEmpty, !models.active.isEmpty {
+            return .init(provider: selectedProviderID, model: models.active)
+        }
+        return .init(provider: fallbackProvider, model: fallbackModel)
+    }
+
     public static func prewarmArguments(providerID: String, modelID: String) -> [String] {
         ["providers", "--prewarm", providerID, "--model", modelID, "--json"]
     }
