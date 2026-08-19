@@ -4,7 +4,7 @@ from copy import deepcopy
 
 import pytest
 
-from capt_runtime.errors import CapabilityDenied, IdempotencyConflict
+from capt_runtime.errors import AuthorityViolation, CapabilityDenied, IdempotencyConflict
 from capt_runtime.services import RuntimeService
 from capt_runtime.store import EventStore
 from capt_runtime.tool_broker import ToolBroker, tool_request_fingerprint
@@ -20,7 +20,14 @@ class FakeAdapter:
     def __init__(self) -> None:
         self.calls = 0
         self.reconcile_calls = 0
+        self.preflight_calls = 0
+        self.preflight_error = None
         self.status = "succeeded"
+
+    def preflight(self, request: dict) -> None:
+        self.preflight_calls += 1
+        if self.preflight_error is not None:
+            raise self.preflight_error
 
     def execute(self, request: dict) -> dict:
         self.calls += 1
@@ -210,5 +217,25 @@ def test_live_lease_denial_never_reaches_adapter(tmp_path) -> None:
         )
         assert replay["status"] == "denied"
         assert replay["replayed"] is True
+    finally:
+        store.close()
+
+
+def test_request_specific_preflight_denial_happens_before_reservation_or_dispatch(tmp_path) -> None:
+    store, runtime, _registry, adapter, broker = _broker(tmp_path)
+    try:
+        adapter.preflight_error = AuthorityViolation("SSH network policy denied target")
+        result = broker.execute(
+            _request(operation="test.write", with_lease=True), operator_id="op", session_id="s"
+        )
+        assert result["status"] == "denied"
+        assert adapter.preflight_calls == 1
+        assert adapter.calls == 0
+        assert runtime.reservations == []
+        assert runtime.finalizations == []
+        state = store.require_state("tool_execution-" + result["toolExecutionId"])
+        assert state["state"] == "failed"
+        assert state["dispatchBoundary"] == "not_started"
+        assert state["reservationId"] is None
     finally:
         store.close()

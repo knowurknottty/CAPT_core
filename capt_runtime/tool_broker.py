@@ -378,6 +378,43 @@ class ToolBroker:
                 "replayed": False,
             }
 
+        adapter = registration["adapter"]
+        preflight = getattr(adapter, "preflight", None)
+        if callable(preflight):
+            try:
+                preflight(deepcopy(request))
+            except Exception as exc:
+                reason = f"{type(exc).__name__}: {exc}"
+                if isinstance(exc, (AuthorityViolation, CapabilityDenied, ValueError)):
+                    result = self._denied_result(
+                        request, "request-specific tool preflight denied: " + reason
+                    )
+                else:
+                    result = self._result_from_adapter(
+                        request,
+                        {
+                            "status": "failed",
+                            "exitCode": None,
+                            "output": [
+                                {
+                                    "kind": "string",
+                                    "name": "preflight_error",
+                                    "value": reason[:16384],
+                                }
+                            ],
+                            "sideEffectIdentity": None,
+                            "error": None,
+                        },
+                    )
+                state = self._transition_terminal(execution_id, "prepared", result)
+                return {
+                    "toolExecutionId": execution_id,
+                    "status": result["status"],
+                    "result": result,
+                    "state": state["state"],
+                    "replayed": False,
+                }
+
         reservation_id = None
         if request["consequential"]:
             reservation = self._reservation(request, execution_id)
@@ -396,7 +433,6 @@ class ToolBroker:
             self.metadata(execution_id, "dispatching"),
         )
 
-        adapter = registration["adapter"]
         try:
             adapter_result = adapter.execute(deepcopy(request))
             result = self._result_from_adapter(request, adapter_result)
