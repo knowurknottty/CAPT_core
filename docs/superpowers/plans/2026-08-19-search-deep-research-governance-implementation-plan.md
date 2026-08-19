@@ -193,6 +193,7 @@ def test_deep_research_has_adversarial_stage():
 
 ```python
 from dataclasses import dataclass
+from hashlib import sha256
 
 @dataclass(frozen=True)
 class ResearchStage:
@@ -218,7 +219,7 @@ class ResearchClaimRecord:
     statement: str
     supporting_source_ids: tuple[str, ...]
     contradicting_source_ids: tuple[str, ...]
-    status: str  # supported | contradicted | mixed | insufficient | unresolved
+    status: str
 
 @dataclass(frozen=True)
 class ResearchPlan:
@@ -230,15 +231,43 @@ class ResearchPlan:
 
     @staticmethod
     def for_mode(mode: str, objective: str, *, max_sources: int) -> "ResearchPlan":
-        # deterministic stage IDs derived from mode + ordinal; implement both exact templates in this task
-        ...
+        templates = {
+            "search": (
+                ("retrieve", "Discover bounded relevant sources", 2),
+                ("source_check", "Check source identity, recency, and conflicts", 0),
+                ("synthesize", "Synthesize sourced answer without inventing verification", 0),
+            ),
+            "deep_research": (
+                ("decompose", "Decompose the research question", 0),
+                ("retrieve", "Retrieve bounded source set", 8),
+                ("claim_map", "Map claims to supporting and contradicting sources", 0),
+                ("adversarial_check", "Challenge high-impact claims and unresolved gaps", 4),
+                ("synthesize", "Synthesize converged, dissenting, and unresolved findings", 0),
+            ),
+        }
+        if mode not in templates:
+            raise ValueError("UNKNOWN_RESEARCH_MODE:" + mode)
+        seed = (mode + "\x00" + objective).encode("utf-8")
+        plan_id = "research-" + sha256(seed).hexdigest()[:24]
+        stages = tuple(
+            ResearchStage(
+                stage_id=f"{plan_id}-stage-{index + 1}",
+                kind=kind,
+                purpose=purpose,
+                input_refs=(),
+                max_sources=max_sources if kind in {"retrieve", "adversarial_check"} else 0,
+                max_retrieval_rounds=rounds,
+            )
+            for index, (kind, purpose, rounds) in enumerate(templates[mode])
+        )
+        return ResearchPlan(plan_id, mode, objective, stages, max_sources)
 ```
 
-The implementation step must replace the illustrative ellipsis with concrete construction before commit; the committed source cannot contain a placeholder. Search template is exactly `retrieve/source_check/synthesize`; Deep Research template is exactly the five stages above.
+`ResearchClaimRecord.status` is validated by constructor/helper to one of `supported`, `contradicted`, `mixed`, `insufficient`, `unresolved`.
 
-- [ ] **Step 3: Add invalid mode test**
+- [ ] **Step 3: Add invalid mode/status tests**
 
-Any mode besides `search`/`deep_research` is rejected by `ResearchPlan.for_mode`; Normal chat does not create a ResearchPlan.
+Any mode besides `search`/`deep_research` rejects. Normal chat creates no ResearchPlan. Invalid claim status rejects.
 
 - [ ] **Step 4: Commit**
 
@@ -290,7 +319,7 @@ git commit -m "feat(research): preserve source and claim provenance"
 #expect(CAPTExecutionMode.deepResearch.workloadProfileID == "deep_research")
 ```
 
-`code_review_deep` is selected only by an explicit dedicated code-review action/profile, not ordinary composer Normal mode.
+`code_review_deep` is selected only by the explicit governed code-review action/profile, not ordinary composer Normal mode.
 
 - [ ] **Step 2: Implement stage snapshot**
 
