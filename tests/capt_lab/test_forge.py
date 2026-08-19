@@ -101,6 +101,104 @@ def test_gap_analysis_reports_documented_expectation_without_inventing_completio
     assert "implemented" not in {g["status"] for g in gaps}
 
 
+def test_gap_analysis_distinguishes_related_text_from_zero_evidence(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "README.md").write_text(
+        "CAPT preserves a durable audit trail for every governed driver run.\n",
+        encoding="utf-8",
+    )
+    out = execute_forge(req("gap_analysis", {
+        "root": str(root),
+        "expectations": ["preserve durable audit trail", "quantum banana reactor"],
+    }), {})
+    gaps = {item["expectation"]: item for item in out.observation["gaps"]}
+    related = gaps["preserve durable audit trail"]
+    absent = gaps["quantum banana reactor"]
+    assert related["status"] == "related_text_found"
+    assert related["tokenCoverage"] == 1.0
+    assert related["observedPaths"] == ["README.md"]
+    assert absent["status"] == "not_observed"
+    assert absent["tokenCoverage"] == 0.0
+    assert absent["observedPaths"] == []
+    assert out.observation["notObservedCount"] == 1
+
+
+def test_gap_analysis_uses_whole_tokens_not_substring_matches(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "README.md").write_text(
+        "durable auditing trailer notes\n",
+        encoding="utf-8",
+    )
+    out = execute_forge(req("gap_analysis", {
+        "root": str(root),
+        "expectations": ["durable audit trail"],
+    }), {})
+    gap = out.observation["gaps"][0]
+    assert gap["status"] == "partial_text_evidence"
+    assert gap["tokenCoverage"] == pytest.approx(1 / 3)
+    assert gap["observedPaths"] == []
+
+
+def test_gap_analysis_ignores_nonsemantic_stopword_only_overlap(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "README.md").write_text("the unrelated notes exist\n", encoding="utf-8")
+    out = execute_forge(req("gap_analysis", {
+        "root": str(root),
+        "expectations": ["the quantum banana reactor"],
+    }), {})
+    gap = out.observation["gaps"][0]
+    assert gap["status"] == "not_observed"
+    assert gap["tokenCoverage"] == 0.0
+    assert gap["observedPaths"] == []
+
+
+def test_gap_analysis_matches_simple_inflections_symmetrically(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "README.md").write_text("preserve durable audit trail\n", encoding="utf-8")
+    out = execute_forge(req("gap_analysis", {
+        "root": str(root),
+        "expectations": ["preserves durable audits trail"],
+    }), {})
+    gap = out.observation["gaps"][0]
+    assert gap["status"] == "related_text_found"
+    assert gap["tokenCoverage"] == 1.0
+    assert gap["observedPaths"] == ["README.md"]
+
+
+def test_gap_analysis_does_not_treat_short_lexemes_as_inflections(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "README.md").write_text("news audit\n", encoding="utf-8")
+    out = execute_forge(req("gap_analysis", {
+        "root": str(root),
+        "expectations": ["new audit"],
+    }), {})
+    gap = out.observation["gaps"][0]
+    assert gap["status"] == "partial_text_evidence"
+    assert gap["tokenCoverage"] == 0.5
+    assert gap["observedPaths"] == []
+
+
+def test_gap_analysis_reports_partial_cross_repository_text_evidence(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "a.md").write_text("durable audit records\n", encoding="utf-8")
+    (root / "b.md").write_text("trail recovery notes\n", encoding="utf-8")
+    out = execute_forge(req("gap_analysis", {
+        "root": str(root),
+        "expectations": ["preserve durable audit trail"],
+    }), {})
+    gap = out.observation["gaps"][0]
+    assert gap["status"] == "partial_text_evidence"
+    assert 0.0 < gap["tokenCoverage"] < 1.0
+    assert gap["observedPaths"] == []
+    assert out.observation["notObservedCount"] == 0
+
+
 def test_sigma_brief_is_non_mutating_and_contains_no_fake_patent_claims(tmp_path):
     root, _ = fixture_repo(tmp_path)
     before = tree_digest(root)
