@@ -4,21 +4,22 @@
 
 **Goal:** Add distinct Search and Deep Research execution modes with explicit governed wall-clock/retrieval budgets so long-form work can complete without globally weakening CAPT's interactive timeout discipline.
 
-**Architecture:** Introduce immutable workload profiles in RuntimeService admission. The approval binding carries `workloadProfileId`; the effective wall-clock/retrieval ceilings are computed before dispatch and become cognitive/execution provenance. Search remains a bounded retrieval path. Deep Research executes decomposition/retrieval/evidence/adversarial/synthesis stages under one governed research plan rather than a prompt suffix.
+**Architecture:** Immutable workload profiles are resolved before RuntimeService admission and bound into approval. Search is a bounded retrieval plan. Deep Research is a multi-stage plan (`decompose -> retrieve -> claim_map -> adversarial_check -> synthesize`) with source/claim provenance. Token context and wall-clock ceilings remain separate dimensions.
 
-**Tech Stack:** Python CAPT RuntimeService/EventStore, provider driver, ContextPack/evidence pipeline, existing approval binding, web/retrieval adapters where configured, Swift composer mode selection/result rendering, pytest/Swift tests.
+**Tech Stack:** Python CAPT RuntimeService/EventStore/provider driver/ContextPack; existing approval binding; configured retrieval adapters; Swift composer/result presentation; pytest/Swift tests.
 
 **Spec:** Parent design Part IV §§26-29 plus composer parity contract Search/Deep Research sections.
 
 ## Global Constraints
 
-- Existing ordinary interactive chat remains bounded; do not globally replace 120 seconds with a large timeout.
-- Workload profile is bound at approval and cannot be changed after approval without a fresh approval.
-- Token context limit and wall-clock budget are separate dimensions.
-- Deep Research results remain evidence/analysis until verification; source count/majority is not truth.
-- Retrieval source provenance and timestamp are recorded.
-- Search is distinct from Deep Research.
-- No network access is silently granted to local file scanners or unrelated capabilities by enabling research.
+- Ordinary interactive chat remains at a 120-second ceiling in this release.
+- Profile ID and resolved budget are approval-bound and immutable after approval.
+- Context-token capacity never implies sufficient wall-clock budget.
+- Research output remains evidence/analysis until verification.
+- Source count/majority is not truth.
+- Every retrieved source records URL, retrieval timestamp, content digest, and adapter/provider.
+- Search and Deep Research are distinct modes.
+- Research network capability never grants network access to quarantine scanners or unrelated execution surfaces.
 
 ## File Structure
 
@@ -34,16 +35,16 @@
 - `capt_runtime/model_approval_binding.py`
 - `capt_runtime/operator_provenance.py`
 - `desktop/capt_runtime_service.py`
-- provider driver timeout plumbing where the current hard 120-second value is applied.
-- `CAPTChatCoordinator.swift` to include workload profile ID selected by composer.
-- `CAPTOperatorStore.swift` to project current mode/status.
+- current provider-driver timeout call site.
+- `CAPTChatCoordinator.swift`
+- `CAPTOperatorStore.swift`
+- `CAPTComposerContext.swift`
 
 ---
 
 ### Task 1: Workload profile contract
 
-**Interfaces:**
-- Produces `WorkloadProfile` and `resolve_workload_profile(profile_id, provider_context_limit)`.
+**Interfaces:** Produces `WorkloadProfile`, `resolve_workload_profile(profile_id) -> WorkloadProfile`.
 
 - [ ] **Step 1: Write RED profile tests**
 
@@ -57,7 +58,7 @@ def test_interactive_profile_remains_bounded():
     assert p.max_retrieval_rounds == 0
 
 
-def test_deep_research_has_explicit_larger_budget_not_global_override():
+def test_deep_research_has_larger_explicit_budget():
     p = resolve_workload_profile("deep_research")
     assert p.wall_seconds == 600
     assert p.max_retrieval_rounds == 8
@@ -66,6 +67,8 @@ def test_deep_research_has_explicit_larger_budget_not_global_override():
 - [ ] **Step 2: Implement immutable profiles**
 
 ```python
+from dataclasses import dataclass
+
 @dataclass(frozen=True)
 class WorkloadProfile:
     profile_id: str
@@ -81,13 +84,17 @@ PROFILES = {
     "deep_research": WorkloadProfile("deep_research", 600, 8, 64, 4, "multi-stage governed research"),
     "code_review_deep": WorkloadProfile("code_review_deep", 300, 0, 0, 1, "long-context code analysis"),
 }
+
+def resolve_workload_profile(profile_id: str) -> WorkloadProfile:
+    try:
+        return PROFILES[profile_id]
+    except KeyError as exc:
+        raise ValueError("UNKNOWN_WORKLOAD_PROFILE:" + profile_id) from exc
 ```
 
-These are initial release ceilings; changing them is a policy/config change, not an implicit provider behavior.
+- [ ] **Step 3: Add invalid-profile rejection test**
 
-- [ ] **Step 3: Add invalid-profile rejection tests**
-
-Unknown IDs must reject before dispatch; no fallback to interactive profile for an explicitly unknown value.
+Unknown explicit ID raises `UNKNOWN_WORKLOAD_PROFILE` before dispatch; there is no fallback.
 
 - [ ] **Step 4: Commit**
 
@@ -98,23 +105,19 @@ git commit -m "feat(runtime): add governed workload budgets"
 
 ---
 
-### Task 2: Bind profile to approval and provenance
+### Task 2: Bind workload profile to approval/provenance
 
-**Interfaces:**
-- Approval binding gains exact `workloadProfileId` and resolved budget digest/fields.
-- Cognitive provenance exposes requested/effective wall-clock budget.
+**Interfaces:** Approval binding gains `workloadProfileId` plus resolved budget fields; provenance gains ceilings, not claimed usage.
 
 - [ ] **Step 1: Write RED mutation test**
 
-Approve `interactive_chat`; execute as `deep_research` using same approval ID. Expect `MODEL_PROMPT_APPROVAL_WORKLOAD_MISMATCH`, zero external dispatch.
+Approve `interactive_chat`; execute as `deep_research` with same approval ID -> `MODEL_PROMPT_APPROVAL_WORKLOAD_MISMATCH`, zero DriverRuns/external dispatch.
 
-- [ ] **Step 2: Extend approval binding**
+- [ ] **Step 2: Extend deterministic binding**
 
-Include `workloadProfileId` in deterministic execution binding and prepared execution digest. Resolve profile during preparation; freeze effective budget into prepared data.
+`workloadProfileId`, `effectiveWallClockSeconds`, `maxRetrievalRounds`, and `maxSources` enter the bound execution data/prepared digest. Resolve once during preparation and freeze.
 
-- [ ] **Step 3: Extend provenance**
-
-Add:
+- [ ] **Step 3: Extend cognitive provenance**
 
 ```json
 {
@@ -125,37 +128,34 @@ Add:
 }
 ```
 
-Do not claim the full budget was consumed; these are ceilings.
-
 - [ ] **Step 4: Commit**
 
 ```bash
-git add capt_runtime desktop tests
+git add capt_runtime/model_approval_binding.py capt_runtime/operator_provenance.py desktop tests
 git commit -m "feat(runtime): bind workload profile to model approval"
 ```
 
 ---
 
-### Task 3: Provider timeout uses admitted profile
+### Task 3: Provider timeout consumes the admitted profile
 
-**Interfaces:**
-- Provider driver receives `timeout_seconds` from prepared execution, not a hidden global constant.
+**Interfaces:** Provider execution receives `timeout_seconds` from immutable prepared execution.
 
-- [ ] **Step 1: Write RED driver timeout propagation test**
+- [ ] **Step 1: Write RED propagation test**
 
-Inject a fake provider transport and assert `interactive_chat` receives 120 and `code_review_deep` receives 300.
+Fake transport records timeout: `interactive_chat == 120`, `code_review_deep == 300`, `deep_research == 600`.
 
-- [ ] **Step 2: Thread the frozen timeout through the driver call**
+- [ ] **Step 2: Thread frozen timeout to provider call**
 
-Do not read current UI preference/provider state again after admission. The timeout is part of immutable prepared execution.
+No UI/provider preference reread after admission. Remove the hidden hard-coded 120 seconds only at the provider call site; interactive profile preserves 120 behavior.
 
-- [ ] **Step 3: Add timeout classification test**
+- [ ] **Step 3: Preserve typed timeout failure**
 
-A provider timeout must remain a typed `PROVIDERDRIVERFAILURE`/timeout detail, and DriverRun/task recovery semantics remain unchanged.
+Provider timeout remains `PROVIDERDRIVERFAILURE` with timeout detail; existing DriverRun/task recovery semantics remain unchanged.
 
-- [ ] **Step 4: Re-run the previously observed long-context scenario**
+- [ ] **Step 4: Re-run known long-context case**
 
-Use the same ~10K-token code-review dossier. Under `interactive_chat` it may hit 120s; under `code_review_deep` it must be admitted with 300s and allowed to complete if the provider returns within that ceiling. Record actual elapsed time separately from ceiling.
+Same ~10K-token CAPT Swift review dossier: `interactive_chat` ceiling remains 120; `code_review_deep` admits 300. Record actual elapsed duration and provider outcome independently of ceiling.
 
 - [ ] **Step 5: Commit**
 
@@ -166,36 +166,81 @@ git commit -m "fix(runtime): enforce admitted provider wall-clock budget"
 
 ---
 
-### Task 4: Search research-plan model
+### Task 4: Typed Search/Deep Research plan model
 
-**Interfaces:**
-- Produces `ResearchPlan`, `ResearchSourceRecord`, `ResearchClaimRecord`.
+**Interfaces:** Produces exact `ResearchStage`, `ResearchPlan`, `ResearchSourceRecord`, `ResearchClaimRecord`.
 
 - [ ] **Step 1: Write RED plan tests**
 
 ```python
+from capt_runtime.research import ResearchPlan
+
+
 def test_search_plan_is_bounded():
-    p = ResearchPlan.for_mode("search", "current GPU rental pricing")
-    assert len(p.stages) <= 3
+    p = ResearchPlan.for_mode("search", "current GPU rental pricing", max_sources=12)
+    assert [s.kind for s in p.stages] == ["retrieve", "source_check", "synthesize"]
     assert p.max_sources == 12
 
 
-def test_deep_research_plan_contains_adversarial_stage():
-    p = ResearchPlan.for_mode("deep_research", "question")
+def test_deep_research_has_adversarial_stage():
+    p = ResearchPlan.for_mode("deep_research", "question", max_sources=64)
     assert [s.kind for s in p.stages] == [
         "decompose", "retrieve", "claim_map", "adversarial_check", "synthesize"
     ]
 ```
 
-- [ ] **Step 2: Implement deterministic plan templates**
+- [ ] **Step 2: Implement exact dataclasses/templates**
 
-Search stages: `retrieve -> source_check -> synthesize`.
+```python
+from dataclasses import dataclass
 
-Deep Research stages: `decompose -> retrieve -> claim_map -> adversarial_check -> synthesize`.
+@dataclass(frozen=True)
+class ResearchStage:
+    stage_id: str
+    kind: str
+    purpose: str
+    input_refs: tuple[str, ...]
+    max_sources: int
+    max_retrieval_rounds: int
 
-Each stage carries stage ID, purpose, input refs, source/retrieval budget, and completion state. Do not put source truth judgments into the planner.
+@dataclass(frozen=True)
+class ResearchSourceRecord:
+    source_id: str
+    url: str
+    retrieved_at: str
+    content_digest: str
+    provider: str
+    title: str
 
-- [ ] **Step 3: Commit**
+@dataclass(frozen=True)
+class ResearchClaimRecord:
+    claim_id: str
+    statement: str
+    supporting_source_ids: tuple[str, ...]
+    contradicting_source_ids: tuple[str, ...]
+    status: str  # supported | contradicted | mixed | insufficient | unresolved
+
+@dataclass(frozen=True)
+class ResearchPlan:
+    plan_id: str
+    mode: str
+    objective: str
+    stages: tuple[ResearchStage, ...]
+    max_sources: int
+
+    @staticmethod
+    def for_mode(mode: str, objective: str, *, max_sources: int) -> "ResearchPlan":
+        # deterministic stage IDs derived from mode + ordinal; implement both exact templates in this task
+        ...
+```
+
+The implementation step must replace the illustrative ellipsis with concrete construction before commit; the committed source cannot contain a placeholder. Search template is exactly `retrieve/source_check/synthesize`; Deep Research template is exactly the five stages above.
+
+- [ ] **Step 3: Add invalid mode test**
+
+Any mode besides `search`/`deep_research` is rejected by `ResearchPlan.for_mode`; Normal chat does not create a ResearchPlan.
+
+- [ ] **Step 4: Commit**
 
 ```bash
 git add capt_runtime/research.py tests/capt_runtime/test_research_plan.py
@@ -204,25 +249,27 @@ git commit -m "feat(research): add governed search and deep research plans"
 
 ---
 
-### Task 5: Retrieval/source provenance and evidence graph
+### Task 5: Retrieval/source registry and claim graph
 
-**Interfaces:**
-- Each retrieved source produces `ResearchSourceRecord(source_id, url, retrieved_at, content_digest, provider, title)`.
-- Claim map links claim IDs to supporting/contradicting source IDs.
+**Interfaces:** `register_source(...) -> ResearchSourceRecord`; `build_claim_record(...) -> ResearchClaimRecord`.
 
-- [ ] **Step 1: Write RED provenance tests**
+- [ ] **Step 1: Write RED provenance/conflict tests**
 
-Two snapshots from the same URL at different retrieval times/digests remain distinct records. A claim with conflicting sources records both rather than deleting the minority source.
+Same URL with different retrieval timestamp/digest -> distinct source IDs. Contradictory source remains attached to claim; never deleted because it is minority evidence.
 
-- [ ] **Step 2: Implement source registry and claim map**
+- [ ] **Step 2: Implement canonical source identity**
 
-Canonical URL + retrieval timestamp + digest are stored. Keep excerpts within configured copyright/source constraints in presentation layers; internal provenance stores digests/metadata and bounded excerpts as policy permits.
+Canonical URL + retrieval timestamp + content digest determine source ID. Store adapter/provider/title. Bounded excerpts are presentation/policy data, not identity.
 
-- [ ] **Step 3: Implement adversarial check stage**
+- [ ] **Step 3: Implement claim status rules**
 
-Require at least one of: contradictory source search, source-authority challenge, temporal-staleness check, or missing-evidence determination for each high-impact claim. An inability to resolve conflict becomes `unresolved`, not forced consensus.
+Supporting only -> `supported`; contradicting only -> `contradicted`; both -> `mixed`; no adequate evidence -> `insufficient`; unresolved adversarial conflict -> `unresolved`.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Implement adversarial-check requirements**
+
+For every high-impact claim record, stage records at least one performed check type: `contradictory_source_search`, `source_authority_challenge`, `temporal_staleness_check`, or `missing_evidence_check`. Inability to resolve remains `unresolved`.
+
+- [ ] **Step 5: Commit**
 
 ```bash
 git add capt_runtime/research.py tests/capt_runtime/test_research_plan.py
@@ -231,28 +278,34 @@ git commit -m "feat(research): preserve source and claim provenance"
 
 ---
 
-### Task 6: Native Search / Deep Research mode binding
+### Task 6: Swift research mode/progress models
 
-**Interfaces:**
-- Composer `.search` maps to workload profile `search`.
-- `.deepResearch` maps to `deep_research`.
-- Normal maps to `interactive_chat`, except explicit deep-code-review controls may choose `code_review_deep` later.
+**Interfaces:** `CAPTExecutionMode.workloadProfileID`; `CAPTResearchStageSnapshot`.
 
-- [ ] **Step 1: Write Swift mapping tests**
+- [ ] **Step 1: Write RED mappings**
 
 ```swift
+#expect(CAPTExecutionMode.normal.workloadProfileID == "interactive_chat")
 #expect(CAPTExecutionMode.search.workloadProfileID == "search")
 #expect(CAPTExecutionMode.deepResearch.workloadProfileID == "deep_research")
-#expect(CAPTExecutionMode.normal.workloadProfileID == "interactive_chat")
 ```
 
-- [ ] **Step 2: Add mode chip/status**
+`code_review_deep` is selected only by an explicit dedicated code-review action/profile, not ordinary composer Normal mode.
 
-Search and Deep Research are mutually exclusive. The user can remove the chip before Send, returning to Normal.
+- [ ] **Step 2: Implement stage snapshot**
 
-- [ ] **Step 3: Display research progress human-readably**
+```swift
+public struct CAPTResearchStageSnapshot: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let kind: String
+    public let state: String
+    public let sourceCount: Int
+}
+```
 
-Stages appear as `Searching sources`, `Checking claims`, `Synthesizing` rather than raw event JSON. Raw stage envelopes remain available in Raw details.
+- [ ] **Step 3: Render human progress**
+
+Map stages to public labels: `Searching sources`, `Checking sources`, `Mapping claims`, `Challenging claims`, `Synthesizing`. Raw stage envelopes remain in Raw details.
 
 - [ ] **Step 4: Commit**
 
@@ -265,27 +318,9 @@ git commit -m "feat(mac): bind research modes to governed workload profiles"
 
 ### Task 7: Search + Deep Research acceptance
 
-- [ ] **Step 1: Approval-binding acceptance**
-
-Attempt profile mutation after approval; confirm rejection and zero dispatch.
-
-- [ ] **Step 2: Timeout acceptance**
-
-Demonstrate ordinary chat retains 120-second ceiling; deep code review can use 300; Deep Research can use 600. Record actual elapsed time and outcome.
-
-- [ ] **Step 3: Source provenance acceptance**
-
-Run Search against a changing/current topic; confirm source URL, retrieval time, digest, and source relation to claims are retained.
-
-- [ ] **Step 4: Conflict acceptance**
-
-Provide two contradictory fixtures/sources; final result must surface unresolved disagreement rather than selecting a winner solely by count.
-
-- [ ] **Step 5: Full suites**
-
-```bash
-python -m pytest -q
-cd capt_ui/surfaces/desktop_swift
-swift test
-swift build --product CAPTNativeMac
-```
+- [ ] Profile mutation after approval -> rejection/zero dispatch.
+- [ ] Ordinary chat ceiling = 120; deep code review = 300; Deep Research = 600; actual durations recorded separately.
+- [ ] Search source record contains URL/retrieval timestamp/digest/provider.
+- [ ] Contradictory controlled sources produce `mixed`/`unresolved`, never winner-by-count.
+- [ ] Research synthesis remains unverified evidence until VerificationPipeline action.
+- [ ] Run full Python suite, Swift tests, and `swift build --product CAPTNativeMac` with zero failures.
