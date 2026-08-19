@@ -7,6 +7,7 @@
 | runtime lifecycle | yes | status/control | yes | contract only |
 | checkpoint/resume | yes | yes | yes | contract only |
 | durable memory | yes | view/control | view/control | contract only |
+| pinned authored-skill verify/list/show | yes | no | no | no |
 | evidence/verification | yes | yes | yes | contract only |
 | provider registry/health/model list | `capt-ui` operator CLI | yes | yes | contract only |
 | model-selection foundation | `capt-ui` | yes | yes | contract only |

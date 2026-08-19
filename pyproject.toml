@@ -41,6 +41,7 @@ namespaces = true
 "capt_solo.components" = ["*.json"]
 "capt_solo.plugin" = ["*.json"]
 "capt_solo.skills" = ["**/*.md"]
+"capt_runtime" = ["skill_packs/*.json"]
 
 [tool.pytest.ini_options]
 addopts = "-m 'not slow'"

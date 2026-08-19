@@ -106,6 +106,7 @@ For the guided path, use [`START_HERE.md`](START_HERE.md).
 - evidence and verification machinery;
 - ClaimGuard;
 - proof/workflow/Foundry/Knowledge Bubble components;
+- pinned external authored-skill verification and governed `ContextSlice.skillContext`;
 - bounded Hermes compatibility execution.
 
 ### Normal operator surfaces
@@ -115,6 +116,7 @@ For the guided path, use [`START_HERE.md`](START_HERE.md).
 | `capt` normal CLI | **SHIPPED** |
 | runtime lifecycle / evidence / doctor | **SHIPPED** |
 | durable memory CLI | **SHIPPED / PROVEN** |
+| `capt skills status/list/show` pinned authored-skill inspection | **SHIPPED** |
 | shared `capt_ui.operator` facade | **SHIPPED** |
 | Textual TUI | **SHIPPED MVP** |
 | governed approve/deny in TUI | **SHIPPED MVP** |
@@ -128,6 +130,8 @@ For the guided path, use [`START_HERE.md`](START_HERE.md).
 | true process-boundary cross-model continuity | **NOT YET RELEASE-PROVEN** |
 
 The UI is deliberately thin. **CLI, TUI, and desktop surfaces do not become alternate runtimes.**
+
+Pinned external authored skills are a separate trust class from bundled CAPT operation skills and executable Skill Foundry procedures. CAPT verifies the `CAPT_Skills` release lock, freezes explicitly selected bytes before authoritative mutation, carries them only inside the validated `ContextSlice`, and emits provenance-only receipt evidence. See [`docs/AUTHORED_SKILLS.md`](docs/AUTHORED_SKILLS.md).
 
 ---
 

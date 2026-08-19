@@ -48,6 +48,9 @@ from capt_runtime.services import RuntimeService
 from capt_runtime.store import EventStore
 from capt_runtime.verification import build_verification_result, guard_claim, build_artifact_hash_evidence
 from capt_runtime.composition import RuntimeComposition, create_runtime
+from capt_runtime.authored_skills import (
+    parse_authored_skill_request, summarize_skill_context,
+)
 
 from desktop.m1_command_service import RuntimeCommandService
 
@@ -61,6 +64,23 @@ DEMO_GRANT_ID = "g-desktop-m0-demo"
 DEMO_LEASE_ID = "l-desktop-m0-demo"
 DEMO_CLAIM_ID = "cl-desktop-m0-demo"
 DEMO_WORKTREE = "/tmp/capt-desktop-m0-demo-worktree"
+
+
+def _prepare_hermes_host_with_authored_skills(
+    runtime: RuntimeComposition, payload: Dict[str, Any], *, target_repo: str,
+    staging_root: str, executable: Optional[str] = None,
+    authored_skill_pack_lock: Optional[Dict[str, Any]] = None,
+):
+    """Bind explicit command skill selection to a pin-verifying DriverHost."""
+    skill_root, skill_names = parse_authored_skill_request(payload)
+    host = runtime.hermes_host(
+        target_repo=target_repo, staging_root=staging_root, executable=executable,
+        enforce_memory=False, authored_skill_pack_root=skill_root,
+        authored_skill_pack_lock=authored_skill_pack_lock,
+    )
+    if skill_names:
+        host.prepare_authored_skills(skill_names)
+    return host, skill_names
 
 
 # --------------------------------------------------------------------------
@@ -566,6 +586,16 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 target_root = payload.get("targetRoot")
                 if not objective or not target_root:
                     raise ValueError("MODEL_TASK_OBJECTIVE_OR_TARGET_MISSING")
+                # Authored-skill preflight MUST complete before any authoritative
+                # mission/task/grant/lease mutation. The host freezes the exact
+                # verified skill bytes in memory, closing the approval->dispatch
+                # TOCTOU window.
+                worktree = Path(target_root)
+                staging = worktree.parent / (worktree.name + "-model-staging")
+                host, skill_names = _prepare_hermes_host_with_authored_skills(
+                    runtime, payload, target_repo=str(worktree), staging_root=str(staging),
+                    executable=payload.get("executable") or None,
+                )
                 command_id = command["commandId"]
                 now = command.get("timestamp") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                 mission_id = payload.get("missionId") or ("m-model-" + command_id)
@@ -575,7 +605,6 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 lease_id = payload.get("leaseId") or ("l-model-" + command_id)
                 claim_id = payload.get("claimId") or ("cl-model-" + command_id)
                 policy_id = payload.get("policyDecisionId") or ("pd-model-" + command_id)
-                executable = payload.get("executable") or None
                 # 1. Authoritative mission/task state (objective persisted in
                 # the Task aggregate by RuntimeService planning).
                 intent = {
@@ -670,13 +699,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 dispatch_lease = dict(lease)
                 dispatch_lease["scope"] = {**lease["scope"], "allowedPaths": [target_root]}
                 # 3. DriverHost dispatch with the resolved authoritative task.
-                worktree = Path(target_root)
-                staging = worktree.parent / (worktree.name + "-model-staging")
-                staging.mkdir(parents=True, exist_ok=True)
-                host = runtime.hermes_host(
-                    target_repo=str(worktree), staging_root=str(staging),
-                    executable=executable, enforce_memory=False,
-                )
+                # Host + authored-skill snapshot were prepared before step 1.
                 ctx = host.build_context(
                     {"leaseId": lease["leaseId"], "operations": lease["operations"],
                      "scope": lease["scope"], "validFrom": lease["validFrom"],
@@ -684,6 +707,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     ["terminal"], {"maxSeconds": 600, "maxArtifacts": 1, "maxObservations": 10},
                     [{"artifactPath": str(staging / "model-analysis.md"), "artifactKind": "report"}],
                     {"onUnexpectedWrite": "fail"},
+                    skill_names=skill_names or None,
                 )
                 wo = {
                     "schemaVersion": "1.0.0", "driverRunId": run_id, "driverId": "hermes",
@@ -780,6 +804,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     "targetPath": str(worktree), "beforeDigest": before,
                     "observations": out.get("observations", []),
                     "driver": "hermes",
+                    "authoredSkills": summarize_skill_context(ctx.get("skillContext")),
                 }
                 hermes_work_receipts[key] = receipt
                 return receipt

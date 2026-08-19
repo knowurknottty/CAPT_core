@@ -58,13 +58,18 @@ class RuntimeComposition:
 
     def hermes_host(
         self, *, target_repo: str, staging_root: str, executable: Optional[str] = None,
-        enforce_memory: bool = True,
+        enforce_memory: bool = True, authored_skill_pack_root: Optional[str] = None,
+        authored_skill_pack_lock: Optional[dict] = None,
     ) -> DriverHost:
         from .drivers.hermes import DESCRIPTOR as HERMES_DESCRIPTOR, HermesDriver
         if not self.registry.is_registered(HERMES_DESCRIPTOR["driverId"]):
             self.registry.register(HERMES_DESCRIPTOR)
-        host = DriverHost(self.registry, staging_root, target_repo,
-                          memory_engine=self.memory_engine if enforce_memory else None)
+        host = DriverHost(
+            self.registry, staging_root, target_repo,
+            memory_engine=self.memory_engine if enforce_memory else None,
+            authored_skill_pack_root=authored_skill_pack_root,
+            authored_skill_pack_lock=authored_skill_pack_lock,
+        )
         host.select_driver(HermesDriver(staging_root, executable=executable,
                                         task_resolver=self.task_resolver()))
         return host
