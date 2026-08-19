@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "1.0.0",
+  "packName": "CAPT_Skills",
+  "packVersion": "0.1.0",
+  "repository": "https://github.com/knowurknottty/CAPT_Skills.git",
+  "ref": "v0.1.0",
+  "commit": "080446e2e8b8774ece41285e50d1c9c903984ba2",
+  "tree": "cd578d805178fa364e6ccd0b2374f2c99f150f12",
+  "skills": [
+    {
+      "name": "inversion-creative-critic",
+      "version": "0.1.0",
+      "path": "skills/inversion-creative-critic/SKILL.md",
+      "sha256": "d4d7cbb89bcee66c645afd2095e871d963c2c5af85601a67bbc2151e40837441"
+    },
+    {
+      "name": "inversion-creative-director",
+      "version": "0.1.0",
+      "path": "skills/inversion-creative-director/SKILL.md",
+      "sha256": "ccc0001d6f00f8128ed4b1d7544a652f66cb7942a7c75159fd3a9f9a63c8c6a9"
+    },
+    {
+      "name": "inversion-interface-craft",
+      "version": "0.1.0",
+      "path": "skills/inversion-interface-craft/SKILL.md",
+      "sha256": "7041035485dd7283c9029bc8cdd091acbc751159d5643bc2015e415582eeea41"
+    },
+    {
+      "name": "inversion-motion-craft",
+      "version": "0.1.0",
+      "path": "skills/inversion-motion-craft/SKILL.md",
+      "sha256": "e58925584f6b76603df9557604092f94a6f444ab105b77fef7c2022c6cabdb9a"
+    }
+  ]
+}
