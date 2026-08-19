@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:59bf06c0abc36da44f6f6841c1886dcde6b5d470790d65c42f5d5b15bfc0aa95
+# source digest:  sha256:5bafe06a54ed489dfbf95d825b7ee042bd0bb76fec096846e8aaea7275f23af8
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -275,6 +275,7 @@ class CheckpointManifest(object):
     runtimeVersion: str
     schemaVersion: SchemaVersion
     taskVersions: List[StreamVersionEntry]
+    artifactPromotionVersions: List[StreamVersionEntry] = field(default_factory=list)
     humanApprovalVersions: List[StreamVersionEntry] = field(default_factory=list)
 
 
@@ -1289,6 +1290,48 @@ class RequiredReceipt(object):
 
 
 @dataclass(frozen=True)
+class ArtifactPromotionAdoptedPayload(object):
+    """ArtifactPromotionAdoptedPayload"""
+
+    adoptedAt: Timestamp
+    eventType: Literal["ArtifactPromotionAdopted"]
+    promotionId: Identifier
+    receipt: ArtifactAdoptionReceipt
+
+
+@dataclass(frozen=True)
+class ArtifactPromotionAuthorizedPayload(object):
+    """ArtifactPromotionAuthorizedPayload"""
+
+    authorizedAt: Timestamp
+    authorizedBy: Identifier
+    contentDigest: Digest
+    destinationPath: UpgradeAbsolutePath
+    eventType: Literal["ArtifactPromotionAuthorized"]
+    evidenceId: Identifier
+    promotionId: Identifier
+    verificationId: Identifier
+
+
+@dataclass(frozen=True)
+class ArtifactPromotionDiscardedPayload(object):
+    """ArtifactPromotionDiscardedPayload"""
+
+    discardedAt: Timestamp
+    eventType: Literal["ArtifactPromotionDiscarded"]
+    promotionId: Identifier
+    reason: str
+
+
+@dataclass(frozen=True)
+class ArtifactPromotionPreparedPayload(object):
+    """ArtifactPromotionPreparedPayload"""
+
+    eventType: Literal["ArtifactPromotionPrepared"]
+    promotion: ArtifactPromotionState
+
+
+@dataclass(frozen=True)
 class CapabilityGrantRevokedPayload(object):
     """CapabilityGrantRevokedPayload"""
 
@@ -1506,7 +1549,7 @@ class TaskTransitionedPayload(object):
 
 
 # discriminated on 'eventType'
-EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload]
+EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload]
 
 
 class EventType(str, Enum):
@@ -1535,6 +1578,10 @@ class EventType(str, Enum):
     HUMANAPPROVALREQUESTED = "HumanApprovalRequested"
     HUMANAPPROVALDECIDED = "HumanApprovalDecided"
     HUMANAPPROVALCONSUMED = "HumanApprovalConsumed"
+    ARTIFACTPROMOTIONPREPARED = "ArtifactPromotionPrepared"
+    ARTIFACTPROMOTIONAUTHORIZED = "ArtifactPromotionAuthorized"
+    ARTIFACTPROMOTIONADOPTED = "ArtifactPromotionAdopted"
+    ARTIFACTPROMOTIONDISCARDED = "ArtifactPromotionDiscarded"
 
 
 @dataclass(frozen=True)
@@ -1915,6 +1962,42 @@ class ToolResultStatus(str, Enum):
     FAILED = "failed"
     INDETERMINATE = "indeterminate"
     DENIED = "denied"
+
+
+@dataclass(frozen=True)
+class ArtifactAdoptionReceipt(object):
+    """Mechanical receipt from an already-authorized artifact adoption step; not authorization itself."""
+
+    atomicReplace: bool
+    contentDigest: Digest
+    destinationPath: UpgradeAbsolutePath
+    operation: str
+
+
+@dataclass(frozen=True)
+class ArtifactPromotionState(object):
+    """Authoritative source/destination/digest-bound promotion transaction. ClaimGuard does not own this state machine."""
+
+    adoptedAt: Optional[Timestamp]
+    adoptionReceipt: Optional[ArtifactAdoptionReceipt]
+    authorizedAt: Optional[Timestamp]
+    authorizedBy: Optional[Identifier]
+    candidateId: Identifier
+    claimId: Identifier
+    contentDigest: Digest
+    destinationPath: UpgradeAbsolutePath
+    discardReason: Optional[str]
+    discardedAt: Optional[Timestamp]
+    evidenceId: Identifier
+    preparedAt: Timestamp
+    promotionId: Identifier
+    sourcePath: UpgradeAbsolutePath
+    state: str
+    verificationId: Identifier
+    workspaceId: Identifier
+
+
+UpgradeAbsolutePath = str
 
 
 @dataclass(frozen=True)

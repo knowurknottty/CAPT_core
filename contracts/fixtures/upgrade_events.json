@@ -1,0 +1,50 @@
+{
+  "fixtureSetVersion": "1.0.0",
+  "description": "Governed upgrade event contract parity fixtures.",
+  "cases": [
+    {
+      "id": "artifact-promotion-prepared-event-valid",
+      "type": "EventEnvelope",
+      "expectValid": true,
+      "value": {
+        "schemaVersion": "1.0.0",
+        "eventId": "ev-promote-prepared",
+        "streamId": "artifact_promotion-p-1",
+        "streamVersion": 1,
+        "globalSequence": 1,
+        "eventType": "ArtifactPromotionPrepared",
+        "occurredAt": "2026-08-18T00:00:00Z",
+        "actor": {"actorId": "exec", "kind": "execution_plane"},
+        "missionId": null,
+        "taskId": null,
+        "claimId": null,
+        "correlationId": "corr-promote",
+        "causationId": null,
+        "payload": {
+          "eventType": "ArtifactPromotionPrepared",
+          "promotion": {
+            "promotionId": "p-1",
+            "candidateId": "cand-1",
+            "workspaceId": "ws-1",
+            "sourcePath": "/tmp/staged.bin",
+            "destinationPath": "/tmp/canonical.bin",
+            "contentDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "claimId": "cl-1",
+            "verificationId": "ver-1",
+            "evidenceId": "ev-1",
+            "preparedAt": "2026-08-18T00:00:00Z",
+            "authorizedAt": null,
+            "authorizedBy": null,
+            "adoptedAt": null,
+            "discardedAt": null,
+            "discardReason": null,
+            "adoptionReceipt": null,
+            "state": "prepared"
+          }
+        },
+        "payloadDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "extensions": []
+      }
+    }
+  ]
+}

@@ -20,7 +20,7 @@
       "title": "StreamId",
       "description": "Aggregate stream identifier. The prefix declares the owning aggregate (ADR-0103) and is enforced by the store.",
       "type": "string",
-      "pattern": "^(mission|task|capability|driverrun|claim|human_approval)-[A-Za-z0-9_.-]{1,96}$"
+      "pattern": "^(mission|task|capability|driverrun|claim|human_approval|artifact_promotion)-[A-Za-z0-9_.-]{1,96}$"
     },
     "Timestamp": {
       "title": "Timestamp",
@@ -48,43 +48,107 @@
     "ActorKind": {
       "title": "ActorKind",
       "type": "string",
-      "enum": ["human", "governance_kernel", "cognitive_plane", "execution_plane", "verification_plane", "claim_authority", "external_driver", "system"]
+      "enum": [
+        "human",
+        "governance_kernel",
+        "cognitive_plane",
+        "execution_plane",
+        "verification_plane",
+        "claim_authority",
+        "external_driver",
+        "system"
+      ]
     },
     "ActorRef": {
       "title": "ActorRef",
       "description": "Who performed an action. 'kind' carries the authority domain and is checked by authority invariants.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["actorId", "kind"],
+      "required": [
+        "actorId",
+        "kind"
+      ],
       "properties": {
-        "actorId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "kind": { "$ref": "common.schema.json#/$defs/ActorKind" },
-        "displayName": { "type": ["string", "null"], "maxLength": 256 }
+        "actorId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "kind": {
+          "$ref": "common.schema.json#/$defs/ActorKind"
+        },
+        "displayName": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        }
       }
     },
     "ReplayPolicy": {
       "title": "ReplayPolicy",
       "description": "never: no automatic re-execution. safe: externally idempotent. verify-before-retry: observe external state first (ADR-0108).",
       "type": "string",
-      "enum": ["never", "safe", "verify-before-retry"]
+      "enum": [
+        "never",
+        "safe",
+        "verify-before-retry"
+      ]
     },
     "CommandMetadata": {
       "title": "CommandMetadata",
       "description": "Mandatory envelope for every consequential command (ADR-0108).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "commandId", "idempotencyKey", "operationFingerprint", "correlationId", "actor", "issuedAt", "replayPolicy", "attempt"],
+      "required": [
+        "schemaVersion",
+        "commandId",
+        "idempotencyKey",
+        "operationFingerprint",
+        "correlationId",
+        "actor",
+        "issuedAt",
+        "replayPolicy",
+        "attempt"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "commandId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "idempotencyKey": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "operationFingerprint": { "$ref": "common.schema.json#/$defs/Digest" },
-        "correlationId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "causationId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }] },
-        "actor": { "$ref": "common.schema.json#/$defs/ActorRef" },
-        "issuedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
-        "replayPolicy": { "$ref": "common.schema.json#/$defs/ReplayPolicy" },
-        "attempt": { "type": "integer", "minimum": 1 }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "commandId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "idempotencyKey": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "operationFingerprint": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "correlationId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "causationId": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "actor": {
+          "$ref": "common.schema.json#/$defs/ActorRef"
+        },
+        "issuedAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "replayPolicy": {
+          "$ref": "common.schema.json#/$defs/ReplayPolicy"
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
     "ExtensionEnvelope": {
@@ -92,14 +156,20 @@
       "description": "THE ONLY permitted generic payload boundary (ADR-0102). Namespaced, validated, and never present in a security-critical decision field.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["namespace", "payloadDigest", "payloadJson"],
+      "required": [
+        "namespace",
+        "payloadDigest",
+        "payloadJson"
+      ],
       "properties": {
         "namespace": {
           "type": "string",
           "pattern": "^x-[a-z0-9]+(\\.[a-z0-9]+)*$",
           "maxLength": 128
         },
-        "payloadDigest": { "$ref": "common.schema.json#/$defs/Digest" },
+        "payloadDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
         "payloadJson": {
           "description": "Serialized JSON string, not a live object. Keeps untyped data out of the typed tree and forces explicit parsing.",
           "type": "string",
@@ -110,40 +180,116 @@
     "ErrorCategory": {
       "title": "ErrorCategory",
       "type": "string",
-      "enum": ["validation", "authority", "concurrency", "idempotency", "integrity", "not_found", "illegal_transition", "capability_denied", "reconciliation_required", "internal"]
+      "enum": [
+        "validation",
+        "authority",
+        "concurrency",
+        "idempotency",
+        "integrity",
+        "not_found",
+        "illegal_transition",
+        "capability_denied",
+        "reconciliation_required",
+        "internal"
+      ]
     },
     "ErrorEnvelope": {
       "title": "ErrorEnvelope",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "category", "code", "message", "occurredAt"],
+      "required": [
+        "schemaVersion",
+        "category",
+        "code",
+        "message",
+        "occurredAt"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "category": { "$ref": "common.schema.json#/$defs/ErrorCategory" },
-        "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{2,63}$" },
-        "message": { "type": "string", "maxLength": 2048 },
-        "occurredAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
-        "correlationId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }] },
-        "streamId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/StreamId" }, { "type": "null" }] },
-        "expectedVersion": { "type": ["integer", "null"], "minimum": 0 },
-        "actualVersion": { "type": ["integer", "null"], "minimum": 0 }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "category": {
+          "$ref": "common.schema.json#/$defs/ErrorCategory"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]{2,63}$"
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "occurredAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "correlationId": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "streamId": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/StreamId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "expectedVersion": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "actualVersion": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
       }
     },
     "Budget": {
       "title": "Budget",
       "type": "object",
       "additionalProperties": false,
-      "required": ["wallClockSeconds", "maxOperations"],
+      "required": [
+        "wallClockSeconds",
+        "maxOperations"
+      ],
       "properties": {
-        "wallClockSeconds": { "type": "integer", "minimum": 1, "maximum": 86400 },
-        "maxOperations": { "type": "integer", "minimum": 1, "maximum": 1000000 }
+        "wallClockSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "maxOperations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        }
       }
     },
     "RiskClassification": {
       "title": "RiskClassification",
       "description": "Operator-facing risk band for a bounded approval request. Advisory only; CAPT authority invariants remain the sole enforcement path.",
       "type": "string",
-      "enum": ["none", "low", "medium", "high", "consequential"]
+      "enum": [
+        "none",
+        "low",
+        "medium",
+        "high",
+        "consequential"
+      ]
     },
     "OperatorMissionIntent": {
       "title": "OperatorMissionIntent",
@@ -151,34 +297,126 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "schemaVersion", "missionId", "objective", "scope", "requiresApproval"
+        "schemaVersion",
+        "missionId",
+        "objective",
+        "scope",
+        "requiresApproval"
       ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "objective": { "type": "string", "maxLength": 4096 },
-        "rawRequest": { "type": ["string", "null"], "maxLength": 8192 },
-        "normalizedRequest": { "type": ["string", "null"], "maxLength": 8192 },
-        "scope": { "type": "object", "additionalProperties": true },
-        "constraints": { "type": "array", "items": { "type": "object" } },
-        "successCriteria": { "type": "array", "items": { "type": "object" } },
-        "terminationCriteria": { "type": "array", "items": { "type": "object" } },
-        "unresolvedAmbiguities": { "type": "array", "items": { "type": "string" } },
-        "budget": {
-          "type": ["object", "null"],
-          "additionalProperties": false,
-          "properties": {
-            "maxEvents": { "type": ["integer", "null"], "minimum": 0 }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "missionId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "objective": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "rawRequest": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 8192
+        },
+        "normalizedRequest": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 8192
+        },
+        "scope": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "type": "object"
           }
         },
-        "requiresApproval": { "type": "boolean" },
-        "requestedCapability": { "type": "string", "maxLength": 256 },
-        "resource": { "type": ["string", "null"], "maxLength": 1024 },
-        "operation": { "type": ["string", "null"], "maxLength": 128 },
-        "riskClassification": { "$ref": "common.schema.json#/$defs/RiskClassification" },
-        "policyReason": { "type": ["string", "null"], "maxLength": 1024 },
-        "taskId": { "type": ["string", "null"], "maxLength": 256 },
-        "requestId": { "type": ["string", "null"], "maxLength": 256 }
+        "successCriteria": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "terminationCriteria": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "unresolvedAmbiguities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "budget": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "maxEvents": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        },
+        "requiresApproval": {
+          "type": "boolean"
+        },
+        "requestedCapability": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "resource": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 1024
+        },
+        "operation": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        },
+        "riskClassification": {
+          "$ref": "common.schema.json#/$defs/RiskClassification"
+        },
+        "policyReason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 1024
+        },
+        "taskId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "requestId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        }
       }
     },
     "MemoryTriggerPolicy": {
@@ -187,25 +425,84 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "schemaVersion", "policyVersion", "triggerIntervalTokens",
-        "retrievalTriggerSteps", "compressionTriggerSteps",
-        "checkpointTriggerSteps", "consolidationTriggerSteps",
-        "hardStopTriggerSteps", "modelSafeLimitSteps", "source"
+        "schemaVersion",
+        "policyVersion",
+        "triggerIntervalTokens",
+        "retrievalTriggerSteps",
+        "compressionTriggerSteps",
+        "checkpointTriggerSteps",
+        "consolidationTriggerSteps",
+        "hardStopTriggerSteps",
+        "modelSafeLimitSteps",
+        "source"
       ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "policyVersion": { "type": "integer", "minimum": 1 },
-        "triggerIntervalTokens": { "const": 32768 },
-        "retrievalTriggerSteps": { "type": "integer", "minimum": 1 },
-        "compressionTriggerSteps": { "type": "integer", "minimum": 1 },
-        "checkpointTriggerSteps": { "type": "integer", "minimum": 1 },
-        "consolidationTriggerSteps": { "type": "integer", "minimum": 1 },
-        "hardStopTriggerSteps": { "type": "integer", "minimum": 1 },
-        "modelSafeLimitSteps": { "type": "integer", "minimum": 1 },
-        "source": { "type": "string", "enum": ["constitutional", "runtime_policy", "model_provider", "project_policy", "operator_selected", "driver_preference"] },
-        "operatorId": { "type": ["string", "null"], "maxLength": 256 },
-        "previousPolicyDigest": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" },
-        "policyDigest": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "policyVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "triggerIntervalTokens": {
+          "const": 32768
+        },
+        "retrievalTriggerSteps": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "compressionTriggerSteps": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "checkpointTriggerSteps": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "consolidationTriggerSteps": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hardStopTriggerSteps": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "modelSafeLimitSteps": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "source": {
+          "type": "string",
+          "enum": [
+            "constitutional",
+            "runtime_policy",
+            "model_provider",
+            "project_policy",
+            "operator_selected",
+            "driver_preference"
+          ]
+        },
+        "operatorId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "previousPolicyDigest": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "policyDigest": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
       }
     },
     "MemoryQuery": {
@@ -214,32 +511,128 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "schemaVersion", "missionId", "taskId", "actor", "requestingSubsystem",
-        "triggerBoundary", "contextUsage", "requestedMemoryClasses", "purpose",
-        "recordLimit", "tokenBudget", "correlationId"
+        "schemaVersion",
+        "missionId",
+        "taskId",
+        "actor",
+        "requestingSubsystem",
+        "triggerBoundary",
+        "contextUsage",
+        "requestedMemoryClasses",
+        "purpose",
+        "recordLimit",
+        "tokenBudget",
+        "correlationId"
       ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "taskId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "driverRunId": { "type": ["string", "null"], "maxLength": 256 },
-        "actor": { "type": "string", "maxLength": 256 },
-        "requestingSubsystem": { "type": "string", "maxLength": 128 },
-        "triggerBoundary": { "type": "integer", "minimum": 0 },
-        "contextUsage": { "type": "integer", "minimum": 0 },
-        "requestedMemoryClasses": { "type": "array", "items": { "type": "string" } },
-        "projectScope": { "type": ["string", "null"], "maxLength": 256 },
-        "purpose": { "type": "string", "maxLength": 2048 },
-        "relevanceCriteria": { "type": ["string", "null"], "maxLength": 2048 },
-        "timeRange": { "type": ["object", "null"], "additionalProperties": true },
-        "trustThreshold": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
-        "consentScope": { "type": ["string", "null"], "maxLength": 256 },
-        "sensitivityAllowance": { "type": ["string", "null"], "maxLength": 64 },
-        "recordLimit": { "type": "integer", "minimum": 1, "maximum": 1000 },
-        "tokenBudget": { "type": "integer", "minimum": 0 },
-        "provenanceRequirement": { "type": ["string", "null"], "maxLength": 256 },
-        "correlationId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "causationId": { "type": ["string", "null"], "maxLength": 256 }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "missionId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "taskId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "driverRunId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "actor": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "requestingSubsystem": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "triggerBoundary": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "contextUsage": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "requestedMemoryClasses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "projectScope": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "purpose": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "relevanceCriteria": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2048
+        },
+        "timeRange": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": true
+        },
+        "trustThreshold": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "consentScope": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "sensitivityAllowance": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "recordLimit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "tokenBudget": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "provenanceRequirement": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "correlationId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "causationId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        }
       }
     },
     "MemoryRecord": {
@@ -248,28 +641,104 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "recordId", "memoryClass", "owner", "source", "provenance", "trust",
-        "verificationStatus", "sensitivity", "consent", "digest"
+        "recordId",
+        "memoryClass",
+        "owner",
+        "source",
+        "provenance",
+        "trust",
+        "verificationStatus",
+        "sensitivity",
+        "consent",
+        "digest"
       ],
       "properties": {
-        "recordId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "memoryClass": { "type": "string", "maxLength": 64 },
-        "owner": { "type": "string", "maxLength": 256 },
-        "source": { "type": "string", "maxLength": 512 },
-        "provenance": { "type": "string", "maxLength": 1024 },
-        "trust": { "type": "string", "maxLength": 32 },
-        "verificationStatus": { "type": "string", "maxLength": 32 },
-        "sensitivity": { "type": "string", "maxLength": 32 },
-        "consent": { "type": "string", "maxLength": 32 },
-        "createdAt": { "type": ["string", "null"], "maxLength": 64 },
-        "lastVerifiedAt": { "type": ["string", "null"], "maxLength": 64 },
-        "expiresAt": { "type": ["string", "null"], "maxLength": 64 },
-        "digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
-        "retrievalScore": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
-        "retrievalReason": { "type": "string", "maxLength": 512 },
-        "stale": { "type": "boolean" },
-        "conflictState": { "type": ["string", "null"], "maxLength": 64 },
-        "downstreamUseRestriction": { "type": ["string", "null"], "maxLength": 256 }
+        "recordId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "memoryClass": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "owner": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "source": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "provenance": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "trust": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "verificationStatus": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "sensitivity": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "consent": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "createdAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "lastVerifiedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "expiresAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "retrievalScore": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "retrievalReason": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "stale": {
+          "type": "boolean"
+        },
+        "conflictState": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "downstreamUseRestriction": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        }
       }
     },
     "ContextPack": {
@@ -278,32 +747,132 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "schemaVersion", "contextPackId", "policyVersion", "triggerBoundary",
-        "contextUsageBefore", "contextUsageAfter", "selectedRecords",
-        "excludedRecords", "tokenBudget", "contextPackDigest"
+        "schemaVersion",
+        "contextPackId",
+        "policyVersion",
+        "triggerBoundary",
+        "contextUsageBefore",
+        "contextUsageAfter",
+        "selectedRecords",
+        "excludedRecords",
+        "tokenBudget",
+        "contextPackDigest"
       ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "contextPackId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "policyVersion": { "type": "integer", "minimum": 1 },
-        "triggerBoundary": { "type": "integer", "minimum": 0 },
-        "contextUsageBefore": { "type": "integer", "minimum": 0 },
-        "contextUsageAfter": { "type": "integer", "minimum": 0 },
-        "selectedRecords": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/MemoryRecord" } },
-        "excludedRecords": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
-        "exclusionReasons": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
-        "compressionActions": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
-        "summariesGenerated": { "type": "array", "items": { "type": "string" } },
-        "provenanceRetained": { "type": "boolean" },
-        "unresolvedConflicts": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
-        "staleRecords": { "type": "array", "items": { "type": "string" } },
-        "redactions": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
-        "tokenBudget": { "type": "integer", "minimum": 0 },
-        "previousContextPackDigest": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" },
-        "contextPackDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
-        "missionId": { "type": ["string", "null"], "maxLength": 256 },
-        "taskId": { "type": ["string", "null"], "maxLength": 256 },
-        "driverRunId": { "type": ["string", "null"], "maxLength": 256 }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "contextPackId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "policyVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "triggerBoundary": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "contextUsageBefore": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "contextUsageAfter": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "selectedRecords": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/MemoryRecord"
+          }
+        },
+        "excludedRecords": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "exclusionReasons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "compressionActions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "summariesGenerated": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "provenanceRetained": {
+          "type": "boolean"
+        },
+        "unresolvedConflicts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "staleRecords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "redactions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "tokenBudget": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "previousContextPackDigest": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "contextPackDigest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "missionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "taskId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "driverRunId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        }
       }
     },
     "HumanApprovalRequest": {
@@ -312,27 +881,83 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "schemaVersion", "requestId", "missionId", "taskId", "requestedCapability",
-        "resource", "operation", "scope", "riskClassification", "policyReason",
-        "requestedBy", "expiresAt", "correlationId", "createdAt"
+        "schemaVersion",
+        "requestId",
+        "missionId",
+        "taskId",
+        "requestedCapability",
+        "resource",
+        "operation",
+        "scope",
+        "riskClassification",
+        "policyReason",
+        "requestedBy",
+        "expiresAt",
+        "correlationId",
+        "createdAt"
       ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "requestId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "taskId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "requestedCapability": { "type": "string", "maxLength": 256 },
-        "resource": { "type": "string", "maxLength": 1024 },
-        "operation": { "type": "string", "maxLength": 128 },
-        "scope": { "type": "object", "additionalProperties": true },
-        "riskClassification": { "$ref": "common.schema.json#/$defs/RiskClassification" },
-        "policyReason": { "type": "string", "maxLength": 1024 },
-        "requestedBy": { "$ref": "common.schema.json#/$defs/ActorRef" },
-        "expiresAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
-        "remainingUses": { "type": ["integer", "null"], "minimum": 1 },
-        "correlationId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "createdAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
-        "promptAssemblyDigest": { "type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$" }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "requestId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "missionId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "taskId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "requestedCapability": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "resource": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "operation": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "scope": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "riskClassification": {
+          "$ref": "common.schema.json#/$defs/RiskClassification"
+        },
+        "policyReason": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "requestedBy": {
+          "$ref": "common.schema.json#/$defs/ActorRef"
+        },
+        "expiresAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "remainingUses": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "correlationId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "createdAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "promptAssemblyDigest": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
       }
     },
     "HumanApprovalDecision": {
@@ -341,19 +966,54 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "schemaVersion", "requestId", "decision", "operatorId", "decidedAt",
-        "idempotencyKey", "correlationId"
+        "schemaVersion",
+        "requestId",
+        "decision",
+        "operatorId",
+        "decidedAt",
+        "idempotencyKey",
+        "correlationId"
       ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "requestId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "decision": { "type": "string", "enum": ["approve", "deny"] },
-        "operatorId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "decidedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
-        "note": { "type": ["string", "null"], "maxLength": 1024 },
-        "idempotencyKey": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "correlationId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "sessionId": { "type": ["string", "null"], "maxLength": 128 }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "requestId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "approve",
+            "deny"
+          ]
+        },
+        "operatorId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "decidedAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 1024
+        },
+        "idempotencyKey": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "correlationId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "sessionId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        }
       }
     },
     "HumanApprovalConsumption": {
@@ -362,20 +1022,50 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "schemaVersion", "requestId", "useId", "consumedAt", "missionId",
-        "taskId", "driverRunId", "resource", "operation", "promptAssemblyDigest"
+        "schemaVersion",
+        "requestId",
+        "useId",
+        "consumedAt",
+        "missionId",
+        "taskId",
+        "driverRunId",
+        "resource",
+        "operation",
+        "promptAssemblyDigest"
       ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "requestId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "useId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "consumedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
-        "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "taskId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "driverRunId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "resource": { "type": "string", "maxLength": 1024 },
-        "operation": { "type": "string", "maxLength": 128 },
-        "promptAssemblyDigest": { "$ref": "common.schema.json#/$defs/Digest" }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "requestId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "useId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "consumedAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "missionId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "taskId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "driverRunId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "resource": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "operation": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "promptAssemblyDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        }
       }
     },
     "Principal": {
@@ -383,13 +1073,41 @@
       "description": "The actor on whose behalf authority is exercised. Identity establishes the actor; delegation transfers bounded authority; governance evaluates; capability issuance grants permission. Additive plane-convergence extension under contract 1.0.0 (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "principalId", "kind", "attestation"],
+      "required": [
+        "schemaVersion",
+        "principalId",
+        "kind",
+        "attestation"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "kind": { "type": "string", "enum": ["human", "agent", "runtime", "driver", "model", "skill", "plugin"] },
-        "displayName": { "type": ["string", "null"], "maxLength": 256 },
-        "attestation": { "$ref": "common.schema.json#/$defs/IdentityAttestation" }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "principalId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "human",
+            "agent",
+            "runtime",
+            "driver",
+            "model",
+            "skill",
+            "plugin"
+          ]
+        },
+        "displayName": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "attestation": {
+          "$ref": "common.schema.json#/$defs/IdentityAttestation"
+        }
       }
     },
     "HumanIdentity": {
@@ -397,12 +1115,28 @@
       "description": "A human operator principal. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "principalId", "operatorId"],
+      "required": [
+        "schemaVersion",
+        "principalId",
+        "operatorId"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "operatorId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "displayName": { "type": ["string", "null"], "maxLength": 256 }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "principalId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "operatorId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "displayName": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        }
       }
     },
     "AgentIdentity": {
@@ -410,13 +1144,32 @@
       "description": "An autonomous agent principal operating under delegated authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "principalId", "agentId", "delegatedBy"],
+      "required": [
+        "schemaVersion",
+        "principalId",
+        "agentId",
+        "delegatedBy"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "agentId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "delegatedBy": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "displayName": { "type": ["string", "null"], "maxLength": 256 }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "principalId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "agentId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "delegatedBy": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "displayName": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        }
       }
     },
     "RuntimeIdentity": {
@@ -424,12 +1177,26 @@
       "description": "The CAPT runtime instance principal. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "principalId", "runtimeId", "version"],
+      "required": [
+        "schemaVersion",
+        "principalId",
+        "runtimeId",
+        "version"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "runtimeId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "version": { "type": "string", "maxLength": 64 }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "principalId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "runtimeId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 64
+        }
       }
     },
     "DriverIdentity": {
@@ -437,13 +1204,30 @@
       "description": "An external ExecutionDriver principal. Reuses the existing driver-identity attestation discipline (DriverRegistry.SpoofedDriverIdentity, hermes.probe_hermes_identity). Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "principalId", "driverId", "executableDigest", "version"],
+      "required": [
+        "schemaVersion",
+        "principalId",
+        "driverId",
+        "executableDigest",
+        "version"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "driverId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "executableDigest": { "$ref": "common.schema.json#/$defs/Digest" },
-        "version": { "type": "string", "maxLength": 64 }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "principalId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "driverId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "executableDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 64
+        }
       }
     },
     "ModelIdentity": {
@@ -451,13 +1235,31 @@
       "description": "A model principal referenced by a driver. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "principalId", "modelId", "provider", "modelName"],
+      "required": [
+        "schemaVersion",
+        "principalId",
+        "modelId",
+        "provider",
+        "modelName"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "modelId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "provider": { "type": "string", "maxLength": 64 },
-        "modelName": { "type": "string", "maxLength": 128 }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "principalId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "modelId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "provider": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "modelName": {
+          "type": "string",
+          "maxLength": 128
+        }
       }
     },
     "SessionIdentity": {
@@ -465,13 +1267,30 @@
       "description": "A bounded session under which authority is exercised. A session token alone must never become unrestricted authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "sessionId", "principalId", "issuedAt", "expiresAt"],
+      "required": [
+        "schemaVersion",
+        "sessionId",
+        "principalId",
+        "issuedAt",
+        "expiresAt"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "sessionId": { "type": "string", "maxLength": 128 },
-        "principalId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "issuedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
-        "expiresAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "sessionId": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "principalId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "issuedAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "expiresAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        }
       }
     },
     "Delegation": {
@@ -479,14 +1298,34 @@
       "description": "A bounded transfer of authority from a delegator to a delegate. Must not widen the delegator's own authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "delegationId", "delegatorId", "delegateId", "scope", "expiresAt"],
+      "required": [
+        "schemaVersion",
+        "delegationId",
+        "delegatorId",
+        "delegateId",
+        "scope",
+        "expiresAt"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "delegationId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "delegatorId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "delegateId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "scope": { "type": "string", "maxLength": 256 },
-        "expiresAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "delegationId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "delegatorId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "delegateId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "scope": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "expiresAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        }
       }
     },
     "AuthorityChain": {
@@ -494,11 +1333,24 @@
       "description": "The unbroken chain of delegations from a root principal to the acting principal. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "chainId", "entries"],
+      "required": [
+        "schemaVersion",
+        "chainId",
+        "entries"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "chainId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "entries": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/Delegation" } }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "chainId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/Delegation"
+          }
+        }
       }
     },
     "IdentityAttestation": {
@@ -506,11 +1358,27 @@
       "description": "Cryptographic or process attestation that a principal is who it claims. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "method", "digest"],
+      "required": [
+        "schemaVersion",
+        "method",
+        "digest"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "method": { "type": "string", "enum": ["executable_digest", "session_token", "delegation_record", "runtime_attestation"] },
-        "digest": { "$ref": "common.schema.json#/$defs/Digest" }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "executable_digest",
+            "session_token",
+            "delegation_record",
+            "runtime_attestation"
+          ]
+        },
+        "digest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        }
       }
     },
     "RevocationRecord": {
@@ -518,13 +1386,30 @@
       "description": "A revocation of a principal, delegation, or session. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "revocationId", "targetId", "revokedAt", "reason"],
+      "required": [
+        "schemaVersion",
+        "revocationId",
+        "targetId",
+        "revokedAt",
+        "reason"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "revocationId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "targetId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "revokedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
-        "reason": { "type": "string", "maxLength": 1024 }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "revocationId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "targetId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "revokedAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 1024
+        }
       }
     },
     "CapabilitySubject": {
@@ -532,11 +1417,27 @@
       "description": "The subject (principal or resource) a capability is issued against. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "subjectId", "subjectKind"],
+      "required": [
+        "schemaVersion",
+        "subjectId",
+        "subjectKind"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "subjectId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "subjectKind": { "type": "string", "enum": ["principal", "resource", "mission", "driver"] }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "subjectId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "subjectKind": {
+          "type": "string",
+          "enum": [
+            "principal",
+            "resource",
+            "mission",
+            "driver"
+          ]
+        }
       }
     },
     "PathScope": {
@@ -544,11 +1445,27 @@
       "description": "A bounded filesystem scope for an artifact workspace. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "rootPath", "allowedPaths"],
+      "required": [
+        "schemaVersion",
+        "rootPath",
+        "allowedPaths"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "rootPath": { "type": "string", "pattern": "^/[A-Za-z0-9_./-]+$" },
-        "allowedPaths": { "type": "array", "minItems": 1, "maxItems": 256, "items": { "type": "string" } }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "rootPath": {
+          "type": "string",
+          "pattern": "^/[A-Za-z0-9_./-]+$"
+        },
+        "allowedPaths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "type": "string"
+          }
+        }
       }
     },
     "WorkspaceDescriptor": {
@@ -556,12 +1473,26 @@
       "description": "An isolated worktree/staging directory for artifact production. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "workspaceId", "rootPath", "pathScope"],
+      "required": [
+        "schemaVersion",
+        "workspaceId",
+        "rootPath",
+        "pathScope"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "workspaceId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "rootPath": { "type": "string", "pattern": "^/[A-Za-z0-9_./-]+$" },
-        "pathScope": { "$ref": "common.schema.json#/$defs/PathScope" }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "workspaceId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "rootPath": {
+          "type": "string",
+          "pattern": "^/[A-Za-z0-9_./-]+$"
+        },
+        "pathScope": {
+          "$ref": "common.schema.json#/$defs/PathScope"
+        }
       }
     },
     "WorkspaceLease": {
@@ -569,14 +1500,38 @@
       "description": "A time-boxed, scoped lease over a workspace. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "leaseId", "workspaceId", "issuedAt", "expiresAt", "state"],
+      "required": [
+        "schemaVersion",
+        "leaseId",
+        "workspaceId",
+        "issuedAt",
+        "expiresAt",
+        "state"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "leaseId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "workspaceId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "issuedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
-        "expiresAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
-        "state": { "type": "string", "enum": ["active", "expired", "revoked"] }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "leaseId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "workspaceId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "issuedAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "expiresAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "state": {
+          "type": "string",
+          "enum": [
+            "active",
+            "expired",
+            "revoked"
+          ]
+        }
       }
     },
     "ArtifactCandidate": {
@@ -584,13 +1539,30 @@
       "description": "An untrusted object produced by a driver, awaiting validation. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "candidateId", "driverRunId", "path", "contentDigest"],
+      "required": [
+        "schemaVersion",
+        "candidateId",
+        "driverRunId",
+        "path",
+        "contentDigest"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "candidateId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "driverRunId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "path": { "type": "string", "maxLength": 4096 },
-        "contentDigest": { "$ref": "common.schema.json#/$defs/Digest" }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "candidateId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "driverRunId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "path": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "contentDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        }
       }
     },
     "ArtifactRecord": {
@@ -598,14 +1570,34 @@
       "description": "A promoted, authoritative artifact. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "artifactId", "candidateId", "path", "contentDigest", "promotionDecision"],
+      "required": [
+        "schemaVersion",
+        "artifactId",
+        "candidateId",
+        "path",
+        "contentDigest",
+        "promotionDecision"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "artifactId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "candidateId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "path": { "type": "string", "maxLength": 4096 },
-        "contentDigest": { "$ref": "common.schema.json#/$defs/Digest" },
-        "promotionDecision": { "$ref": "common.schema.json#/$defs/ArtifactPromotionDecision" }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "artifactId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "candidateId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "path": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "contentDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "promotionDecision": {
+          "$ref": "common.schema.json#/$defs/ArtifactPromotionDecision"
+        }
       }
     },
     "ArtifactManifest": {
@@ -613,11 +1605,24 @@
       "description": "A manifest describing a set of artifacts and their digests. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "manifestId", "artifacts"],
+      "required": [
+        "schemaVersion",
+        "manifestId",
+        "artifacts"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "manifestId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "artifacts": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/ArtifactRecord" } }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "manifestId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/ArtifactRecord"
+          }
+        }
       }
     },
     "ArtifactPromotionDecision": {
@@ -625,14 +1630,44 @@
       "description": "The governance/ClaimGuard decision on artifact promotion. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "decision", "decidedBy", "decidedAt"],
+      "required": [
+        "schemaVersion",
+        "decision",
+        "decidedBy",
+        "decidedAt"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "decision": { "type": "string", "enum": ["promote", "reject", "quarantine"] },
-        "decidedBy": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "decidedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
-        "verificationRef": { "type": ["string", "null"], "maxLength": 256 },
-        "reason": { "type": ["string", "null"], "maxLength": 1024 }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "promote",
+            "reject",
+            "quarantine"
+          ]
+        },
+        "decidedBy": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "decidedAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "verificationRef": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 1024
+        }
       }
     },
     "MutationReceipt": {
@@ -640,14 +1675,40 @@
       "description": "A receipt for an artifact mutation (create/update/delete) within a workspace. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "receiptId", "artifactPath", "operation", "contentDigest", "verified"],
+      "required": [
+        "schemaVersion",
+        "receiptId",
+        "artifactPath",
+        "operation",
+        "contentDigest",
+        "verified"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "receiptId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "artifactPath": { "type": "string", "maxLength": 4096 },
-        "operation": { "type": "string", "enum": ["create", "update", "delete", "move"] },
-        "contentDigest": { "$ref": "common.schema.json#/$defs/Digest" },
-        "verified": { "type": "boolean" }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "receiptId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "artifactPath": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "operation": {
+          "type": "string",
+          "enum": [
+            "create",
+            "update",
+            "delete",
+            "move"
+          ]
+        },
+        "contentDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "verified": {
+          "type": "boolean"
+        }
       }
     },
     "TrajectoryRecord": {
@@ -655,14 +1716,36 @@
       "description": "An immutable record of a mission execution trajectory, admissible to Learning only after verification + ClaimGuard. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "trajectoryId", "missionId", "verified", "claimGuardPassed"],
+      "required": [
+        "schemaVersion",
+        "trajectoryId",
+        "missionId",
+        "verified",
+        "claimGuardPassed"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "trajectoryId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "verified": { "type": "boolean" },
-        "claimGuardPassed": { "type": "boolean" },
-        "evidenceRef": { "type": ["string", "null"], "maxLength": 256 }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "trajectoryId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "missionId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "verified": {
+          "type": "boolean"
+        },
+        "claimGuardPassed": {
+          "type": "boolean"
+        },
+        "evidenceRef": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        }
       }
     },
     "RewardSignal": {
@@ -670,12 +1753,25 @@
       "description": "A compiled reward signal for a trajectory segment. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "signalId", "trajectoryId", "value"],
+      "required": [
+        "schemaVersion",
+        "signalId",
+        "trajectoryId",
+        "value"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "signalId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "trajectoryId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "value": { "type": "number" }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "signalId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "trajectoryId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "value": {
+          "type": "number"
+        }
       }
     },
     "LearningStrategy": {
@@ -683,12 +1779,32 @@
       "description": "A registered learning strategy (GRPO/SFT/DPO/ORPO/KTO/RLOO). Interfaces only; no live training in M0. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "strategyId", "kind"],
+      "required": [
+        "schemaVersion",
+        "strategyId",
+        "kind"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "strategyId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "kind": { "type": "string", "enum": ["GRPO", "SFT", "DPO", "ORPO", "KTO", "RLOO"] },
-        "enabled": { "type": "boolean" }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "strategyId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "GRPO",
+            "SFT",
+            "DPO",
+            "ORPO",
+            "KTO",
+            "RLOO"
+          ]
+        },
+        "enabled": {
+          "type": "boolean"
+        }
       }
     },
     "ModelCandidate": {
@@ -696,12 +1812,25 @@
       "description": "A candidate model produced by isolated training, awaiting offline evaluation. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "candidateId", "sourceTrajectoryId", "artifactDigest"],
+      "required": [
+        "schemaVersion",
+        "candidateId",
+        "sourceTrajectoryId",
+        "artifactDigest"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "candidateId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "sourceTrajectoryId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "artifactDigest": { "$ref": "common.schema.json#/$defs/Digest" }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "candidateId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "sourceTrajectoryId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "artifactDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        }
       }
     },
     "LearningPromotionDecision": {
@@ -709,13 +1838,36 @@
       "description": "Human-governed promotion decision for a model candidate. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "decision", "decidedBy", "decidedAt"],
+      "required": [
+        "schemaVersion",
+        "decision",
+        "decidedBy",
+        "decidedAt"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "decision": { "type": "string", "enum": ["promote", "reject"] },
-        "decidedBy": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "decidedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
-        "reason": { "type": ["string", "null"], "maxLength": 1024 }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "promote",
+            "reject"
+          ]
+        },
+        "decidedBy": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "decidedAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 1024
+        }
       }
     },
     "SimulationEnvironment": {
@@ -723,14 +1875,32 @@
       "description": "An isolated simulation environment with frozen initial state. Never inherits production authority. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "simId", "environmentDigest", "datasetDigest", "isSimulation"],
+      "required": [
+        "schemaVersion",
+        "simId",
+        "environmentDigest",
+        "datasetDigest",
+        "isSimulation"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "simId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "environmentDigest": { "$ref": "common.schema.json#/$defs/Digest" },
-        "datasetDigest": { "$ref": "common.schema.json#/$defs/Digest" },
-        "isSimulation": { "const": true },
-        "productionAuthority": { "const": false }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "simId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "environmentDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "datasetDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "isSimulation": {
+          "const": true
+        },
+        "productionAuthority": {
+          "const": false
+        }
       }
     },
     "SimulationMarker": {
@@ -738,12 +1908,31 @@
       "description": "An explicit marker that an artifact/result was produced in simulation and must never become production state. Additive plane-convergence extension (ADR-DT-PLANE-CONV).",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "markerId", "simId", "kind"],
+      "required": [
+        "schemaVersion",
+        "markerId",
+        "simId",
+        "kind"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "markerId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "simId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "kind": { "type": "string", "enum": ["result", "artifact", "evidence", "state"] }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "markerId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "simId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "result",
+            "artifact",
+            "evidence",
+            "state"
+          ]
+        }
       }
     },
     "TemporalContext": {
@@ -751,21 +1940,83 @@
       "description": "Canonical temporal model distinguishing wall-clock, monotonic, logical, causal, mission-relative, lease, policy-effective, evidence-observation, verification, memory-freshness, training-cutoff, and replay times. Additive plane-convergence extension (ADR-DT-PLANE-CONV). Not a Time Plane.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["schemaVersion", "wallClock", "monotonic", "logical", "causal", "missionRelative"],
+      "required": [
+        "schemaVersion",
+        "wallClock",
+        "monotonic",
+        "logical",
+        "causal",
+        "missionRelative"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "wallClock": { "$ref": "common.schema.json#/$defs/Timestamp" },
-        "monotonic": { "type": "number" },
-        "logical": { "type": "integer" },
-        "causal": { "type": "string", "maxLength": 256 },
-        "missionRelative": { "type": "number" },
-        "leaseExpiration": { "type": ["string", "null"], "maxLength": 64 },
-        "policyEffective": { "type": ["string", "null"], "maxLength": 64 },
-        "evidenceObservation": { "type": ["string", "null"], "maxLength": 64 },
-        "verificationTime": { "type": ["string", "null"], "maxLength": 64 },
-        "memoryFreshness": { "type": ["string", "null"], "maxLength": 64 },
-        "trainingCutoff": { "type": ["string", "null"], "maxLength": 64 },
-        "replayTime": { "type": ["string", "null"], "maxLength": 64 }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "wallClock": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "monotonic": {
+          "type": "number"
+        },
+        "logical": {
+          "type": "integer"
+        },
+        "causal": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "missionRelative": {
+          "type": "number"
+        },
+        "leaseExpiration": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "policyEffective": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "evidenceObservation": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "verificationTime": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "memoryFreshness": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "trainingCutoff": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "replayTime": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        }
       }
     }
   }

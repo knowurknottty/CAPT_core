@@ -13,27 +13,56 @@
           "title": "CleanRecoveryState",
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind"],
-          "properties": { "kind": { "type": "string", "const": "clean" } }
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "clean"
+            }
+          }
         },
         {
           "title": "AwaitingReconciliationRecoveryState",
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "openReservationIds"],
+          "required": [
+            "kind",
+            "openReservationIds"
+          ],
           "properties": {
-            "kind": { "type": "string", "const": "awaiting_reconciliation" },
-            "openReservationIds": { "type": "array", "minItems": 1, "maxItems": 256, "items": { "$ref": "common.schema.json#/$defs/Identifier" } }
+            "kind": {
+              "type": "string",
+              "const": "awaiting_reconciliation"
+            },
+            "openReservationIds": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 256,
+              "items": {
+                "$ref": "common.schema.json#/$defs/Identifier"
+              }
+            }
           }
         },
         {
           "title": "DegradedRecoveryState",
           "type": "object",
           "additionalProperties": false,
-          "required": ["kind", "reason"],
+          "required": [
+            "kind",
+            "reason"
+          ],
           "properties": {
-            "kind": { "type": "string", "const": "degraded" },
-            "reason": { "type": "string", "maxLength": 2048 }
+            "kind": {
+              "type": "string",
+              "const": "degraded"
+            },
+            "reason": {
+              "type": "string",
+              "maxLength": 2048
+            }
           }
         }
       ]
@@ -42,10 +71,22 @@
       "title": "LedgerPosition",
       "type": "object",
       "additionalProperties": false,
-      "required": ["globalSequence", "eventId"],
+      "required": [
+        "globalSequence",
+        "eventId"
+      ],
       "properties": {
-        "globalSequence": { "type": "integer", "minimum": 0 },
-        "eventId": { "type": ["string", "null"], "maxLength": 128 }
+        "globalSequence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "eventId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 128
+        }
       }
     },
     "StreamVersionEntry": {
@@ -53,20 +94,35 @@
       "description": "Explicit array of pairs rather than a free-form map, so the shape is closed and generator-friendly in both languages.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["streamId", "version"],
+      "required": [
+        "streamId",
+        "version"
+      ],
       "properties": {
-        "streamId": { "$ref": "common.schema.json#/$defs/StreamId" },
-        "version": { "$ref": "common.schema.json#/$defs/AggregateVersion" }
+        "streamId": {
+          "$ref": "common.schema.json#/$defs/StreamId"
+        },
+        "version": {
+          "$ref": "common.schema.json#/$defs/AggregateVersion"
+        }
       }
     },
     "ArtifactHashEntry": {
       "title": "ArtifactHashEntry",
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "digest"],
+      "required": [
+        "path",
+        "digest"
+      ],
       "properties": {
-        "path": { "type": "string", "maxLength": 4096 },
-        "digest": { "$ref": "common.schema.json#/$defs/Digest" }
+        "path": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "digest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        }
       }
     },
     "CheckpointManifest": {
@@ -95,25 +151,111 @@
         "integrityDigest"
       ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "runtimeVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
-        "checkpointId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "createdAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
-        "ledgerPosition": { "$ref": "checkpoint.schema.json#/$defs/LedgerPosition" },
-        "ledgerDigest": { "$ref": "common.schema.json#/$defs/Digest" },
-        "missionVersions": { "type": "array", "maxItems": 4096, "items": { "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry" } },
-        "taskVersions": { "type": "array", "maxItems": 4096, "items": { "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry" } },
-        "capabilityVersions": { "type": "array", "maxItems": 4096, "items": { "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry" } },
-        "driverRunVersions": { "type": "array", "maxItems": 4096, "items": { "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry" } },
-        "claimVersions": { "type": "array", "maxItems": 4096, "items": { "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry" } },
-        "humanApprovalVersions": { "type": "array", "maxItems": 4096, "items": { "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry" } },
-        "activeLeaseIds": { "type": "array", "maxItems": 4096, "items": { "$ref": "common.schema.json#/$defs/Identifier" } },
-        "activeReservationIds": { "type": "array", "maxItems": 4096, "items": { "$ref": "common.schema.json#/$defs/Identifier" } },
-        "pendingOutboxEventIds": { "type": "array", "maxItems": 8192, "items": { "$ref": "common.schema.json#/$defs/Identifier" } },
-        "artifactHashes": { "type": "array", "maxItems": 4096, "items": { "$ref": "checkpoint.schema.json#/$defs/ArtifactHashEntry" } },
-        "policyBundleDigest": { "$ref": "common.schema.json#/$defs/Digest" },
-        "recoveryState": { "$ref": "checkpoint.schema.json#/$defs/RecoveryState" },
-        "integrityDigest": { "$ref": "common.schema.json#/$defs/Digest" }
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "runtimeVersion": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "checkpointId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "createdAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "ledgerPosition": {
+          "$ref": "checkpoint.schema.json#/$defs/LedgerPosition"
+        },
+        "ledgerDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "missionVersions": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry"
+          }
+        },
+        "taskVersions": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry"
+          }
+        },
+        "capabilityVersions": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry"
+          }
+        },
+        "driverRunVersions": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry"
+          }
+        },
+        "claimVersions": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry"
+          }
+        },
+        "humanApprovalVersions": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry"
+          }
+        },
+        "activeLeaseIds": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "common.schema.json#/$defs/Identifier"
+          }
+        },
+        "activeReservationIds": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "common.schema.json#/$defs/Identifier"
+          }
+        },
+        "pendingOutboxEventIds": {
+          "type": "array",
+          "maxItems": 8192,
+          "items": {
+            "$ref": "common.schema.json#/$defs/Identifier"
+          }
+        },
+        "artifactHashes": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "checkpoint.schema.json#/$defs/ArtifactHashEntry"
+          }
+        },
+        "policyBundleDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "recoveryState": {
+          "$ref": "checkpoint.schema.json#/$defs/RecoveryState"
+        },
+        "integrityDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "artifactPromotionVersions": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry"
+          }
+        }
       }
     }
   }

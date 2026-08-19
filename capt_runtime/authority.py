@@ -43,6 +43,13 @@ _PERMITTED: Dict[str, FrozenSet[str]] = {
     "propose_claim": frozenset({COGNITION, EXECUTION, SYSTEM}),
     "decide_claim": frozenset({CLAIM_AUTHORITY}),
     "create_checkpoint": frozenset({SYSTEM}),
+    # Verification/ClaimGuard do not own filesystem adoption. A bounded
+    # promotion transaction separates preparation, human/governance
+    # authorization, and the consequential atomic filesystem step.
+    "prepare_artifact_promotion": frozenset({EXECUTION, SYSTEM}),
+    "authorize_artifact_promotion": frozenset({HUMAN, GOVERNANCE, SYSTEM}),
+    "adopt_artifact_promotion": frozenset({EXECUTION, SYSTEM}),
+    "discard_artifact_promotion": frozenset({EXECUTION, HUMAN, SYSTEM}),
 }
 
 

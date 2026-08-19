@@ -13,9 +13,11 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Tuple
 
 from .aggregates import (
+    ArtifactPromotionAggregate,
     CapabilityAggregate,
     ClaimAggregate,
     DriverRunAggregate,
+    HumanApprovalAggregate,
     MissionAggregate,
     TaskAggregate,
 )
@@ -80,6 +82,8 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         "CapabilityGranted",
         "DriverRunCreated",
         "ClaimCreated",
+        "HumanApprovalRequested",
+        "ArtifactPromotionPrepared",
     )
     if event_type not in _CREATION_EVENTS and current is None:
         # A mutation event on a stream with no prior state means the ledger is
@@ -139,6 +143,32 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         nxt = ClaimAggregate.record_verification(existing(), payload["verification"])
     elif event_type == "ClaimGuardDecided":
         nxt = ClaimAggregate.decide(existing(), payload["decision"])
+    elif event_type == "HumanApprovalRequested":
+        nxt = HumanApprovalAggregate.create(payload["request"])
+    elif event_type == "HumanApprovalDecided":
+        decision = payload["decision"]
+        nxt = HumanApprovalAggregate.decide(
+            existing(), decision, decision.get("decidedAt") or envelope.get("occurredAt", "")
+        )
+    elif event_type == "HumanApprovalConsumed":
+        consumption = payload["consumption"]
+        nxt = HumanApprovalAggregate.consume(
+            existing(), consumption["useId"], consumption["consumedAt"]
+        )
+    elif event_type == "ArtifactPromotionPrepared":
+        nxt = ArtifactPromotionAggregate.prepare(payload["promotion"])
+    elif event_type == "ArtifactPromotionAuthorized":
+        nxt = ArtifactPromotionAggregate.authorize(
+            existing(), payload["authorizedBy"], payload["authorizedAt"]
+        )
+    elif event_type == "ArtifactPromotionAdopted":
+        nxt = ArtifactPromotionAggregate.adopt(
+            existing(), payload["receipt"], payload["adoptedAt"]
+        )
+    elif event_type == "ArtifactPromotionDiscarded":
+        nxt = ArtifactPromotionAggregate.discard(
+            existing(), payload["reason"], payload["discardedAt"]
+        )
     elif event_type in ("CheckpointCreated", "MissionResumed"):
         # Bookkeeping events: they advance the stream version but carry no
         # aggregate state change.
@@ -178,6 +208,8 @@ def checkpoint_replay(
         "capabilityVersions",
         "driverRunVersions",
         "claimVersions",
+        "humanApprovalVersions",
+        "artifactPromotionVersions",
     ):
         for entry in manifest[field]:
             stream_state = store.load_state(entry["streamId"])

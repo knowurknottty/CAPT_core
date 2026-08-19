@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:59bf06c0abc36da44f6f6841c1886dcde6b5d470790d65c42f5d5b15bfc0aa95
+// source digest:  sha256:5bafe06a54ed489dfbf95d825b7ee042bd0bb76fec096846e8aaea7275f23af8
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -234,6 +234,7 @@ export interface CheckpointManifest {
   readonly runtimeVersion: string;
   readonly schemaVersion: SchemaVersion;
   readonly taskVersions: readonly StreamVersionEntry[];
+  readonly artifactPromotionVersions?: readonly StreamVersionEntry[];
   readonly humanApprovalVersions?: readonly StreamVersionEntry[];
 }
 
@@ -1108,6 +1109,40 @@ export interface RequiredReceipt {
   readonly contentDigest?: string;
 }
 
+/** ArtifactPromotionAdoptedPayload */
+export interface ArtifactPromotionAdoptedPayload {
+  readonly adoptedAt: Timestamp;
+  readonly eventType: "ArtifactPromotionAdopted";
+  readonly promotionId: Identifier;
+  readonly receipt: ArtifactAdoptionReceipt;
+}
+
+/** ArtifactPromotionAuthorizedPayload */
+export interface ArtifactPromotionAuthorizedPayload {
+  readonly authorizedAt: Timestamp;
+  readonly authorizedBy: Identifier;
+  readonly contentDigest: Digest;
+  readonly destinationPath: UpgradeAbsolutePath;
+  readonly eventType: "ArtifactPromotionAuthorized";
+  readonly evidenceId: Identifier;
+  readonly promotionId: Identifier;
+  readonly verificationId: Identifier;
+}
+
+/** ArtifactPromotionDiscardedPayload */
+export interface ArtifactPromotionDiscardedPayload {
+  readonly discardedAt: Timestamp;
+  readonly eventType: "ArtifactPromotionDiscarded";
+  readonly promotionId: Identifier;
+  readonly reason: string;
+}
+
+/** ArtifactPromotionPreparedPayload */
+export interface ArtifactPromotionPreparedPayload {
+  readonly eventType: "ArtifactPromotionPrepared";
+  readonly promotion: ArtifactPromotionState;
+}
+
 /** CapabilityGrantRevokedPayload */
 export interface CapabilityGrantRevokedPayload {
   readonly eventType: "CapabilityGrantRevoked";
@@ -1228,10 +1263,14 @@ export type EventPayload =
   | ClaimGuardDecidedPayload
   | HumanApprovalRequestedPayload
   | HumanApprovalDecidedPayload
-  | HumanApprovalConsumedPayload;
+  | HumanApprovalConsumedPayload
+  | ArtifactPromotionPreparedPayload
+  | ArtifactPromotionAuthorizedPayload
+  | ArtifactPromotionAdoptedPayload
+  | ArtifactPromotionDiscardedPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -1256,6 +1295,10 @@ export const EventTypeValues = [
   "HumanApprovalRequested",
   "HumanApprovalDecided",
   "HumanApprovalConsumed",
+  "ArtifactPromotionPrepared",
+  "ArtifactPromotionAuthorized",
+  "ArtifactPromotionAdopted",
+  "ArtifactPromotionDiscarded",
 ] as const;
 
 /** EvidenceRecordedPayload */
@@ -1672,6 +1715,38 @@ export const ToolResultStatusValues = [
   "indeterminate",
   "denied",
 ] as const;
+
+/** Mechanical receipt from an already-authorized artifact adoption step; not authorization itself. */
+export interface ArtifactAdoptionReceipt {
+  readonly atomicReplace: boolean;
+  readonly contentDigest: Digest;
+  readonly destinationPath: UpgradeAbsolutePath;
+  readonly operation: string;
+}
+
+/** Authoritative source/destination/digest-bound promotion transaction. ClaimGuard does not own this state machine. */
+export interface ArtifactPromotionState {
+  readonly adoptedAt: Timestamp | null;
+  readonly adoptionReceipt: ArtifactAdoptionReceipt | null;
+  readonly authorizedAt: Timestamp | null;
+  readonly authorizedBy: Identifier | null;
+  readonly candidateId: Identifier;
+  readonly claimId: Identifier;
+  readonly contentDigest: Digest;
+  readonly destinationPath: UpgradeAbsolutePath;
+  readonly discardReason: string | null;
+  readonly discardedAt: Timestamp | null;
+  readonly evidenceId: Identifier;
+  readonly preparedAt: Timestamp;
+  readonly promotionId: Identifier;
+  readonly sourcePath: UpgradeAbsolutePath;
+  readonly state: string;
+  readonly verificationId: Identifier;
+  readonly workspaceId: Identifier;
+}
+
+/** Absolute normalized path bound into a governed upgrade transaction. */
+export type UpgradeAbsolutePath = string;
 
 /** ContradictedStatus */
 export interface ContradictedStatus {

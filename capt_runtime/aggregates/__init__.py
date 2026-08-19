@@ -1,5 +1,6 @@
 """CAPT runtime aggregates with exclusive state ownership (ADR-0103)."""
 
+from .artifact_promotion import ArtifactPromotionAggregate
 from .capability import CapabilityAggregate, scope_contains
 from .claim_driver import ClaimAggregate, DriverRunAggregate
 from .human_approval import HumanApprovalAggregate
@@ -12,10 +13,12 @@ ALL_AGGREGATES = (
     DriverRunAggregate,
     ClaimAggregate,
     HumanApprovalAggregate,
+    ArtifactPromotionAggregate,
 )
 
 __all__ = [
     "ALL_AGGREGATES",
+    "ArtifactPromotionAggregate",
     "CapabilityAggregate",
     "ClaimAggregate",
     "DriverRunAggregate",

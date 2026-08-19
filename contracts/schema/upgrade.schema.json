@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.capt.dev/upgrade.schema.json",
+  "title": "CAPT governed upgrade aggregate contracts",
+  "x-domain": "upgrade",
+  "$defs": {
+    "UpgradeAbsolutePath": {
+      "title": "UpgradeAbsolutePath",
+      "description": "Absolute normalized path bound into a governed upgrade transaction.",
+      "type": "string",
+      "pattern": "^/[^\\u0000]*$",
+      "maxLength": 4096
+    },
+    "ArtifactAdoptionReceipt": {
+      "title": "ArtifactAdoptionReceipt",
+      "description": "Mechanical receipt from an already-authorized artifact adoption step; not authorization itself.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["destinationPath", "contentDigest", "operation", "atomicReplace"],
+      "properties": {
+        "destinationPath": { "$ref": "upgrade.schema.json#/$defs/UpgradeAbsolutePath" },
+        "contentDigest": { "$ref": "common.schema.json#/$defs/Digest" },
+        "operation": { "type": "string", "enum": ["atomic_replace", "already_present_reconciled"] },
+        "atomicReplace": { "type": "boolean", "const": true }
+      }
+    },
+    "ArtifactPromotionState": {
+      "title": "ArtifactPromotionState",
+      "description": "Authoritative source/destination/digest-bound promotion transaction. ClaimGuard does not own this state machine.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["promotionId", "candidateId", "workspaceId", "sourcePath", "destinationPath", "contentDigest", "claimId", "verificationId", "evidenceId", "preparedAt", "authorizedAt", "authorizedBy", "adoptedAt", "discardedAt", "discardReason", "adoptionReceipt", "state"],
+      "properties": {
+        "promotionId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "candidateId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "workspaceId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "sourcePath": { "$ref": "upgrade.schema.json#/$defs/UpgradeAbsolutePath" },
+        "destinationPath": { "$ref": "upgrade.schema.json#/$defs/UpgradeAbsolutePath" },
+        "contentDigest": { "$ref": "common.schema.json#/$defs/Digest" },
+        "claimId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "verificationId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "evidenceId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "preparedAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "authorizedAt": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Timestamp" }, { "type": "null" }] },
+        "authorizedBy": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }] },
+        "adoptedAt": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Timestamp" }, { "type": "null" }] },
+        "discardedAt": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Timestamp" }, { "type": "null" }] },
+        "discardReason": { "type": ["string", "null"], "maxLength": 2048 },
+        "adoptionReceipt": { "oneOf": [{ "$ref": "upgrade.schema.json#/$defs/ArtifactAdoptionReceipt" }, { "type": "null" }] },
+        "state": { "type": "string", "enum": ["prepared", "authorized", "adopted", "discarded"] }
+      }
+    }
+  }
+}
