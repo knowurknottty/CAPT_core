@@ -32,9 +32,9 @@ history               approvals        + ContextPack
 
 No presentation surface, MCP client, external model, Hermes client, Cohort coordinator, discovery scanner, prompt enhancer, provider manager, or security checker becomes a parallel runtime.
 
-## Terminal convergence architecture
+## Merged convergence architecture
 
-PR #117 reconciles the formerly stacked runtime, provider, native, security, authored-skill, and UPG-001→019 lines into one candidate. This is semantic reconciliation rather than a mechanical mega-merge.
+Merged PR #117 reconciles the formerly stacked runtime, provider, native, security, authored-skill, and UPG-001→019 lines on `main`. This is semantic reconciliation rather than a mechanical mega-merge.
 
 Key integrated properties:
 
@@ -104,4 +104,4 @@ RELEASE_PROVEN
 
 They are not interchangeable.
 
-See [`CURRENT_STATE.md`](CURRENT_STATE.md) for the exact protected-main / convergence-candidate / release-security split.
+See [`CURRENT_STATE.md`](CURRENT_STATE.md) for the exact merged-integration / release-security split.

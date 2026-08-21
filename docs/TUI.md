@@ -18,17 +18,17 @@ The TUI/operator layer exposes runtime/mission/task state, memory/context, provi
 
 The enhancement/presentation layer may propose or display context; it may not grant capability, bypass RuntimeService approval, make a provider result verified, or declare task/mission completion.
 
-## Terminal convergence status
+## Merged convergence status
 
-PR #117 now contains the coherent cumulative implementation rather than treating PR #47 as the active authority. The same convergence line also carries durable Cohort/steering projections, replay/forensic/provenance/security operator surfaces, native macOS parity work, and PR #118's provider/model coherence repair.
+PR #117 is merged into `main` and contains the coherent cumulative implementation rather than treating PR #47 as the active authority. The merged line also carries durable Cohort/steering projections, replay/forensic/provenance/security operator surfaces, native macOS work, and the provider/model-coherence semantics from closed-unmerged PR #118.
 
 Fresh 2026-08-19 Core verification is green across the Python suite and Swift normal/strict/ThreadSanitizer suites. Cross-surface acceptance with MCP PR #2 also passes against one shared disposable RuntimeService/EventStore.
 
 ## Current classification
 
 - protected-main TUI foundation: **MERGED**;
-- terminal cumulative TUI/provider/operator candidate: **INTEGRATED / EXACT-CANDIDATE VERIFIED**;
-- native macOS source/build: **VERIFIED CANDIDATE**;
+- cumulative TUI/provider/operator line: **MERGED / INTEGRATED**;
+- native macOS source/build: **MERGED / ENGINEERING-VERIFIED**;
 - release authorization: **BLOCKED pending Security Closure Cockpit evidence**.
 
 See [`CURRENT_STATE.md`](CURRENT_STATE.md) and [`RELEASE_EVIDENCE.md`](RELEASE_EVIDENCE.md).

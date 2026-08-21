@@ -6,9 +6,11 @@ CAPT keeps evidence scoped to the claim it actually supports. Historical evidenc
 
 `release_evidence/v0.5/` remains the proof set for the numbered `0.5.0` lineage. It is historical and intentionally immutable.
 
-## Terminal convergence evidence — 2026-08-19
+## Merged convergence evidence — 2026-08-19→21
 
-Current integration authority is PR #117. The formerly stacked provider/native/UPG-001→019 lines have been semantically reconciled there; stale implementation PRs were closed unmerged as superseded rather than mechanically merged one by one.
+PR #117 is now merged into `main` at merge commit `4a654a74083cf341f8557983ce256949198a02e7`. The formerly stacked provider/native/UPG-001→019 lines were semantically reconciled there; stale implementation PRs were closed unmerged as superseded rather than mechanically merged one by one.
+
+The exact merged PR head is `570babeef113943860c1268722200a48639e406d`. On that head, M0-A Contract & Runtime Proof and Native macOS Swift passed, while **Release Security failed** (workflow run `32440329043`). This means the integration is merged but not release-authorized.
 
 ### Frozen local runtime/product snapshot
 
@@ -27,7 +29,7 @@ Fresh local verification on the frozen runtime/product snapshot established:
 
 The broad Core repository Ruff F/E9 sweep is not globally clean; legacy unused imports/locals/redefinitions remain outside the terminal fix slice. Do not cite the scoped/fatal lint success as a repo-wide Ruff pass.
 
-### Exact-candidate GitHub CI
+### Pre-merge/frozen GitHub CI evidence
 
 After convergence, CI itself exposed and fixed two harness defects and one genuine presentation-lifecycle race:
 
@@ -69,7 +71,7 @@ The exact cross-surface acceptance report binds to the frozen runtime/product sn
 
 ## Security evidence boundary
 
-The Security Closure Cockpit is integrated and intentionally fail-closed. The current CI-generated exact-candidate result is:
+The Security Closure Cockpit is integrated and intentionally fail-closed. The last detailed pre-merge gate projection recorded at exact head `33e24146094242d7a88612cea39267ef52a1d2e1` was:
 
 - decision **BLOCKED**;
 - `releaseAuthorized=false`;
@@ -79,7 +81,7 @@ The Security Closure Cockpit is integrated and intentionally fail-closed. The cu
 
 The gate artifact is uploaded by the `Release Security` workflow for audit. `NOT_VERIFIED` is missing/incomplete evidence, not a discovered vulnerability and not permission to infer PASS from unrelated test suites.
 
-Until the cockpit returns authorized, the convergence candidate is **integration-verified but release-security blocked**.
+The subsequent exact merged head `570babeef113943860c1268722200a48639e406d` produced a failing Release Security workflow. Until an exact release source commit returns authorized, merged `main` is **integration-merged but release-security blocked**.
 
 ## Artifact evidence boundary
 

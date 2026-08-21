@@ -8,7 +8,7 @@ The Python/Tk surface is a real projection/control client and remains useful as 
 
 ## Native macOS application
 
-`capt_ui/surfaces/desktop_swift` now contains more than a client-contract library. The terminal convergence line builds the real `CAPTNativeMac` application target with governed chat/approval flow, runtime/provider controls, native session persistence, typed actor-boundary projections, and origin-session-bound asynchronous provider/model updates.
+`capt_ui/surfaces/desktop_swift` now contains more than a client-contract library. Current `main` builds the real `CAPTNativeMac` application target with governed chat/approval flow, runtime/provider controls, native session persistence, typed actor-boundary projections, and origin-session-bound asynchronous provider/model updates.
 
 Fresh convergence verification:
 
