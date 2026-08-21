@@ -1,15 +1,15 @@
 # CAPT Core Architecture
 
-CAPT Core is local-first governed cognitive infrastructure around replaceable inference models. The architecture deliberately keeps durable responsibility outside a model session.
+CAPT Core is local-first governed cognitive infrastructure around replaceable inference models. Durable responsibility stays outside any transient model session.
 
 ## Authority topology
 
 ```text
 Human / application / compatibility client
               |
-      CLI / TUI / desktop
+   CLI / TUI / native macOS / MCP
               |
-      shared Operator facade
+      shared Operator/control layer
               |
       authenticated local IPC
               v
@@ -30,67 +30,64 @@ history               approvals        + ContextPack
       replaceable inference
 ```
 
-No presentation surface, external model, Hermes client, Cohort coordinator, discovery scanner, prompt enhancer, or security checker becomes a parallel runtime.
+No presentation surface, MCP client, external model, Hermes client, Cohort coordinator, discovery scanner, prompt enhancer, provider manager, or security checker becomes a parallel runtime.
+
+## Terminal convergence architecture
+
+PR #117 reconciles the formerly stacked runtime, provider, native, security, authored-skill, and UPG-001→019 lines into one candidate. This is semantic reconciliation rather than a mechanical mega-merge.
+
+Key integrated properties:
+
+- exact historical replay reconstructs the ledger prefix rather than seeding old state with present snapshots;
+- governed replay forks create new history without reactivating historical approvals/capabilities;
+- Cohorts own durable EventStore state, evidence admission, epoch/round semantics, and governed steering;
+- artifact promotion has its own authoritative transaction rather than filesystem side effects pretending to be verification;
+- capability leases remain bounded/revocable authority;
+- authored skill bytes are verified and bound into the exact model-visible approval identity before one-use execution;
+- provider/model changes are session-isolated in the native client;
+- MCP and native macOS remain compatibility/control surfaces over the same RuntimeService/EventStore authority.
 
 ## Durable layers
 
 ### EventStore
 
-Authoritative ordered runtime history, replay, sequence identity, and integrity evidence.
+Authoritative ordered runtime history, replay, sequence identity, stream versions, and integrity chain.
 
 ### CTP
 
-Operational transaction/recovery journal. CTP is useful for begin/validate/commit/abort/idempotency/receipt semantics, but it does not replace EventStore as runtime authority.
+Operational transaction/recovery journal; it does not replace EventStore authority.
 
-### CAPT Solo Memory Engine
+### Durable memory / ContextPack
 
-Persistent local knowledge with provenance/metadata and local integrity/backup facilities.
-
-### Runtime Memory Governor / ContextPack
-
-Separate from durable storage. It owns context policy, token/budget accounting, bounded context construction/rotation, stale-state rejection, and dispatch gating.
+Durable knowledge storage and governed bounded model context are separate layers. Context selection/provenance is frozen at the approval/execution boundary where required.
 
 ### KHSB
 
-In-process coordination. It is not currently durable, cross-process, or distributed.
+In-process coordination and compatibility substrate. It remains non-authoritative; cross-process/distributed authority is not inferred from it.
+
+### Cohorts
+
+The convergence line includes durable Cohort persistence/reconstruction, evidence admission, governed steering, epoch handling, and Chamber projection. Cohort majority/quorum is not verification and cannot bypass RuntimeService authority.
 
 ## Governed execution
 
-RuntimeService admits commands under explicit authority. DriverHost executes bounded external work. A completed driver call is an observation/artifact candidate, not automatic evidence acceptance, verification, task completion, or mission completion.
+RuntimeService admits commands under explicit authority. DriverHost executes bounded external work. A provider/model result yields observations/artifact candidates and leaves verification/ClaimGuard/task completion distinct.
 
-The active #46 lifecycle hardening strengthens durable idempotency, lease consumption, dispatch-boundary accounting, cancellation, and indeterminate-execution recovery. When dispatch status cannot be proven, the safe behavior is suspension/reconciliation rather than silent replay.
-
-## Operator layer
-
-`capt_ui.operator` is the shared projection/control abstraction used by the Textual TUI and desktop/operator surfaces. It may render state and submit governed requests; it does not write EventStore directly.
-
-The merged TUI is an operator MVP. PR #47 adds prompt assembly/cognitive provenance and provider-run integration without changing the authority topology.
+If CAPT cannot prove whether consequential external dispatch occurred, it does not blindly redispatch; the recovery path is lost/suspended/reconciliation-required as appropriate.
 
 ## Provider layer
 
-Merged `main` contains provider registration, health/model discovery where supported, and model-selection foundations.
+The convergence provider spine includes Ollama plus local/authenticated OpenAI-compatible execution, endpoint provenance, resource ceilings, bounded prewarm, and coherent global/session provider selection. The generic direct native MLX placeholder is not represented as a working adapter unless materially configured.
 
-PR #47 adds a bounded ProviderDriver for Ollama native generation and OpenAI-compatible chat-completions transport. Exact head `4334657a919f74803e65d9b01aa5054d6d7b9a61` has clean source/editable full-suite verification, including the governed approval/dispatch path; intended live-provider and installed-runtime acceptance remain separate proof classes.
+## Native macOS layer
 
-## Hermes boundary
+`CAPTNativeMac` is a real executable target, not merely a Swift contract package. It remains a thin RuntimeService client with typed projections, governed approvals, encrypted session-cache persistence, and session-isolated async configuration updates.
 
-Hermes is a compatibility/execution client, not CAPT authority. Historical v0.5 evidence established bounded installed-wheel behavior. Separately, operator-supplied LOCAL-002 metadata referenced `evidence/hermes-local-002-r6` / `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`, but Terra could not retrieve that branch, commit, or report from the current GitHub remote/API. `HERMES_LOCAL_002_COMPLETE` and its supplied workspace counts/no-blocker statement are therefore currently unverified and are not architectural evidence.
+## Security layer
 
-## Discovery
-
-PR #44 adds read-only bounded discovery/SEAL scanning. Discovery may observe source/state; it does not grant capabilities or mutate authoritative runtime state.
-
-## Cohorts
-
-PR #48 defines bounded multi-perspective contribution/quorum/dissent coordination over CAPT authority. Current Cohort work does not yet claim durable reconstruction, restart-safe cursors, evidence admission, or installed-runtime TUI dogfood.
-
-## SecurityGate
-
-PR #49 turns security requirements into fail-closed infrastructure evidence. Its verdict is advisory/governance input, not a self-authorizing state transition. Applicable controls without evidence keep the gate blocked.
+SecurityGate/Security Closure Cockpit is a fail-closed projection over the 47-control catalog. It does not self-authorize release and does not convert general test success into control evidence. Current release-security state remains blocked until exact-head evidence closes every applicable release-blocking control.
 
 ## Truth classes
-
-Use precise terms:
 
 ```text
 SOURCE_PRESENT
@@ -107,6 +104,4 @@ RELEASE_PROVEN
 
 They are not interchangeable.
 
-## Current state
-
-See [`CURRENT_STATE.md`](CURRENT_STATE.md) for the exact package/main/integration/evidence split.
+See [`CURRENT_STATE.md`](CURRENT_STATE.md) for the exact protected-main / convergence-candidate / release-security split.

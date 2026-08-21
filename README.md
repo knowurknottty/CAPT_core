@@ -12,36 +12,22 @@ The model is an inference component. **CAPT is the system of record around it.**
 
 ## Current repository status
 
-CAPT Core currently spans four distinct truth classes:
+CAPT Core has four distinct authority/evidence states that must not be collapsed:
 
-1. **Numbered package release:** `pyproject.toml` still declares `capt-solo 0.5.0`; preserved release proof lives under `release_evidence/v0.5/`.
-2. **Merged `main`:** substantially newer productization code is already merged: normal CLI on-ramp, shared operator layer, provider/model foundations, CaveCAPT verbosity, Textual TUI MVP, Tk operator MVP, SwiftUI client contract, onboarding, and continuity scaffolding.
-3. **Active stacked integration:** Discovery, hardened Ouroboros/Hermes lifecycle, prompt/cognitive provenance, upgraded TUI run surface, bounded ProviderDriver, Cohorts, and the fail-closed security gate are being reconciled through the current stack.
-4. **Proof/evidence:** a source file, passing unit test, controlled protocol test, installed-runtime run, live-provider run, restart test, and destructive failure-injection test are different evidence classes.
+1. **Numbered package:** `pyproject.toml` still declares `capt-solo 0.5.0`; preserved proof under `release_evidence/v0.5/` is historical.
+2. **Protected `main`:** the published runtime/productization baseline, including normal CLI/TUI/Tk operator surfaces and pinned authored-skill verification.
+3. **Terminal convergence candidate:** PR #117 reconciles the provider/native spine, CAPT-UPG-001→019, replay/checkpoint corrections, durable Cohorts + steering, governed artifact promotion, lease controls, forensic/provenance/epistemic/security projections, authored-skill approval binding, and macOS ↔ RuntimeService ↔ MCP authority acceptance. PR #118 is closed unmerged; its provider/model-coherence semantics are reconciled into that exact PR #117 line.
+4. **Release authorization:** independent of integration success. The Security Closure Cockpit is fail-closed and the candidate remains **release-security BLOCKED** until applicable controls have exact-head closure evidence.
 
-A branch implementation is not described as shipped merely because the code exists.
+Current classification:
 
-### Active integration stack
+`IMPLEMENTED_CROSS_SURFACE_VERIFIED_RELEASE_SECURITY_BLOCKED`
 
-| PR | Area | Current classification |
-|---|---|---|
-| #44 | Discovery Governor + bounded local scanner | implemented/local evidence; not yet merged |
-| #46 | governed Hermes/Ouroboros execution lifecycle | hardened lifecycle/recovery; not yet merged |
-| #47 | prompt assembly, cognitive provenance, TUI cockpit, ProviderDriver | **exact-head source/editable full-suite verified; not yet merged; installed/live-provider proof remains separate** |
-| #48 | bounded Cohort coordination | coordination contracts; durable runtime integration later |
-| #49 | fail-closed SecurityGate | draft; intentionally blocked until applicable controls close |
+Fresh 2026-08-19 convergence proof includes a green Core full Python suite, normal/strict/ThreadSanitizer Swift suites, contract drift, MCP PR #2 full suite and Ruff, and a shared disposable RuntimeService acceptance in which native Swift and MCP observe the same authoritative approval/task/DriverRun streams with exactly one provider dispatch and no manufactured verification.
 
-### Hermes LOCAL-002 metadata status
+**CAPT-UPG-020→024 and Inversion Labs/Forge are deliberately not folded into public Core release main.** They remain separate benchmark/probe or edition-specific lines.
 
-On 2026-08-17, Terra independently attempted to resolve the operator-supplied LOCAL-002 identifiers. The expected branch `evidence/hermes-local-002-r6`, supplied HEAD `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`, and named report `reports/local-evidence/HERMES_AGENT_TUI_WORKSPACE_TESTS_AND_STATE_MAP_8F97AE9_2026-08-17.md` are absent from the current GitHub remote/API.
-
-The previously stated `HERMES_LOCAL_002_COMPLETE`, 98/0/0 focused result, 174/0/2 broader result, npm-version notes, and no-blocker statement are therefore **operator-supplied, currently unverified metadata**, not independently usable evidence.
-
-This does **not** invalidate preserved historical v0.5 Hermes evidence. If LOCAL-002 is later restored and independently verified, it would still be adjacent Hermes workspace evidence only; it would not by itself prove PR #47 exact-head correctness, installed-wheel behavior, live-provider execution, destructive rollback, restart continuity, or release readiness.
-
-PR #47 itself now has separate clean source/editable proof at `4334657a919f74803e65d9b01aa5054d6d7b9a61`: 8 approval-security tests, 31 focused prompt/provider/TUI/operator tests, 18 Ouroboros lifecycle tests, 387 `capt_runtime` passes, and 861 full-repository passes. Installed-artifact/live-provider/restart/destructive proof remains separate.
-
-See [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md) and [`docs/RELEASE_EVIDENCE.md`](docs/RELEASE_EVIDENCE.md) for the exact evidence boundary.
+See [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md), [`docs/FUNCTIONALITY_MATRIX.md`](docs/FUNCTIONALITY_MATRIX.md), and [`docs/RELEASE_EVIDENCE.md`](docs/RELEASE_EVIDENCE.md) for the exact boundary.
 
 ---
 
@@ -135,45 +121,27 @@ Pinned external authored skills are a separate trust class from bundled CAPT ope
 
 ---
 
-## TUI: merged MVP and active cockpit upgrade
+## Operator surfaces and native macOS convergence
 
-The merged Textual TUI already exposes runtime health, mission/task state, memory/context state, providers/models, approvals, evidence/verification, logs, checkpoint/resume/cancel, and CaveCAPT verbosity through the shared Operator facade.
+Protected `main` already has the Textual TUI/Tk operator foundation. The terminal candidate integrates the formerly stacked cockpit/provider/runtime projections and adds a real native `CAPTNativeMac` application target.
 
-PR #47 adds:
+The native app remains a thin RuntimeService client: governed chat/approval flow, runtime/provider controls, encrypted session-cache persistence, typed projections, and origin-session-bound asynchronous configuration updates do not create a second authority plane.
 
-- provider/model selection in the governed run surface;
-- response modes `MAX`, `SPOCK`, `CAVE CAPT`, `MIN`;
-- requested context budgets 32K–256K;
-- enhancement engines `OFF`, `AUTO`, `OMNI`, `META`, `FORGE`, `SIGMA`;
-- inspectable enhancement rather than invisible prompt rewriting;
-- clarification when the input is underspecified;
-- explicit **ENHANCE -> REVIEW -> APPROVE -> RUN** for transformed prompts, with durable RuntimeService approval required for RUN even when enhancement is `OFF`;
-- persisted non-secret prompt preferences;
-- requested/effective context provenance;
-- prompt-assembly digest and cognitive provenance.
+Fresh candidate verification includes **64 Swift tests / 7 deliberate live/cross-surface skips / 0 failures**, strict concurrency + warnings-as-errors PASS, and ThreadSanitizer PASS with no sanitizer finding.
 
-The enhancement layer may propose a better prompt. It may not mint capability, bypass approval, write authoritative state, or declare completion.
+A source-buildable/tested native app is not yet the same evidence class as a signed/notarized/distributed release.
 
-See [`docs/TUI.md`](docs/TUI.md).
+See [`docs/DESKTOP.md`](docs/DESKTOP.md) and [`docs/TUI.md`](docs/TUI.md).
 
 ---
 
 ## Provider execution status
 
-Merged `main` has provider registration/health/model-discovery/model-selection foundations.
+The terminal convergence provider spine supports governed Ollama and local/authenticated OpenAI-compatible execution, endpoint/model provenance, resource ceilings, and bounded local prewarm.
 
-PR #47 adds a bounded ProviderDriver for:
+Closed-unmerged PR #118 documented and repaired a real native-selection defect; those semantics are reconciled into PR #117 by keeping global provider/model persistence coherent, backfilling provider defaults without overwriting user configuration, and preserving session-vs-global selection semantics. The false generic native `MLX / mlx_lm` placeholder is retired unless materially configured; a real local OpenAI-compatible MTPLX/MLX service is a separate supported path.
 
-- Ollama native `/api/generate`;
-- OpenAI-compatible `/chat/completions`;
-- provider/model/endpoint provenance;
-- prompt/response digests;
-- secret exclusion from artifacts/diagnostics;
-- explicit dispatch-boundary tracking;
-- truthful cancellation semantics;
-- reconciliation of pre-dispatch, response-complete, and externally-unknown states.
-
-Controlled local HTTP tests prove protocol/lifecycle behavior. They are **not** the same as exact-head live-provider installed-runtime acceptance.
+Provider health or model discovery is not itself governed-execution proof. Controlled loopback execution proves authority/transport/idempotency, not model quality or release authorization.
 
 See [`docs/PROVIDERS.md`](docs/PROVIDERS.md).
 
@@ -226,19 +194,17 @@ runtime history     grants/leases    durable memory
 
 ## Cohorts and multi-perspective cognition
 
-PR #48 introduces bounded CAPT-native Cohort coordination: typed contributions, participant rosters, deliberation epochs, stale-result rules, sequence cursors, silence/positive quorum, material dissent/escalation, cognitive debt, and bounded-incomplete discrimination.
+The terminal candidate moves beyond the old “coordination contracts, durability later” status. It contains durable Cohort EventStore persistence/reconstruction, evidence admission, governed steering, epochs/rounds, stale-result handling, quorum/dissent semantics, and the Cohort Chamber projection.
 
-It does **not** yet claim durable Cohort persistence/reconstruction, restart-safe cursors, evidence admission, governed participant scheduling, or installed-runtime/TUI Cohort dogfood.
+Cohort consensus remains advisory cognition. It cannot manufacture verification, grant capability, or bypass RuntimeService/EventStore authority. Council-scale public-product orchestration is a later tranche.
 
 ---
 
-## Discovery and Ouroboros lifecycle hardening
+## Discovery, replay, and execution hardening
 
-PR #44 adds bounded read-only discovery/SEAL scanning without self-granting capability.
+The terminal candidate reconciles bounded discovery, long-running execution recovery, replay correction, lease governance, artifact promotion, and forensic/provenance projections into one authority spine.
 
-PR #46 hardens long-running governed execution around durable idempotency, dispatch-boundary accounting, lease consumption, cancellation, lost/indeterminate execution recovery, and suspension rather than unsafe redispatch.
-
-Central rule: **if CAPT cannot prove whether external dispatch occurred, it does not silently replay the work.**
+Central rule: **if CAPT cannot prove whether consequential external dispatch occurred, it does not silently replay the work.** Historical replay reconstructs the exact ledger prefix; replay forks create new history without reactivating old approvals/capabilities.
 
 ---
 
@@ -246,9 +212,9 @@ Central rule: **if CAPT cannot prove whether external dispatch occurred, it does
 
 CAPT is local-first; local-first is not automatically high-assurance.
 
-Current limitations include incomplete CAPT-managed encryption at rest, no multi-user authorization model, no independently rooted signed audit history, incomplete production IPC/resource-ceiling hardening, and incomplete adversarial prompt/context/provider assurance.
+The terminal candidate includes the 47-control Security Closure Cockpit and substantial hardening—bounded IPC framing, covered rejection auditing, restrictive state permissions, resource ceilings, injection-assurance regressions, one-use exact approval binding, and encrypted native session-cache handling.
 
-PR #49 converts security requirements into fail-closed infrastructure and is intentionally **BLOCKED** until every applicable control has exact-head evidence.
+Those implementation/test facts are **not** automatically control attestations. The release gate remains fail-closed while applicable exact-head evidence is missing. Open assurance areas still include CAPT-managed encryption for all sensitive authoritative state, independently rooted/signed audit attestations, universal process isolation, paid-service billing-cap/alert evidence, and final signed/notarized native distribution proof.
 
 Read [`docs/SECURITY.md`](docs/SECURITY.md) before higher-trust use.
 
@@ -259,6 +225,7 @@ Read [`docs/SECURITY.md`](docs/SECURITY.md) before higher-trust use.
 | I want to... | Read this |
 |---|---|
 | See exact current state | [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md) |
+| See live PR topology | [`docs/PR_TOPOLOGY.md`](docs/PR_TOPOLOGY.md) |
 | Get CAPT running | [`START_HERE.md`](START_HERE.md) |
 | Navigate all docs | [`docs/README.md`](docs/README.md) |
 | Understand CAPT in one screen | [`docs/MENTAL_MODEL.md`](docs/MENTAL_MODEL.md) |

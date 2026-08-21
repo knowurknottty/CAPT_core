@@ -1,22 +1,36 @@
 # CAPT Providers
 
-Provider **registration/discovery**, provider **execution**, and provider **release proof** are separate states.
+Provider registration, provider execution, native presentation, and release proof are separate states.
 
-## Merged `main`
+## Terminal convergence provider spine
 
-The shared operator layer contains provider configuration/adapters and honest capability classification. Supported discovery/health/model-list behavior depends on transport/provider.
+The convergence line supports governed execution through:
 
-| Provider family | Merged registration | Health/model-list foundation | Governed generation on `main` |
-|---|---:|---:|---:|
-| OpenRouter / OpenAI-compatible | yes | yes where configured | no |
-| Ollama | yes | native discovery/health/model list | no |
-| LM Studio | yes | OpenAI-compatible discovery/health/model list | no |
-| vLLM | yes | OpenAI-compatible health/model list | no |
-| llama.cpp server | yes | OpenAI-compatible discovery/health/model list | no |
-| MLX / mlx_lm | registered foundation | limited/not operational in merged adapter | no |
-| Hermes compatibility | registered/bounded compatibility surface | separate subprocess path | bounded historical/current local evidence, not general provider parity |
+- Ollama native generation;
+- configured local OpenAI-compatible endpoints such as MTPLX, LM Studio, vLLM, and llama.cpp-style servers where their API surface matches the adapter contract;
+- authenticated OpenAI-compatible remote/provider paths where credentials are configured;
+- Hermes as a compatibility execution path rather than CAPT authority.
 
-Use:
+Selected local OpenAI-compatible models have bounded prewarm support so known-cold residency can be handled before the first user workload without creating Mission/Task/DriverRun authority.
+
+## Provider/model coherence
+
+PR #118 is closed unmerged; its provider/model-coherence semantics are reconciled onto the terminal candidate:
+
+- activating a provider persists a coherent global provider/model tuple;
+- legacy provider registries backfill current defaults without overwriting persisted operator configuration;
+- a restored chat may keep its session provider/model while New Chat re-reads the global default;
+- if global selection differs from the current chat, native UI keeps the provider action available instead of pretending the chat already switched.
+
+This prevents an impossible state such as globally displaying MTPLX while `models.json` still binds the same model to Ollama.
+
+## MLX naming boundary
+
+The dormant generic native `MLX / mlx_lm` placeholder had no real model-list, health, or execution adapter and is therefore retired/unregistered by default. It must not be displayed as a working second MLX server.
+
+A **materially configured** local OpenAI-compatible MLX/MTPLX service is a different, supported provider path. A future direct native `mlx_lm` adapter must earn its own registration and verification.
+
+## Operator commands
 
 ```zsh
 capt-ui capabilities
@@ -24,37 +38,12 @@ capt-ui providers
 capt-ui models
 ```
 
-A healthy provider entry is **not** evidence that CAPT completed a governed inference mission through it.
-
-## Active PR #47 ProviderDriver
-
-The active cumulative branch adds a bounded, read-only provider execution driver with:
-
-- Ollama native `POST /api/generate`;
-- OpenAI-compatible `POST /chat/completions`;
-- explicit provider/model/endpoint provenance;
-- prompt and response digests;
-- secret exclusion from returned diagnostics/artifacts;
-- dispatch-boundary tracking;
-- cancellation recorded truthfully as a request when the underlying urllib call cannot be aborted;
-- reconciliation for pre-dispatch, response-complete, and externally-unknown states.
-
-Controlled local HTTP servers exercise the real request/response protocol shape in tests. That establishes transport/lifecycle behavior, **not** live-provider release acceptance.
-
-## Hermes LOCAL-002 workspace metadata
-
-The operator supplied `HERMES_LOCAL_002_COMPLETE` metadata for `evidence/hermes-local-002-r6` / `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04` with reported 98/0/0 focused and 174/0/2 broader tests and npm environment details. Terra could not retrieve that branch, commit, or `reports/local-evidence/HERMES_AGENT_TUI_WORKSPACE_TESTS_AND_STATE_MAP_8F97AE9_2026-08-17.md` from the current GitHub remote/API.
-
-Accordingly, LOCAL-002 is **currently unverified metadata, not provider evidence**. Historical v0.5 Hermes proof remains separate. The missing LOCAL-002 record cannot close destructive rollback, general live-provider acceptance, installed-runtime acceptance, or any PR #47 proof boundary. See [`CURRENT_STATE.md`](CURRENT_STATE.md) and [`RELEASE_EVIDENCE.md`](RELEASE_EVIDENCE.md).
-
-## TUI integration
-
-PR #47 connects provider/model selection to the upgraded TUI run surface and carries prompt-enhancement, response-mode, requested-context-budget, and human-verification preferences into the governed command path.
+A healthy provider entry is not proof that a governed inference mission completed through it.
 
 ## Secrets
 
-Merged provider configuration stores secret **references** rather than raw tokens where supported. The active ProviderDriver must not persist authorization headers or raw API keys into evidence/artifacts.
+Provider configuration stores secret references rather than raw tokens where supported. Provider diagnostics/provenance must not persist authorization headers or raw API keys. Credentialless OpenAI-compatible execution is admitted only for explicitly local loopback endpoints under the local-provider contract.
 
-## Release gate
+## Proof boundary
 
-Do not claim `GOVERNED_EXECUTION_PROVEN` for a provider until exact-head, installed-runtime, intended-provider evidence exists and the result has survived the normal CAPT evidence/verification boundary.
+Controlled loopback-provider tests establish transport/governance/idempotency behavior. Live intended-provider runs establish a different evidence class. Neither automatically closes release-security controls or model-quality claims.

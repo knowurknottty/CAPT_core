@@ -1,47 +1,92 @@
 # Release and Integration Evidence
 
-CAPT keeps evidence scoped to the claim it actually supports.
+CAPT keeps evidence scoped to the claim it actually supports. Historical evidence is not rewritten into current proof, and ordinary test success does not become a security-control attestation.
 
-## Numbered v0.5 evidence
+## Historical v0.5 evidence
 
-`release_evidence/v0.5/` remains the historical proof set for the numbered `0.5.0` package lineage. It includes release readiness, requirement/evidence mapping, test matrix, wheel identity, installed model-operator evidence, and public-claim audit material.
+`release_evidence/v0.5/` remains the proof set for the numbered `0.5.0` lineage. It is historical and intentionally immutable.
 
-Do not rewrite those records to make them describe later `main` or open-PR behavior.
+## Terminal convergence evidence — 2026-08-19
 
-## Merged-main evidence
+Current integration authority is PR #117. The formerly stacked provider/native/UPG-001→019 lines have been semantically reconciled there; stale implementation PRs were closed unmerged as superseded rather than mechanically merged one by one.
 
-Later productization tests establish the normal CLI/TUI/operator/provider-configuration foundations on `main`. Those are source/test claims for merged code, not a retroactive v0.5 wheel claim.
+### Frozen local runtime/product snapshot
 
-## Active PR evidence
+Fresh local verification on the frozen runtime/product snapshot established:
 
-Each active stacked PR has its own evidence boundary. PR #47 now has clean exact-head **source/editable-runtime** verification at `4334657a919f74803e65d9b01aa5054d6d7b9a61`:
+- clean Python 3.14 environment, editable source resolved to the isolated convergence worktree;
+- Core full suite: **1,055 passed / 57 skipped / 12 deselected / 0 failed**;
+- generated-contract drift: **PASS** (`11 generated files match the schema source`);
+- `git diff --check`: **PASS**;
+- fatal Python lint subset (`E9/F63/F7/F82`): **PASS**;
+- Swift normal: **64 tests / 7 deliberate opt-in skips / 0 failures**;
+- Swift strict concurrency + warnings-as-errors: **PASS**;
+- ThreadSanitizer: **64 / 7 skipped / 0 failures**, no sanitizer finding;
+- MCP PR #2 full suite against that Core runtime snapshot: **259 passed / 0 failures**;
+- MCP repository Ruff: **PASS**.
 
-- approval-security regressions: 8 passed;
-- focused prompt/provider/TUI/operator suite: 31 passed;
-- Ouroboros lifecycle: 18 passed;
-- `tests/capt_runtime`: 387 passed / 10 skipped / 12 deselected;
-- full repository: 861 passed / 67 skipped / 12 deselected;
-- contract drift and `git diff --check`: passed.
+The broad Core repository Ruff F/E9 sweep is not globally clean; legacy unused imports/locals/redefinitions remain outside the terminal fix slice. Do not cite the scoped/fatal lint success as a repo-wide Ruff pass.
 
-That proof does not convert the source tree into an installed-wheel, live-provider, process-boundary cross-model, destructive rollback, or release artifact proof.
+### Exact-candidate GitHub CI
 
-## Hermes LOCAL-002 metadata — quarantined pending retrieval
+After convergence, CI itself exposed and fixed two harness defects and one genuine presentation-lifecycle race:
 
-The operator supplied branch `evidence/hermes-local-002-r6`, HEAD `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`, report `reports/local-evidence/HERMES_AGENT_TUI_WORKSPACE_TESTS_AND_STATE_MAP_8F97AE9_2026-08-17.md`, classification `HERMES_LOCAL_002_COMPLETE`, and reported 98/0/0 focused plus 174/0/2 broader results with Node/npm environment notes and a no-product/state-map-blocker statement.
+1. M0-A had run the UI-inclusive full suite without installing the project dependency closure, producing false `textual` import failures. The workflow now installs the declared CAPT project dependencies before full regression.
+2. the inherited workflow named `Release Security` did not execute the Security Closure Cockpit at all, allowing a green badge to disagree with CAPT's own fail-closed release authority. The workflow now generates exact-head evidence, evaluates the 47-control gate, uploads its evidence/result artifact, and fails closed when applicable controls remain unverified.
+3. Python 3.10 exposed a Textual teardown race where a select-change callback could update `#status` after the status widget had been unmounted. `_set_status()` now ignores only that transient `NoMatches` presentation condition; runtime/provider/approval authority is unchanged.
 
-Terra later verified that the branch, commit, and named report are absent from the current GitHub remote/API. These values are therefore **not independently usable evidence**. The prior explanation that GitHub retrieval was merely lagging is superseded by the later remote/API audit.
+Post-fix GitHub evidence:
 
-Historical v0.5 Hermes evidence remains authoritative for its own bounded release lineage. If LOCAL-002 is restored, its report must be retrieved and reviewed before any of its claims re-enter the release ledger. Even a restored LOCAL-002 record would remain adjacent Hermes workspace evidence rather than proof of PR #47 exact head, installed-wheel behavior, live-provider execution, destructive rollback, restart continuity, or release readiness.
+- M0-A Python 3.10: **PASS** — conformance, full regression, wheel build/install, clean installed imports, package-content inspection;
+- M0-A Python 3.12: **PASS** — same gates;
+- contract regeneration + byte-reproducibility: **PASS**;
+- TypeScript build + cross-language parity: **PASS**;
+- Native macOS Swift workflow: **PASS**, including unit tests and `CAPTNativeMac` build;
+- Release Security Python 3.10: **PASS**;
+- Release Security Python 3.12: **PASS**;
+- full-history gitleaks: **PASS**;
+- dependency closure pip-audit: **PASS**;
+- SecurityGate machinery tests: **11 passed**;
+- final Security Closure Cockpit enforcement: **BLOCKED by design** because applicable release-control evidence remains incomplete.
 
-## What still requires separate proof
+## Cross-surface authority acceptance
 
-- live intended-provider execution from the exact integrated head;
-- installed-runtime acceptance of that provider path;
-- true process-boundary Model-A -> Model-B continuity;
-- destructive rollback/reconciliation cases where external work may have escaped cancellation;
-- security controls explicitly left BLOCKED by #49;
-- durable Cohort restart/evidence semantics.
+A disposable RuntimeService/EventStore plus deterministic loopback OpenAI-compatible test provider reproduced `CROSS_SURFACE_PASS` across native Swift and MCP PR #2:
+
+1. MCP created a concrete model approval.
+2. Native Swift observed and denied it; MCP then observed authoritative `denied` and provider dispatch stayed zero.
+3. Native Swift created a fresh approval.
+4. MCP approved and executed that exact mission/task/DriverRun binding.
+5. Provider dispatch occurred exactly once.
+6. Exact replay returned idempotently without a second dispatch.
+7. Mismatched reuse failed closed with `AUTHORITYVIOLATION`.
+8. Native observed approval `consumed`, DriverRun completed, task `awaiting_verification`, and `verificationId=null`.
+9. RuntimeService restarted on the same ledger and both surfaces reconstructed the same authority state and chain digest.
+
+This proves transport, authority, binding, replay, and reconstruction behavior. It is not a model-quality benchmark or a claim that a loopback test provider equals a production external provider.
+
+The exact cross-surface acceptance report binds to the frozen runtime/product snapshot used for that test. Subsequent terminal-candidate changes are limited to CI workflow hardening, documentation reconciliation, and the Textual presentation teardown guard; they do not silently relabel the earlier acceptance report as a different source SHA.
+
+## Security evidence boundary
+
+The Security Closure Cockpit is integrated and intentionally fail-closed. The current CI-generated exact-candidate result is:
+
+- decision **BLOCKED**;
+- `releaseAuthorized=false`;
+- **2 PASS / 0 FAIL / 19 NOT_VERIFIED / 26 NOT_APPLICABLE**;
+- PASS evidence currently includes `gitleaks:full-history` and `pip-audit:installed-runtime-closure`;
+- the remaining 19 applicable controls are release-blocking until their required exact-head evidence is supplied.
+
+The gate artifact is uploaded by the `Release Security` workflow for audit. `NOT_VERIFIED` is missing/incomplete evidence, not a discovered vulnerability and not permission to infer PASS from unrelated test suites.
+
+Until the cockpit returns authorized, the convergence candidate is **integration-verified but release-security blocked**.
+
+## Artifact evidence boundary
+
+Wheel, sdist, and native-binary SHA-256 values recorded on PR #117 bind to the exact frozen runtime/product snapshot that produced them. Later workflow/documentation/TUI-lifecycle commits change the repository head, so those hashes must not be misrepresented as hashes of a different source commit.
+
+A final public-release artifact set must be rebuilt and re-hashed from the exact source commit that is ultimately authorized for release.
 
 ## Evidence rule
 
-A successful test suite, source file, controlled HTTP server, installed wheel, live provider, restart test, and destructive failure-injection test are different evidence classes. Claim only what the matching evidence establishes.
+A source test suite, sanitizer run, controlled provider protocol test, installed artifact, real provider run, security-control evidence record, signed/notarized release, and release-authorized source commit are distinct evidence classes. Claim only what the matching evidence establishes.
