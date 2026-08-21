@@ -102,11 +102,17 @@ class RuntimeClient:
     def event_timeline(self, after: int = 0) -> List[Dict[str, Any]]:
         return self._query({"op": "event_timeline", "after": after})["result"]
 
-    def claimguard_disposition(self, statement: str) -> Dict[str, Any]:
-        return self._query({"op": "claimguard", "statement": statement})["result"]
+    def claimguard_disposition(self, statement: str, claim_id: Optional[str] = None) -> Dict[str, Any]:
+        request = {"op": "claimguard", "statement": statement}
+        if claim_id is not None:
+            request["claimId"] = claim_id
+        return self._query(request)["result"]
 
-    def verification(self) -> Dict[str, Any]:
-        return self._query({"op": "verification"})["result"]
+    def verification(self, claim_id: Optional[str] = None) -> Dict[str, Any]:
+        request = {"op": "verification"}
+        if claim_id is not None:
+            request["claimId"] = claim_id
+        return self._query(request)["result"]
 
     # -- command API (governed operator actions, M1) ----------------------
 
@@ -145,22 +151,22 @@ class RuntimeClient:
 
     @staticmethod
     def _send(sock: socket.socket, payload: Dict[str, Any]) -> None:
-        data = json.dumps(payload).encode("utf-8")
-        sock.sendall(len(data).to_bytes(4, "big") + data)
+        from capt_runtime.ipc_framing import FrameProtocolError, send_json
+        try:
+            send_json(sock, payload)
+        except (FrameProtocolError, ValueError) as exc:
+            raise RuntimeClientError(f"IPC send error: {exc}") from exc
 
     @staticmethod
     def _recv(sock: socket.socket) -> Dict[str, Any]:
-        header = sock.recv(4)
-        if not header:
+        from capt_runtime.ipc_framing import FrameProtocolError, recv_json
+        try:
+            message = recv_json(sock)
+        except (FrameProtocolError, ValueError) as exc:
+            raise RuntimeClientError(f"IPC protocol error: {exc}") from exc
+        if message is None:
             raise RuntimeClientError("connection closed by runtime")
-        length = int.from_bytes(header, "big")
-        buf = b""
-        while len(buf) < length:
-            chunk = sock.recv(length - len(buf))
-            if not chunk:
-                raise RuntimeClientError("connection closed mid-frame")
-            buf += chunk
-        return json.loads(buf.decode("utf-8"))
+        return message
 
     def _query(self, request: Dict[str, Any]) -> Dict[str, Any]:
         if self._sock is None:
@@ -215,8 +221,8 @@ def project_mission_view(client: RuntimeClient, mission_id: str = DEMO_MISSION_I
         "missionEvents": mission_events,
         "claim": claim_state,
         "claimGuardDisposition": claimguard,
-        "evidence": _extract_evidence(mission_events),
-        "verification": client.verification(),
+        "evidence": project_evidence(client, mission_id),
+        "verification": client.verification(claim_state.get("claimId") if claim_state else None),
     }
 
 
@@ -267,6 +273,7 @@ def project_authoritative_state(client: RuntimeClient) -> Dict[str, Any]:
     """
     aggregates = client.list_aggregates()
     missions, tasks, approvals, driver_runs, claims = [], [], [], [], []
+    capabilities, artifact_promotions, cohorts, replay_forks = [], [], [], []
     for agg in aggregates:
         st = client.get_state(agg["streamId"])
         if st is None:
@@ -281,14 +288,33 @@ def project_authoritative_state(client: RuntimeClient) -> Dict[str, Any]:
             driver_runs.append(st)
         elif agg["kind"] == "claim":
             claims.append(st)
+        elif agg["kind"] == "capability":
+            capabilities.append(st)
+        elif agg["kind"] == "artifact_promotion":
+            artifact_promotions.append(st)
+        elif agg["kind"] == "cohort":
+            cohorts.append(st)
+        elif agg["kind"] == "replay_fork":
+            replay_forks.append(st)
+    # Verification is claim-owned: a global scalar would hide coexistence of
+    # accepted and contradicted claims. Preserve every committed claim result;
+    # only claims without one expose their explicitly advisory fallback.
+    verifications = {
+        claim["claimId"]: client.verification(claim["claimId"])
+        for claim in claims if claim.get("claimId")
+    }
     return {
         "missions": missions,
         "tasks": tasks,
         "approvals": approvals,
         "driverRuns": driver_runs,
         "claims": claims,
+        "capabilities": capabilities,
+        "artifactPromotions": artifact_promotions,
+        "cohorts": cohorts,
+        "replayForks": replay_forks,
         "eventTimeline": client.event_timeline(),
-        "verification": client.verification(),
+        "verificationsByClaim": verifications,
         "identity": client.identity(),
     }
 
@@ -309,9 +335,20 @@ def project_driver_run(client: RuntimeClient, driver_run_id: str) -> Optional[Di
 
 
 def project_evidence(client: RuntimeClient, mission_id: str) -> List[Dict[str, Any]]:
-    """Return evidence recorded for a mission (read-only projection)."""
-    events = client.get_stream_events("mission-" + mission_id)
-    return _extract_evidence(events)
+    """Return evidence attached to claims for a mission.
+
+    EvidenceRecorded is authoritative on the claim stream, not the mission
+    stream; this projection deliberately follows that ownership boundary.
+    """
+    evidence: List[Dict[str, Any]] = []
+    for aggregate in client.list_aggregates():
+        if aggregate["kind"] != "claim":
+            continue
+        state = client.get_state(aggregate["streamId"])
+        if not state or state.get("missionId") != mission_id:
+            continue
+        evidence.extend(_extract_evidence(client.get_stream_events(aggregate["streamId"])))
+    return evidence
 
 
 def project_claimguard(client: RuntimeClient, statement: str) -> Dict[str, Any]:

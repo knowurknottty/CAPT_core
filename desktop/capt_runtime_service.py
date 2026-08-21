@@ -27,7 +27,6 @@ import argparse
 from datetime import datetime, timezone
 UTC = timezone.utc
 import getpass
-import hashlib
 import json
 import os
 import secrets
@@ -40,22 +39,105 @@ from typing import Any, Dict, List, Optional
 import capt_runtime
 from capt_runtime import commands, contracts
 from capt_runtime.checkpoint import create_checkpoint
-from capt_runtime.driver_host import DriverHost, tree_digest
-from capt_runtime.drivers.openharness import OpenHarnessDriver, DESCRIPTOR as REF
-from capt_runtime.drivers.registry import DriverRegistry
-from capt_runtime.scenario import build_scenario
-from capt_runtime.services import RuntimeService
+from capt_runtime.driver_host import tree_digest
+from capt_runtime.errors import AuthorityViolation
 from capt_runtime.store import EventStore
-from capt_runtime.verification import build_verification_result, guard_claim, build_artifact_hash_evidence
+from capt_runtime.ipc_framing import FrameProtocolError, recv_json, send_json
+from capt_runtime.resource_governor import TokenCostGovernor
+from capt_runtime.replay import replay_to_sequence
+from capt_runtime.verification import (
+    build_artifact_hash_evidence,
+    build_verification_result,
+    guard_claim,
+)
 from capt_runtime.composition import RuntimeComposition, create_runtime
+from capt_runtime.provider_endpoint import credential_required
+from capt_runtime.operator_provenance import (
+    build_cognitive_provenance, build_prompt_assembly, effective_context_budget,
+)
+from capt_runtime.model_approval_binding import (
+    build_bound_model_operator_approval, staging_root_for_ledger,
+)
+from capt_runtime.prepared_execution import PreparedApprovedModelExecution, freeze
+from capt_runtime.verification_baseline import capture_verification_baseline
 from capt_runtime.authored_skills import (
-    parse_authored_skill_request, summarize_skill_context,
+    parse_authored_skill_request, prepare_authored_skill_context, summarize_skill_context,
 )
 
-from desktop.m1_command_service import RuntimeCommandService
 
 RUNTIME_VERSION = getattr(capt_runtime, "RUNTIME_VERSION", "0.1.0")
 CONTRACT_SCHEMA_VERSION = "1.0.0"
+
+
+def _test_fault(point: str) -> None:
+    """Test-only crash seam for durable lifecycle boundary proof.
+
+    It is inert unless a test explicitly supplies the exact environment value.
+    A hard exit models process death: no exception handler is allowed to turn a
+    missing persistence step into a fabricated outcome.
+    """
+    if os.environ.get("CAPT_TEST_OUROBOROS_CRASH_AFTER") == point:
+        os._exit(86)
+
+
+def _reconcile_stranded_driver_runs(runtime: RuntimeComposition, now: str) -> None:
+    """Conservatively recover durable pre-restart DriverRun state.
+
+    This is CAPT Core reconciliation over the existing EventStore, never a
+    driver invocation. It gives a crashed command a durable exit path before a
+    duplicate request can observe its idempotency admission.
+    """
+    store, svc = runtime.store, runtime.service
+    for stream_id, kind, _version in store.all_aggregates():
+        if kind != "driverrun":
+            continue
+        run = store.load_state(stream_id)
+        if not run or run.get("state") not in ("created", "submitted", "running", "suspended", "completed"):
+            continue
+        run_id, task_id = run["driverRunId"], run["taskId"]
+        def recovery_meta(step: str) -> Dict[str, Any]:
+            return commands.command(
+                command_id="cmd-recovery-" + run_id + ":" + step,
+                idempotency_key="idem-recovery-" + run_id + ":" + step,
+                operation_fingerprint=commands.fingerprint("recover_driver_run", {"driverRunId": run_id, "step": step}),
+                correlation_id="corr-recovery-" + run_id, actor_id="exec-recovery",
+                actor_kind="execution_plane", issued_at=now, replay_policy="never",
+            )
+        # A created run has not reached submission. Every later non-terminal
+        # state is ambiguous: consume any open reservation and forbid replay.
+        if run["state"] == "created":
+            svc.transition_driver_run(run_id, "failed", recovery_meta("created-failed"))
+            task = store.load_state("task-" + task_id)
+            if task and task.get("state") in ("assigned", "running"):
+                svc.transition_task(task_id, "failed", "restart before driver submission", recovery_meta("created-task-failed"))
+            continue
+        for cap_stream, cap_kind, _ in store.all_aggregates():
+            if cap_kind != "capability":
+                continue
+            capability = store.load_state(cap_stream)
+            if capability is None:
+                continue
+            lease = capability.get("lease")
+            if not lease or lease.get("missionId") != run.get("missionId") or lease.get("taskId") != task_id:
+                continue
+            for reservation in capability.get("reservations", []):
+                if reservation.get("state") != "open":
+                    continue
+                consumption = {
+                    "schemaVersion": "1.0.0",
+                    "consumptionId": "con-recovery-" + reservation["reservationId"],
+                    "reservationId": reservation["reservationId"], "leaseId": reservation["leaseId"],
+                    "outcome": "indeterminate", "sideEffectIdentity": run_id, "finalizedAt": now,
+                }
+                svc.finalize_use(capability["grantId"], consumption, recovery_meta("finalize-" + reservation["reservationId"]))
+        if run["state"] == "submitted":
+            svc.transition_driver_run(run_id, "lost", recovery_meta("submitted-lost"))
+        elif run["state"] == "running":
+            svc.transition_driver_run(run_id, "lost", recovery_meta("running-lost"))
+        task = store.load_state("task-" + task_id)
+        if task and task.get("state") == "running":
+            svc.transition_task(task_id, "suspended", "restart requires governed reconciliation", recovery_meta("task-suspended"))
+
 
 DEMO_MISSION_ID = "m-desktop-m0-demo"
 DEMO_TASK_ID = "t-desktop-m0-demo"
@@ -368,15 +450,62 @@ class RuntimeQueryService:
     def event_timeline(self, after: int = 0) -> List[Dict[str, Any]]:
         return self.store.read_events(after)
 
-    def claimguard_disposition(self, statement: str) -> Dict[str, Any]:
-        """Return ClaimGuard's verdict for a statement WITHOUT mutating state."""
+    def replay_state_at(self, global_sequence: int, stream_id: Optional[str] = None) -> Dict[str, Any]:
+        """Project deterministic historical state without mutating the runtime."""
+        state = replay_to_sequence(self.store, int(global_sequence))
+        result: Dict[str, Any] = {
+            "globalSequence": int(global_sequence),
+            "headSequence": self.store.head_sequence(),
+            "stateDigest": state.digest(),
+            "summary": state.summary(),
+        }
+        if stream_id is not None:
+            result.update({
+                "streamId": stream_id,
+                "streamVersion": state.versions.get(stream_id),
+                "state": state.aggregates.get(stream_id),
+            })
+        return result
+
+    def _claim_id_for_statement(self, statement: str) -> Optional[str]:
+        """Find the most recent claim with this exact statement, if any."""
+        matches = []
+        for stream_id, kind, version in self.store.all_aggregates():
+            if kind != "claim":
+                continue
+            state = self.store.load_state(stream_id)
+            if state and state.get("statement") == statement:
+                matches.append((version, state.get("claimId")))
+        return max(matches)[1] if matches else None
+
+    def claimguard_disposition(
+        self, statement: str, claim_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Project a committed ClaimGuard decision before advisory recomputation."""
+        selected = claim_id or self._claim_id_for_statement(statement)
+        if selected:
+            state = self.store.load_state("claim-" + selected)
+            if state and state.get("guardVerdict"):
+                for env in reversed(self.store.read_stream("claim-" + selected)):
+                    payload = env.get("payload", {})
+                    if payload.get("eventType") == "ClaimGuardDecided":
+                        decision = payload["decision"]
+                        return {
+                            "statement": state["statement"],
+                            "verdict": "accepted" if decision["verdict"] == "accept" else "rejected",
+                            "claimId": selected,
+                            "decisionId": decision["decisionId"],
+                            "committed": True,
+                            "advisory": False,
+                        }
         try:
             accepted = guard_claim(statement)
-            return {"statement": accepted, "verdict": "accepted"}
+            return {"statement": accepted, "verdict": "accepted", "committed": False, "advisory": True}
         except Exception as exc:  # noqa: BLE001
-            return {"statement": statement, "verdict": "rejected", "reason": str(exc)[:160]}
+            return {"statement": statement, "verdict": "rejected", "reason": str(exc)[:160],
+                    "committed": False, "advisory": True}
 
-    def verification(self) -> Dict[str, Any]:
+    def verification(self, claim_id: Optional[str] = None) -> Dict[str, Any]:
         """Recompute the CAPT-authored verification result for the demo artifact.
 
         This is a read-only computation over authoritative state (the artifact
@@ -387,6 +516,11 @@ class RuntimeQueryService:
         The desktop view flattens _view into the top-level response so consumers
         that expect vr['trust']/vr['checks'] keep working.
         """
+        if claim_id:
+            for env in reversed(self.store.read_stream("claim-" + claim_id)):
+                payload = env.get("payload", {})
+                if payload.get("eventType") == "ClaimVerified":
+                    return {**payload["verification"], "committed": True, "advisory": False}
         if not self.demo.get("artifactPath"):
             return {"status": {"kind": "not_tested"}, "trust": "capt_authoritative"}
         try:
@@ -400,10 +534,11 @@ class RuntimeQueryService:
             # Flatten _view annotations into the top-level for GUI consumers.
             view = vr.pop("_view", {})
             vr.update(view)
+            vr.update({"committed": False, "advisory": True})
             return vr
         except Exception as exc:  # noqa: BLE001
             return {"status": {"kind": "failed"}, "error": str(exc)[:200],
-                    "trust": "capt_authoritative"}
+                    "trust": "capt_authoritative", "committed": False, "advisory": True}
 
     def handle(self, request: Dict[str, Any]) -> Dict[str, Any]:
         op = request.get("op")
@@ -413,8 +548,8 @@ class RuntimeQueryService:
             if op == "capabilities":
                 return {"ok": True, "result": {
                     "schemaVersion": CONTRACT_SCHEMA_VERSION,
-                    "queryOperations": ["identity", "capabilities", "list_aggregates", "get_state", "get_stream_events", "event_timeline", "claimguard", "verification", "get_memory_policy", "get_memory_state"],
-                    "commandOperations": ["create_mission", "submit_approval_decision", "cancel_task", "cancel_driver_run", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime"],
+                    "queryOperations": ["identity", "capabilities", "list_aggregates", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state"],
+                    "commandOperations": ["create_mission", "request_model_prompt_approval", "submit_approval_decision", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime"],
                     "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True},
                     "lifecycleOperations": {"checkpoint": True, "shutdown": True, "resume": True},
                 }}
@@ -429,10 +564,16 @@ class RuntimeQueryService:
                 return {"ok": True, "result": self.get_stream_events(request["streamId"])}
             if op == "event_timeline":
                 return {"ok": True, "result": self.event_timeline(int(request.get("after", 0)))}
+            if op == "replay_state_at":
+                return {"ok": True, "result": self.replay_state_at(
+                    int(request["globalSequence"]), request.get("streamId")
+                )}
             if op == "claimguard":
-                return {"ok": True, "result": self.claimguard_disposition(request["statement"])}
+                return {"ok": True, "result": self.claimguard_disposition(
+                    request["statement"], request.get("claimId")
+                )}
             if op == "verification":
-                return {"ok": True, "result": self.verification()}
+                return {"ok": True, "result": self.verification(request.get("claimId"))}
             if op == "get_memory_policy":
                 if self.memory_engine is None:
                     return {"ok": False, "error": "memory engine not active"}
@@ -477,22 +618,14 @@ class RuntimeQueryService:
 # --------------------------------------------------------------------------
 
 def _recv_json(sock: socket.socket) -> Optional[Dict[str, Any]]:
-    header = sock.recv(4)
-    if not header:
+    try:
+        return recv_json(sock)
+    except (FrameProtocolError, ValueError):
         return None
-    length = int.from_bytes(header, "big")
-    buf = b""
-    while len(buf) < length:
-        chunk = sock.recv(length - len(buf))
-        if not chunk:
-            return None
-        buf += chunk
-    return json.loads(buf.decode("utf-8"))
 
 
 def _send_json(sock: socket.socket, payload: Dict[str, Any]) -> None:
-    data = json.dumps(payload).encode("utf-8")
-    sock.sendall(len(data).to_bytes(4, "big") + data)
+    send_json(sock, payload)
 
 
 def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> None:
@@ -515,6 +648,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             probe.close()
 
     runtime = create_runtime(str(ledger_path))
+    _reconcile_stranded_driver_runs(runtime, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     store = runtime.store
     svc = runtime.service
     demo = None
@@ -542,7 +676,6 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
     srv.settimeout(0.2)
     shutdown_requested = threading.Event()
     fixed_work_receipts: Dict[str, Dict[str, Any]] = {}
-    hermes_work_receipts: Dict[str, Dict[str, Any]] = {}
     checkpoint_receipts: Dict[str, Dict[str, Any]] = {}
     print("CAPT_RUNTIME_SERVICE_READY sock=%s ledger=%s pid=%d" % (sock_path, ledger_path, os.getpid()))
 
@@ -551,6 +684,15 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             # Authenticate: first frame must be the session token.
             auth = _recv_json(conn)
             if not auth or auth.get("token") != token:
+                try:
+                    store.record_security_rejection(
+                        rejection_id="rej-" + secrets.token_hex(8),
+                        rejection_kind="unauthenticated_ipc_attempt",
+                        details={"reason": "invalid_or_missing_session_token"},
+                    )
+                except Exception:
+                    # Audit failure must not convert a denial into admission.
+                    pass
                 _send_json(conn, {"ok": False, "error": "unauthenticated"})
                 return
             # Bind operator identity to this authenticated connection.
@@ -561,6 +703,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             operator_id = "operator-" + (getpass.getuser() or "local")
             session_id = "sess-" + secrets.token_hex(8)
             cmd_svc = runtime.command_service(operator_id, session_id)
+            provider_governor = TokenCostGovernor()
             # Fixed v0.5 OpenHarness inspection: service-owned runner uses the
             # already-created canonical RuntimeComposition; no duplicate runtime.
             def _fixed_openharness(command: Dict[str, Any]):
@@ -576,26 +719,17 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             # mission/task state; the frozen work order carries only the
             # missionId/taskId references; HermesDriver derives its prompt from
             # the resolved authoritative task (TaskResolver) inside CAPT.
-            def _run_approved_hermes(command: Dict[str, Any]):
-                key = command["idempotencyKey"]
-                prior = hermes_work_receipts.get(key)
-                if prior is not None:
-                    return {**prior, "_idempotent": True}
+            def _prepare_approved_hermes(command: Dict[str, Any]) -> PreparedApprovedModelExecution:
+                """Validate and freeze every deterministic dispatch input."""
                 payload = command.get("payload", {})
                 objective = payload.get("objective")
                 target_root = payload.get("targetRoot")
                 if not objective or not target_root:
                     raise ValueError("MODEL_TASK_OBJECTIVE_OR_TARGET_MISSING")
-                # Authored-skill preflight MUST complete before any authoritative
-                # mission/task/grant/lease mutation. The host freezes the exact
-                # verified skill bytes in memory, closing the approval->dispatch
-                # TOCTOU window.
-                worktree = Path(target_root)
-                staging = worktree.parent / (worktree.name + "-model-staging")
-                host, skill_names = _prepare_hermes_host_with_authored_skills(
-                    runtime, payload, target_repo=str(worktree), staging_root=str(staging),
-                    executable=payload.get("executable") or None,
-                )
+                # All deterministic execution inputs are frozen before CAPT consumes
+                # the one-use approval. Authored skill bytes are independently
+                # re-verified here, then carried in the immutable prepared object;
+                # dispatch never re-reads the skill checkout.
                 command_id = command["commandId"]
                 now = command.get("timestamp") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                 mission_id = payload.get("missionId") or ("m-model-" + command_id)
@@ -605,12 +739,210 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 lease_id = payload.get("leaseId") or ("l-model-" + command_id)
                 claim_id = payload.get("claimId") or ("cl-model-" + command_id)
                 policy_id = payload.get("policyDecisionId") or ("pd-model-" + command_id)
+                executable = payload.get("executable") or None
+                provider_id = payload.get("provider")
+                provider_model = payload.get("model")
+                provider = None
+                provider_key = ""
+                if provider_id:
+                    from capt_ui.operator.providers import ProviderManager
+                    from capt_ui.operator.secrets import resolve
+                    provider = ProviderManager(Path(ledger_path).parent / "ui").get(str(provider_id))
+                    if provider is None or not provider_model:
+                        raise ValueError("PROVIDER_OR_MODEL_UNAVAILABLE")
+                    provider_key = resolve(provider.id, provider.key_ref)
+                    if credential_required(provider.id, provider.kind, provider.base_url) and not provider_key:
+                        raise ValueError("PROVIDER_CREDENTIAL_UNAVAILABLE")
+                skill_context, skill_names = prepare_authored_skill_context(payload)
+                requested_context_budget = int(payload.get("requestedContextBudget", 32_000))
+                effective_budget = effective_context_budget(
+                    requested_context_budget, provider.context_limit if provider is not None else 0)
+                response_mode = str(payload.get("responseMode", "SPOCK"))
+                enhancement_engine = str(payload.get("promptEnhancement", "OFF"))
+                human_verification_required = bool(payload.get("humanVerificationRequired", True))
+                # Governed continuation context selection (PR #47 context gate).
+                # Prior authoritative mission evidence is selected HERE, from the
+                # ledger, before approval/admission. No manual injection, no
+                # surviving in-memory object carries it across the restart.
+                from capt_runtime.continuation_context import select_continuation_context
+                ledger_dir = str(Path(ledger_path).parent)
+                continuation = select_continuation_context(
+                    store, str(mission_id), str(task_id),
+                    exclude_run_id=str(run_id), ledger_dir=ledger_dir,
+                )
+                context_pack_digest = continuation["contextPackDigest"]
+                prompt_assembly = build_prompt_assembly(
+                    human_prompt=str(objective), response_mode=response_mode,
+                    enhancement_engine=enhancement_engine,
+                    context_pack_digest=context_pack_digest,
+                    tool_schema_digest=contracts.digest({"operations": ["RepositoryRead", "FilesystemRead", "ArtifactCreate", "AnalysisOnly"]}),
+                    continuation_context=continuation["records"],
+                    authored_skill_context=skill_context,
+                )
+                # Runtime authority binds human approval to the exact
+                # model-visible assembly. Client booleans are provenance only;
+                # no client can use OFF/no-transform as a governance bypass.
+                approval_request_id = payload.get("approvalRequestId")
+                if not approval_request_id:
+                    raise AuthorityViolation("MODEL_PROMPT_APPROVAL_RECEIPT_REQUIRED")
+                bound_assembly = build_bound_model_operator_approval(
+                    human_prompt=str(objective), response_mode=response_mode,
+                    enhancement_engine=enhancement_engine, mission_id=str(mission_id),
+                    task_id=str(task_id), driver_run_id=str(run_id), target_root=str(target_root),
+                    provider=str(provider_id or ""), model=str(provider_model or ""),
+                    requested_context_budget=requested_context_budget,
+                    human_verification_required=human_verification_required,
+                    executable=str(executable or ""),
+                    staging_root=staging_root_for_ledger(store.path, str(run_id)),
+                    context_pack_digest=context_pack_digest,
+                    continuation_context=continuation["records"],
+                    authored_skill_context=skill_context,
+                )
+                # This read-only check catches a mismatched approval before the
+                # command service consumes the one-use receipt.
+                svc.require_approved_prompt_assembly(
+                    str(approval_request_id), bound_assembly["promptAssemblyDigest"],
+                    "ModelOperatorInspection")
+                return PreparedApprovedModelExecution(
+                    command_id=str(command_id), idempotency_key=str(command["idempotencyKey"]),
+                    correlation_id=str(command.get("correlationId", "corr-model")), issued_at=str(now),
+                    approval_request_id=str(approval_request_id),
+                    prompt_assembly_digest=bound_assembly["promptAssemblyDigest"],
+                    dispatch_prompt_digest=bound_assembly["dispatchPromptDigest"],
+                    mission_id=str(mission_id), task_id=str(task_id), driver_run_id=str(run_id),
+                    resource=str(target_root), objective=str(objective),
+                    provider_id=str(provider_id) if provider_id else None,
+                    provider_model=str(provider_model) if provider_model else None,
+                    executable=str(executable) if executable else None,
+                    data=freeze({
+                        "grantId": str(grant_id), "leaseId": str(lease_id),
+                        "claimId": str(claim_id), "policyDecisionId": str(policy_id),
+                        "requestedContextBudget": requested_context_budget,
+                        "effectiveBudget": effective_budget,
+                        "responseMode": response_mode,
+                        "enhancementEngine": enhancement_engine,
+                        "humanVerificationRequired": human_verification_required,
+                        "promptAssembly": prompt_assembly,
+                        "dispatchPrompt": bound_assembly["dispatchPrompt"],
+                        "contextPackDigest": context_pack_digest,
+                        "continuationContext": continuation["records"],
+                        "authoredSkillContext": skill_context,
+                        "skillNames": skill_names,
+                    }),
+                    context_pack_digest=context_pack_digest,
+                )
+
+            def _execute_approved_hermes(prepared: PreparedApprovedModelExecution):
+                # Dispatch consumes only the immutable prepared object. It never
+                # reconstructs fields from the original raw command.
+                key = prepared.idempotency_key
+                command_fingerprint = commands.fingerprint(
+                    "admit_approved_model_execution",
+                    {"preparedExecutionDigest": prepared.prepared_execution_digest})
+                objective = prepared.objective
+                target_root = prepared.resource
+                command_id, now = prepared.command_id, prepared.issued_at
+                correlation_id = prepared.correlation_id
+                mission_id, task_id, run_id = prepared.mission_id, prepared.task_id, prepared.driver_run_id
+                grant_id, lease_id = prepared.data["grantId"], prepared.data["leaseId"]
+                claim_id, policy_id = prepared.data["claimId"], prepared.data["policyDecisionId"]
+                provider_id, provider_model = prepared.provider_id, prepared.provider_model
+                executable = prepared.executable
+                provider = None
+                provider_key = ""
+                if provider_id:
+                    from capt_ui.operator.providers import ProviderManager
+                    from capt_ui.operator.secrets import resolve
+                    provider = ProviderManager(Path(ledger_path).parent / "ui").get(provider_id)
+                    if provider is None or not provider_model:
+                        raise ValueError("PROVIDER_OR_MODEL_UNAVAILABLE")
+                    provider_key = resolve(provider.id, provider.key_ref)
+                    if credential_required(provider.id, provider.kind, provider.base_url) and not provider_key:
+                        raise ValueError("PROVIDER_CREDENTIAL_UNAVAILABLE")
+                requested_context_budget = prepared.data["requestedContextBudget"]
+                effective_budget = prepared.data["effectiveBudget"]
+                human_verification_required = prepared.data["humanVerificationRequired"]
+                prompt_assembly = prepared.data["promptAssembly"]
+                dispatch_prompt = prepared.data["dispatchPrompt"]
+                skill_context = (
+                    json.loads(json.dumps(prepared.data["authoredSkillContext"]))
+                    if prepared.data.get("authoredSkillContext") else None
+                )
+                skill_names = list(prepared.data.get("skillNames") or ())
+                task_title = str(objective).strip()[:512] or "Model operator task"
+                cognitive_provenance = build_cognitive_provenance(
+                    assembly=prompt_assembly, provider_id=provider.id if provider is not None else "hermes",
+                    model=str(provider_model or "hermes"), requested_context_budget=requested_context_budget,
+                    effective_context_budget_value=effective_budget,
+                    human_verification_required=human_verification_required,
+                    correlation={"missionId": mission_id, "taskId": task_id, "driverRunId": run_id,
+                                 "policyDecisionId": policy_id, "grantId": grant_id, "leaseId": lease_id},
+                )
+                def recovery_meta(step: str) -> Dict[str, Any]:
+                    return commands.command(
+                        command_id=command_id + ":" + step,
+                        idempotency_key=key + ":" + step,
+                        operation_fingerprint=commands.fingerprint(step, {"driverRunId": run_id}),
+                        correlation_id=correlation_id,
+                        actor_id="exec-1", actor_kind="execution_plane",
+                        issued_at=now, replay_policy="never",
+                    )
+                # Restart/replay safety: persisted DriverRun is CAPT authority.
+                # `running` is not proof that dispatch did or did not cross the
+                # boundary. It is converted durably to lost/reconciliation-required,
+                # its open reservation is consumed indeterminately, and its task is
+                # suspended for the existing governed cancellation/reconciliation
+                # command path. No branch re-dispatches an extant run.
+                prior_run = store.load_state("driverrun-" + run_id)
+                # An immediately-created ``created`` run is this invocation's
+                # durable admission intent. Any later state is restart evidence
+                # and must follow recovery, never re-dispatch.
+                if prior_run is not None and prior_run.get("state") != "created":
+                    capability = store.load_state("capability-" + grant_id)
+                    reservation_id = "res-" + command_id
+                    open_reservation = bool(capability and reservation_id in [
+                        r["reservationId"] for r in capability.get("reservations", [])
+                        if r["state"] == "open"
+                    ])
+                    if open_reservation:
+                        consumption = {
+                            "schemaVersion": "1.0.0", "consumptionId": "con-" + command_id,
+                            "reservationId": reservation_id, "leaseId": lease_id,
+                            "outcome": "indeterminate", "sideEffectIdentity": run_id,
+                            "finalizedAt": now,
+                        }
+                        svc.finalize_use(grant_id, consumption, recovery_meta("recover-finalize"))
+                    prior_state = prior_run.get("state")
+                    task_state = store.load_state("task-" + task_id)
+                    if prior_state in ("created", "submitted"):
+                        # Dispatch is provably not yet entered in this runner's
+                        # ordering. Preserve authority: no consumption is invented.
+                        svc.transition_driver_run(run_id, "failed", recovery_meta("recover-no-dispatch"))
+                        if task_state and task_state.get("state") in ("assigned", "running"):
+                            svc.transition_task(task_id, "failed", "dispatch not entered before restart", recovery_meta("recover-task-failed"))
+                        recovery = "persisted_pre_dispatch_run_failed"
+                    elif prior_state in ("running", "suspended"):
+                        if prior_state == "running":
+                            svc.transition_driver_run(run_id, "lost", recovery_meta("recover-lost"))
+                        if task_state and task_state.get("state") == "running":
+                            svc.transition_task(task_id, "suspended", "external boundary indeterminate; governed reconciliation required", recovery_meta("recover-suspend"))
+                        recovery = "persisted_indeterminate_requires_reconciliation"
+                    else:
+                        # Completed/terminal runs are immutable evidence. Only an
+                        # open reservation may be conservatively reconciled above.
+                        if prior_state == "completed" and task_state and task_state.get("state") == "running":
+                            svc.transition_task(task_id, "suspended", "completed external work requires governed reconciliation", recovery_meta("recover-suspend"))
+                        recovery = "persisted_driver_run_not_repeated"
+                    receipt = {"missionId": mission_id, "taskId": task_id, "driverRunId": run_id,
+                               "claimId": claim_id, "recovery": recovery}
+                    store.complete_claimed_command(key, command_fingerprint, receipt)
+                    return receipt
                 # 1. Authoritative mission/task state (objective persisted in
                 # the Task aggregate by RuntimeService planning).
                 intent = {
                     "schemaVersion": "1.0.0",
                     "missionId": mission_id,
-                    "objective": objective,
+                    "objective": task_title,
                     "scope": {"kind": "filesystem", "rootPath": target_root, "recursive": True},
                     "requiresApproval": False,
                     "constraints": [{"kind": "resource_boundary", "constraintId": "con-model-1",
@@ -628,22 +960,30 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     "riskClassification": "low",
                     "taskId": task_id,
                 }
+                existing_mission = store.load_state("mission-" + str(mission_id))
+                planning_op = (
+                    "plan_task_for_existing_mission" if existing_mission is not None
+                    else "create_mission"
+                )
                 meta = commands.command(
                     command_id=command_id + ":mission",
                     idempotency_key=key + ":mission",
-                    operation_fingerprint=commands.fingerprint("create_mission", intent),
-                    correlation_id=command.get("correlationId", "corr-model"),
+                    operation_fingerprint=commands.fingerprint(planning_op, intent),
+                    correlation_id=correlation_id,
                     actor_id=cmd_svc.operator_id,
                     actor_kind="human",
                     issued_at=now,
                     replay_policy="never",
                 )
-                svc.create_mission_with_approval(intent, meta)
+                if existing_mission is None:
+                    svc.create_mission_with_approval(intent, meta)
+                else:
+                    svc.plan_task_for_existing_mission(intent, meta)
                 exec_meta = lambda step: commands.command(
                     command_id=command_id + ":" + step,
                     idempotency_key=key + ":" + step,
                     operation_fingerprint=commands.fingerprint("transition_task", {"taskId": task_id, "to": step}),
-                    correlation_id=command.get("correlationId", "corr-model"),
+                    correlation_id=correlation_id,
                     actor_id="exec-1", actor_kind="execution_plane",
                     issued_at=now, replay_policy="never",
                 )
@@ -655,7 +995,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     command_id=command_id + ":" + step,
                     idempotency_key=key + ":" + step,
                     operation_fingerprint=commands.fingerprint(step, {"missionId": mission_id, "taskId": task_id}),
-                    correlation_id=command.get("correlationId", "corr-model"),
+                    correlation_id=correlation_id,
                     actor_id="gk-1", actor_kind="governance_kernel",
                     issued_at=now, replay_policy="never",
                 )
@@ -699,7 +1039,27 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 dispatch_lease = dict(lease)
                 dispatch_lease["scope"] = {**lease["scope"], "allowedPaths": [target_root]}
                 # 3. DriverHost dispatch with the resolved authoritative task.
-                # Host + authored-skill snapshot were prepared before step 1.
+                # Authored skill bytes were verified and frozen in `prepare`, before
+                # approval consumption. Binding them here does not re-read disk.
+                worktree = Path(target_root)
+                staging = Path(staging_root_for_ledger(store.path, str(run_id)))
+                staging.mkdir(parents=True, exist_ok=True)
+                if provider is not None:
+                    host = runtime.provider_host(
+                        target_repo=str(worktree), staging_root=str(staging),
+                        provider_id=provider.id, model=str(provider_model),
+                        base_url=provider.base_url, api_key=provider_key,
+                        dispatch_prompt=str(dispatch_prompt),
+                        governor=provider_governor,
+                    )
+                else:
+                    host = runtime.hermes_host(
+                        target_repo=str(worktree), staging_root=str(staging),
+                        executable=executable, enforce_memory=False,
+                        dispatch_prompt=str(dispatch_prompt),
+                    )
+                if skill_context is not None:
+                    host.bind_prepared_authored_skills(skill_context, skill_names)
                 ctx = host.build_context(
                     {"leaseId": lease["leaseId"], "operations": lease["operations"],
                      "scope": lease["scope"], "validFrom": lease["validFrom"],
@@ -710,30 +1070,67 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     skill_names=skill_names or None,
                 )
                 wo = {
-                    "schemaVersion": "1.0.0", "driverRunId": run_id, "driverId": "hermes",
+                    "schemaVersion": "1.0.0", "driverRunId": run_id, "driverId": "provider" if provider is not None else "hermes",
                     "missionId": mission_id, "taskId": task_id, "workOrderVersion": 1,
                     "contextSlice": ctx,
                     "operations": ["RepositoryRead", "FilesystemRead", "ArtifactCreate", "AnalysisOnly"],
                 }
-                svc.create_driver_run(
-                    {"schemaVersion": "1.0.0", "driverRunId": run_id, "driverId": "hermes",
-                     "missionId": mission_id, "taskId": task_id, "workOrderVersion": 1,
-                     "externalRunId": None, "state": "created", "reconciliationStatus": "not_required",
-                     "createdAt": now},
-                    commands.command(command_id=command_id + ":drcreate", idempotency_key=key + ":drcreate",
-                                     operation_fingerprint=commands.fingerprint("create_driver_run", {"driverRunId": run_id}),
-                                     correlation_id=command.get("correlationId", "corr-model"),
-                                     actor_id="exec-1", actor_kind="execution_plane",
-                                     issued_at=now, replay_policy="never"),
-                )
+                # DriverRunCreated was committed atomically with approval use.
                 svc.transition_driver_run(run_id, "submitted", exec_meta("drsubmit"))
                 svc.transition_driver_run(run_id, "running", exec_meta("drrun"))
-                out = host.dispatch(wo, ctx, {"state": "running"}, now=now, lease=dispatch_lease)
+                # The integrity baseline is CAPT-side evidence captured before the
+                # external process. Existing operator dirt is part of the baseline;
+                # only a delta is attributed to the driver. Persist it in CAPT
+                # staging now so later verification does not depend on this receipt.
+                baseline = capture_verification_baseline(
+                    str(worktree), staging, mission_id, task_id, run_id, now
+                )
+                before = baseline["manifest"]["beforeDigest"]
+                reservation_id = "res-" + command_id
+                reservation = {
+                    "schemaVersion": "1.0.0", "reservationId": reservation_id,
+                    "leaseId": lease_id, "operation": "repository.read",
+                    "operationFingerprint": commands.fingerprint("hermes.dispatch", {"driverRunId": run_id}),
+                    "idempotencyKey": key + ":dispatch", "state": "open", "reservedAt": now,
+                }
+                svc.reserve_use(grant_id, reservation, exec_meta("reserve"))
+                _test_fault("reservation")
+                try:
+                    out = host.dispatch(wo, ctx, {"state": "running"}, now=now, lease=dispatch_lease)
+                except Exception:
+                    # Dispatch reached an external boundary after reservation. The
+                    # absence of a result is not proof that no side effect occurred:
+                    # consume indeterminately and require recovery rather than retry.
+                    consumption = {
+                        "schemaVersion": "1.0.0", "consumptionId": "con-" + command_id,
+                        "reservationId": reservation_id, "leaseId": lease_id,
+                        "outcome": "indeterminate", "sideEffectIdentity": run_id, "finalizedAt": now,
+                    }
+                    svc.finalize_use(grant_id, consumption, exec_meta("finalize-indeterminate"))
+                    # A dispatch exception after the boundary is not evidence of
+                    # failure. Preserve the unknown as lost + suspended so the
+                    # existing governed cancellation/reconciliation path, not an
+                    # automatic retry, decides the terminal disposition.
+                    svc.transition_driver_run(run_id, "lost", exec_meta("drlost"))
+                    svc.transition_task(task_id, "suspended", "external dispatch outcome indeterminate; reconciliation required", exec_meta("tasksuspended"))
+                    raise
+                _test_fault("dispatch")
                 svc.transition_driver_run(run_id, "completed", exec_meta("drcomplete"))
+                _test_fault("driver_completed")
+                # A returned driver result proves this invocation completed. Its
+                # capability use is therefore consumed before any downstream claim
+                # verification, which may still reject the result.
+                consumption = {
+                    "schemaVersion": "1.0.0", "consumptionId": "con-" + command_id,
+                    "reservationId": reservation_id, "leaseId": lease_id,
+                    "outcome": "succeeded", "sideEffectIdentity": out.get("externalRunId") or run_id,
+                    "finalizedAt": now,
+                }
+                svc.finalize_use(grant_id, consumption, exec_meta("finalize"))
+                _test_fault("capability_finalized")
                 # 4. Verification + ClaimGuard (CAPT-authored).
                 artifact_path = out["artifactCandidate"]["artifactPath"]
                 artifact_digest = out["artifactCandidate"]["artifactDigest"]
-                before = tree_digest(str(worktree))
                 accepted = guard_claim("Repository inspected in read-only mode.")
                 svc.propose_claim(
                     {"schemaVersion": "1.0.0", "claimId": claim_id, "missionId": mission_id,
@@ -743,72 +1140,71 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                      "proposedAt": now, "sourceProposalId": None},
                     commands.command(command_id=command_id + ":claim", idempotency_key=key + ":claim",
                                      operation_fingerprint=commands.fingerprint("propose_claim", {"claimId": claim_id}),
-                                     correlation_id=command.get("correlationId", "corr-model"),
+                                     correlation_id=correlation_id,
                                      actor_id="cog-1", actor_kind="cognitive_plane",
                                      issued_at=now, replay_policy="never"),
                 )
-                # 4b. Record evidence (artifact_hash)
-                ev_id = "ev-" + commands.fingerprint("artifact_hash", {"artifact": artifact_digest})[:16]
-                evidence = build_artifact_hash_evidence(
-                    mission_id=mission_id,
-                    artifact_path=artifact_path,
-                    artifact_digest=artifact_digest,
+                baseline_ev_id = "ev-" + commands.fingerprint(
+                    "artifact_hash", {"artifact": baseline["artifactDigest"], "role": "verification_baseline"}
+                )
+                result_ev_id = "ev-" + commands.fingerprint(
+                    "artifact_hash", {"artifact": artifact_digest, "role": "driver_result"}
+                )
+                baseline_evidence = build_artifact_hash_evidence(
+                    mission_id=mission_id, artifact_path=baseline["artifactPath"],
+                    artifact_digest=baseline["artifactDigest"],
                     collected_by={"actorId": "verification_pipeline", "kind": "verification_plane"},
-                    evidence_id=ev_id,
-                    task_id=task_id,
-                    collected_at=now,
+                    evidence_id=baseline_ev_id, task_id=task_id, collected_at=now,
                 )
-                svc.record_evidence(claim_id, evidence,
-                    commands.command(command_id=command_id + ":evidence", idempotency_key=key + ":evidence",
-                                     operation_fingerprint=commands.fingerprint("record_evidence", {"evidenceId": ev_id}),
-                                     correlation_id=command.get("correlationId", "corr-model"),
-                                     actor_id="verification_pipeline", actor_kind="verification_plane",
-                                     issued_at=now, replay_policy="never"),
+                result_evidence = build_artifact_hash_evidence(
+                    mission_id=mission_id, artifact_path=artifact_path, artifact_digest=artifact_digest,
+                    collected_by={"actorId": "verification_pipeline", "kind": "verification_plane"},
+                    evidence_id=result_ev_id, task_id=task_id, collected_at=now,
                 )
-                # 4c. Build verification result with cited evidence, then record
-                vr = build_verification_result(str(worktree), before, artifact_path, artifact_digest, "hermes",
-                                                 claim_id=claim_id, supporting_evidence_ids=[ev_id])
-                svc.record_verification(vr,
-                    commands.command(command_id=command_id + ":verify", idempotency_key=key + ":verify",
-                                     operation_fingerprint=commands.fingerprint("record_verification", {"verificationId": vr["verificationId"]}),
-                                     correlation_id=command.get("correlationId", "corr-model"),
-                                     actor_id="verification_pipeline", actor_kind="verification_plane",
-                                     issued_at=now, replay_policy="never"),
+                def evidence_meta(step: str, evidence_id: str) -> Dict[str, Any]:
+                    return commands.command(
+                        command_id=command_id + ":" + step, idempotency_key=key + ":" + step,
+                        operation_fingerprint=commands.fingerprint("record_evidence", {"evidenceId": evidence_id}),
+                        correlation_id=correlation_id,
+                        actor_id="verification_pipeline", actor_kind="verification_plane",
+                        issued_at=now, replay_policy="never",
+                    )
+                svc.record_evidence(
+                    claim_id, baseline_evidence, evidence_meta("evidence-baseline", baseline_ev_id)
                 )
-                # 4d. Decide claim (ClaimGuard)
-                decision = {
-                    "schemaVersion": "1.0.0",
-                    "decisionId": "cgd-" + command_id,
-                    "claimId": claim_id,
-                    "verdict": "accept",
-                    "rationale": "Bounded statement accepted by ClaimGuard; evidence and verification recorded.",
-                    "verificationId": vr["verificationId"],
-                    "decidedBy": {"actorId": "claim-guard", "kind": "claim_authority"},
-                    "decidedAt": now,
-                }
-                svc.decide_claim(decision,
-                    commands.command(command_id=command_id + ":decide", idempotency_key=key + ":decide",
-                                     operation_fingerprint=commands.fingerprint("decide_claim", {"claimId": claim_id}),
-                                     correlation_id=command.get("correlationId", "corr-model"),
-                                     actor_id="claim-guard", actor_kind="claim_authority",
-                                     issued_at=now, replay_policy="never"),
+                svc.record_evidence(
+                    claim_id, result_evidence, evidence_meta("evidence-result", result_ev_id)
                 )
-                # 5. Checkpoint records continuation.
+                _test_fault("evidence_recorded")
+                # A provider response and its immutable artifact are evidence, not
+                # verification.  Keep the claim proposed and the task in the
+                # aggregate's existing awaiting_verification state; a later
+                # verification/ClaimGuard authority must perform any promotion.
+                svc.transition_task(task_id, "awaiting_verification", "provider response recorded; independent verification required", exec_meta("taskawaitingverification"))
                 create_checkpoint(store, "cp-model-" + command_id, now,
                                   contracts.digest({"policyBundle": "model-operator", "version": 1}))
                 receipt = {
-                    "missionId": mission_id, "taskId": task_id,
-                    "driverRunId": run_id, "claimId": claim_id,
-                    "verificationId": vr["verificationId"],
+                    "missionId": mission_id, "taskId": task_id, "driverRunId": run_id,
+                    "claimId": claim_id, "verificationId": None,
                     "artifactPath": artifact_path, "artifactDigest": artifact_digest,
                     "targetPath": str(worktree), "beforeDigest": before,
+                    "verificationBaselinePath": baseline["artifactPath"],
+                    "verificationBaselineDigest": baseline["artifactDigest"],
+                    "verificationBaselineEvidenceId": baseline_ev_id,
+                    "resultEvidenceId": result_ev_id,
                     "observations": out.get("observations", []),
-                    "driver": "hermes",
+                    "driver": "provider" if provider is not None else "hermes",
+                    "providerProvenance": out.get("diagnostics", {}) if provider is not None else {},
+                    "cognitiveProvenance": cognitive_provenance,
                     "authoredSkills": summarize_skill_context(ctx.get("skillContext")),
                 }
-                hermes_work_receipts[key] = receipt
+                store.complete_claimed_command(key, command_fingerprint, receipt)
                 return receipt
-            cmd_svc.approved_hermes_runner = _run_approved_hermes
+            class _PreparedApprovedHermesRunner:
+                prepare = staticmethod(_prepare_approved_hermes)
+                execute = staticmethod(_execute_approved_hermes)
+
+            cmd_svc.approved_hermes_runner = _PreparedApprovedHermesRunner()
             def _runtime_checkpoint(command: Dict[str, Any]):
                 from capt_runtime.checkpoint import create_checkpoint
                 from capt_runtime.contracts import digest

@@ -13,6 +13,7 @@ from typing import Optional
 from .driver_host import DriverHost
 from .drivers.openharness import DESCRIPTOR, OpenHarnessDriver
 from .drivers.registry import DriverRegistry
+from .steered_service import SteeredRuntimeService
 from .memory.engine import MemoryTriggerEngine
 from .memory.store import MemoryStore
 from .services import RuntimeService
@@ -32,9 +33,9 @@ class RuntimeComposition:
 
     def command_service(self, operator_id: str, session_id: str):
         # Import lazily to avoid a desktop-to-runtime import cycle at module load.
-        from desktop.m1_command_service import RuntimeCommandService
+        from desktop.replay_command_service import ReplayRuntimeCommandService
 
-        return RuntimeCommandService(
+        return ReplayRuntimeCommandService(
             self.store,
             operator_id,
             session_id,
@@ -58,7 +59,8 @@ class RuntimeComposition:
 
     def hermes_host(
         self, *, target_repo: str, staging_root: str, executable: Optional[str] = None,
-        enforce_memory: bool = True, authored_skill_pack_root: Optional[str] = None,
+        enforce_memory: bool = True, dispatch_prompt: str = "",
+        authored_skill_pack_root: Optional[str] = None,
         authored_skill_pack_lock: Optional[dict] = None,
     ) -> DriverHost:
         from .drivers.hermes import DESCRIPTOR as HERMES_DESCRIPTOR, HermesDriver
@@ -70,8 +72,26 @@ class RuntimeComposition:
             authored_skill_pack_root=authored_skill_pack_root,
             authored_skill_pack_lock=authored_skill_pack_lock,
         )
-        host.select_driver(HermesDriver(staging_root, executable=executable,
-                                        task_resolver=self.task_resolver()))
+        host.select_driver(HermesDriver(
+            staging_root, executable=executable, task_resolver=self.task_resolver(),
+            dispatch_prompt=dispatch_prompt,
+        ))
+        return host
+
+    def provider_host(
+        self, *, target_repo: str, staging_root: str, provider_id: str, model: str,
+        base_url: str, api_key: str = "", dispatch_prompt: str = "",
+        governor=None,
+    ) -> DriverHost:
+        from .drivers.provider import DESCRIPTOR as PROVIDER_DESCRIPTOR, ProviderDriver
+        if not self.registry.is_registered(PROVIDER_DESCRIPTOR["driverId"]):
+            self.registry.register(PROVIDER_DESCRIPTOR)
+        host = DriverHost(self.registry, staging_root, target_repo)
+        host.select_driver(ProviderDriver(
+            staging_root, provider_id=provider_id, model=model, base_url=base_url,
+            api_key=api_key, task_resolver=self.task_resolver(),
+            dispatch_prompt=dispatch_prompt, governor=governor,
+        ))
         return host
 
     def task_resolver(self) -> TaskResolver:
@@ -100,7 +120,7 @@ def create_runtime(
     )
     return RuntimeComposition(
         store=store,
-        service=RuntimeService(store),
+        service=SteeredRuntimeService(store),
         registry=DriverRegistry(),
         memory_store=memory_store,
         memory_engine=memory_engine,

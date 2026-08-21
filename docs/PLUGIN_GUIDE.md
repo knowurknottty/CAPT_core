@@ -18,7 +18,7 @@ A client may project runtime/mission/memory/provider/approval/evidence state and
 
 ## Provider integration
 
-Merged `main` contains provider registry/discovery/model-selection foundations. Active PR #47 adds bounded Ollama native and OpenAI-compatible generation transport with provenance/digests/secret scrubbing and conservative reconciliation semantics.
+Protected `main` contains provider registry/discovery/model-selection foundations. Terminal convergence PR #117 reconciles the formerly stacked provider path into bounded Ollama and local/authenticated OpenAI-compatible generation with provenance/digests, resource ceilings, secret scrubbing, conservative reconciliation, and PR #118 provider/model coherence.
 
 Do not label a provider operational merely because it registers or returns a model list.
 
@@ -27,7 +27,7 @@ Do not label a provider operational merely because it registers or returns a mod
 The current evidence story has multiple layers:
 
 - historical v0.5 installed-wheel bounded Hermes proof;
-- active #46 lifecycle hardening;
+- terminal PR #117 lifecycle/provider/replay hardening;
 - operator-supplied LOCAL-002 metadata for `evidence/hermes-local-002-r6` at `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`.
 
 Terra could not retrieve the LOCAL-002 branch, commit, or named report from the current GitHub remote/API. Its `HERMES_LOCAL_002_COMPLETE`, 98/0/0, 174/0/2, and no-blocker statements are therefore **currently unverified** and must not be used to certify a compatibility client. Destructive external-provider/tool-kill rollback remains separately unproven.

@@ -25,13 +25,14 @@ from ..errors import AuthorityViolation, IllegalTransition
 
 KIND = "human_approval"
 
-APPROVAL_TERMINAL: FrozenSet[str] = frozenset({"approved", "denied", "expired"})
+APPROVAL_TERMINAL: FrozenSet[str] = frozenset({"denied", "expired", "consumed"})
 
 APPROVAL_TRANSITIONS: Dict[str, FrozenSet[str]] = {
     "requested": frozenset({"approved", "denied", "expired"}),
-    "approved": frozenset(),
+    "approved": frozenset({"consumed", "expired"}),
     "denied": frozenset(),
     "expired": frozenset(),
+    "consumed": frozenset(),
 }
 
 
@@ -47,6 +48,9 @@ class HumanApprovalAggregate(object):
             "human_approval.decidedAt",
             "human_approval.note",
             "human_approval.decidedIdempotencyKeys",
+            "human_approval.remainingUses",
+            "human_approval.consumedAt",
+            "human_approval.consumedBy",
         }
     )
     REFERENCE_FIELDS = frozenset({"requestId", "missionId", "taskId"})
@@ -72,12 +76,15 @@ class HumanApprovalAggregate(object):
             "remainingUses": request.get("remainingUses"),
             "correlationId": request["correlationId"],
             "createdAt": request["createdAt"],
+            "promptAssemblyDigest": request.get("promptAssemblyDigest"),
             "state": "requested",
             "decision": None,
             "operatorId": None,
             "decidedAt": None,
             "note": None,
             "decidedIdempotencyKeys": [],
+            "consumedAt": None,
+            "consumedBy": None,
         }
 
     @staticmethod
@@ -98,9 +105,10 @@ class HumanApprovalAggregate(object):
         if idek in state["decidedIdempotencyKeys"]:
             return state
 
-        if current in APPROVAL_TERMINAL:
+        if current != "requested":
             raise IllegalTransition(
-                "approval %s is terminal" % state["requestId"], current,
+                "approval %s cannot be decided from %s" % (state["requestId"], current),
+                current,
                 decision["decision"],
             )
 
@@ -135,4 +143,26 @@ class HumanApprovalAggregate(object):
             return state
         nxt = dict(state)
         nxt["state"] = "expired"
+        return nxt
+
+    @staticmethod
+    def consume(state: Dict[str, Any], use_id: str, now: str) -> Dict[str, Any]:
+        if state.get("state") != "approved":
+            raise IllegalTransition(
+                "approval %s cannot be consumed from %s"
+                % (state["requestId"], state.get("state")),
+                str(state.get("state")),
+                "consumed",
+            )
+        if now > state["expiresAt"]:
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_EXPIRED")
+        remaining = state.get("remainingUses")
+        if remaining is None or int(remaining) < 1:
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_USE_LIMIT_MISSING")
+        nxt = dict(state)
+        nxt["remainingUses"] = int(remaining) - 1
+        nxt["consumedAt"] = now
+        nxt["consumedBy"] = use_id
+        if nxt["remainingUses"] == 0:
+            nxt["state"] = "consumed"
         return nxt

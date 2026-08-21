@@ -19,7 +19,7 @@ import argparse
 import sys
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 REPO = Path(__file__).resolve().parents[3]
 if str(REPO) not in sys.path:
@@ -89,11 +89,27 @@ def cmd_dashboard(args) -> int:
 
 def cmd_providers(args) -> int:
     pm = ProviderManager(_cfg())
+    if args.key_ref:
+        p = pm.update(args.key_ref[0], {"key_ref": args.key_ref[1]})
+        _out({"provider": p.id if p else "", "key_ref": "configured" if p else ""}, args.json)
+        return 0
+    if args.prewarm:
+        res = pm.prewarm(args.prewarm, args.model or "")
+        _out(res, args.json)
+        return 0
     if args.test:
         res = pm.test(args.test)
         _out(res.to_dict(), args.json)
         return 0
     if args.activate:
+        target = pm.get(args.activate)
+        if target is not None and target.models:
+            mm = ModelManager(_cfg(), providers=pm)
+            current_default = mm.summary().get("default") or {}
+            model_id = current_default.get("model")
+            if current_default.get("provider") != target.id or model_id not in target.models:
+                model_id = target.models[0]
+            mm.set_default(target.id, model_id)
         p = pm.activate(args.activate)
         _out({"activated": args.activate, "kind": pm.label(p) if p else "?"}, args.json)
         return 0
@@ -173,7 +189,10 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     pr = sub.add_parser("providers")
     pr.add_argument("--test")
+    pr.add_argument("--prewarm")
+    pr.add_argument("--model")
     pr.add_argument("--activate")
+    pr.add_argument("--key-ref", nargs=2, metavar=("PROVIDER", "REF"))
     pr.add_argument("--json", action="store_true")
 
     cap = sub.add_parser("capabilities")

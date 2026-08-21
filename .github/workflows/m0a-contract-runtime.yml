@@ -70,8 +70,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install test tooling
-        run: python -m pip install --upgrade pip pytest jsonschema build
+      - name: Install project and test tooling
+        run: |
+          python -m pip install --upgrade pip pytest jsonschema build
+          python -m pip install -e .
       - name: Run M0-A conformance suite
         run: python -m pytest tests/capt_runtime -q
       - name: Run full regression

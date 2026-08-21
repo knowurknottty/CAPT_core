@@ -1,32 +1,32 @@
 # CAPT Desktop
 
-CAPT currently has two desktop tracks with deliberately different claims.
+CAPT has a Python/Tk reference operator surface and a native Swift macOS application line. Both remain thin clients over RuntimeService authority.
 
-## Tk operator MVP
+## Tk operator surface
 
-The Python/Tk surface is a real thin client/view-model proving ground over the authenticated runtime/operator boundary.
+The Python/Tk surface is a real projection/control client and remains useful as a reference/fallback. It does not own EventStore writes, capability decisions, evidence promotion, or completion authority.
 
-Classification: **OPERATOR MVP / reference / fallback**, not a polished native product.
+## Native macOS application
 
-It must not own RuntimeService logic, EventStore writes, capability decisions, evidence promotion, or completion state.
+`capt_ui/surfaces/desktop_swift` now contains more than a client-contract library. The terminal convergence line builds the real `CAPTNativeMac` application target with governed chat/approval flow, runtime/provider controls, native session persistence, typed actor-boundary projections, and origin-session-bound asynchronous provider/model updates.
 
-## SwiftUI track
+Fresh convergence verification:
 
-`capt_ui/surfaces/desktop_swift/CAPTCoreDesktop` is a Swift Package/client contract. It models the same operator projections used by CLI/TUI while leaving CAPT authority in the existing local runtime service.
-
-Classification: **LIBRARY / CLIENT CONTRACT**, not a shipped `.app` executable.
-
-```zsh
-cd capt_ui/surfaces/desktop_swift
-swift build
+```text
+swift test                                  -> 64 tests / 7 opt-in skips / 0 failures
+strict concurrency + warnings-as-errors    -> PASS
+swift test --sanitize=thread                -> 64 / 7 skipped / 0 failures
+swift build --product CAPTNativeMac         -> PASS
 ```
 
-A successful library build is not evidence of a distributable/notarized native application.
+Native encrypted session-cache storage also has explicit private filesystem-permission regression coverage.
 
-## Relationship to current TUI work
+## Authority boundary
 
-The active PR #47 cognition/provider cockpit is presently implemented in the Textual TUI path. It should inform the eventual native operator UX, but desktop parity should not be claimed until the native client implements and proves equivalent governed controls.
+The app is not a second CAPT runtime and does not call a model provider as an alternate authority path. Consequential state remains admitted through authenticated RuntimeService/EventStore contracts.
 
-## Product gate
+The macOS ↔ RuntimeService ↔ MCP disposable-runtime acceptance proves both native Swift and MCP can observe and act on the same authoritative approval/task/DriverRun streams without manufacturing verification or duplicate provider dispatch.
 
-The native desktop product remains a later usability/distribution milestone. Signing, notarization, packaging, auto-update, platform acceptance, and full provider/control parity require their own evidence.
+## Distribution boundary
+
+A buildable/tested native executable is **not** the same evidence class as a signed/notarized/distributed release. Final packaging, signing, notarization, update channel, and release-security gates remain separately evidenced.

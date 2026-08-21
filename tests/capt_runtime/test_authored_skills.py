@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import subprocess
 from pathlib import Path
 
@@ -180,3 +179,65 @@ def test_authored_skill_errors_use_runtime_taxonomy():
     assert AuthoredSkillPackViolation.category == "integrity"
     assert issubclass(AuthoredSkillRequestViolation, AuthoredSkillPackViolation)
     assert AuthoredSkillRequestViolation.category == "validation"
+
+
+def _approval_meta(label: str):
+    from capt_runtime import commands
+
+    return commands.command(
+        command_id="cmd-" + label, idempotency_key="idem-" + label,
+        operation_fingerprint=commands.fingerprint("approval", {"label": label}),
+        correlation_id="corr-" + label, actor_id="operator-test", actor_kind="human",
+        issued_at="2026-08-19T10:00:00Z", replay_policy="never",
+    )
+
+
+def test_prompt_approval_binds_verified_authored_skill_provenance(tmp_path, monkeypatch):
+    import capt_runtime.authored_skills as authored
+    from capt_runtime.prompt_approval import request_model_prompt_approval
+    from capt_runtime.services import RuntimeService
+    from capt_runtime.store import EventStore
+
+    root, lock = _make_pack(tmp_path)
+    monkeypatch.setattr(authored, "load_capt_skills_lock", lambda _path=None: lock)
+    store = EventStore(str(tmp_path / "approval-skill.db"))
+    try:
+        result = request_model_prompt_approval(
+            RuntimeService(store),
+            {"objective": "Review UI", "targetRoot": "/tmp/project",
+             "provider": "local-openai", "model": "qwen",
+             "skillPackRoot": str(root), "skillNames": ["inversion-interface-craft"]},
+            _approval_meta("skill"),
+        )
+        state = store.require_state("human_approval-" + result["requestId"])
+        summary = state["scope"]["approvalBinding"]["authoredSkills"]
+        assert summary["sourceCommit"] == lock["commit"]
+        assert summary["skills"][0]["name"] == "inversion-interface-craft"
+        assert "content" not in summary["skills"][0]
+        assert result["authoredSkills"] == summary
+    finally:
+        store.close()
+
+
+def test_prompt_approval_skill_tamper_fails_before_authority_mutation(tmp_path, monkeypatch):
+    import capt_runtime.authored_skills as authored
+    from capt_runtime.prompt_approval import request_model_prompt_approval
+    from capt_runtime.services import RuntimeService
+    from capt_runtime.store import EventStore
+
+    root, lock = _make_pack(tmp_path)
+    monkeypatch.setattr(authored, "load_capt_skills_lock", lambda _path=None: lock)
+    skill_file = root / lock["skills"][0]["path"]
+    skill_file.write_text(skill_file.read_text() + "\nTAMPER_BEFORE_APPROVAL\n")
+    store = EventStore(str(tmp_path / "approval-tamper.db"))
+    try:
+        with pytest.raises(AuthoredSkillPackViolation):
+            request_model_prompt_approval(
+                RuntimeService(store),
+                {"objective": "Review UI", "targetRoot": "/tmp/project",
+                 "skillPackRoot": str(root), "skillNames": ["inversion-interface-craft"]},
+                _approval_meta("tamper"),
+            )
+        assert store.head_sequence() == 0
+    finally:
+        store.close()

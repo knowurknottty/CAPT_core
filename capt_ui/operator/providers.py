@@ -15,11 +15,14 @@ from __future__ import annotations
 
 import json
 import os
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlsplit
 
 from .contract import ProviderHealth, ProviderKind
+from .secrets import is_reference
 
 
 @dataclass
@@ -92,9 +95,6 @@ DEFAULT_PROVIDERS: List[Dict[str, Any]] = [
     {"id": "lmstudio", "name": "LM Studio", "kind": "local",
      "transport": "openai_compatible", "base_url": "http://localhost:1234/v1",
      "context_limit": 32768, "capabilities": ["chat", "tool_use"]},
-    {"id": "mlx", "name": "MLX / mlx_lm", "kind": "local",
-     "transport": "native", "base_url": "", "context_limit": 32768,
-     "capabilities": ["chat"]},
     {"id": "vllm", "name": "vLLM", "kind": "hybrid",
      "transport": "openai_compatible", "base_url": "http://localhost:8000/v1",
      "context_limit": 32768, "capabilities": ["chat"]},
@@ -105,6 +105,25 @@ DEFAULT_PROVIDERS: List[Dict[str, Any]] = [
      "transport": "subprocess", "base_url": "", "context_limit": 0,
      "capabilities": ["bounded_execution"]},
 ]
+
+
+def _validate_provider_config(provider: Provider) -> None:
+    """Reject unsafe persisted config before a health probe can consume it.
+
+    Provider config is an operator preference, not RuntimeService authority, but
+    it still must never persist a raw secret or an ambiguous endpoint.
+    """
+    if provider.key_ref and not is_reference(provider.key_ref):
+        raise ValueError("provider key_ref must be an env: or keychain: reference")
+    if not provider.base_url:
+        return
+    parsed = urlsplit(provider.base_url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise ValueError("provider base_url must be an absolute http(s) URL")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("provider base_url must not contain credentials")
+    if parsed.query or parsed.fragment:
+        raise ValueError("provider base_url must not contain query or fragment")
 
 
 class ProviderManager:
@@ -124,18 +143,33 @@ class ProviderManager:
         return Path.home() / ".capt" / "ui"
 
     def _load_defaults(self) -> None:
+        loaded_existing = False
+        changed = False
         if self._file.exists():
             try:
                 data = json.loads(self._file.read_text())
                 for pd in data.get("providers", []):
                     p = Provider.from_dict(pd)
+                    _validate_provider_config(p)
+                    if (
+                        p.id == "mlx" and p.transport == "native"
+                        and not p.base_url and not p.key_ref and not p.models
+                    ):
+                        changed = True
+                        continue
                     self._providers[p.id] = p
-                return
+                loaded_existing = True
             except Exception:  # noqa: BLE001 - corrupt file: fall back to defaults
-                pass
+                self._providers.clear()
+
         for tmpl in DEFAULT_PROVIDERS:
-            p = Provider.from_dict(tmpl)
-            self._providers[p.id] = p
+            if tmpl["id"] in self._providers:
+                continue
+            self._providers[tmpl["id"]] = Provider.from_dict(tmpl)
+            changed = loaded_existing or changed
+
+        if loaded_existing and changed:
+            self.save()
 
     def save(self) -> None:
         self._file.parent.mkdir(parents=True, exist_ok=True)
@@ -150,6 +184,7 @@ class ProviderManager:
         return self._providers.get(provider_id)
 
     def add(self, provider: Provider) -> None:
+        _validate_provider_config(provider)
         self._providers[provider.id] = provider
         self.save()
 
@@ -157,6 +192,7 @@ class ProviderManager:
         p = self._providers.get(provider_id)
         if p is None:
             return None
+        candidate = deepcopy(p)
         for k, v in changes.items():
             if k in ("id",):
                 continue
@@ -164,9 +200,11 @@ class ProviderManager:
                 v = ProviderKind(v)
             elif k == "health":
                 v = ProviderHealth(v)
-            setattr(p, k, v)
+            setattr(candidate, k, v)
+        _validate_provider_config(candidate)
+        self._providers[provider_id] = candidate
         self.save()
-        return p
+        return candidate
 
     def remove(self, provider_id: str) -> Optional[Provider]:
         p = self._providers.pop(provider_id, None)
@@ -234,6 +272,54 @@ class ProviderManager:
             p.last_success_at = _now()
         self.save()
         return p
+
+    def prewarm(self, provider_id: str, model_id: str) -> Dict[str, Any]:
+        """Warm a selected loopback OpenAI-compatible provider without ledger mutation.
+
+        This is operator-plane readiness work, analogous to a health probe. The
+        response is discarded and must never be promoted to CAPT evidence.
+        """
+        p = self._providers.get(provider_id)
+        if p is None:
+            raise ValueError("unknown provider: %s" % provider_id)
+        if p.kind != ProviderKind.LOCAL or p.transport != "openai_compatible":
+            raise ValueError("prewarm requires a local OpenAI-compatible provider")
+        from capt_runtime.provider_endpoint import endpoint_class
+        if endpoint_class(p.base_url) != "local":
+            raise ValueError("prewarm requires a loopback endpoint")
+        model = str(model_id or "").strip()
+        if not model:
+            raise ValueError("prewarm requires a model id")
+
+        import time
+        import urllib.request
+        from .adapters import resolve_secret
+
+        body = json.dumps({
+            "model": model,
+            "messages": [{"role": "user", "content": "CAPT provider prewarm. Reply OK."}],
+            "max_tokens": 8,
+            "temperature": 0,
+            "stream": False,
+        }).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        key = resolve_secret(p, "")
+        if key:
+            headers["Authorization"] = "Bearer " + key
+        req = urllib.request.Request(
+            p.base_url.rstrip("/") + "/chat/completions",
+            data=body, headers=headers, method="POST",
+        )
+        started = time.monotonic()
+        with urllib.request.urlopen(req, timeout=120) as response:
+            response.read()
+        return {
+            "status": "warm",
+            "provider": p.id,
+            "model": model,
+            "endpoint_class": "local",
+            "latency_ms": int((time.monotonic() - started) * 1000),
+        }
 
     # -- discovery ---------------------------------------------------------
     def discover_local(self) -> List[str]:

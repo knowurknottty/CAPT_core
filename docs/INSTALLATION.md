@@ -1,8 +1,8 @@
 # CAPT Installation
 
-This guide installs the current merged `main` operator surfaces. See [`CURRENT_STATE.md`](CURRENT_STATE.md) for the distinction between package version, merged capabilities, and active integration work.
+This guide distinguishes the protected `main` install from the terminal PR #117 convergence candidate. See [`CURRENT_STATE.md`](CURRENT_STATE.md) before treating advanced functionality as released.
 
-## Recommended development/evaluation install
+## Development/evaluation install
 
 ```zsh
 git clone https://github.com/knowurknottty/CAPT_core.git
@@ -22,7 +22,7 @@ capt --version
 capt doctor
 ```
 
-`pyproject.toml` currently declares package version `0.5.0`; later productization code is present on `main` without a new numbered package release yet.
+`pyproject.toml` still declares `capt-solo 0.5.0`; repository integration state is newer than that package version.
 
 ## First run
 
@@ -35,39 +35,29 @@ capt checkpoint
 capt-ui dashboard
 ```
 
-Then test restart continuity:
+Default local state is `~/.capt`, overridable with `$CAPT_STATE_DIR`. The canonical runtime uses the local `runtime.sock` / `runtime.token` layout.
+
+## Native macOS candidate
+
+On the terminal convergence branch:
 
 ```zsh
-capt stop
-capt start
-capt resume
-capt status
+cd capt_ui/surfaces/desktop_swift
+swift test
+swift build --product CAPTNativeMac
 ```
 
-## State paths
+`CAPTNativeMac` is a real application target, not merely a contract library. Fresh candidate verification includes normal Swift, strict concurrency/warnings-as-errors, and ThreadSanitizer passes.
 
-Default normal-user state is `~/.capt`, overridable with `$CAPT_STATE_DIR`.
-
-The normal on-ramp creates/uses the canonical local runtime socket/token layout (`runtime.sock` and `runtime.token`). The merged UI bootstrap resolves that same layout.
-
-## Surfaces
-
-| Surface | Status on merged `main` |
-|---|---|
-| `capt` normal CLI | shipped/merged |
-| `capt harness ...` | expert/debug surface |
-| Textual TUI | shipped MVP |
-| Tk desktop | operator MVP/reference fallback |
-| SwiftUI | client-contract library; not a shipped `.app` |
-| active PR #47 cockpit/provider execution | unmerged integration work |
+That is source/build evidence—not signing, notarization, distribution, or release-security authorization.
 
 ## Provider note
 
-Provider registration/discovery on `main` and provider **execution** in the active PR #47 lineage are different states. Do not treat a configured provider as proof of governed live inference. See [`PROVIDERS.md`](PROVIDERS.md).
+The convergence line supports governed Ollama and configured local/authenticated OpenAI-compatible execution. A configured/healthy provider is not automatically proof of a completed governed mission. The generic direct native MLX placeholder is intentionally unregistered unless a real adapter/configuration exists.
 
 ## Platform note
 
-macOS is the primary development environment and Linux has established CI/release paths. Windows should remain labeled unverified until separately proven.
+macOS is the primary development environment. Linux has established CI/release-era paths. Windows remains unverified unless newer exact-head platform evidence says otherwise.
 
 ## Troubleshooting
 

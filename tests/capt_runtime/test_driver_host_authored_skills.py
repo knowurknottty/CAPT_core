@@ -193,3 +193,22 @@ def test_model_operator_skill_preflight_failure_leaves_ledger_untouched(tmp_path
         assert runtime.store.head_sequence() == 0
     finally:
         runtime.close()
+
+
+def test_driver_host_binds_preverified_snapshot_without_pack_reread(tmp_path):
+    from capt_runtime.authored_skills import build_skill_context
+
+    root, lock = _pack(tmp_path)
+    names = ["inversion-creative-critic"]
+    verified = build_skill_context(root, lock, selected_names=names)
+    host = DriverHost(DriverRegistry(), str(tmp_path / "staging-bound"), "/tmp")
+    summary = host.bind_prepared_authored_skills(verified, names)
+
+    skill_file = root / lock["skills"][0]["path"]
+    skill_file.write_text(skill_file.read_text() + "\nTAMPER_AFTER_PREPARE\n")
+    ctx = host.build_context(
+        _lease(), [], {"maxSeconds": 30}, [], {"onUnexpectedWrite": "fail"},
+        skill_names=names,
+    )
+    assert ctx["skillContext"]["manifestDigest"] == summary["manifestDigest"]
+    assert "TAMPER_AFTER_PREPARE" not in ctx["skillContext"]["skills"][0]["content"]

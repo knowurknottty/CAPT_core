@@ -30,7 +30,16 @@
         "ClaimVerified",
         "ClaimGuardDecided",
         "HumanApprovalRequested",
-        "HumanApprovalDecided"
+        "HumanApprovalDecided",
+        "HumanApprovalConsumed",
+        "ArtifactPromotionPrepared",
+        "ArtifactPromotionAuthorized",
+        "ArtifactPromotionAdopted",
+        "ArtifactPromotionDiscarded",
+        "CohortCreated",
+        "CohortSnapshotPersisted",
+        "CohortSteered",
+        "ReplayForkCreated"
       ]
     },
     "EventPayload": {
@@ -42,231 +51,651 @@
           "title": "MissionCreatedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "missionSpec"],
+          "required": [
+            "eventType",
+            "missionSpec"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "MissionCreated" },
-            "missionSpec": { "$ref": "mission.schema.json#/$defs/MissionSpec" }
+            "eventType": {
+              "type": "string",
+              "const": "MissionCreated"
+            },
+            "missionSpec": {
+              "$ref": "mission.schema.json#/$defs/MissionSpec"
+            }
           }
         },
         {
           "title": "PolicyEvaluatedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "policyDecision"],
+          "required": [
+            "eventType",
+            "policyDecision"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "PolicyEvaluated" },
-            "policyDecision": { "$ref": "policy.schema.json#/$defs/PolicyDecision" }
+            "eventType": {
+              "type": "string",
+              "const": "PolicyEvaluated"
+            },
+            "policyDecision": {
+              "$ref": "policy.schema.json#/$defs/PolicyDecision"
+            }
           }
         },
         {
           "title": "MissionStateChangedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "fromState", "toState", "reason"],
+          "required": [
+            "eventType",
+            "fromState",
+            "toState",
+            "reason"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "MissionStateChanged" },
-            "fromState": { "$ref": "mission.schema.json#/$defs/MissionState" },
-            "toState": { "$ref": "mission.schema.json#/$defs/MissionState" },
-            "reason": { "type": "string", "maxLength": 2048 }
+            "eventType": {
+              "type": "string",
+              "const": "MissionStateChanged"
+            },
+            "fromState": {
+              "$ref": "mission.schema.json#/$defs/MissionState"
+            },
+            "toState": {
+              "$ref": "mission.schema.json#/$defs/MissionState"
+            },
+            "reason": {
+              "type": "string",
+              "maxLength": 2048
+            }
           }
         },
         {
           "title": "CheckpointCreatedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "checkpointId", "integrityDigest"],
+          "required": [
+            "eventType",
+            "checkpointId",
+            "integrityDigest"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "CheckpointCreated" },
-            "checkpointId": { "$ref": "common.schema.json#/$defs/Identifier" },
-            "integrityDigest": { "$ref": "common.schema.json#/$defs/Digest" }
+            "eventType": {
+              "type": "string",
+              "const": "CheckpointCreated"
+            },
+            "checkpointId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "integrityDigest": {
+              "$ref": "common.schema.json#/$defs/Digest"
+            }
           }
         },
         {
           "title": "MissionResumedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "checkpointId", "resumedFromGlobalSequence"],
+          "required": [
+            "eventType",
+            "checkpointId",
+            "resumedFromGlobalSequence"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "MissionResumed" },
-            "checkpointId": { "$ref": "common.schema.json#/$defs/Identifier" },
-            "resumedFromGlobalSequence": { "$ref": "common.schema.json#/$defs/SequenceNumber" }
+            "eventType": {
+              "type": "string",
+              "const": "MissionResumed"
+            },
+            "checkpointId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "resumedFromGlobalSequence": {
+              "$ref": "common.schema.json#/$defs/SequenceNumber"
+            }
           }
         },
         {
           "title": "TaskCreatedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "task"],
+          "required": [
+            "eventType",
+            "task"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "TaskCreated" },
-            "task": { "$ref": "task.schema.json#/$defs/TaskNode" }
+            "eventType": {
+              "type": "string",
+              "const": "TaskCreated"
+            },
+            "task": {
+              "$ref": "task.schema.json#/$defs/TaskNode"
+            }
           }
         },
         {
           "title": "TaskTransitionedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "taskId", "fromState", "toState", "reason"],
+          "required": [
+            "eventType",
+            "taskId",
+            "fromState",
+            "toState",
+            "reason"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "TaskTransitioned" },
-            "taskId": { "$ref": "common.schema.json#/$defs/Identifier" },
-            "fromState": { "$ref": "task.schema.json#/$defs/TaskState" },
-            "toState": { "$ref": "task.schema.json#/$defs/TaskState" },
-            "reason": { "type": "string", "maxLength": 2048 }
+            "eventType": {
+              "type": "string",
+              "const": "TaskTransitioned"
+            },
+            "taskId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "fromState": {
+              "$ref": "task.schema.json#/$defs/TaskState"
+            },
+            "toState": {
+              "$ref": "task.schema.json#/$defs/TaskState"
+            },
+            "reason": {
+              "type": "string",
+              "maxLength": 2048
+            }
           }
         },
         {
           "title": "TaskResultSubmittedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "taskId", "resultRef", "toState"],
+          "required": [
+            "eventType",
+            "taskId",
+            "resultRef",
+            "toState"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "TaskResultSubmitted" },
-            "taskId": { "$ref": "common.schema.json#/$defs/Identifier" },
-            "resultRef": { "type": "string", "minLength": 1, "maxLength": 2048 },
-            "toState": { "$ref": "task.schema.json#/$defs/TaskState" }
+            "eventType": {
+              "type": "string",
+              "const": "TaskResultSubmitted"
+            },
+            "taskId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "resultRef": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "toState": {
+              "$ref": "task.schema.json#/$defs/TaskState"
+            }
           }
         },
         {
           "title": "CapabilityGrantedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "grant"],
+          "required": [
+            "eventType",
+            "grant"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "CapabilityGranted" },
-            "grant": { "$ref": "capability.schema.json#/$defs/CapabilityGrant" }
+            "eventType": {
+              "type": "string",
+              "const": "CapabilityGranted"
+            },
+            "grant": {
+              "$ref": "capability.schema.json#/$defs/CapabilityGrant"
+            }
           }
         },
         {
           "title": "CapabilityLeaseActivatedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "lease"],
+          "required": [
+            "eventType",
+            "lease"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "CapabilityLeaseActivated" },
-            "lease": { "$ref": "capability.schema.json#/$defs/CapabilityLease" }
+            "eventType": {
+              "type": "string",
+              "const": "CapabilityLeaseActivated"
+            },
+            "lease": {
+              "$ref": "capability.schema.json#/$defs/CapabilityLease"
+            }
           }
         },
         {
           "title": "CapabilityUseReservedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "reservation"],
+          "required": [
+            "eventType",
+            "reservation"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "CapabilityUseReserved" },
-            "reservation": { "$ref": "capability.schema.json#/$defs/CapabilityReservation" }
+            "eventType": {
+              "type": "string",
+              "const": "CapabilityUseReserved"
+            },
+            "reservation": {
+              "$ref": "capability.schema.json#/$defs/CapabilityReservation"
+            }
           }
         },
         {
           "title": "CapabilityUseFinalizedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "consumption"],
+          "required": [
+            "eventType",
+            "consumption"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "CapabilityUseFinalized" },
-            "consumption": { "$ref": "capability.schema.json#/$defs/CapabilityConsumptionRecord" }
+            "eventType": {
+              "type": "string",
+              "const": "CapabilityUseFinalized"
+            },
+            "consumption": {
+              "$ref": "capability.schema.json#/$defs/CapabilityConsumptionRecord"
+            }
           }
         },
         {
           "title": "CapabilityGrantRevokedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "revocation"],
+          "required": [
+            "eventType",
+            "revocation"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "CapabilityGrantRevoked" },
-            "revocation": { "$ref": "capability.schema.json#/$defs/CapabilityRevocation" }
+            "eventType": {
+              "type": "string",
+              "const": "CapabilityGrantRevoked"
+            },
+            "revocation": {
+              "$ref": "capability.schema.json#/$defs/CapabilityRevocation"
+            }
           }
         },
         {
           "title": "CapabilityLeaseRevokedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "revocation"],
+          "required": [
+            "eventType",
+            "revocation"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "CapabilityLeaseRevoked" },
-            "revocation": { "$ref": "capability.schema.json#/$defs/CapabilityRevocation" }
+            "eventType": {
+              "type": "string",
+              "const": "CapabilityLeaseRevoked"
+            },
+            "revocation": {
+              "$ref": "capability.schema.json#/$defs/CapabilityRevocation"
+            }
           }
         },
         {
           "title": "DriverRunCreatedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "driverRun"],
+          "required": [
+            "eventType",
+            "driverRun"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "DriverRunCreated" },
-            "driverRun": { "$ref": "driver.schema.json#/$defs/DriverRun" }
+            "eventType": {
+              "type": "string",
+              "const": "DriverRunCreated"
+            },
+            "driverRun": {
+              "$ref": "driver.schema.json#/$defs/DriverRun"
+            }
           }
         },
         {
           "title": "DriverRunStateChangedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "driverRunId", "fromState", "toState"],
+          "required": [
+            "eventType",
+            "driverRunId",
+            "fromState",
+            "toState"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "DriverRunStateChanged" },
-            "driverRunId": { "$ref": "common.schema.json#/$defs/Identifier" },
-            "fromState": { "$ref": "driver.schema.json#/$defs/DriverRunState" },
-            "toState": { "$ref": "driver.schema.json#/$defs/DriverRunState" }
+            "eventType": {
+              "type": "string",
+              "const": "DriverRunStateChanged"
+            },
+            "driverRunId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "fromState": {
+              "$ref": "driver.schema.json#/$defs/DriverRunState"
+            },
+            "toState": {
+              "$ref": "driver.schema.json#/$defs/DriverRunState"
+            }
           }
         },
         {
           "title": "ClaimCreatedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "claim"],
+          "required": [
+            "eventType",
+            "claim"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "ClaimCreated" },
-            "claim": { "$ref": "claim.schema.json#/$defs/ClaimRecord" }
+            "eventType": {
+              "type": "string",
+              "const": "ClaimCreated"
+            },
+            "claim": {
+              "$ref": "claim.schema.json#/$defs/ClaimRecord"
+            }
           }
         },
         {
           "title": "EvidenceRecordedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "evidence"],
+          "required": [
+            "eventType",
+            "evidence"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "EvidenceRecorded" },
-            "evidence": { "$ref": "evidence.schema.json#/$defs/EvidenceRecord" }
+            "eventType": {
+              "type": "string",
+              "const": "EvidenceRecorded"
+            },
+            "evidence": {
+              "$ref": "evidence.schema.json#/$defs/EvidenceRecord"
+            }
           }
         },
         {
           "title": "ClaimVerifiedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "verification"],
+          "required": [
+            "eventType",
+            "verification"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "ClaimVerified" },
-            "verification": { "$ref": "verification.schema.json#/$defs/VerificationResult" }
+            "eventType": {
+              "type": "string",
+              "const": "ClaimVerified"
+            },
+            "verification": {
+              "$ref": "verification.schema.json#/$defs/VerificationResult"
+            }
           }
         },
         {
           "title": "ClaimGuardDecidedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "decision"],
+          "required": [
+            "eventType",
+            "decision"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "ClaimGuardDecided" },
-            "decision": { "$ref": "claim.schema.json#/$defs/ClaimGuardDecision" }
+            "eventType": {
+              "type": "string",
+              "const": "ClaimGuardDecided"
+            },
+            "decision": {
+              "$ref": "claim.schema.json#/$defs/ClaimGuardDecision"
+            }
           }
         },
         {
           "title": "HumanApprovalRequestedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "request"],
+          "required": [
+            "eventType",
+            "request"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "HumanApprovalRequested" },
-            "request": { "$ref": "common.schema.json#/$defs/HumanApprovalRequest" }
+            "eventType": {
+              "type": "string",
+              "const": "HumanApprovalRequested"
+            },
+            "request": {
+              "$ref": "common.schema.json#/$defs/HumanApprovalRequest"
+            }
           }
         },
         {
           "title": "HumanApprovalDecidedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "decision"],
+          "required": [
+            "eventType",
+            "decision"
+          ],
           "properties": {
-            "eventType": { "type": "string", "const": "HumanApprovalDecided" },
-            "decision": { "$ref": "common.schema.json#/$defs/HumanApprovalDecision" }
+            "eventType": {
+              "type": "string",
+              "const": "HumanApprovalDecided"
+            },
+            "decision": {
+              "$ref": "common.schema.json#/$defs/HumanApprovalDecision"
+            }
+          }
+        },
+        {
+          "title": "HumanApprovalConsumedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "consumption"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "HumanApprovalConsumed"
+            },
+            "consumption": {
+              "$ref": "common.schema.json#/$defs/HumanApprovalConsumption"
+            }
+          }
+        },
+        {
+          "title": "ArtifactPromotionPreparedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "promotion"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "ArtifactPromotionPrepared"
+            },
+            "promotion": {
+              "$ref": "upgrade.schema.json#/$defs/ArtifactPromotionState"
+            }
+          }
+        },
+        {
+          "title": "ArtifactPromotionAuthorizedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "promotionId",
+            "verificationId",
+            "evidenceId",
+            "contentDigest",
+            "destinationPath",
+            "authorizedBy",
+            "authorizedAt"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "ArtifactPromotionAuthorized"
+            },
+            "promotionId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "verificationId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "evidenceId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "contentDigest": {
+              "$ref": "common.schema.json#/$defs/Digest"
+            },
+            "destinationPath": {
+              "$ref": "upgrade.schema.json#/$defs/UpgradeAbsolutePath"
+            },
+            "authorizedBy": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "authorizedAt": {
+              "$ref": "common.schema.json#/$defs/Timestamp"
+            }
+          }
+        },
+        {
+          "title": "ArtifactPromotionAdoptedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "promotionId",
+            "receipt",
+            "adoptedAt"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "ArtifactPromotionAdopted"
+            },
+            "promotionId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "receipt": {
+              "$ref": "upgrade.schema.json#/$defs/ArtifactAdoptionReceipt"
+            },
+            "adoptedAt": {
+              "$ref": "common.schema.json#/$defs/Timestamp"
+            }
+          }
+        },
+        {
+          "title": "ArtifactPromotionDiscardedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "promotionId",
+            "reason",
+            "discardedAt"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "ArtifactPromotionDiscarded"
+            },
+            "promotionId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "reason": {
+              "type": "string",
+              "maxLength": 2048
+            },
+            "discardedAt": {
+              "$ref": "common.schema.json#/$defs/Timestamp"
+            }
+          }
+        },
+        {
+          "title": "CohortCreatedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "snapshot"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "CohortCreated"
+            },
+            "snapshot": {
+              "$ref": "upgrade.schema.json#/$defs/CohortSnapshot"
+            }
+          }
+        },
+        {
+          "title": "CohortSnapshotPersistedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "snapshot"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "CohortSnapshotPersisted"
+            },
+            "snapshot": {
+              "$ref": "upgrade.schema.json#/$defs/CohortSnapshot"
+            }
+          }
+        },
+        {
+          "title": "CohortSteeredPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "cohortId",
+            "steer"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "CohortSteered"
+            },
+            "cohortId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "steer": {
+              "$ref": "upgrade.schema.json#/$defs/CohortSteer"
+            }
+          }
+        },
+        {
+          "title": "ReplayForkCreatedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "fork"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "ReplayForkCreated"
+            },
+            "fork": {
+              "$ref": "replay.schema.json#/$defs/ReplayForkState"
+            }
           }
         }
       ]
@@ -276,28 +705,107 @@
       "description": "Authoritative durable event. Only the CAPT runtime constructs this (ADR-0110).",
       "type": "object",
       "additionalProperties": false,
-      "x-cross-field-equal": [["eventType", "payload.eventType"]],
-      "required": ["schemaVersion", "eventId", "streamId", "streamVersion", "globalSequence", "eventType", "occurredAt", "actor", "correlationId", "payload", "payloadDigest"],
+      "x-cross-field-equal": [
+        [
+          "eventType",
+          "payload.eventType"
+        ]
+      ],
+      "required": [
+        "schemaVersion",
+        "eventId",
+        "streamId",
+        "streamVersion",
+        "globalSequence",
+        "eventType",
+        "occurredAt",
+        "actor",
+        "correlationId",
+        "payload",
+        "payloadDigest"
+      ],
       "properties": {
-        "schemaVersion": { "$ref": "common.schema.json#/$defs/SchemaVersion" },
-        "eventId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "streamId": { "$ref": "common.schema.json#/$defs/StreamId" },
-        "streamVersion": { "$ref": "common.schema.json#/$defs/SequenceNumber" },
-        "globalSequence": { "$ref": "common.schema.json#/$defs/SequenceNumber" },
-        "eventType": { "$ref": "event.schema.json#/$defs/EventType" },
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "eventId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "streamId": {
+          "$ref": "common.schema.json#/$defs/StreamId"
+        },
+        "streamVersion": {
+          "$ref": "common.schema.json#/$defs/SequenceNumber"
+        },
+        "globalSequence": {
+          "$ref": "common.schema.json#/$defs/SequenceNumber"
+        },
+        "eventType": {
+          "$ref": "event.schema.json#/$defs/EventType"
+        },
         "occurredAt": {
           "description": "Descriptive only. Never used for ordering (ADR-0106).",
           "$ref": "common.schema.json#/$defs/Timestamp"
         },
-        "actor": { "$ref": "common.schema.json#/$defs/ActorRef" },
-        "missionId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }] },
-        "taskId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }] },
-        "claimId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }] },
-        "correlationId": { "$ref": "common.schema.json#/$defs/Identifier" },
-        "causationId": { "oneOf": [{ "$ref": "common.schema.json#/$defs/Identifier" }, { "type": "null" }] },
-        "payload": { "$ref": "event.schema.json#/$defs/EventPayload" },
-        "payloadDigest": { "$ref": "common.schema.json#/$defs/Digest" },
-        "extensions": { "type": "array", "maxItems": 8, "items": { "$ref": "common.schema.json#/$defs/ExtensionEnvelope" } }
+        "actor": {
+          "$ref": "common.schema.json#/$defs/ActorRef"
+        },
+        "missionId": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "taskId": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "claimId": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "correlationId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "causationId": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "payload": {
+          "$ref": "event.schema.json#/$defs/EventPayload"
+        },
+        "payloadDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "extensions": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "common.schema.json#/$defs/ExtensionEnvelope"
+          }
+        }
       }
     }
   }

@@ -16,6 +16,8 @@
     "verification.schema.json",
     "claim.schema.json",
     "driver.schema.json",
+    "upgrade.schema.json",
+    "replay.schema.json",
     "event.schema.json",
     "checkpoint.schema.json"
   ]

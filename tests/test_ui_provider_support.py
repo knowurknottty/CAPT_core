@@ -9,6 +9,8 @@ that secrets are never persisted or leaked.
 import os
 import sys
 import tempfile
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
@@ -43,14 +45,17 @@ def _p(**kw) -> Provider:
 # -------------------------------------------------------- registered vs supported
 def test_registered_only_does_not_imply_supported():
     for cap in CAPABILITY_MATRIX:
-        assert cap.registered is True
-        # not every registered provider claims model execution
+        if cap.id == "mlx":
+            assert cap.registered is False
+        else:
+            assert cap.registered is True
         if cap.id in ("mlx", "hermes"):
             assert cap.model_execution is False
 
 
 def test_support_level_defaults_to_registered_only():
-    assert level_of("mlx") == "REGISTERED_ONLY"
+    assert capability_for("mlx").registered is False
+    assert level_of("mlx") == "UNREGISTERED"
     assert level_of("hermes") == "REGISTERED_ONLY"
 
 
@@ -105,6 +110,29 @@ def test_missing_api_key_openrouter_auth_failure():
     assert res["health"] in (ProviderHealth.RED.value, ProviderHealth.YELLOW.value)
 
 
+
+def test_openrouter_auth_failure_is_classified_without_cloud_call():
+    class Deny(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            self.send_response(401)
+            self.end_headers()
+        def log_message(self, format, *args):  # noqa: N802,A002
+            return
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Deny)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        p = _p(id="openrouter", transport="openai_compatible",
+               base_url="http://127.0.0.1:%d/v1" % server.server_port)
+        result = adapter_for("openai_compatible").health(p, api_key="")
+        assert result == {"health": ProviderHealth.RED.value, "reachable": True,
+                          "authenticated": False, "model_list_ok": False,
+                          "latency_ms": result["latency_ms"]}
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_execution_not_supported_honest():
     p = _p(transport="openai_compatible")
     with pytest.raises(NotImplementedError):
@@ -157,6 +185,21 @@ def test_delete_provider_no_secret_leak():
         assert "env:CAPT_TEST_DEL" in raw  # reference only
     finally:
         del os.environ["CAPT_TEST_DEL"]
+
+
+
+def test_provider_rejects_raw_secret_and_unsafe_endpoint_without_persisting(tmp_path):
+    cfg = tmp_path / "ui"
+    pm = ProviderManager(cfg)
+    with pytest.raises(ValueError, match="key_ref"):
+        pm.update("openrouter", {"key_ref": "synthetic-raw-secret"})
+    with pytest.raises(ValueError, match="base_url"):
+        pm.update("openrouter", {"base_url": "ftp://example.invalid/v1"})
+    with pytest.raises(ValueError, match="credentials"):
+        pm.update("openrouter", {"base_url": "https://user:pass@example.invalid/v1"})
+    raw = (cfg / "providers.json").read_text() if (cfg / "providers.json").exists() else ""
+    assert "synthetic-raw-secret" not in raw
+    assert "user:pass" not in raw
 
 
 def test_provider_persistence_stores_reference_not_token():

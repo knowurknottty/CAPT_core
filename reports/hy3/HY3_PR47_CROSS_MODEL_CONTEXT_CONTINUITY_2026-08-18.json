@@ -1,0 +1,89 @@
+{
+  "authorityBoundary": "awaiting_verification: no automatic ClaimGuard/verification/task-success; task left awaiting_verification per runtime.",
+  "checkpoint": {
+    "checkpointId": null,
+    "digest": null,
+    "ledgerHead": 33,
+    "manifestDigest": null,
+    "version": null
+  },
+  "classification": "CROSS_MODEL_PROCESS_CONTINUITY_VERIFIED",
+  "contextEmptyBeforeModelA": true,
+  "continuationSelected": {
+    "contextPackDigest": "sha256:f06af373e7b44c7688c9cf839e8c922f6af032ea8f0d140343517b3139cdbaf6",
+    "markerInSelected": true,
+    "provenanceSources": [
+      "prior_driverrun_evidence"
+    ],
+    "recordCount": 1,
+    "records": [
+      {
+        "artifactPath": "<gate-run>/state/staging/dr-model-2a60d83c1ea22993f31385ef/provider-analysis-dr-model-2a60d83c1ea22993f31385ef.md",
+        "content": "MK-A-7f8a196a",
+        "driverRunId": "dr-model-2a60d83c1ea22993f31385ef",
+        "kind": "prior_model_evidence",
+        "marker": "MK-A-7f8a196a",
+        "missionId": "m-model-2a60d83c1ea22993f31385ef",
+        "provenance": {
+          "claimId": "cl-model-cmd-1014cc956b9246ea",
+          "driverRunId": "dr-model-2a60d83c1ea22993f31385ef",
+          "source": "prior_driverrun_evidence"
+        },
+        "recordId": "cont-dr-model-2a60d83c1ea22993f31385ef",
+        "taskId": "m-model-2a60d83c1ea22993f31385ef-task-1",
+        "trust": "unverified"
+      }
+    ],
+    "trustLabels": [
+      "unverified"
+    ]
+  },
+  "continuityMarker": "MK-A-7f8a196a",
+  "eventDelta": 21,
+  "manualMarkerInjection": false,
+  "modelA": {
+    "driverRunId": "dr-model-2a60d83c1ea22993f31385ef",
+    "markerInArtifact": true,
+    "missionId": "m-model-2a60d83c1ea22993f31385ef",
+    "model": "qwen3.5-defiant-fable:latest",
+    "provider": "ollama",
+    "taskId": "m-model-2a60d83c1ea22993f31385ef-task-1"
+  },
+  "modelARedispatch": false,
+  "modelApid": 11409,
+  "modelB": {
+    "driverRunId": "dr-model-b8d7d40bc843c3ff98aa58a2",
+    "missionId": "m-model-2a60d83c1ea22993f31385ef",
+    "model": "qwen3.6-fable-fusion:latest",
+    "nonceBInArtifact": false,
+    "preparedPromptContainsMarker": true,
+    "preparedPromptContainsUnverifiedLabel": true,
+    "provider": "ollama",
+    "receivedContinuationMarker": true,
+    "sameMissionLineage": true,
+    "taskId": "m-model-2a60d83c1ea22993f31385ef-task-1",
+    "trustPreservedUnverified": true
+  },
+  "modelBDispatchCount": 1,
+  "modelBpid": 11413,
+  "negativeControl": {
+    "markerKnown": false,
+    "separateLedger": true
+  },
+  "newPid": 11413,
+  "nonceA": "7f8a196a",
+  "nonceB": "a47e260d",
+  "oldProcessDead": true,
+  "postModelBEventHead": 54,
+  "postRestartBeforeModelBEventHead": 34,
+  "preShutdownEventHead": 33,
+  "replayModelA": {
+    "classification": "internal_failure",
+    "status": "rejected"
+  },
+  "sdistSha256": "49dc1a4089bbda3e204960440c2dd2e1f34ca460b92b94a26f4b35110807d202",
+  "socketClosed": true,
+  "sourceHead": "e6c3b359035c525e2700b9fa85cdba68cf5714b8",
+  "unverifiedEvidenceLabelPreserved": true,
+  "wheelSha256": "c1a7ce900d1302345bac31793ac1b8088998bea1786fdbbb38aaa4de22b844b5"
+}

@@ -37,9 +37,9 @@ capt-ui dashboard
 
 The merged TUI exposes runtime, mission, memory/context, provider/model, approvals, evidence, and logs. Governed approve/deny/checkpoint/resume/cancel actions route through the shared operator/runtime boundary.
 
-### Active cockpit upgrade
+### Terminal convergence cockpit
 
-PR #47 adds an integrated run surface with:
+PR #117 reconciles the formerly stacked cockpit/provider work into an integrated run surface with:
 
 - provider/model choice;
 - response modes `MAX`, `SPOCK`, `CAVE CAPT`, `MIN`;
@@ -48,7 +48,7 @@ PR #47 adds an integrated run surface with:
 - explicit human review/approval when required;
 - requested/effective context and prompt-assembly provenance.
 
-Until that stack merges and receives terminal acceptance evidence, treat it as active integration work rather than a released feature.
+The convergence candidate has terminal source/integration acceptance, but it remains distinct from protected `main` and release authorization until the Security Closure Cockpit gate is satisfied.
 
 ## Governed execution model
 
@@ -69,7 +69,7 @@ A driver returning successfully is not itself task completion.
 
 ## Provider execution boundary
 
-Merged `main` supports provider registration/health/model-list foundations. The active PR #47 lineage adds a bounded ProviderDriver for Ollama native generation and OpenAI-compatible chat-completions transport.
+Protected `main` supports provider registration/health/model-list foundations. Terminal PR #117 integrates bounded Ollama and local/authenticated OpenAI-compatible execution; PR #118 fixes coherent global/session provider-model selection on that line.
 
 Its controlled HTTP tests validate protocol shape, provenance/digests, cancellation truthfulness, reconciliation, and secret exclusion. Live-provider exact-head installed-runtime acceptance remains a separate gate.
 

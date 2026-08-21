@@ -1,0 +1,198 @@
+{
+  "fixtureSetVersion": "1.0.0",
+  "description": "Governed upgrade event contract parity fixtures.",
+  "cases": [
+    {
+      "id": "artifact-promotion-prepared-event-valid",
+      "type": "EventEnvelope",
+      "expectValid": true,
+      "value": {
+        "schemaVersion": "1.0.0",
+        "eventId": "ev-promote-prepared",
+        "streamId": "artifact_promotion-p-1",
+        "streamVersion": 1,
+        "globalSequence": 1,
+        "eventType": "ArtifactPromotionPrepared",
+        "occurredAt": "2026-08-18T00:00:00Z",
+        "actor": {
+          "actorId": "exec",
+          "kind": "execution_plane"
+        },
+        "missionId": null,
+        "taskId": null,
+        "claimId": null,
+        "correlationId": "corr-promote",
+        "causationId": null,
+        "payload": {
+          "eventType": "ArtifactPromotionPrepared",
+          "promotion": {
+            "promotionId": "p-1",
+            "candidateId": "cand-1",
+            "workspaceId": "ws-1",
+            "sourcePath": "/tmp/staged.bin",
+            "destinationPath": "/tmp/canonical.bin",
+            "contentDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "claimId": "cl-1",
+            "verificationId": "ver-1",
+            "evidenceId": "ev-1",
+            "preparedAt": "2026-08-18T00:00:00Z",
+            "authorizedAt": null,
+            "authorizedBy": null,
+            "adoptedAt": null,
+            "discardedAt": null,
+            "discardReason": null,
+            "adoptionReceipt": null,
+            "state": "prepared"
+          }
+        },
+        "payloadDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "extensions": []
+      }
+    },
+    {
+      "id": "cohort-created-event-valid",
+      "type": "EventEnvelope",
+      "expectValid": true,
+      "value": {
+        "schemaVersion": "1.0.0",
+        "eventId": "ev-cohort-created",
+        "streamId": "cohort-coh-1",
+        "streamVersion": 1,
+        "globalSequence": 2,
+        "eventType": "CohortCreated",
+        "occurredAt": "2026-08-18T00:00:01Z",
+        "actor": {
+          "actorId": "capt-runtime",
+          "kind": "system"
+        },
+        "missionId": "m-1",
+        "taskId": "t-1",
+        "claimId": null,
+        "correlationId": "corr-cohort",
+        "causationId": null,
+        "payload": {
+          "eventType": "CohortCreated",
+          "snapshot": {
+            "cohortId": "coh-1",
+            "missionId": "m-1",
+            "taskId": "t-1",
+            "epoch": 0,
+            "rounds": 0,
+            "roundCap": 3,
+            "participantCap": 4,
+            "required": [
+              "planner"
+            ],
+            "roster": [
+              "planner"
+            ],
+            "participantCursors": {
+              "planner": 10
+            },
+            "contributions": [
+              {
+                "contributionId": "c-1",
+                "participant": "planner",
+                "epoch": 0,
+                "round": 0,
+                "outcome": "PASS",
+                "cursor": 10,
+                "sourceSequences": [
+                  9,
+                  10
+                ],
+                "material": false,
+                "escalation": null
+              }
+            ],
+            "stoppingReason": "SILENCE_QUORUM",
+            "evidenceIds": [],
+            "latestSteer": null
+          }
+        },
+        "payloadDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "extensions": []
+      }
+    },
+    {
+      "id": "cohort-steered-event-valid",
+      "type": "EventEnvelope",
+      "expectValid": true,
+      "value": {
+        "schemaVersion": "1.0.0",
+        "eventId": "ev-cohort-steered",
+        "streamId": "cohort-coh-1",
+        "streamVersion": 2,
+        "globalSequence": 3,
+        "eventType": "CohortSteered",
+        "occurredAt": "2026-08-18T00:00:02Z",
+        "actor": {
+          "actorId": "captain",
+          "kind": "human"
+        },
+        "missionId": "m-1",
+        "taskId": "t-1",
+        "claimId": null,
+        "correlationId": "corr-steer",
+        "causationId": null,
+        "payload": {
+          "eventType": "CohortSteered",
+          "cohortId": "coh-1",
+          "steer": {
+            "directive": "Inspect alternate evidence before continuing.",
+            "reason": "operator steering",
+            "steeredBy": "captain",
+            "steeredAt": "2026-08-18T00:00:02Z",
+            "epoch": 1
+          }
+        },
+        "payloadDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "extensions": []
+      }
+    },
+    {
+      "id": "replay-fork-created-event-valid",
+      "type": "EventEnvelope",
+      "expectValid": true,
+      "value": {
+        "schemaVersion": "1.0.0",
+        "eventId": "ev-replay-fork-created",
+        "streamId": "replay_fork-fork-parity",
+        "streamVersion": 1,
+        "globalSequence": 4,
+        "eventType": "ReplayForkCreated",
+        "occurredAt": "2026-08-18T07:42:00Z",
+        "actor": {
+          "actorId": "captain",
+          "kind": "human"
+        },
+        "missionId": "m-fork-parity",
+        "taskId": null,
+        "claimId": null,
+        "correlationId": "corr-replay-fork-parity",
+        "causationId": null,
+        "payload": {
+          "eventType": "ReplayForkCreated",
+          "fork": {
+            "forkId": "fork-parity",
+            "sourceSequence": 3,
+            "sourceEventId": "ev-cohort-steered",
+            "sourceStateDigest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+            "newMissionId": "m-fork-parity",
+            "reason": "parity fixture alternate continuation",
+            "createdBy": {
+              "actorId": "captain",
+              "kind": "human"
+            },
+            "createdAt": "2026-08-18T07:42:00Z",
+            "historicalAuthorityReactivated": false,
+            "state": "created",
+            "sourceChainDigest": "sha256:7777777777777777777777777777777777777777777777777777777777777777"
+          }
+        },
+        "payloadDigest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "extensions": []
+      }
+    }
+  ]
+}

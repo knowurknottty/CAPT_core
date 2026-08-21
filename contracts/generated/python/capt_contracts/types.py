@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:5d2cc89384b3e0c78f2b03f6d1865ca842ad4037266254c251f4b1086ae2da74
+# source digest:  sha256:9bd7748ad72f8dcf9237db796a1e54a2778334c97bce1e40bbd6b727cf2287df
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -275,6 +275,10 @@ class CheckpointManifest(object):
     runtimeVersion: str
     schemaVersion: SchemaVersion
     taskVersions: List[StreamVersionEntry]
+    artifactPromotionVersions: List[StreamVersionEntry] = field(default_factory=list)
+    cohortVersions: List[StreamVersionEntry] = field(default_factory=list)
+    humanApprovalVersions: List[StreamVersionEntry] = field(default_factory=list)
+    replayForkVersions: List[StreamVersionEntry] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -590,6 +594,22 @@ class ExtensionEnvelope(object):
 
 
 @dataclass(frozen=True)
+class HumanApprovalConsumption(object):
+    """Durable one-use admission of a previously approved model execution."""
+
+    consumedAt: Timestamp
+    driverRunId: Identifier
+    missionId: Identifier
+    operation: str
+    promptAssemblyDigest: Digest
+    requestId: Identifier
+    resource: str
+    schemaVersion: SchemaVersion
+    taskId: Identifier
+    useId: Identifier
+
+
+@dataclass(frozen=True)
 class HumanApprovalDecision(object):
     """Operator decision on a HumanApprovalRequest. 'approve' permits only the originally requested scope; 'deny' must prevent execution. Idempotent by idempotencyKey. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001)."""
 
@@ -622,6 +642,7 @@ class HumanApprovalRequest(object):
     schemaVersion: SchemaVersion
     scope: Dict[str, Any]
     taskId: Identifier
+    promptAssemblyDigest: Optional[str] = None
     remainingUses: Optional[int] = None
 
 
@@ -1297,6 +1318,48 @@ class RequiredReceipt(object):
 
 
 @dataclass(frozen=True)
+class ArtifactPromotionAdoptedPayload(object):
+    """ArtifactPromotionAdoptedPayload"""
+
+    adoptedAt: Timestamp
+    eventType: Literal["ArtifactPromotionAdopted"]
+    promotionId: Identifier
+    receipt: ArtifactAdoptionReceipt
+
+
+@dataclass(frozen=True)
+class ArtifactPromotionAuthorizedPayload(object):
+    """ArtifactPromotionAuthorizedPayload"""
+
+    authorizedAt: Timestamp
+    authorizedBy: Identifier
+    contentDigest: Digest
+    destinationPath: UpgradeAbsolutePath
+    eventType: Literal["ArtifactPromotionAuthorized"]
+    evidenceId: Identifier
+    promotionId: Identifier
+    verificationId: Identifier
+
+
+@dataclass(frozen=True)
+class ArtifactPromotionDiscardedPayload(object):
+    """ArtifactPromotionDiscardedPayload"""
+
+    discardedAt: Timestamp
+    eventType: Literal["ArtifactPromotionDiscarded"]
+    promotionId: Identifier
+    reason: str
+
+
+@dataclass(frozen=True)
+class ArtifactPromotionPreparedPayload(object):
+    """ArtifactPromotionPreparedPayload"""
+
+    eventType: Literal["ArtifactPromotionPrepared"]
+    promotion: ArtifactPromotionState
+
+
+@dataclass(frozen=True)
 class CapabilityGrantRevokedPayload(object):
     """CapabilityGrantRevokedPayload"""
 
@@ -1378,6 +1441,31 @@ class ClaimVerifiedPayload(object):
 
 
 @dataclass(frozen=True)
+class CohortCreatedPayload(object):
+    """CohortCreatedPayload"""
+
+    eventType: Literal["CohortCreated"]
+    snapshot: CohortSnapshot
+
+
+@dataclass(frozen=True)
+class CohortSnapshotPersistedPayload(object):
+    """CohortSnapshotPersistedPayload"""
+
+    eventType: Literal["CohortSnapshotPersisted"]
+    snapshot: CohortSnapshot
+
+
+@dataclass(frozen=True)
+class CohortSteeredPayload(object):
+    """CohortSteeredPayload"""
+
+    cohortId: Identifier
+    eventType: Literal["CohortSteered"]
+    steer: CohortSteer
+
+
+@dataclass(frozen=True)
 class DriverRunCreatedPayload(object):
     """DriverRunCreatedPayload"""
 
@@ -1423,6 +1511,14 @@ class EvidenceRecordedPayload(object):
 
     eventType: Literal["EvidenceRecorded"]
     evidence: EvidenceRecord
+
+
+@dataclass(frozen=True)
+class HumanApprovalConsumedPayload(object):
+    """HumanApprovalConsumedPayload"""
+
+    consumption: HumanApprovalConsumption
+    eventType: Literal["HumanApprovalConsumed"]
 
 
 @dataclass(frozen=True)
@@ -1477,6 +1573,14 @@ class PolicyEvaluatedPayload(object):
 
 
 @dataclass(frozen=True)
+class ReplayForkCreatedPayload(object):
+    """ReplayForkCreatedPayload"""
+
+    eventType: Literal["ReplayForkCreated"]
+    fork: ReplayForkState
+
+
+@dataclass(frozen=True)
 class TaskCreatedPayload(object):
     """TaskCreatedPayload"""
 
@@ -1506,7 +1610,7 @@ class TaskTransitionedPayload(object):
 
 
 # discriminated on 'eventType'
-EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload]
+EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, ReplayForkCreatedPayload]
 
 
 class EventType(str, Enum):
@@ -1534,6 +1638,15 @@ class EventType(str, Enum):
     CLAIMGUARDDECIDED = "ClaimGuardDecided"
     HUMANAPPROVALREQUESTED = "HumanApprovalRequested"
     HUMANAPPROVALDECIDED = "HumanApprovalDecided"
+    HUMANAPPROVALCONSUMED = "HumanApprovalConsumed"
+    ARTIFACTPROMOTIONPREPARED = "ArtifactPromotionPrepared"
+    ARTIFACTPROMOTIONAUTHORIZED = "ArtifactPromotionAuthorized"
+    ARTIFACTPROMOTIONADOPTED = "ArtifactPromotionAdopted"
+    ARTIFACTPROMOTIONDISCARDED = "ArtifactPromotionDiscarded"
+    COHORTCREATED = "CohortCreated"
+    COHORTSNAPSHOTPERSISTED = "CohortSnapshotPersisted"
+    COHORTSTEERED = "CohortSteered"
+    REPLAYFORKCREATED = "ReplayForkCreated"
 
 
 @dataclass(frozen=True)
@@ -1764,6 +1877,34 @@ class PolicyEffect(str, Enum):
     ESCALATE = "escalate"
 
 
+@dataclass(frozen=True)
+class ReplayForkIntent(object):
+    """High-level human request to create a new draft mission bound to an exact historical replay position. RuntimeService builds the MissionSpec; transport/UI may not fabricate aggregate state."""
+
+    forkId: Identifier
+    missionIntent: OperatorMissionIntent
+    reason: str
+    schemaVersion: SchemaVersion
+    sourceSequence: int
+
+
+@dataclass(frozen=True)
+class ReplayForkState(object):
+    """Durable provenance binding for a new governed continuation. Historical authority is never reactivated by this record."""
+
+    createdAt: Timestamp
+    createdBy: ActorRef
+    forkId: Identifier
+    historicalAuthorityReactivated: bool
+    newMissionId: Identifier
+    reason: str
+    sourceChainDigest: Digest
+    sourceEventId: Optional[str]
+    sourceSequence: int
+    sourceStateDigest: Digest
+    state: Literal["created"]
+
+
 class DependencyCondition(str, Enum):
     """Spec 8: 'parallel' is NOT an edge type. Parallelism emerges when predecessor conditions are simultaneously satisfied."""
 
@@ -1914,6 +2055,122 @@ class ToolResultStatus(str, Enum):
     FAILED = "failed"
     INDETERMINATE = "indeterminate"
     DENIED = "denied"
+
+
+@dataclass(frozen=True)
+class ArtifactAdoptionReceipt(object):
+    """Mechanical receipt from an already-authorized artifact adoption step; not authorization itself."""
+
+    atomicReplace: bool
+    contentDigest: Digest
+    destinationPath: UpgradeAbsolutePath
+    operation: str
+
+
+@dataclass(frozen=True)
+class ArtifactPromotionState(object):
+    """Authoritative source/destination/digest-bound promotion transaction. ClaimGuard does not own this state machine."""
+
+    adoptedAt: Optional[Timestamp]
+    adoptionReceipt: Optional[ArtifactAdoptionReceipt]
+    authorizedAt: Optional[Timestamp]
+    authorizedBy: Optional[Identifier]
+    candidateId: Identifier
+    claimId: Identifier
+    contentDigest: Digest
+    destinationPath: UpgradeAbsolutePath
+    discardReason: Optional[str]
+    discardedAt: Optional[Timestamp]
+    evidenceId: Identifier
+    preparedAt: Timestamp
+    promotionId: Identifier
+    sourcePath: UpgradeAbsolutePath
+    state: str
+    verificationId: Identifier
+    workspaceId: Identifier
+
+
+@dataclass(frozen=True)
+class CohortContribution(object):
+    """Durable structured contribution identity/outcome; raw model token streams are not authoritative Cohort state."""
+
+    contributionId: Identifier
+    cursor: int
+    epoch: int
+    escalation: Optional[CohortEscalationCategory]
+    material: bool
+    outcome: CohortContributionOutcome
+    participant: Identifier
+    round: int
+    sourceSequences: List[int]
+
+
+class CohortContributionOutcome(str, Enum):
+    """CohortContributionOutcome"""
+
+    CONTRIBUTE = "CONTRIBUTE"
+    PASS = "PASS"
+    DISSENT = "DISSENT"
+    ESCALATE = "ESCALATE"
+    REQUEST_EVIDENCE = "REQUEST_EVIDENCE"
+    FAILED = "FAILED"
+    UNAVAILABLE = "UNAVAILABLE"
+    TIMED_OUT = "TIMED_OUT"
+    INDETERMINATE = "INDETERMINATE"
+
+
+class CohortEscalationCategory(str, Enum):
+    """CohortEscalationCategory"""
+
+    AUTHORITY_REQUIRED = "AUTHORITY_REQUIRED"
+    VALUE_JUDGMENT = "VALUE_JUDGMENT"
+    AMBIGUOUS_INTENT = "AMBIGUOUS_INTENT"
+    MISSING_EVIDENCE = "MISSING_EVIDENCE"
+    IRREVERSIBLE_ACTION = "IRREVERSIBLE_ACTION"
+    COST_APPROVAL = "COST_APPROVAL"
+    CONFLICT_RESOLUTION = "CONFLICT_RESOLUTION"
+    SAFETY_BOUNDARY = "SAFETY_BOUNDARY"
+
+
+@dataclass(frozen=True)
+class CohortSnapshot(object):
+    """Authoritative bounded Cohort reconstruction state. Aggregate invariants additionally enforce cursor monotonicity, immutable bindings, and contribution retention."""
+
+    cohortId: Identifier
+    contributions: List[CohortContribution]
+    epoch: int
+    evidenceIds: List[Identifier]
+    latestSteer: Optional[CohortSteer]
+    missionId: Identifier
+    participantCap: int
+    participantCursors: Dict[str, Any]
+    required: List[Identifier]
+    roster: List[Identifier]
+    roundCap: int
+    rounds: int
+    stoppingReason: Optional[CohortStoppingReason]
+    taskId: Identifier
+
+
+@dataclass(frozen=True)
+class CohortSteer(object):
+    """Durable human steering directive. It changes deliberation epoch but grants no capability."""
+
+    directive: str
+    epoch: int
+    reason: str
+    steeredAt: Timestamp
+    steeredBy: Identifier
+
+
+class CohortStoppingReason(str, Enum):
+    """CohortStoppingReason"""
+
+    SILENCE_QUORUM = "SILENCE_QUORUM"
+    BOUNDED_INCOMPLETE = "BOUNDED_INCOMPLETE"
+
+
+UpgradeAbsolutePath = str
 
 
 @dataclass(frozen=True)

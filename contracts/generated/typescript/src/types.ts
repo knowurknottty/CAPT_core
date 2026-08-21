@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:5d2cc89384b3e0c78f2b03f6d1865ca842ad4037266254c251f4b1086ae2da74
+// source digest:  sha256:9bd7748ad72f8dcf9237db796a1e54a2778334c97bce1e40bbd6b727cf2287df
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -234,6 +234,10 @@ export interface CheckpointManifest {
   readonly runtimeVersion: string;
   readonly schemaVersion: SchemaVersion;
   readonly taskVersions: readonly StreamVersionEntry[];
+  readonly artifactPromotionVersions?: readonly StreamVersionEntry[];
+  readonly cohortVersions?: readonly StreamVersionEntry[];
+  readonly humanApprovalVersions?: readonly StreamVersionEntry[];
+  readonly replayForkVersions?: readonly StreamVersionEntry[];
 }
 
 /** CleanRecoveryState */
@@ -509,6 +513,20 @@ export interface ExtensionEnvelope {
   readonly payloadJson: string;
 }
 
+/** Durable one-use admission of a previously approved model execution. */
+export interface HumanApprovalConsumption {
+  readonly consumedAt: Timestamp;
+  readonly driverRunId: Identifier;
+  readonly missionId: Identifier;
+  readonly operation: string;
+  readonly promptAssemblyDigest: Digest;
+  readonly requestId: Identifier;
+  readonly resource: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly taskId: Identifier;
+  readonly useId: Identifier;
+}
+
 /** Operator decision on a HumanApprovalRequest. 'approve' permits only the originally requested scope; 'deny' must prevent execution. Idempotent by idempotencyKey. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001). */
 export interface HumanApprovalDecision {
   readonly correlationId: Identifier;
@@ -538,6 +556,7 @@ export interface HumanApprovalRequest {
   readonly schemaVersion: SchemaVersion;
   readonly scope: Readonly<Record<string, unknown>>;
   readonly taskId: Identifier;
+  readonly promptAssemblyDigest?: string | null;
   readonly remainingUses?: number | null;
 }
 
@@ -1114,6 +1133,40 @@ export interface RequiredReceipt {
   readonly contentDigest?: string;
 }
 
+/** ArtifactPromotionAdoptedPayload */
+export interface ArtifactPromotionAdoptedPayload {
+  readonly adoptedAt: Timestamp;
+  readonly eventType: "ArtifactPromotionAdopted";
+  readonly promotionId: Identifier;
+  readonly receipt: ArtifactAdoptionReceipt;
+}
+
+/** ArtifactPromotionAuthorizedPayload */
+export interface ArtifactPromotionAuthorizedPayload {
+  readonly authorizedAt: Timestamp;
+  readonly authorizedBy: Identifier;
+  readonly contentDigest: Digest;
+  readonly destinationPath: UpgradeAbsolutePath;
+  readonly eventType: "ArtifactPromotionAuthorized";
+  readonly evidenceId: Identifier;
+  readonly promotionId: Identifier;
+  readonly verificationId: Identifier;
+}
+
+/** ArtifactPromotionDiscardedPayload */
+export interface ArtifactPromotionDiscardedPayload {
+  readonly discardedAt: Timestamp;
+  readonly eventType: "ArtifactPromotionDiscarded";
+  readonly promotionId: Identifier;
+  readonly reason: string;
+}
+
+/** ArtifactPromotionPreparedPayload */
+export interface ArtifactPromotionPreparedPayload {
+  readonly eventType: "ArtifactPromotionPrepared";
+  readonly promotion: ArtifactPromotionState;
+}
+
 /** CapabilityGrantRevokedPayload */
 export interface CapabilityGrantRevokedPayload {
   readonly eventType: "CapabilityGrantRevoked";
@@ -1175,6 +1228,25 @@ export interface ClaimVerifiedPayload {
   readonly verification: VerificationResult;
 }
 
+/** CohortCreatedPayload */
+export interface CohortCreatedPayload {
+  readonly eventType: "CohortCreated";
+  readonly snapshot: CohortSnapshot;
+}
+
+/** CohortSnapshotPersistedPayload */
+export interface CohortSnapshotPersistedPayload {
+  readonly eventType: "CohortSnapshotPersisted";
+  readonly snapshot: CohortSnapshot;
+}
+
+/** CohortSteeredPayload */
+export interface CohortSteeredPayload {
+  readonly cohortId: Identifier;
+  readonly eventType: "CohortSteered";
+  readonly steer: CohortSteer;
+}
+
 /** DriverRunCreatedPayload */
 export interface DriverRunCreatedPayload {
   readonly driverRun: DriverRun;
@@ -1233,10 +1305,19 @@ export type EventPayload =
   | ClaimVerifiedPayload
   | ClaimGuardDecidedPayload
   | HumanApprovalRequestedPayload
-  | HumanApprovalDecidedPayload;
+  | HumanApprovalDecidedPayload
+  | HumanApprovalConsumedPayload
+  | ArtifactPromotionPreparedPayload
+  | ArtifactPromotionAuthorizedPayload
+  | ArtifactPromotionAdoptedPayload
+  | ArtifactPromotionDiscardedPayload
+  | CohortCreatedPayload
+  | CohortSnapshotPersistedPayload
+  | CohortSteeredPayload
+  | ReplayForkCreatedPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "ReplayForkCreated";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -1260,12 +1341,27 @@ export const EventTypeValues = [
   "ClaimGuardDecided",
   "HumanApprovalRequested",
   "HumanApprovalDecided",
+  "HumanApprovalConsumed",
+  "ArtifactPromotionPrepared",
+  "ArtifactPromotionAuthorized",
+  "ArtifactPromotionAdopted",
+  "ArtifactPromotionDiscarded",
+  "CohortCreated",
+  "CohortSnapshotPersisted",
+  "CohortSteered",
+  "ReplayForkCreated",
 ] as const;
 
 /** EvidenceRecordedPayload */
 export interface EvidenceRecordedPayload {
   readonly eventType: "EvidenceRecorded";
   readonly evidence: EvidenceRecord;
+}
+
+/** HumanApprovalConsumedPayload */
+export interface HumanApprovalConsumedPayload {
+  readonly consumption: HumanApprovalConsumption;
+  readonly eventType: "HumanApprovalConsumed";
 }
 
 /** HumanApprovalDecidedPayload */
@@ -1305,6 +1401,12 @@ export interface MissionStateChangedPayload {
 export interface PolicyEvaluatedPayload {
   readonly eventType: "PolicyEvaluated";
   readonly policyDecision: PolicyDecision;
+}
+
+/** ReplayForkCreatedPayload */
+export interface ReplayForkCreatedPayload {
+  readonly eventType: "ReplayForkCreated";
+  readonly fork: ReplayForkState;
 }
 
 /** TaskCreatedPayload */
@@ -1533,6 +1635,30 @@ export const PolicyEffectValues = [
   "escalate",
 ] as const;
 
+/** High-level human request to create a new draft mission bound to an exact historical replay position. RuntimeService builds the MissionSpec; transport/UI may not fabricate aggregate state. */
+export interface ReplayForkIntent {
+  readonly forkId: Identifier;
+  readonly missionIntent: OperatorMissionIntent;
+  readonly reason: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly sourceSequence: number;
+}
+
+/** Durable provenance binding for a new governed continuation. Historical authority is never reactivated by this record. */
+export interface ReplayForkState {
+  readonly createdAt: Timestamp;
+  readonly createdBy: ActorRef;
+  readonly forkId: Identifier;
+  readonly historicalAuthorityReactivated: boolean;
+  readonly newMissionId: Identifier;
+  readonly reason: string;
+  readonly sourceChainDigest: Digest;
+  readonly sourceEventId: string | null;
+  readonly sourceSequence: number;
+  readonly sourceStateDigest: Digest;
+  readonly state: "created";
+}
+
 /** Spec 8: 'parallel' is NOT an edge type. Parallelism emerges when predecessor conditions are simultaneously satisfied. */
 export type DependencyCondition = "completed" | "succeeded" | "failed" | "verified" | "approved";
 export const DependencyConditionValues = [
@@ -1670,6 +1796,112 @@ export const ToolResultStatusValues = [
   "indeterminate",
   "denied",
 ] as const;
+
+/** Mechanical receipt from an already-authorized artifact adoption step; not authorization itself. */
+export interface ArtifactAdoptionReceipt {
+  readonly atomicReplace: boolean;
+  readonly contentDigest: Digest;
+  readonly destinationPath: UpgradeAbsolutePath;
+  readonly operation: string;
+}
+
+/** Authoritative source/destination/digest-bound promotion transaction. ClaimGuard does not own this state machine. */
+export interface ArtifactPromotionState {
+  readonly adoptedAt: Timestamp | null;
+  readonly adoptionReceipt: ArtifactAdoptionReceipt | null;
+  readonly authorizedAt: Timestamp | null;
+  readonly authorizedBy: Identifier | null;
+  readonly candidateId: Identifier;
+  readonly claimId: Identifier;
+  readonly contentDigest: Digest;
+  readonly destinationPath: UpgradeAbsolutePath;
+  readonly discardReason: string | null;
+  readonly discardedAt: Timestamp | null;
+  readonly evidenceId: Identifier;
+  readonly preparedAt: Timestamp;
+  readonly promotionId: Identifier;
+  readonly sourcePath: UpgradeAbsolutePath;
+  readonly state: string;
+  readonly verificationId: Identifier;
+  readonly workspaceId: Identifier;
+}
+
+/** Durable structured contribution identity/outcome; raw model token streams are not authoritative Cohort state. */
+export interface CohortContribution {
+  readonly contributionId: Identifier;
+  readonly cursor: number;
+  readonly epoch: number;
+  readonly escalation: CohortEscalationCategory | null;
+  readonly material: boolean;
+  readonly outcome: CohortContributionOutcome;
+  readonly participant: Identifier;
+  readonly round: number;
+  readonly sourceSequences: readonly number[];
+}
+
+/** CohortContributionOutcome */
+export type CohortContributionOutcome = "CONTRIBUTE" | "PASS" | "DISSENT" | "ESCALATE" | "REQUEST_EVIDENCE" | "FAILED" | "UNAVAILABLE" | "TIMED_OUT" | "INDETERMINATE";
+export const CohortContributionOutcomeValues = [
+  "CONTRIBUTE",
+  "PASS",
+  "DISSENT",
+  "ESCALATE",
+  "REQUEST_EVIDENCE",
+  "FAILED",
+  "UNAVAILABLE",
+  "TIMED_OUT",
+  "INDETERMINATE",
+] as const;
+
+/** CohortEscalationCategory */
+export type CohortEscalationCategory = "AUTHORITY_REQUIRED" | "VALUE_JUDGMENT" | "AMBIGUOUS_INTENT" | "MISSING_EVIDENCE" | "IRREVERSIBLE_ACTION" | "COST_APPROVAL" | "CONFLICT_RESOLUTION" | "SAFETY_BOUNDARY";
+export const CohortEscalationCategoryValues = [
+  "AUTHORITY_REQUIRED",
+  "VALUE_JUDGMENT",
+  "AMBIGUOUS_INTENT",
+  "MISSING_EVIDENCE",
+  "IRREVERSIBLE_ACTION",
+  "COST_APPROVAL",
+  "CONFLICT_RESOLUTION",
+  "SAFETY_BOUNDARY",
+] as const;
+
+/** Authoritative bounded Cohort reconstruction state. Aggregate invariants additionally enforce cursor monotonicity, immutable bindings, and contribution retention. */
+export interface CohortSnapshot {
+  readonly cohortId: Identifier;
+  readonly contributions: readonly CohortContribution[];
+  readonly epoch: number;
+  readonly evidenceIds: readonly Identifier[];
+  readonly latestSteer: CohortSteer | null;
+  readonly missionId: Identifier;
+  readonly participantCap: number;
+  readonly participantCursors: Readonly<Record<string, unknown>>;
+  readonly required: readonly Identifier[];
+  readonly roster: readonly Identifier[];
+  readonly roundCap: number;
+  readonly rounds: number;
+  readonly stoppingReason: CohortStoppingReason | null;
+  readonly taskId: Identifier;
+}
+
+/** Durable human steering directive. It changes deliberation epoch but grants no capability. */
+export interface CohortSteer {
+  readonly directive: string;
+  readonly epoch: number;
+  readonly reason: string;
+  readonly steeredAt: Timestamp;
+  readonly steeredBy: Identifier;
+}
+
+/** CohortStoppingReason */
+export type CohortStoppingReason = "SILENCE_QUORUM" | "BOUNDED_INCOMPLETE";
+export const CohortStoppingReasonValues = [
+  "SILENCE_QUORUM",
+  "BOUNDED_INCOMPLETE",
+] as const;
+
+/** Absolute normalized path bound into a governed upgrade transaction. */
+export type UpgradeAbsolutePath = string;
 
 /** ContradictedStatus */
 export interface ContradictedStatus {

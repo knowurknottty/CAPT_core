@@ -35,6 +35,7 @@ _PERMITTED: Dict[str, FrozenSet[str]] = {
     "submit_result": frozenset({EXECUTION, SYSTEM}),
     "request_human_approval": frozenset({EXECUTION, GOVERNANCE, SYSTEM}),
     "submit_human_approval_decision": frozenset({HUMAN}),
+    "consume_human_approval": frozenset({EXECUTION, SYSTEM}),
     "cancel_task": frozenset({EXECUTION, HUMAN, SYSTEM}),
     "cancel_driver_run": frozenset({EXECUTION, HUMAN, SYSTEM}),
     "record_evidence": frozenset({VERIFICATION, EXECUTION, SYSTEM}),
@@ -42,6 +43,16 @@ _PERMITTED: Dict[str, FrozenSet[str]] = {
     "propose_claim": frozenset({COGNITION, EXECUTION, SYSTEM}),
     "decide_claim": frozenset({CLAIM_AUTHORITY}),
     "create_checkpoint": frozenset({SYSTEM}),
+    # Verification/ClaimGuard do not own filesystem adoption. A bounded
+    # promotion transaction separates preparation, human/governance
+    # authorization, and the consequential atomic filesystem step.
+    "prepare_artifact_promotion": frozenset({EXECUTION, SYSTEM}),
+    "authorize_artifact_promotion": frozenset({HUMAN, GOVERNANCE, SYSTEM}),
+    "adopt_artifact_promotion": frozenset({EXECUTION, SYSTEM}),
+    "discard_artifact_promotion": frozenset({EXECUTION, HUMAN, SYSTEM}),
+    "persist_cohort": frozenset({COGNITION, SYSTEM}),
+    "steer_cohort": frozenset({HUMAN}),
+    "create_replay_fork": frozenset({HUMAN}),
 }
 
 

@@ -20,10 +20,12 @@ from .aggregates import (
     DriverRunAggregate,
     HumanApprovalAggregate,
     MissionAggregate,
+    ReplayForkAggregate,
     TaskAggregate,
 )
 from .authority import require_authority
 from .contracts import require
+from .replay import ledger_identity_to_sequence, replay_to_sequence
 from .errors import AuthorityViolation, ConcurrencyError, IdempotencyConflict
 from .store import AppendRequest, EventStore
 
@@ -56,6 +58,101 @@ class RuntimeService(object):
             # Strictly AFTER commit returns (spec invariant 10).
             self.store.dispatch()
         return result
+
+
+    # -- historical replay fork -------------------------------------------
+
+    def create_replay_fork_from_intent(
+        self, intent: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Build a new draft MissionSpec inside RuntimeService and bind it to history."""
+        require("ReplayForkIntent", intent)
+        require("CommandMetadata", metadata)
+        require_authority("create_replay_fork", metadata["actor"]["kind"])
+        mission_intent = intent["missionIntent"]
+        if mission_intent.get("requiresApproval"):
+            raise AuthorityViolation(
+                "replay fork creation cannot auto-create approval authority"
+            )
+        mission_spec = self._build_mission_spec_from_intent(mission_intent)
+        return self.create_replay_fork(
+            str(intent["forkId"]),
+            int(intent["sourceSequence"]),
+            mission_spec,
+            str(intent["reason"]),
+            metadata,
+        )
+
+    def create_replay_fork(
+        self,
+        fork_id: str,
+        source_sequence: int,
+        new_mission_spec: Dict[str, Any],
+        reason: str,
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Create new governed history without reactivating historical authority."""
+        require("MissionSpec", new_mission_spec)
+        require("CommandMetadata", metadata)
+        require_authority("create_replay_fork", metadata["actor"]["kind"])
+
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            offered = metadata.get("operationFingerprint")
+            if offered and prior["operation_fingerprint"] != offered:
+                raise IdempotencyConflict("replay fork idempotency conflict")
+            current = self.store.require_state(ReplayForkAggregate.stream_id(fork_id))
+            return {"status": "idempotent", "fork": current, "replayed": True}
+
+        fork_stream = ReplayForkAggregate.stream_id(fork_id)
+        if self.store.aggregate_version(fork_stream) != 0:
+            raise AuthorityViolation("replay fork identity already exists")
+        mission_stream = MissionAggregate.stream_id(new_mission_spec["missionId"])
+        if self.store.aggregate_version(mission_stream) != 0:
+            raise AuthorityViolation("replay fork requires a new mission identity")
+
+        source_sequence = int(source_sequence)
+        head = self.store.head_sequence()
+        if source_sequence < 0:
+            raise AuthorityViolation("replay fork sourceSequence must be >= 0")
+        if source_sequence > head:
+            raise AuthorityViolation(
+                "replay fork sourceSequence %d exceeds ledger head %d"
+                % (source_sequence, head)
+            )
+        historical = replay_to_sequence(self.store, source_sequence)
+        source_identity = ledger_identity_to_sequence(self.store, source_sequence)
+        fork_record = ReplayForkAggregate.create(
+            {
+                "forkId": fork_id,
+                "sourceSequence": source_sequence,
+                "sourceEventId": source_identity["eventId"],
+                "sourceStateDigest": historical.digest(),
+                "sourceChainDigest": source_identity["chainDigest"],
+                "newMissionId": new_mission_spec["missionId"],
+                "reason": reason,
+                "createdBy": dict(metadata["actor"]),
+                "createdAt": metadata["issuedAt"],
+                "historicalAuthorityReactivated": False,
+            }
+        )
+        fork_event = commands.envelope(
+            event_id=metadata["commandId"] + "-fork",
+            stream_id=fork_stream,
+            event_type="ReplayForkCreated",
+            payload={"eventType": "ReplayForkCreated", "fork": fork_record},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+            mission_id=new_mission_spec["missionId"],
+        )
+        result = self._commit(
+            [
+                AppendRequest(fork_stream, ReplayForkAggregate.KIND, 0, fork_event, fork_record),
+                self._append_create_mission(new_mission_spec, metadata),
+            ],
+            metadata,
+        )
+        return {**result, "fork": fork_record}
 
     # -- mission -----------------------------------------------------------
 
@@ -271,6 +368,55 @@ class RuntimeService(object):
         result["taskId"] = task_id
         result["requestId"] = request_id
         return result
+
+    def plan_task_for_existing_mission(
+        self, intent: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Plan one new governed task under an already-durable mission.
+
+        The outer request is human-authored operator intent, but TaskCreated
+        remains authored by the cognitive plane. The existing Mission stream is
+        never recreated or rewritten by this operation.
+        """
+        require("OperatorMissionIntent", intent)
+        require("CommandMetadata", metadata)
+        if metadata.get("actor", {}).get("kind") != "human":
+            raise AuthorityViolation("EXISTING_MISSION_TASK_REQUEST_MUST_BE_HUMAN_AUTHORED")
+
+        mission_id = str(intent.get("missionId") or "").strip()
+        task_id = str(intent.get("taskId") or "").strip()
+        if not mission_id or not task_id:
+            raise AuthorityViolation("EXISTING_MISSION_OR_SUCCESSOR_TASK_ID_MISSING")
+
+        mission_stream = MissionAggregate.stream_id(mission_id)
+        mission = self.store.load_state(mission_stream)
+        if mission is None:
+            raise AuthorityViolation("EXISTING_MISSION_NOT_FOUND")
+        if mission.get("state") in ("completed", "failed", "cancelled"):
+            raise AuthorityViolation("EXISTING_MISSION_IS_TERMINAL")
+
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            offered = metadata.get("operationFingerprint")
+            if offered and prior["operation_fingerprint"] != offered:
+                raise IdempotencyConflict(
+                    "idempotency key %r reused with a different operation fingerprint"
+                    % metadata["idempotencyKey"]
+                )
+            return {"status": "idempotent", "missionId": mission_id, "taskId": task_id}
+
+        task_stream = TaskAggregate.stream_id(task_id)
+        if self.store.aggregate_version(task_stream) != 0:
+            raise AuthorityViolation("SUCCESSOR_TASK_ID_ALREADY_EXISTS")
+        task = self._build_task_from_intent(intent, task_id)
+        task_meta = self._inner_metadata(
+            metadata, "create_task", {"taskId": task_id, "missionId": mission_id},
+            "cognitive_plane", "cog-1", "task",
+        )
+        result = dict(self._commit([self._append_create_task(task, task_meta)], metadata))
+        result.update({"missionId": mission_id, "taskId": task_id})
+        return result
+
 
     def _reconstruct_mission_result(
         self, mission_id: str, metadata: Dict[str, Any]
@@ -574,7 +720,24 @@ class RuntimeService(object):
 
         stream = CapabilityAggregate.stream_id(grant_id)
         expected = self.store.aggregate_version(stream)
-        state = CapabilityAggregate.revoke(self.store.require_state(stream), revocation)
+        current = self.store.require_state(stream)
+        target_kind = revocation["targetKind"]
+        target_id = revocation["targetId"]
+        if target_kind == "grant":
+            if target_id != grant_id:
+                raise AuthorityViolation(
+                    "revocation targetId %r does not match grant %r" % (target_id, grant_id)
+                )
+        else:
+            lease = current.get("lease")
+            if lease is None:
+                raise AuthorityViolation("cannot revoke lease: grant has no active lease record")
+            if target_id != lease.get("leaseId"):
+                raise AuthorityViolation(
+                    "revocation targetId %r does not match active lease %r"
+                    % (target_id, lease.get("leaseId"))
+                )
+        state = CapabilityAggregate.revoke(current, revocation)
 
         event_type = (
             "CapabilityGrantRevoked"
@@ -671,6 +834,12 @@ class RuntimeService(object):
         require("HumanApprovalRequest", request)
         require("CommandMetadata", metadata)
         require_authority("request_human_approval", metadata["actor"]["kind"])
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            return self._commit([], metadata)
+        stream = HumanApprovalAggregate.stream_id(request["requestId"])
+        if self.store.aggregate_version(stream) != 0:
+            raise AuthorityViolation("HUMAN_APPROVAL_REQUEST_ALREADY_EXISTS")
         return self._commit(
             [self._append_request_human_approval(request, metadata)], metadata
         )
@@ -681,7 +850,7 @@ class RuntimeService(object):
         require("HumanApprovalRequest", request)
         require_authority("request_human_approval", metadata["actor"]["kind"])
         stream = HumanApprovalAggregate.stream_id(request["requestId"])
-        expected = self.store.aggregate_version(stream)
+        expected = 0
         state = HumanApprovalAggregate.create(request)
         event = commands.envelope(
             event_id=metadata["commandId"] + "-ev1",
@@ -738,6 +907,144 @@ class RuntimeService(object):
             metadata,
         )
 
+    def require_approved_prompt_assembly(
+        self, request_id: str, prompt_assembly_digest: str, operation: str
+    ) -> Dict[str, Any]:
+        """Compatibility read-check for the prompt portion of a governed approval.
+
+        Consequential model execution MUST use ``admit_approved_model_execution``
+        first.  This check remains for the existing runner's later prompt-only
+        assertion and therefore accepts the persisted full binding digest or its
+        explicitly persisted base prompt-assembly digest.
+        """
+        state = self.store.require_state(HumanApprovalAggregate.stream_id(request_id))
+        if state.get("state") not in ("approved", "consumed"):
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_NOT_APPROVED")
+        if state.get("operation") != operation:
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_OPERATION_MISMATCH")
+        binding = (state.get("scope") or {}).get("approvalBinding") or {}
+        accepted_digests = {
+            state.get("promptAssemblyDigest"),
+            binding.get("basePromptAssemblyDigest"),
+        }
+        if prompt_assembly_digest not in accepted_digests:
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_DIGEST_MISMATCH")
+        return state
+
+    def admit_approved_model_execution(
+        self,
+        request_id: str,
+        prompt_assembly_digest: str,
+        operation: str,
+        *,
+        mission_id: str,
+        task_id: str,
+        driver_run_id: str,
+        resource: str,
+        use_id: str,
+        now: str,
+        metadata: Dict[str, Any],
+        driver_id: str = "hermes",
+        prepared_execution_digest: str = "sha256:" + "0" * 64,
+    ) -> Dict[str, Any]:
+        """Atomically consume approval and persist a DriverRun dispatch intent.
+
+        This is the irreversible admission boundary. The approval consumption,
+        durable DriverRunCreated intent, and caller command idempotency record
+        are one ``EventStore.commit_command`` transaction. A crash after return
+        is never permission to reconstruct or redispatch work.
+        """
+        require("CommandMetadata", metadata)
+        require_authority("consume_human_approval", metadata["actor"]["kind"])
+        if not prepared_execution_digest.startswith("sha256:"):
+            raise AuthorityViolation("PREPARED_EXECUTION_DIGEST_REQUIRED")
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            return {"status": "idempotent", "driverRunId": driver_run_id,
+                    "preparedExecutionDigest": prepared_execution_digest}
+        stream = HumanApprovalAggregate.stream_id(request_id)
+        current = self.store.require_state(stream)
+        if current.get("operation") != operation:
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_OPERATION_MISMATCH")
+        if current.get("promptAssemblyDigest") != prompt_assembly_digest:
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_DIGEST_MISMATCH")
+        binding = (current.get("scope") or {}).get("approvalBinding") or {}
+        checks = (
+            ("missionId", mission_id, "MODEL_PROMPT_APPROVAL_MISSION_MISMATCH"),
+            ("taskId", task_id, "MODEL_PROMPT_APPROVAL_TASK_MISMATCH"),
+            ("driverRunId", driver_run_id, "MODEL_PROMPT_APPROVAL_DRIVER_RUN_MISMATCH"),
+            ("targetRoot", resource, "MODEL_PROMPT_APPROVAL_RESOURCE_MISMATCH"),
+        )
+        for key, offered, code in checks:
+            if str(binding.get(key, "")) != str(offered):
+                raise AuthorityViolation(code)
+        if str(current.get("resource", "")) != str(resource):
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_RESOURCE_MISMATCH")
+        if current.get("state") == "consumed":
+            if current.get("consumedBy") == use_id:
+                return {**current, "status": "idempotent"}
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_CONSUMED")
+        if current.get("state") != "approved":
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_NOT_APPROVED")
+        if now > current.get("expiresAt", ""):
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_EXPIRED")
+        if current.get("remainingUses") != 1:
+            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_ONE_USE_REQUIRED")
+
+        expected = self.store.aggregate_version(stream)
+        state = HumanApprovalAggregate.consume(current, use_id, now)
+        consumption = {
+            "schemaVersion": "1.0.0",
+            "requestId": request_id,
+            "useId": use_id,
+            "consumedAt": now,
+            "missionId": mission_id,
+            "taskId": task_id,
+            "driverRunId": driver_run_id,
+            "resource": resource,
+            "operation": operation,
+            "promptAssemblyDigest": prompt_assembly_digest,
+        }
+        require("HumanApprovalConsumption", consumption)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1",
+            stream_id=stream,
+            event_type="HumanApprovalConsumed",
+            payload={"eventType": "HumanApprovalConsumed", "consumption": consumption},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+            mission_id=mission_id,
+            task_id=task_id,
+        )
+        run = {
+            "schemaVersion": "1.0.0", "driverRunId": driver_run_id,
+            "driverId": driver_id, "missionId": mission_id, "taskId": task_id,
+            "workOrderVersion": 1, "externalRunId": None, "state": "created",
+            "reconciliationStatus": "not_required", "createdAt": now,
+        }
+        require("DriverRun", run)
+        run_stream = DriverRunAggregate.stream_id(driver_run_id)
+        if self.store.aggregate_version(run_stream) != 0:
+            raise AuthorityViolation("MODEL_DRIVER_RUN_ALREADY_EXISTS")
+        run_event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev2", stream_id=run_stream,
+            event_type="DriverRunCreated",
+            payload={"eventType": "DriverRunCreated", "driverRun": run},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+            mission_id=mission_id, task_id=task_id,
+        )
+        committed = self._commit(
+            [
+                AppendRequest(stream, HumanApprovalAggregate.KIND, expected, event, state),
+                AppendRequest(run_stream, DriverRunAggregate.KIND, 0, run_event,
+                              DriverRunAggregate.create(run)),
+            ],
+            metadata,
+        )
+        return {**state, "status": committed.get("status", "applied"),
+                "driverRunId": driver_run_id,
+                "preparedExecutionDigest": prepared_execution_digest}
+
     # -- cancellation (M1) ------------------------------------------------
 
     def cancel_task(
@@ -756,7 +1063,20 @@ class RuntimeService(object):
                 "targetId": task_id,
                 "state": current["state"] if current else None,
             }
-        return self.transition_task(task_id, "cancelled", reason, metadata)
+        expected = self.store.aggregate_version(stream)
+        current = self.store.require_state(stream)
+        state = TaskAggregate.transition(current, "cancelled")
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type="TaskTransitioned",
+            payload={"eventType": "TaskTransitioned", "taskId": task_id,
+                     "fromState": current["state"], "toState": "cancelled", "reason": reason},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+            mission_id=current["missionId"], task_id=task_id,
+        )
+        return self._commit(
+            [AppendRequest(stream, TaskAggregate.KIND, expected, event, state)], metadata
+        )
 
     def cancel_driver_run(
         self, driver_run_id: str, reason: str, metadata: Dict[str, Any]
@@ -985,3 +1305,56 @@ class RuntimeService(object):
         return self._commit(
             [AppendRequest(stream, TaskAggregate.KIND, expected, event, state)], metadata
         )
+
+    # -- governed discovery (v0.7, additive read-only) ---------------------
+    def run_governed_discovery(
+        self, request: dict, metadata: dict
+    ) -> dict:
+        """Run a bounded, read-only discovery as a governed operation.
+
+        Additive and NON-MUTATING: it performs no aggregate transition, writes
+        no event, and does not create or enlarge any capability. It only admits
+        the request, validates admission authority, runs the Discovery Governor
+        + Bounded SEAL scanner, and returns the DiscoveryResult plus an
+        evidence-shaped payload that the caller must route through the
+        canonical ``record_evidence`` path for authoritative persistence.
+
+        Authority: admission requires a human or system actor (read intent).
+        The discovery subsystem itself never grants.
+        """
+        from .discovery import run_discovery, to_evidence
+
+        require_authority("create_mission", metadata["actor"]["kind"])
+        if metadata["actor"]["kind"] not in ("human", "system"):
+            raise AuthorityViolation(
+                "governed discovery must be requested by human or system, got %r"
+                % metadata["actor"]["kind"]
+            )
+
+        targets = request.get("targets")
+        if not isinstance(targets, list) or not targets:
+            raise ValueError("request.targets must be a non-empty list of paths")
+        allowed_roots = request.get("allowedRoots")
+        enumeration_root = request.get("enumerationRoot")
+        guess_budget = int(request.get("guessBudget", 3))
+
+        result = run_discovery(
+            targets=targets,
+            allowed_roots=allowed_roots,
+            enumeration_root=enumeration_root,
+            guess_budget=guess_budget,
+            requester=str(metadata["actor"].get("actorId", metadata["actor"]["kind"])),
+            request_id=metadata.get("commandId", ""),
+            expected_markers=request.get("expectedMarkers"),
+        )
+        mission_id = request.get("missionId", "mission-unknown")
+        evidence_id = request.get("evidenceId")
+        evidence = to_evidence(
+            result, mission_id=mission_id,
+            collected_by=metadata["actor"], evidence_id=evidence_id)
+        return {
+            "status": "ok",
+            "requestId": result.request_id,
+            "discovery": result.to_dict(),
+            "evidence": evidence,
+        }

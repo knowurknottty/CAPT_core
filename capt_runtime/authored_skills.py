@@ -236,6 +236,21 @@ def parse_authored_skill_request(payload: Mapping[str, Any]) -> tuple[str | None
     return root, normalized
 
 
+def prepare_authored_skill_context(
+    payload: Mapping[str, Any],
+    *,
+    lock: Mapping[str, Any] | None = None,
+) -> tuple[Dict[str, Any] | None, List[str]]:
+    """Verify an explicit skill selection and return the exact frozen input basis."""
+    root, names = parse_authored_skill_request(payload)
+    if not names:
+        return None, []
+    context = build_skill_context(
+        str(root), lock or load_capt_skills_lock(), selected_names=names
+    )
+    return context, names
+
+
 def summarize_skill_context(context: Mapping[str, Any] | None) -> Dict[str, Any] | None:
     """Return provenance-only skill evidence; never echo instruction bodies."""
     if not context:

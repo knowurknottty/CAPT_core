@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
@@ -73,8 +75,18 @@ CREATE TABLE IF NOT EXISTS checkpoints (
     global_sequence INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS security_rejections (
+    rejection_id    TEXT PRIMARY KEY,
+    timestamp       TEXT NOT NULL,
+    rejection_kind  TEXT NOT NULL,
+    source_ip       TEXT,
+    actor_id        TEXT,
+    details_json    TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_events_stream ON events (stream_id, stream_version);
 CREATE INDEX IF NOT EXISTS idx_outbox_pending ON outbox (status, global_sequence);
+CREATE INDEX IF NOT EXISTS idx_security_rejections ON security_rejections (rejection_kind, timestamp);
 """
 
 GENESIS_CHAIN = "sha256:" + "0" * 64
@@ -112,12 +124,48 @@ class EventStore(object):
     def __init__(self, path: str) -> None:
         self.path = path
         if path != ":memory:":
-            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            parent = Path(path).parent
+            if not parent.exists():
+                parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    os.chmod(parent, 0o700)
+                except OSError:
+                    pass
         self._lock = threading.RLock()
-        self._conn = sqlite3.connect(path, isolation_level=None, check_same_thread=False)
+        self._conn = sqlite3.connect(
+            path, isolation_level=None, check_same_thread=False, timeout=5.0
+        )
+        if path != ":memory:":
+            self._harden_permissions()
+        self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.row_factory = sqlite3.Row
-        self._conn.executescript(SCHEMA_SQL)
+        # Two runtime processes can open an empty ledger concurrently before
+        # one has installed WAL/schema. SQLite serializes this initialization;
+        # retry only the transient lock, never a SQL/schema failure.
+        for attempt in range(20):
+            try:
+                self._conn.executescript(SCHEMA_SQL)
+                break
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower() or attempt == 19:
+                    self._conn.close()
+                    raise
+                time.sleep(0.05 * (attempt + 1))
+        if path != ":memory:":
+            self._harden_permissions()
         self._subscribers: List[Callable[[Dict[str, Any]], None]] = []
+
+    def _harden_permissions(self) -> None:
+        """Restrict the SQLite database and sidecars to the owning user."""
+        if self.path == ":memory:":
+            return
+        db = Path(self.path)
+        for target in (db, db.with_name(db.name + "-wal"), db.with_name(db.name + "-shm")):
+            if target.exists():
+                try:
+                    os.chmod(target, 0o600)
+                except OSError:
+                    pass
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -203,6 +251,59 @@ class EventStore(object):
         return self._conn.execute(
             "SELECT * FROM idempotency WHERE idempotency_key = ?", (key,)
         ).fetchone()
+
+    def idempotent_result(self, key: str) -> Optional[Dict[str, Any]]:
+        """Return a defensive copy of a durable command receipt."""
+        row = self.find_idempotent(key)
+        return json.loads(row["result_json"]) if row is not None else None
+
+    def claim_command(self, idempotency_key: str, operation_fingerprint: str,
+                      command_id: str) -> Dict[str, Any]:
+        """Durably admit one long-running command before its external boundary.
+
+        The idempotency table is Core's existing command authority.  Long-running
+        commands cannot wait until their final event transaction to claim a key:
+        a duplicate arriving during execution must discover the durable admission,
+        not race aggregate creation.  A claim is intentionally an in-progress
+        receipt, never proof of external completion.
+        """
+        with self.transaction() as conn:
+            prior = conn.execute(
+                "SELECT * FROM idempotency WHERE idempotency_key = ?", (idempotency_key,)
+            ).fetchone()
+            if prior is not None:
+                if prior["operation_fingerprint"] != operation_fingerprint:
+                    raise IdempotencyConflict(
+                        "idempotency key %r reused with a different operation fingerprint"
+                        % idempotency_key
+                    )
+                result = json.loads(prior["result_json"])
+                result["status"] = "idempotent" if result.get("status") != "in_progress" else "in_progress"
+                result["replayed"] = True
+                return result
+            result = {
+                "commandId": command_id, "status": "in_progress", "replayed": False,
+                "eventIds": [], "globalSequences": [], "streamVersions": [],
+            }
+            conn.execute(
+                "INSERT INTO idempotency (idempotency_key, operation_fingerprint, command_id, result_json, global_sequence) VALUES (?,?,?,?,NULL)",
+                (idempotency_key, operation_fingerprint, command_id, canonical_json(result)),
+            )
+            return result
+
+    def complete_claimed_command(self, idempotency_key: str, operation_fingerprint: str,
+                                 result: Dict[str, Any]) -> None:
+        """Replace an admitted command's provisional receipt with its outcome."""
+        with self.transaction() as conn:
+            prior = conn.execute(
+                "SELECT operation_fingerprint FROM idempotency WHERE idempotency_key = ?", (idempotency_key,)
+            ).fetchone()
+            if prior is None or prior["operation_fingerprint"] != operation_fingerprint:
+                raise IdempotencyConflict("cannot complete an unowned command admission")
+            conn.execute(
+                "UPDATE idempotency SET result_json = ? WHERE idempotency_key = ?",
+                (canonical_json(result), idempotency_key),
+            )
 
     # -- the single write path --------------------------------------------
 
@@ -450,3 +551,40 @@ class EventStore(object):
             "SELECT manifest_json FROM checkpoints ORDER BY global_sequence DESC, rowid DESC LIMIT 1"
         ).fetchone()
         return json.loads(row["manifest_json"]) if row else None
+
+    def record_security_rejection(
+        self,
+        rejection_id: str,
+        rejection_kind: str,
+        details: Dict[str, Any],
+        source_ip: Optional[str] = None,
+        actor_id: Optional[str] = None,
+        timestamp: Optional[str] = None,
+    ) -> None:
+        """Append one non-secret security rejection to the durable audit trail."""
+        ts = timestamp or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        with self.transaction() as conn:
+            conn.execute(
+                "INSERT INTO security_rejections "
+                "(rejection_id, timestamp, rejection_kind, source_ip, actor_id, details_json) "
+                "VALUES (?,?,?,?,?,?)",
+                (rejection_id, ts, rejection_kind, source_ip, actor_id, canonical_json(details)),
+            )
+
+    def list_security_rejections(self, limit: int = 100) -> List[Dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT rejection_id, timestamp, rejection_kind, source_ip, actor_id, details_json "
+            "FROM security_rejections ORDER BY timestamp DESC, rowid DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [
+            {
+                "rejectionId": row["rejection_id"],
+                "timestamp": row["timestamp"],
+                "rejectionKind": row["rejection_kind"],
+                "sourceIp": row["source_ip"],
+                "actorId": row["actor_id"],
+                "details": json.loads(row["details_json"]),
+            }
+            for row in rows
+        ]

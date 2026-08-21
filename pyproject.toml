@@ -8,6 +8,7 @@ version = "0.5.0"
 description = "Local-first cognitive runtime for individual developers, integrating with Hermes."
 readme = "README.md"
 requires-python = ">=3.8"
+dependencies = ["textual>=0.80"]
 license = { text = "MIT" }
 keywords = ["capt", "hermes", "memory", "cognitive", "local-first"]
 classifiers = [
@@ -20,8 +21,14 @@ classifiers = [
 Homepage = "https://github.com/knowurknottty/CAPT_core"
 
 [project.scripts]
+capt-security = "capt_runtime.security_gate:main"
 capt = "capt_cli:main"
 capt-ui = "capt_ui.operator.cli:main"
+capt-tui = "capt_ui.surfaces.tui.lease_app:main"
+capt-provenance = "desktop.provenance_lens:main"
+capt-cohort = "desktop.cohort_chamber:main"
+capt-cohort-tui = "capt_ui.surfaces.tui.cohort_chamber_app:main"
+capt-security-cockpit = "desktop.security_cockpit:main"
 
 [project.optional-dependencies]
 ui = ["textual>=0.80"]

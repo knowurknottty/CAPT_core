@@ -12,6 +12,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
+from .epistemics import project_epistemic_ladder
+from .leases import project_capability_leases
+
+from .cohort_chamber import project_cohort_chamber
 from .contract import (
     ApproxRequest,
     Dashboard,
@@ -50,7 +54,6 @@ class Operator:
         self._identity: Dict[str, Any] = {}
         self._connected = False
 
-    # -- connection -------------------------------------------------------
     @property
     def client(self) -> Any:
         return self._client
@@ -74,13 +77,12 @@ class Operator:
         finally:
             self._connected = False
 
-    # -- status -----------------------------------------------------------
     def status(self) -> OperatorStatus:
         if not self._connected:
             return OperatorStatus(health=RuntimeHealth.STOPPED)
         ident = self._client.identity()
         caps = self._client.capabilities()
-        st = OperatorStatus(
+        return OperatorStatus(
             health=health_of(ident, True),
             runtime_version=ident.get("runtimeVersion", ""),
             integrity=ident.get("integrity", ""),
@@ -91,36 +93,86 @@ class Operator:
                 "command_ops": caps.get("commandOperations", []),
             },
         )
-        return st
 
-    # -- dashboard (no hidden state) --------------------------------------
     def dashboard(self) -> Dashboard:
         if not self._connected:
             return Dashboard()
         st = project_authoritative_state(self._client)  # type: ignore
         approvals = project_approval_queue(self._client)  # type: ignore
+        claims = list(st.get("claims", []))
+        verifications_by_claim = dict(st.get("verificationsByClaim", {}))
+        if len(verifications_by_claim) == 1:
+            compatibility_verification = next(iter(verifications_by_claim.values()))
+        elif len(verifications_by_claim) > 1:
+            compatibility_verification = {
+                "status": {"kind": "claim_scoped"},
+                "claimCount": len(verifications_by_claim),
+                "note": "Use verifications_by_claim / epistemic_ladder; no global verification scalar exists.",
+            }
+        else:
+            compatibility_verification = {}
         dash = Dashboard(
             status=OperatorStatus(health=health_of(self._client.identity(), True)),
             missions=st.get("missions", []),
             tasks=st.get("tasks", []),
             approvals=[_to_approval(a) for a in approvals],
             driver_runs=st.get("driverRuns", []),
+            claims=claims,
             events=st.get("eventTimeline", []),
-            verification=st.get("verification", {}),
+            verification=compatibility_verification,
+            verifications_by_claim=verifications_by_claim,
+            epistemic_ladder=project_epistemic_ladder(claims, verifications_by_claim),
             ledger_chain_digest=st.get("identity", {}).get("ledgerChainDigest", ""),
         )
-        # fill top-line status from authoritative state
         dash.status.head_sequence = st.get("identity", {}).get("headSequence", 0) or 0
         dash.status.integrity = st.get("identity", {}).get("integrity", "")
         dash.status.approvals_pending = len(dash.approvals)
-        dash.evidence = EvidenceView(
-            verification=dash.verification,
-        )
+        dash.evidence = EvidenceView(verification=dash.verification)
         return dash
 
+    def cohort_chamber(self, cohort_id: str) -> Dict[str, Any]:
+        """Project one authoritative Cohort aggregate for operator inspection."""
+        state = self._client.get_state("cohort-" + str(cohort_id))
+        if not state:
+            raise OperatorError("Cohort %s not found" % cohort_id)
+        return project_cohort_chamber(state)
+
+    def capability_leases(self, now: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Project current authoritative capability/lease states for display."""
+        states: List[Dict[str, Any]] = []
+        for aggregate in self._client.list_aggregates():
+            if aggregate.get("kind") != "capability":
+                continue
+            state = self._client.get_state(aggregate["streamId"])
+            if state:
+                states.append(state)
+        return project_capability_leases(states, now=now)
+
     # -- governed controls ------------------------------------------------
+    def replay_state_at(self, global_sequence: int, stream_id: Optional[str] = None) -> Dict[str, Any]:
+        """Read deterministic historical state without mutating RuntimeService."""
+        request: Dict[str, Any] = {
+            "op": "replay_state_at",
+            "globalSequence": int(global_sequence),
+        }
+        if stream_id is not None:
+            request["streamId"] = stream_id
+        return self._client._query(request)["result"]  # type: ignore
+
+    def create_replay_fork(
+        self, payload: Dict[str, Any], idempotency_key: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Submit governed replay-fork intent; RuntimeService builds authority state."""
+        return self._client.command("create_replay_fork", payload, idempotency_key)
+
     def create_mission(self, payload: Dict[str, Any], idempotency_key: Optional[str] = None) -> Dict[str, Any]:
         return self._client.command("create_mission", payload, idempotency_key)
+
+    def request_prompt_approval(
+        self, payload: Dict[str, Any], idempotency_key: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Request a runtime-owned approval receipt for the exact prompt assembly."""
+        return self._client.command("request_model_prompt_approval", payload, idempotency_key)
 
     def decide_approval(self, request_id: str, decision: str, note: Optional[str] = None) -> Dict[str, Any]:
         payload: Dict[str, Any] = {"requestId": request_id, "decision": decision}
@@ -134,11 +186,40 @@ class Operator:
     def cancel_driver_run(self, driver_run_id: str, reason: str = "operator stop") -> Dict[str, Any]:
         return self._client.command("cancel_driver_run", {"driverRunId": driver_run_id, "reason": reason})
 
+    def steer_deliberation(
+        self, cohort_id: str, directive: str, *, reason: str = "operator steering"
+    ) -> Dict[str, Any]:
+        """Submit a governed human steering directive for a durable Cohort."""
+        return self._client.command(
+            "steer_deliberation",
+            {"cohortId": cohort_id, "directive": directive, "reason": reason},
+        )
+
+    def revoke_capability(
+        self,
+        grant_id: str,
+        *,
+        target_kind: str,
+        target_id: str,
+        reason: str,
+        revocation_id: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Request governed grant/lease revocation through RuntimeService authority."""
+        payload: Dict[str, Any] = {
+            "grantId": grant_id,
+            "targetKind": target_kind,
+            "targetId": target_id,
+            "reason": reason,
+        }
+        if revocation_id:
+            payload["revocationId"] = revocation_id
+        return self._client.command("revoke_capability", payload, idempotency_key)
+
     def update_memory_policy(self, payload: Dict[str, Any], idempotency_key: Optional[str] = None) -> Dict[str, Any]:
         return self._client.command("update_memory_trigger_policy", payload, idempotency_key)
 
     def checkpoint(self) -> Dict[str, Any]:
-        """Request an authoritative runtime checkpoint."""
         return self._client.command("checkpoint_runtime", {})
 
     def resume(self) -> Dict[str, Any]:
@@ -147,7 +228,6 @@ class Operator:
     def shutdown(self) -> Dict[str, Any]:
         return self._client.command("shutdown", {})
 
-    # -- evidence / claimguard --------------------------------------------
     def evidence(self, mission_id: str = "") -> EvidenceView:
         if not self._connected:
             return EvidenceView()
@@ -155,13 +235,11 @@ class Operator:
             artifacts = project_evidence(self._client, mission_id)  # type: ignore
         except Exception:  # noqa: BLE001
             artifacts = []
-        verification = self.dashboard().verification
-        return EvidenceView(artifacts=artifacts, verification=verification)
+        return EvidenceView(artifacts=artifacts, verification=self.dashboard().verification)
 
     def claimguard(self, statement: str) -> Dict[str, Any]:
         return project_claimguard(self._client, statement)  # type: ignore
 
-    # -- memory -----------------------------------------------------------
     def memory_policy(self) -> Dict[str, Any]:
         try:
             return self._client._query({"op": "get_memory_policy"})["result"]  # type: ignore
@@ -174,21 +252,22 @@ class Operator:
         except Exception:  # noqa: BLE001
             return {}
 
-    def store_memory(self, content: str, *, namespace: str = "default",
-                     tags: Optional[List[str]] = None, provenance: str = "operator") -> Dict[str, Any]:
-        """Store a durable memory through the supported capt_solo memory API.
-
-        Memory persistence is a capt_solo concern (the same supported API path
-        the CLI uses); it is not a RuntimeService IPC op on this surface. This
-        keeps real durable-memory writes working for onboarding/CLI without
-        fabricating them.
-        """
+    def store_memory(
+        self,
+        content: str,
+        *,
+        namespace: str = "default",
+        tags: Optional[List[str]] = None,
+        provenance: str = "operator",
+    ) -> Dict[str, Any]:
         try:
             from capt_solo.memory.engine import MemoryEngine
             from capt_solo.core.config import memory_db_path
+
             engine = MemoryEngine(memory_db_path())
-            mem = engine.store(content, namespace=namespace, tags=tags or [],
-                               provenance=provenance)
+            mem = engine.store(
+                content, namespace=namespace, tags=tags or [], provenance=provenance
+            )
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "error": str(exc)[:160]}
         return {
@@ -215,9 +294,7 @@ def _to_approval(a: Dict[str, Any]) -> ApproxRequest:
 
 
 def _human(exc: Exception) -> str:
-    """Best-effort human-readable error, avoiding raw exception dumps."""
     msg = str(exc).strip()
     if not msg:
         return exc.__class__.__name__
-    # Trim to first line and any 'error' detail already present.
     return (msg.splitlines() or [msg])[0][:200]

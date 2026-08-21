@@ -71,6 +71,18 @@ class DriverHost:
         context = build_skill_context(
             self.authored_skill_pack_root, lock, selected_names=skill_names
         )
+        return self.bind_prepared_authored_skills(context, skill_names)
+
+    def bind_prepared_authored_skills(
+        self, context: Dict[str, Any], skill_names: List[str]
+    ) -> Dict[str, Any]:
+        """Bind an already verified execution snapshot without re-reading disk."""
+        require("AuthoredSkillContext", context)
+        actual_names = [str(item.get("name", "")) for item in context.get("skills", [])]
+        if actual_names != list(skill_names):
+            raise AuthoredSkillPackViolation(
+                "prepared authored skill names differ from the verified snapshot"
+            )
         self._prepared_skill_context = copy.deepcopy(context)
         self._prepared_skill_names = tuple(skill_names)
         summary = summarize_skill_context(context)
