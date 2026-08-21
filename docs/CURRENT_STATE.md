@@ -1,6 +1,6 @@
 # CAPT Core — Current State
 
-This is the concise public status source for the repository. It intentionally separates the numbered package version, protected `main`, the terminal convergence candidate, and release authorization.
+This is the concise public status source for the repository. It intentionally separates the numbered package version, merged integration state, release authorization, and independent open work.
 
 ## Truth classes
 
@@ -8,76 +8,50 @@ This is the concise public status source for the repository. It intentionally se
 
 `pyproject.toml` still declares **`capt-solo 0.5.0`**. Preserved evidence under `release_evidence/v0.5/` applies to that historical release lineage only.
 
-### 2. Protected `main`
+### 2. Merged integration `main`
 
-Protected `main` remains the published integration baseline. It includes the normal CLI/on-ramp, durable runtime and memory foundations, shared operator layer, provider/model configuration foundations, Textual/Tk operator surfaces, and pinned authored-skill verification.
+The `main` baseline inspected for this reconciliation was `a6601d61fa5a807f2ba04ca4fda84bc8d42505b0`. Resolve the literal current `main` SHA from Git; this documentation merge itself will advance it. PR #117 was merged at merge commit `4a654a74083cf341f8557983ce256949198a02e7`; PR #45 then added the preserved DeepSeek/Ouroboros research record without changing runtime semantics.
 
-`main` is not the authority for the newer terminal convergence work until PR #117 is actually merged.
+PR #117's merged head was `570babeef113943860c1268722200a48639e406d`. The merge brought the formerly stacked Core implementation through UPG-019/native/provider convergence onto `main`, including:
 
-### 3. Terminal convergence candidate
-
-The terminal candidate is **PR #117**, branch `integration/capt-core-terminal-convergence-r2`. It is the semantic reconciliation point for the formerly stacked Core implementation branches rather than a mechanical mega-merge.
-
-The convergence candidate contains, as one coherent lineage:
-
-- CAPT-UPG-001→019 functionality and the corrected replay/checkpoint state model;
+- CAPT-UPG-001→019 and corrected exact historical replay/checkpoint semantics;
 - bounded production IPC framing, rejection audit, state permissions, resource ceilings, and injection-assurance work;
 - governed cross-model continuation/context binding and no-repeat recovery semantics;
 - durable Cohort EventStore persistence, evidence admission, operator steering, Chamber projection, and stale-epoch/quorum semantics;
-- governed artifact promotion, capability lease inspection/revoke, `.capt-flight`, provenance DAG, epistemic ladder, replay fork, and Security Closure Cockpit;
+- governed artifact promotion, capability lease inspect/revoke, `.capt-flight`, provenance DAG, epistemic ladder, replay fork, and Security Closure Cockpit;
 - first-class local OpenAI-compatible provider execution/prewarm and coherent provider/model persistence;
-- native Swift macOS chat/operator application source with session isolation, typed runtime projections, encrypted session cache, and origin-session-bound async updates;
-- pinned authored-skill bytes bound into the exact model-visible approval identity;
+- native Swift `CAPTNativeMac` governed chat/operator source with session isolation, typed runtime projections, encrypted session cache, and origin-session-bound async updates;
+- pinned authored-skill bytes bound into exact model-visible approval identity;
 - macOS ↔ RuntimeService ↔ MCP shared-ledger acceptance.
 
-Fresh 2026-08-19 convergence verification has independently reproduced:
+Closed-unmerged PR #118 is not a separately merged authority; its provider/model-coherence semantics were reconciled into the #117 line before merge.
 
-- local Core Python suite on the frozen runtime snapshot: **1,055 passed / 57 skipped / 12 deselected / 0 failures** in a clean Python 3.14 environment;
-- GitHub M0-A on the terminal candidate: **PASS on Python 3.10 and Python 3.12**, including conformance, full regression, wheel build/install, clean installed imports, package-content inspection, contract reproducibility, and TypeScript parity;
-- Swift local normal: **64 tests / 7 explicit live/cross-surface skips / 0 failures**;
-- Swift strict concurrency + warnings-as-errors: **PASS**;
-- ThreadSanitizer: **64 / 7 skipped / 0 failures**, no sanitizer finding;
-- GitHub Native macOS Swift workflow: **PASS**, including unit tests and `CAPTNativeMac` build;
-- contract drift: **PASS** (`11 generated files match the schema source`);
-- fatal Python lint subset (`E9/F63/F7/F82`): **PASS**;
-- MCP PR #2 full suite against the frozen Core runtime snapshot: **259 passed / 0 failures**;
-- MCP Ruff: **PASS**;
-- disposable macOS ↔ RuntimeService ↔ MCP acceptance: **CROSS_SURFACE_PASS** with one provider dispatch, idempotent replay, mismatched-reuse rejection, restart reconstruction, task `awaiting_verification`, and no manufactured verification ID.
+### 3. Engineering verification vs release authorization
 
-A Python 3.10 Textual teardown race discovered by CI was repaired by making the presentation-only status callback tolerate the `StatusBar` already being unmounted. The post-fix Python 3.10 and 3.12 M0-A matrices are both green.
+The merged #117 head has mixed-but-truthful CI evidence:
 
-The repository-wide broad Ruff `F/E9` sweep is **not clean**: it still contains legacy unused-import/local/redefinition debt outside the convergence slice. This is tracked as cleanup debt, not represented as a release gate pass.
+- M0-A Contract & Runtime Proof: **PASS**;
+- Native macOS Swift: **PASS**;
+- Release Security: **FAIL** on run `32440329043` for exact head `570babeef113943860c1268722200a48639e406d`.
 
-### 4. Release authorization
+The prior detailed Security Closure Cockpit snapshot at `33e24146094242d7a88612cea39267ef52a1d2e1` recorded `releaseAuthorized=false` with **2 PASS / 0 FAIL / 19 NOT_VERIFIED / 26 NOT_APPLICABLE**. Those exact counts belong to that exact candidate head and are not silently relabeled as the merged head's gate result.
 
-Integration verification and release authorization are deliberately separate.
-
-The Security Closure Cockpit is now wired into GitHub Release Security CI as an exact-head, fail-closed gate rather than allowing an unrelated green workflow badge to imply release authorization. The current candidate result is:
-
-- decision: **BLOCKED**;
-- `releaseAuthorized=false`;
-- **2 PASS / 0 FAIL / 19 NOT_VERIFIED / 26 NOT_APPLICABLE**;
-- the two exact-head PASS attestations currently come from full-history `gitleaks` and the installed-runtime dependency `pip-audit`;
-- all remaining applicable release-blocking controls stay blocked until their required evidence class is supplied.
-
-`NOT_VERIFIED` means evidence is absent/stale/incomplete; it is not equivalent to a discovered vulnerability. Ordinary Python/Swift/MCP tests are not promoted into security attestations.
-
-Therefore the truthful current classification is:
+Therefore the current release posture remains:
 
 `IMPLEMENTED_CROSS_SURFACE_VERIFIED_RELEASE_SECURITY_BLOCKED`
 
-This is a strong integration candidate, **not yet a release-certified protected-main merge**.
+**Merged does not mean release-certified.** The public release remains blocked until the Security Closure Cockpit has legitimate exact-head evidence for every applicable release-blocking control, returns `releaseAuthorized=true`, and final release artifacts are rebuilt/re-hashed from that authorized source commit.
 
-## Deliberate exclusions
+### 4. Separate open work
 
-The terminal Core line does **not** absorb:
+The following remain independent of the merged Core authority unless separately reconciled and merged:
 
-- CAPT-UPG-020→024 benchmark/probe work while its empirical/exact-head classifications remain pending;
-- Inversion Labs / Forge edition-specific runtime, UI, or lexical-analysis work;
-- Inversion Eval work in the separate MCP repository;
-- uncommitted or dirty foreign-worktree state.
+- CAPT-UPG-020→024 benchmark/probe work: PRs #89, #91, #93, #95, #97;
+- Inversion Labs / Forge edition lineage: PRs #104, #108, #109, #110, #112, #119;
+- public-release design/planning authority: PRs #111 and #116;
+- workflow/archive material such as #99; historical merge #45 remains a documentation record, not runtime authority.
 
-The superseded Core implementation PRs through UPG-019/native/provider convergence have been closed **unmerged as superseded by PR #117**, preserving their review history without presenting stale bases as competing release candidates.
+See [`PR_TOPOLOGY.md`](PR_TOPOLOGY.md) for the routing map.
 
 ## Native macOS status
 
@@ -87,11 +61,11 @@ What is **not** implied: current convergence-head signing/notarization/distribut
 
 ## Cohort status
 
-Cohorts are no longer “durability later.” The convergence line contains durable Cohort EventStore state, reconstruction, evidence admission, governed steering, epoch handling, and the Cohort Chamber projection. Council-scale public-product orchestration remains a separate planned tranche.
+Cohorts are no longer “durability later.” Merged `main` contains durable Cohort EventStore state, reconstruction, evidence admission, governed steering, epoch handling, and the Cohort Chamber projection. Council-scale public-product orchestration remains a separate planned tranche.
 
 ## Provider status
 
-Local OpenAI-compatible endpoints (including the configured MTPLX path), Ollama, and governed provider execution are present in the convergence line. Provider activation persists a coherent provider/model tuple and legacy provider registries are backfilled without overwriting user configuration.
+Local OpenAI-compatible endpoints (including the configured MTPLX path), Ollama, and governed provider execution are present in merged `main`. Provider activation persists a coherent provider/model tuple and legacy provider registries are backfilled without overwriting user configuration.
 
 The dormant generic native `MLX / mlx_lm` placeholder is intentionally **not** represented as a working native adapter. A materially configured local OpenAI-compatible MLX/MTPLX service is a different path.
 

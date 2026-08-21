@@ -6,9 +6,9 @@ CAPT is local-first and fail-closed where its contracts require it, but local ex
 
 The current public Core primarily assumes one trusted local OS user. The host OS/account, filesystem, language runtimes, and local model/provider processes are part of the trusted computing base unless separately isolated. CAPT does not currently claim protection from a compromised host/account or full multi-user authorization.
 
-## Integrated security controls in the terminal convergence line
+## Integrated security controls on merged `main`
 
-The convergence candidate incorporates the security infrastructure and UPG-001→019 hardening rather than leaving them as independent stale PRs. Implemented mechanisms include:
+Merged `main` incorporates the security infrastructure and UPG-001→019 hardening rather than leaving them as independent stale PRs. Implemented mechanisms include:
 
 - authenticated local RuntimeService socket/token access;
 - bounded production JSON framing and oversized/malformed-frame rejection;
@@ -46,15 +46,17 @@ A red `Release Security` workflow is therefore now an intentional release-author
 
 ## Current release-security verdict
 
-The terminal convergence classification remains:
+The merged Core release posture remains:
 
 `IMPLEMENTED_CROSS_SURFACE_VERIFIED_RELEASE_SECURITY_BLOCKED`
 
-The current exact-candidate CI gate is:
+The last detailed pre-merge exact-head gate projection (`33e24146094242d7a88612cea39267ef52a1d2e1`) was:
 
 - **BLOCKED**;
 - `releaseAuthorized=false`;
 - **2 PASS / 0 FAIL / 19 NOT_VERIFIED / 26 NOT_APPLICABLE**.
+
+PR #117 was subsequently merged, but its exact merged head `570babeef113943860c1268722200a48639e406d` had **Release Security = FAILURE** (run `32440329043`) while M0-A and Native macOS Swift passed. The merge does not convert a failing/blocked security gate into authorization.
 
 The two current PASS controls are backed by exact-head ephemeral CI attestations for:
 

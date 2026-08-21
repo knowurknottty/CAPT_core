@@ -15,19 +15,17 @@ The model is an inference component. **CAPT is the system of record around it.**
 CAPT Core has four distinct authority/evidence states that must not be collapsed:
 
 1. **Numbered package:** `pyproject.toml` still declares `capt-solo 0.5.0`; preserved proof under `release_evidence/v0.5/` is historical.
-2. **Protected `main`:** the published runtime/productization baseline, including normal CLI/TUI/Tk operator surfaces and pinned authored-skill verification.
-3. **Terminal convergence candidate:** PR #117 reconciles the provider/native spine, CAPT-UPG-001→019, replay/checkpoint corrections, durable Cohorts + steering, governed artifact promotion, lease controls, forensic/provenance/epistemic/security projections, authored-skill approval binding, and macOS ↔ RuntimeService ↔ MCP authority acceptance. PR #118's provider/model coherence repair is being folded into that exact line.
-4. **Release authorization:** independent of integration success. The Security Closure Cockpit is fail-closed and the candidate remains **release-security BLOCKED** until applicable controls have exact-head closure evidence.
+2. **Merged integration `main`:** PR #117 was merged on 2026-08-21, bringing the reconciled provider/native spine, CAPT-UPG-001→019, replay/checkpoint corrections, durable Cohorts + steering, governed artifact promotion, lease controls, forensic/provenance/epistemic/security projections, authored-skill approval binding, and macOS ↔ RuntimeService ↔ MCP authority acceptance onto `main`. Closed-unmerged PR #118's provider/model-coherence semantics are included through that reconciled line.
+3. **Release authorization:** still separate and **BLOCKED**. The exact merged PR #117 head `570babeef113943860c1268722200a48639e406d` passed M0-A and Native macOS CI but its `Release Security` workflow **failed** (run `32440329043`). Merge status is not release certification.
+4. **Separate open work:** CAPT-UPG-020→024, Inversion Labs/Forge edition work, and the public-release design/plan lineage remain independent PR lanes and are not silently counted as released Core functionality.
 
-Current classification:
+Current release posture:
 
 `IMPLEMENTED_CROSS_SURFACE_VERIFIED_RELEASE_SECURITY_BLOCKED`
 
-Fresh 2026-08-19 convergence proof includes a green Core full Python suite, normal/strict/ThreadSanitizer Swift suites, contract drift, MCP PR #2 full suite and Ruff, and a shared disposable RuntimeService acceptance in which native Swift and MCP observe the same authoritative approval/task/DriverRun streams with exactly one provider dispatch and no manufactured verification.
+Fresh 2026-08-19 convergence proof remains bound to its recorded frozen snapshots and exact candidate SHAs; those test counts and artifact hashes are not relabeled as evidence for later merge commits. Current `main` includes that implementation lineage, but a final release artifact set and exact-head security closure still have to be produced from an authorized source commit.
 
-**CAPT-UPG-020→024 and Inversion Labs/Forge are deliberately not folded into public Core release main.** They remain separate benchmark/probe or edition-specific lines.
-
-See [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md), [`docs/FUNCTIONALITY_MATRIX.md`](docs/FUNCTIONALITY_MATRIX.md), and [`docs/RELEASE_EVIDENCE.md`](docs/RELEASE_EVIDENCE.md) for the exact boundary.
+See [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md), [`docs/PR_TOPOLOGY.md`](docs/PR_TOPOLOGY.md), [`docs/FUNCTIONALITY_MATRIX.md`](docs/FUNCTIONALITY_MATRIX.md), and [`docs/RELEASE_EVIDENCE.md`](docs/RELEASE_EVIDENCE.md) for the exact boundary.
 
 ---
 
@@ -112,8 +110,8 @@ For the guided path, use [`START_HERE.md`](START_HERE.md).
 | CaveCAPT Minimal/Normal/Detailed/Diagnostic | **SHIPPED** |
 | first-run onboarding | **SHIPPED** |
 | Tk desktop operator | **OPERATOR MVP / reference fallback** |
-| native SwiftUI | **CLIENT CONTRACT / LIBRARY ONLY** |
-| true process-boundary cross-model continuity | **NOT YET RELEASE-PROVEN** |
+| native SwiftUI / `CAPTNativeMac` | **MERGED / BUILDABLE APPLICATION** |
+| true process-boundary cross-model continuity | **MERGED / INTEGRATED; RELEASE PROOF SEPARATE** |
 
 The UI is deliberately thin. **CLI, TUI, and desktop surfaces do not become alternate runtimes.**
 
@@ -123,7 +121,7 @@ Pinned external authored skills are a separate trust class from bundled CAPT ope
 
 ## Operator surfaces and native macOS convergence
 
-Protected `main` already has the Textual TUI/Tk operator foundation. The terminal candidate integrates the formerly stacked cockpit/provider/runtime projections and adds a real native `CAPTNativeMac` application target.
+Current `main` includes the Textual TUI/Tk operator foundation and the PR #117 reconciled cockpit/provider/runtime projections, including the real `CAPTNativeMac` application target.
 
 The native app remains a thin RuntimeService client: governed chat/approval flow, runtime/provider controls, encrypted session-cache persistence, typed projections, and origin-session-bound asynchronous configuration updates do not create a second authority plane.
 
@@ -194,7 +192,7 @@ runtime history     grants/leases    durable memory
 
 ## Cohorts and multi-perspective cognition
 
-The terminal candidate moves beyond the old “coordination contracts, durability later” status. It contains durable Cohort EventStore persistence/reconstruction, evidence admission, governed steering, epochs/rounds, stale-result handling, quorum/dissent semantics, and the Cohort Chamber projection.
+Merged `main` moves beyond the old “coordination contracts, durability later” status. It contains durable Cohort EventStore persistence/reconstruction, evidence admission, governed steering, epochs/rounds, stale-result handling, quorum/dissent semantics, and the Cohort Chamber projection.
 
 Cohort consensus remains advisory cognition. It cannot manufacture verification, grant capability, or bypass RuntimeService/EventStore authority. Council-scale public-product orchestration is a later tranche.
 
@@ -202,7 +200,7 @@ Cohort consensus remains advisory cognition. It cannot manufacture verification,
 
 ## Discovery, replay, and execution hardening
 
-The terminal candidate reconciles bounded discovery, long-running execution recovery, replay correction, lease governance, artifact promotion, and forensic/provenance projections into one authority spine.
+Merged `main` contains the reconciled bounded discovery, long-running execution recovery, replay correction, lease governance, artifact promotion, and forensic/provenance projections in one authority spine.
 
 Central rule: **if CAPT cannot prove whether consequential external dispatch occurred, it does not silently replay the work.** Historical replay reconstructs the exact ledger prefix; replay forks create new history without reactivating old approvals/capabilities.
 
@@ -212,7 +210,7 @@ Central rule: **if CAPT cannot prove whether consequential external dispatch occ
 
 CAPT is local-first; local-first is not automatically high-assurance.
 
-The terminal candidate includes the 47-control Security Closure Cockpit and substantial hardening—bounded IPC framing, covered rejection auditing, restrictive state permissions, resource ceilings, injection-assurance regressions, one-use exact approval binding, and encrypted native session-cache handling.
+Merged `main` includes the 47-control Security Closure Cockpit and substantial hardening—bounded IPC framing, covered rejection auditing, restrictive state permissions, resource ceilings, injection-assurance regressions, one-use exact approval binding, and encrypted native session-cache handling.
 
 Those implementation/test facts are **not** automatically control attestations. The release gate remains fail-closed while applicable exact-head evidence is missing. Open assurance areas still include CAPT-managed encryption for all sensitive authoritative state, independently rooted/signed audit attestations, universal process isolation, paid-service billing-cap/alert evidence, and final signed/notarized native distribution proof.
 

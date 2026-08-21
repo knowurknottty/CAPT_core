@@ -4,7 +4,7 @@
 
 > The model is an inference component. CAPT keeps durable state, memory, authority, evidence, and recovery outside the model session.
 
-Before evaluating advanced features, read [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md). Protected `main`, the terminal PR #117 candidate, and release authorization are intentionally different states.
+Before evaluating advanced features, read [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md). PR #117 is now merged into `main`; merged integration, the historical `0.5.0` package line, and release authorization are intentionally different states.
 
 ## Install the CLI and TUI
 
@@ -48,9 +48,9 @@ capt-ui dashboard
 
 The TUI is a RuntimeService projection/control surface; it does not own the ledger or bypass governance.
 
-## Native macOS candidate
+## Native macOS application
 
-On the terminal convergence line:
+On current `main`:
 
 ```zsh
 cd capt_ui/surfaces/desktop_swift

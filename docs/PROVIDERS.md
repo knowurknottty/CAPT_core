@@ -2,9 +2,9 @@
 
 Provider registration, provider execution, native presentation, and release proof are separate states.
 
-## Terminal convergence provider spine
+## Merged provider spine
 
-The convergence line supports governed execution through:
+Current `main` supports governed execution through:
 
 - Ollama native generation;
 - configured local OpenAI-compatible endpoints such as MTPLX, LM Studio, vLLM, and llama.cpp-style servers where their API surface matches the adapter contract;
@@ -15,7 +15,7 @@ Selected local OpenAI-compatible models have bounded prewarm support so known-co
 
 ## Provider/model coherence
 
-PR #118's fix is reconciled onto the terminal candidate:
+PR #118 is closed unmerged; its provider/model-coherence semantics were reconciled into merged PR #117:
 
 - activating a provider persists a coherent global provider/model tuple;
 - legacy provider registries backfill current defaults without overwriting persisted operator configuration;
