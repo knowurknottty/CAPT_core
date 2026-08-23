@@ -11,7 +11,7 @@ from capt_runtime.prompt_approval import request_model_prompt_approval
 from capt_runtime.replay import checkpoint_replay, full_replay, replay_equivalent
 from capt_runtime.services import RuntimeService
 from capt_runtime.store import EventStore
-from desktop.capt_runtime_service import RuntimeQueryService
+from desktop.capt_runtime_service import RuntimeQueryService, _provider_credential_required
 
 
 DIGEST = "sha256:" + "a" * 64
@@ -139,6 +139,19 @@ def test_approval_digest_binds_every_execution_relevant_operator_input(tmp_path)
         changed[field] = value
         changed_digest = planner_result(tmp_path, "mut-" + field, changed)["promptAssemblyDigest"]
         assert changed_digest != base_digest, field
+
+
+def test_local_no_auth_provider_does_not_require_synthetic_credential():
+    class P:
+        kind = "local"
+        key_ref = ""
+
+    assert _provider_credential_required(P()) is False
+    P.key_ref = "env:LOCAL_PROVIDER_KEY"
+    assert _provider_credential_required(P()) is True
+    P.kind = "cloud"
+    P.key_ref = ""
+    assert _provider_credential_required(P()) is True
 
 
 def test_transport_whitespace_is_canonicalized_before_approval_binding(tmp_path):

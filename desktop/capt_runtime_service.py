@@ -70,6 +70,14 @@ RUNTIME_VERSION = getattr(capt_runtime, "RUNTIME_VERSION", "0.1.0")
 CONTRACT_SCHEMA_VERSION = "1.0.0"
 
 
+def _provider_credential_required(provider: Any) -> bool:
+    """Require auth for remote providers or any provider declaring a key ref."""
+    return (
+        bool(str(getattr(provider, "key_ref", "") or "").strip())
+        or str(getattr(provider, "kind", "")) != "local"
+    )
+
+
 def _test_fault(point: str) -> None:
     """Test-only crash seam for durable lifecycle boundary proof.
 
@@ -709,7 +717,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     if provider is None or not provider_model:
                         raise ValueError("PROVIDER_OR_MODEL_UNAVAILABLE")
                     provider_key = resolve(provider.id, provider.key_ref)
-                    if provider.id != "ollama" and not provider_key:
+                    if _provider_credential_required(provider) and not provider_key:
                         raise ValueError("PROVIDER_CREDENTIAL_UNAVAILABLE")
                 requested_context_budget = int(payload.get("requestedContextBudget", 32_000))
                 effective_budget = effective_context_budget(
@@ -811,7 +819,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     if provider is None or not provider_model:
                         raise ValueError("PROVIDER_OR_MODEL_UNAVAILABLE")
                     provider_key = resolve(provider.id, provider.key_ref)
-                    if provider.id != "ollama" and not provider_key:
+                    if _provider_credential_required(provider) and not provider_key:
                         raise ValueError("PROVIDER_CREDENTIAL_UNAVAILABLE")
                 requested_context_budget = prepared.data["requestedContextBudget"]
                 effective_budget = prepared.data["effectiveBudget"]
