@@ -99,3 +99,35 @@ def test_shared_governor_survives_fresh_provider_driver_instances(tmp_path, monk
             "contextSlice": {}, "submittedAt": "2026-08-19T00:00:00Z",
         }))
     assert len(calls) == 1
+
+
+def test_cost_alert_fires_once_before_hard_cap_without_sensitive_payload():
+    alerts = []
+    gov = TokenCostGovernor(
+        max_cost_usd_per_session=10.0,
+        alert_cost_usd=7.5,
+        on_cost_alert=alerts.append,
+    )
+    first = gov.record_usage(prompt_tokens=10, completion_tokens=10, cost_usd=7.0)
+    assert first["costAlert"] is None
+    assert alerts == []
+
+    second = gov.record_usage(prompt_tokens=10, completion_tokens=10, cost_usd=0.75)
+    assert second["costAlert"]["kind"] == "spend_threshold_crossed"
+    assert second["costAlert"]["thresholdUsd"] == 7.5
+    assert second["costAlert"]["maxCostUsd"] == 10.0
+    assert len(alerts) == 1
+    assert alerts[0] == second["costAlert"]
+    assert set(alerts[0]) == {
+        "kind", "thresholdUsd", "consumedCostUsd", "maxCostUsd", "consumedRequests"
+    }
+
+    third = gov.record_usage(prompt_tokens=10, completion_tokens=10, cost_usd=0.25)
+    assert third["costAlert"] is None
+    assert len(alerts) == 1
+    gov.check_pre_dispatch()
+
+
+def test_cost_alert_configuration_must_be_below_hard_cap():
+    with pytest.raises(ValueError, match="COST_ALERT_THRESHOLD_INVALID"):
+        TokenCostGovernor(max_cost_usd_per_session=5.0, alert_cost_usd=5.0)

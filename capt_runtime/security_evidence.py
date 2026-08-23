@@ -26,6 +26,30 @@ def _parse_attestation(value: str) -> Tuple[str, str]:
     return control_id, ref
 
 
+def load_pass_manifest(path: Path) -> List[str]:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if str(raw.get("schemaVersion") or "") != "1.0.0":
+        raise ValueError("SECURITY_ATTESTATION_MANIFEST_SCHEMA")
+    controls = raw.get("controls", [])
+    if not isinstance(controls, list):
+        raise ValueError("SECURITY_ATTESTATION_MANIFEST_CONTROLS")
+    out: List[str] = []
+    seen = set()
+    for row in controls:
+        if not isinstance(row, dict):
+            raise ValueError("SECURITY_ATTESTATION_MANIFEST_ROW")
+        control_id = str(row.get("controlId") or "").strip()
+        ref = str(row.get("ref") or "").strip()
+        if not control_id or not ref:
+            raise ValueError("SECURITY_ATTESTATION_MANIFEST_ROW")
+        if control_id in seen:
+            raise ValueError("SECURITY_ATTESTATION_DUPLICATE:%s" % control_id)
+        _parse_attestation("%s=%s" % (control_id, ref))
+        seen.add(control_id)
+        out.append("%s=%s" % (control_id, ref))
+    return out
+
+
 def build_bundle(
     *,
     source_sha: str,
@@ -67,12 +91,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--verifier", default="ci")
     parser.add_argument("--pass", dest="passed", action="append", default=[])
+    parser.add_argument("--pass-manifest", type=Path, action="append", default=[])
     parser.add_argument("--fail", dest="failed", action="append", default=[])
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
+    manifest_passes: List[str] = []
+    for manifest in args.pass_manifest:
+        manifest_passes.extend(load_pass_manifest(manifest))
     bundle = build_bundle(
         source_sha=args.source_sha,
-        passed=args.passed,
+        passed=[*args.passed, *manifest_passes],
         failed=args.failed,
         verifier=args.verifier,
     )

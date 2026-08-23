@@ -31,6 +31,7 @@ import json
 import os
 import secrets
 import socket
+import sys
 import threading
 import time
 from pathlib import Path
@@ -67,6 +68,33 @@ from capt_runtime.authored_skills import (
 
 RUNTIME_VERSION = getattr(capt_runtime, "RUNTIME_VERSION", "0.1.0")
 CONTRACT_SCHEMA_VERSION = "1.0.0"
+
+
+def _build_provider_governor(store: EventStore) -> TokenCostGovernor:
+    """Build the paid-provider budget boundary and independent spend alert."""
+    max_cost = float(os.environ.get("CAPT_PROVIDER_SESSION_COST_CAP_USD", "10"))
+    if max_cost <= 0:
+        raise ValueError("COST_CAP_INVALID")
+    raw_alert = os.environ.get("CAPT_PROVIDER_SPEND_ALERT_USD", "").strip()
+    alert_cost = float(raw_alert) if raw_alert else max_cost * 0.8
+
+    def emit_alert(details: Dict[str, Any]) -> None:
+        store.record_security_rejection(
+            rejection_id="spend-alert-" + secrets.token_hex(8),
+            rejection_kind="provider_spend_threshold_alert",
+            details=dict(details),
+        )
+        print(
+            "CAPT_SPEND_ALERT consumed=${consumedCostUsd:.4f} threshold=${thresholdUsd:.4f} cap=${maxCostUsd:.4f}".format(**details),
+            file=sys.stderr,
+            flush=True,
+        )
+
+    return TokenCostGovernor(
+        max_cost_usd_per_session=max_cost,
+        alert_cost_usd=alert_cost,
+        on_cost_alert=emit_alert,
+    )
 
 
 def _test_fault(point: str) -> None:
@@ -703,7 +731,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             operator_id = "operator-" + (getpass.getuser() or "local")
             session_id = "sess-" + secrets.token_hex(8)
             cmd_svc = runtime.command_service(operator_id, session_id)
-            provider_governor = TokenCostGovernor()
+            provider_governor = _build_provider_governor(store)
             # Fixed v0.5 OpenHarness inspection: service-owned runner uses the
             # already-created canonical RuntimeComposition; no duplicate runtime.
             def _fixed_openharness(command: Dict[str, Any]):

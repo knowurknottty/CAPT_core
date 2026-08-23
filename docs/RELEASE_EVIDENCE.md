@@ -81,7 +81,9 @@ The Security Closure Cockpit is integrated and intentionally fail-closed. The la
 
 The gate artifact is uploaded by the `Release Security` workflow for audit. `NOT_VERIFIED` is missing/incomplete evidence, not a discovered vulnerability and not permission to infer PASS from unrelated test suites.
 
-The subsequent exact merged head `570babeef113943860c1268722200a48639e406d` produced a failing Release Security workflow. Until an exact release source commit returns authorized, merged `main` is **integration-merged but release-security blocked**.
+The subsequent exact merged head `570babeef113943860c1268722200a48639e406d` produced a failing Release Security workflow; that historical result remains immutable evidence. The security-closure implementation now maps the full Python assurance suite into explicit per-control attestations, verifies a live provider-side OpenRouter key cap independently, and requires the Python spend-alert proof before `CAPT-SUP-07` can pass. Local projection over the 47-control catalog is **21 PASS / 0 FAIL / 0 NOT_VERIFIED / 26 NOT_APPLICABLE**.
+
+That local projection is not itself release authorization. The exact source commit under consideration must reproduce PASS in hosted `Release Security`, after which release artifacts must be rebuilt and re-hashed from that authorized commit.
 
 ## Artifact evidence boundary
 

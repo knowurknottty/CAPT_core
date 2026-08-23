@@ -20,6 +20,12 @@ import time
 from typing import Any, Dict, List, Optional
 
 from ..contracts import require
+from ..state_security import (
+    AtRestProtector,
+    MAX_MEMORY_CONTENT_BYTES,
+    harden_sqlite_path,
+    validate_persisted_text,
+)
 
 
 def _now_iso() -> str:
@@ -121,10 +127,16 @@ class MemoryStore:
     """SQLite-backed memory record store owned by CAPT Runtime."""
 
     def __init__(self, db_path: str = ":memory:") -> None:
+        self.db_path = db_path
+        self._lock = __import__("threading").Lock()
+        harden_sqlite_path(db_path)
+        self._protector = AtRestProtector.for_path(db_path)
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
-        self._lock = __import__("threading").Lock()
         self._init_schema()
+        if db_path != ":memory:":
+            self._migrate_plaintext_content()
+            harden_sqlite_path(db_path)
 
     def _init_schema(self) -> None:
         self._conn.execute(
@@ -152,7 +164,44 @@ class MemoryStore:
         )
         self._conn.commit()
 
+    def _content_context(self, record_id: str) -> str:
+        return "memory_records.content:%s" % record_id
+
+    def _migrate_plaintext_content(self) -> None:
+        rows = self._conn.execute(
+            "SELECT record_id, content FROM memory_records"
+        ).fetchall()
+        changed = False
+        for row in rows:
+            stored = str(row["content"])
+            if self._protector.is_sealed(stored):
+                self._protector.open_text(
+                    stored, context=self._content_context(str(row["record_id"]))
+                )
+                continue
+            validate_persisted_text(
+                stored, field="MEMORY_CONTENT", max_bytes=MAX_MEMORY_CONTENT_BYTES
+            )
+            sealed = self._protector.seal_text(
+                stored, context=self._content_context(str(row["record_id"]))
+            )
+            self._conn.execute(
+                "UPDATE memory_records SET content = ? WHERE record_id = ?",
+                (sealed, row["record_id"]),
+            )
+            changed = True
+        if changed:
+            self._conn.commit()
+            self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            self._conn.execute("VACUUM")
+
     def store(self, rec: MemoryRecord) -> None:
+        validate_persisted_text(
+            rec.content, field="MEMORY_CONTENT", max_bytes=MAX_MEMORY_CONTENT_BYTES
+        )
+        stored_content = self._protector.seal_text(
+            rec.content, context=self._content_context(rec.record_id)
+        )
         with self._lock:
             self._conn.execute(
                 """
@@ -173,7 +222,7 @@ class MemoryStore:
                     rec.verification_status,
                     rec.sensitivity,
                     rec.consent,
-                    rec.content,
+                    stored_content,
                     rec.created_at,
                     rec.last_verified_at,
                     rec.expires_at,
@@ -202,7 +251,9 @@ class MemoryStore:
             verification_status=row["verification_status"],
             sensitivity=row["sensitivity"],
             consent=row["consent"],
-            content=row["content"],
+            content=self._protector.open_text(
+                row["content"], context=self._content_context(str(row["record_id"]))
+            ),
             created_at=row["created_at"],
             last_verified_at=row["last_verified_at"],
             expires_at=row["expires_at"],
@@ -266,3 +317,4 @@ class MemoryStore:
 
     def close(self) -> None:
         self._conn.close()
+        harden_sqlite_path(self.db_path)

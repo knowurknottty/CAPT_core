@@ -99,6 +99,7 @@ class RuntimeComposition:
         return TaskResolver(self.store)
 
     def close(self) -> None:
+        self.memory_engine.close()
         self.memory_store.close()
         self.store.close()
 

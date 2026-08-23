@@ -44,44 +44,21 @@ The workflow now:
 
 A red `Release Security` workflow is therefore now an intentional release-authority signal when required evidence is incomplete, not a generic test badge.
 
-## Current release-security verdict
+## Release-security authority and closure status
 
-The merged Core release posture remains:
+Release-security authorization is bound to the exact source SHA being evaluated. The historical merged PR #117 head `570babeef113943860c1268722200a48639e406d` remains a **failed** Release Security receipt (run `32440329043`); later work does not rewrite that history.
 
-`IMPLEMENTED_CROSS_SURFACE_VERIFIED_RELEASE_SECURITY_BLOCKED`
+The security-closure implementation supplies explicit proof for all **21 applicable** controls in the 47-control Core profile. Its local projection is **21 PASS / 0 FAIL / 0 NOT_VERIFIED / 26 NOT_APPLICABLE**. The hosted `Release Security` workflow must reproduce PASS on the exact source SHA before that SHA is release-security authorized.
 
-The last detailed pre-merge exact-head gate projection (`33e24146094242d7a88612cea39267ef52a1d2e1`) was:
+The closure proof classes include:
 
-- **BLOCKED**;
-- `releaseAuthorized=false`;
-- **2 PASS / 0 FAIL / 19 NOT_VERIFIED / 26 NOT_APPLICABLE**.
+- full-history secret scanning and dependency closure audit;
+- named Python tests for authentication, authorization, parameterized queries, input bounds, output minimization, injection resistance, resource ceilings, denied-access paths, audit events, and AI-output verification;
+- AES-256-GCM authenticated encryption of sensitive file-backed EventStore JSON fields and MemoryStore content, with legacy plaintext migration, wrong-key/tamper startup rejection, and private DB/sidecar permissions;
+- a one-shot CAPT spend-threshold alert that contains cost/request counters only;
+- a live OpenRouter inference-key policy query that rejects missing hard caps and refuses management/provisioning credentials in CI.
 
-PR #117 was subsequently merged, but its exact merged head `570babeef113943860c1268722200a48639e406d` had **Release Security = FAILURE** (run `32440329043`) while M0-A and Native macOS Swift passed. The merge does not convert a failing/blocked security gate into authorization.
-
-The two current PASS controls are backed by exact-head ephemeral CI attestations for:
-
-- full-history secret scanning (`gitleaks:full-history`);
-- installed-runtime dependency closure scanning (`pip-audit:installed-runtime-closure`).
-
-The remaining applicable controls stay `NOT_VERIFIED` until their required evidence class is produced. `NOT_VERIFIED` means evidence is absent/stale/incomplete; it is not equivalent to a discovered vulnerability and must not be silently converted to PASS.
-
-Current blocking control IDs are:
-
-`VIBE1-01`, `VIBE1-05`, `VIBE1-06`, `VIBE1-07`, `VIBE1-08`, `VIBE1-13`, `VIBE1-14`, `VIBE1-17`, `VIBE2-09`, `VIBE2-10`, `VIBE2-11`, `VIBE2-13`, `VIBE2-18`, `VIBE2-20`, `CAPT-SUP-01`, `CAPT-SUP-04`, `CAPT-SUP-05`, `CAPT-SUP-06`, `CAPT-SUP-07`.
-
-## Known substantive/open assurance areas
-
-Current public Core still does not claim comprehensive:
-
-- CAPT-managed encryption at rest for all sensitive authoritative runtime/memory/evidence state;
-- independently rooted/signed audit-history attestations;
-- multi-user/tenant authorization;
-- universal process/container isolation for external tools/models;
-- exactly-once semantics for arbitrary external side effects;
-- release evidence for paid-service billing caps/alerts across every applicable external service;
-- final signed/notarized native application distribution security.
-
-Other controls may remain `NOT_VERIFIED` even where implementation exists until exact-head evidence is produced.
+A green checklist decision does **not** imply protection from a compromised host account, comprehensive multi-user/tenant authorization, universal process/container isolation, exactly-once arbitrary external side effects, or signed/notarized native distribution. Those remain separate assurance/release classes. Any additional paid provider added to the release profile must provide its own provider-side hard cap plus independent alert evidence before release authorization can remain green.
 
 ## External execution
 
@@ -93,9 +70,11 @@ Do not persist raw API keys in memory, evidence, diagnostics, or prompt payloads
 
 ## Data at rest
 
-The native session cache has encrypted storage and private-permission regression coverage. That fact must **not** be generalized into a claim that all authoritative EventStore/memory/evidence state is CAPT-encrypted at rest.
+The native session cache remains encrypted. Core file-backed runtime persistence now additionally protects sensitive EventStore JSON payload/state/receipt/checkpoint/security-detail fields and MemoryStore content with AES-256-GCM authenticated encryption. Legacy plaintext rows are migrated on open and the SQLite WAL is checkpointed before vacuuming; unexpected plaintext after migration, wrong keys, and modified ciphertext fail closed.
 
-Until the applicable authoritative-state encryption controls are implemented and proven, sensitive deployments should also rely on appropriate host full-disk/filesystem protection and restrictive local permissions.
+On macOS, the runtime state key is stored in Keychain when available. CI/tests may provide an explicit 32-byte base64 key; other supported hosts fall back to a user-private `~/.capt/keys/` key file (`0700` directory / `0600` key file). SQLite DB/WAL/SHM files are owner-private, but CAPT does not chmod caller-owned pre-existing parent directories.
+
+This is field-level protection for sensitive persisted content, not whole-disk encryption. Indexing identifiers, schema metadata, digests, and some non-SQLite artifact files remain outside that encrypted content boundary. A compromised OS account/host remains outside the current threat claim and should still be mitigated with host full-disk/filesystem protection.
 
 ## Verification rule
 
