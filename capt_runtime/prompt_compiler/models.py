@@ -94,6 +94,11 @@ class PromptStageRecord:
 
 
 @dataclass(frozen=True)
+class PromptVerificationContract:
+    acceptance_criteria: Tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class PromptCompileProposal:
     status: str
     original_prompt: str
@@ -101,6 +106,7 @@ class PromptCompileProposal:
     stage_chain: Tuple[PromptStageName, ...]
     stage_records: Tuple[PromptStageRecord, ...]
     requested_capabilities: Tuple[str, ...]
+    verification_contract: PromptVerificationContract
     unresolved_questions: Tuple[str, ...] = ()
     rationale: str = ""
 

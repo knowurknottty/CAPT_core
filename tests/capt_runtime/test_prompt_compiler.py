@@ -147,3 +147,28 @@ def test_local_runner_receives_analysis_only_closed_context_and_records_provider
     assert all(payload["analysisOnly"] is True for payload in seen)
     assert all(payload["allowedCapabilities"] == ["cap.fs.read"] for payload in seen)
     assert all(record.provider_id == "ollama" for record in proposal.stage_records)
+    assert proposal.verification_contract.acceptance_criteria == ("evidence included",)
+
+
+def test_runner_payload_contains_stage_instructions_and_closed_response_contract():
+    seen = []
+
+    def transport(payload):
+        seen.append(payload)
+        return {
+            "stage": payload["stage"], "outcome": "incident report",
+            "scope": "provider run", "inputs": ["prompt"],
+            "outputs": ["report"], "constraints": ["preserve objective"],
+            "successCriteria": ["evidence included"], "ambiguities": [],
+            "requestedCapabilities": [],
+        }
+
+    PromptCompiler(
+        runner=BoundedPromptCompilerRunner(transport),
+        provider=CompilerProvider("ollama", "local-model", "local"),
+    ).compile(_request())
+
+    assert all(payload["instructions"] for payload in seen)
+    assert all(payload["responseSchema"]["additionalProperties"] is False for payload in seen)
+    assert all("providerSecret" not in payload for payload in seen)
+    assert all("tools" not in payload for payload in seen)

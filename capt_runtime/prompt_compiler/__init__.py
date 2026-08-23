@@ -6,6 +6,7 @@ from .models import (
     PromptCompileRequest,
     PromptStageName,
     PromptStageRecord,
+    PromptVerificationContract,
 )
 from .provider_runner import BoundedPromptCompilerRunner, PromptCompilerProviderPolicy
 from .router import PromptRoute, route_stages
@@ -22,6 +23,7 @@ __all__ = [
     "PromptRoute",
     "PromptStageName",
     "PromptStageRecord",
+    "PromptVerificationContract",
     "StructuredStageResult",
     "route_stages",
 ]
