@@ -16,6 +16,7 @@ from .aggregates import (
     CapabilityAggregate,
     ClaimAggregate,
     DriverRunAggregate,
+    HumanApprovalAggregate,
     MissionAggregate,
     TaskAggregate,
 )
@@ -79,6 +80,7 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         "TaskCreated",
         "CapabilityGranted",
         "DriverRunCreated",
+        "HumanApprovalRequested",
         "ClaimCreated",
     )
     if event_type not in _CREATION_EVENTS and current is None:
@@ -131,6 +133,14 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         nxt = DriverRunAggregate.transition(existing(), payload["toState"])
     elif event_type == "DriverRunReconciled":
         nxt = DriverRunAggregate.reconcile(existing(), payload["disposition"])
+    elif event_type == "HumanApprovalRequested":
+        nxt = HumanApprovalAggregate.create(payload["request"])
+    elif event_type == "HumanApprovalDecided":
+        decision = payload["decision"]
+        nxt = HumanApprovalAggregate.decide(existing(), decision, decision["decidedAt"])
+    elif event_type == "HumanApprovalConsumed":
+        consumption = payload["consumption"]
+        nxt = HumanApprovalAggregate.consume(existing(), consumption["useId"], consumption["consumedAt"])
     elif event_type == "ClaimCreated":
         nxt = ClaimAggregate.propose(payload["claim"])
     elif event_type == "EvidenceRecorded":
@@ -180,6 +190,7 @@ def checkpoint_replay(
         "capabilityVersions",
         "driverRunVersions",
         "claimVersions",
+        "humanApprovalVersions",
     ):
         for entry in manifest[field]:
             stream_state = store.load_state(entry["streamId"])

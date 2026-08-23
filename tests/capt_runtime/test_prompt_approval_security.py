@@ -8,6 +8,7 @@ from capt_runtime import commands
 from capt_runtime.checkpoint import create_checkpoint
 from capt_runtime.errors import AuthorityViolation
 from capt_runtime.prompt_approval import request_model_prompt_approval
+from capt_runtime.replay import checkpoint_replay, full_replay, replay_equivalent
 from capt_runtime.services import RuntimeService
 from capt_runtime.store import EventStore
 from desktop.capt_runtime_service import RuntimeQueryService
@@ -207,6 +208,10 @@ def test_checkpoint_accounts_for_durable_human_approval_stream(tmp_path):
         assert manifest["humanApprovalVersions"] == [
             {"streamId": "human_approval-" + result["requestId"], "version": 1}
         ]
+        full = full_replay(store)
+        partial = checkpoint_replay(store, manifest)
+        assert replay_equivalent(full, partial)
+        assert full.aggregates["human_approval-" + result["requestId"]]["state"] == "requested"
     finally:
         store.close()
 
