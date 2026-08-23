@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+
+from ..state_security import harden_sqlite_path
 from typing import Any, Dict, List, Optional
 
 from .accounting import ContextAccounting, ContextUsage, TriggerState
@@ -71,10 +73,17 @@ class MemoryTriggerEngine:
         # per-mission last ContextPack digest
         self._last_pack: Dict[str, Dict[str, Any]] = {}
         # persisted policy log
+        self._ledger_db = ledger_db
+        harden_sqlite_path(ledger_db)
         self._ledger = sqlite3.connect(ledger_db, check_same_thread=False)
         self._ledger.row_factory = sqlite3.Row
         self._ledger_lock = __import__("threading").Lock()
         self._init_ledger()
+        harden_sqlite_path(ledger_db)
+
+    def close(self) -> None:
+        self._ledger.close()
+        harden_sqlite_path(self._ledger_db)
 
     def _init_ledger(self) -> None:
         self._ledger.execute(

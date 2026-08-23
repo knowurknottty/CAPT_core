@@ -34,13 +34,11 @@ The merged #117 head has mixed-but-truthful CI evidence:
 - Native macOS Swift: **PASS**;
 - Release Security: **FAIL** on run `32440329043` for exact head `570babeef113943860c1268722200a48639e406d`.
 
-The prior detailed Security Closure Cockpit snapshot at `33e24146094242d7a88612cea39267ef52a1d2e1` recorded `releaseAuthorized=false` with **2 PASS / 0 FAIL / 19 NOT_VERIFIED / 26 NOT_APPLICABLE**. Those exact counts belong to that exact candidate head and are not silently relabeled as the merged head's gate result.
+The prior detailed Security Closure Cockpit snapshot at `33e24146094242d7a88612cea39267ef52a1d2e1` recorded `releaseAuthorized=false` with **2 PASS / 0 FAIL / 19 NOT_VERIFIED / 26 NOT_APPLICABLE**. Those exact counts belong to that exact candidate head and are not silently relabeled as later source.
 
-Therefore the current release posture remains:
+The release-security closure implementation adds exact-head evidence harvesting for existing controls, AES-256-GCM protection for sensitive file-backed EventStore JSON and MemoryStore content, private SQLite sidecars, bounded storage ingress, an independent spend-threshold alert, and a live OpenRouter hard-cap verifier. Its local 47-control projection is **21 PASS / 0 FAIL / 0 NOT_VERIFIED / 26 NOT_APPLICABLE**.
 
-`IMPLEMENTED_CROSS_SURFACE_VERIFIED_RELEASE_SECURITY_BLOCKED`
-
-**Merged does not mean release-certified.** The public release remains blocked until the Security Closure Cockpit has legitimate exact-head evidence for every applicable release-blocking control, returns `releaseAuthorized=true`, and final release artifacts are rebuilt/re-hashed from that authorized source commit.
+**Merged does not mean release-certified. Hosted exact-head CI remains authoritative.** A commit is release-security authorized only if its own `Release Security` workflow returns PASS; neither this local projection nor merge status may substitute for that receipt. Final release artifacts must then be rebuilt/re-hashed from that authorized source commit.
 
 ### 4. Separate open work
 

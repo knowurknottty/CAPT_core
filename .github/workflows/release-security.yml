@@ -113,6 +113,33 @@ jobs:
           python -m pip freeze --exclude-editable > /tmp/runtime-requirements.txt
           pip-audit -r /tmp/runtime-requirements.txt
 
+  billing-assurance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify OpenRouter release key has a provider-side hard cap
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          OPENROUTER_RELEASE_KEY: ${{ secrets.OPENROUTER_RELEASE_KEY }}
+        run: |
+          test -n "$OPENROUTER_RELEASE_KEY" || { echo "::error::OPENROUTER_RELEASE_KEY is not configured"; exit 1; }
+          python -m capt_runtime.billing_assurance \
+            --provider openrouter \
+            --key-env OPENROUTER_RELEASE_KEY \
+            --source-sha "$SOURCE_SHA" \
+            --output billing-assurance.json
+      - name: Upload billing assurance receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: capt-billing-assurance
+          path: billing-assurance.json
+
   secrets:
     runs-on: ubuntu-latest
     steps:
@@ -128,7 +155,7 @@ jobs:
   checklist-gate:
     name: CAPT checklist security gate
     runs-on: ubuntu-latest
-    needs: [python, secrets]
+    needs: [python, secrets, billing-assurance]
     if: always()
     steps:
       - uses: actions/checkout@v4
@@ -148,6 +175,7 @@ jobs:
           SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           PYTHON_JOB: ${{ needs.python.result }}
           SECRETS_JOB: ${{ needs.secrets.result }}
+          BILLING_JOB: ${{ needs.billing-assurance.result }}
         run: |
           args=()
           if [ "$SECRETS_JOB" = "success" ]; then
@@ -155,12 +183,22 @@ jobs:
           fi
           if [ "$PYTHON_JOB" = "success" ]; then
             args+=(--pass "VIBE1-20=pip-audit:installed-runtime-closure")
+            args+=(--pass-manifest security/profiles/capt-core-python-evidence.json)
+          fi
+          if [ "$PYTHON_JOB" = "success" ] && [ "$BILLING_JOB" = "success" ]; then
+            args+=(--pass "CAPT-SUP-07=openrouter:hard-key-cap+pytest:tests/capt_runtime/test_release_security_assurance.py::test_runtime_provider_governor_emits_durable_data_minimized_spend_alert")
           fi
           python -m capt_runtime.security_evidence \
             --source-sha "$SOURCE_SHA" \
             --verifier "release-security-ci" \
             "${args[@]}" \
             --output security-evidence.json
+      - name: Download live billing assurance receipt
+        if: needs.billing-assurance.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: capt-billing-assurance
+          path: billing-assurance
       - name: Evaluate exact-head CAPT security control gate
         id: checklist
         continue-on-error: true
@@ -180,6 +218,7 @@ jobs:
           path: |
             security-evidence.json
             security-gate-result.json
+            billing-assurance/
       - name: Enforce fail-closed checklist gate
         if: steps.checklist.outcome != 'success'
         run: |

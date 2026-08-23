@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "1.0.0",
+  "controls": [
+    {
+      "controlId": "CAPT-SUP-01",
+      "ref": "pytest:tests/capt_runtime/test_desktop_m1_adversarial.py::test_unauthenticated_command_rejected"
+    },
+    {
+      "controlId": "CAPT-SUP-04",
+      "ref": "pytest:tests/test_ui_provider_support.py::test_safe_to_dict_hides_raw_secret"
+    },
+    {
+      "controlId": "CAPT-SUP-05",
+      "ref": "pytest:tests/capt_runtime/test_desktop_m1_security.py::test_operator_spoofing_rejected"
+    },
+    {
+      "controlId": "CAPT-SUP-06",
+      "ref": "pytest:tests/capt_runtime/test_injection_assurance.py::test_adversarial_model_output_cannot_forge_claimguard"
+    },
+    {
+      "controlId": "VIBE1-01",
+      "ref": "pytest:tests/test_ui_provider_support.py::test_provider_rejects_raw_secret_and_unsafe_endpoint_without_persisting"
+    },
+    {
+      "controlId": "VIBE1-05",
+      "ref": "pytest:tests/capt_runtime/test_release_security_assurance.py::test_authoritative_runtime_and_memory_state_encryption_release_proof"
+    },
+    {
+      "controlId": "VIBE1-06",
+      "ref": "pytest:tests/capt_runtime/test_desktop_m0.py::test_unauthenticated_ipc_rejected"
+    },
+    {
+      "controlId": "VIBE1-07",
+      "ref": "pytest:tests/capt_runtime/test_context_pipeline.py::test_context_selection_excludes_consent_mismatch"
+    },
+    {
+      "controlId": "VIBE1-08",
+      "ref": "pytest:tests/capt_runtime/test_desktop_m1_security.py::test_approval_scope_widening_rejected"
+    },
+    {
+      "controlId": "VIBE1-13",
+      "ref": "pytest:tests/capt_runtime/test_release_security_assurance.py::test_memory_query_parameterizes_attacker_controlled_filters"
+    },
+    {
+      "controlId": "VIBE1-14",
+      "ref": "pytest:tests/capt_runtime/test_bounded_ipc_framing.py::test_ipc_framing_non_object_json"
+    },
+    {
+      "controlId": "VIBE1-17",
+      "ref": "pytest:tests/capt_runtime/test_release_security_assurance.py::test_client_safe_memory_projection_excludes_raw_content"
+    },
+    {
+      "controlId": "VIBE2-09",
+      "ref": "pytest:tests/capt_runtime/test_injection_assurance.py::test_adversarial_prompt_cannot_spoof_approval_digest"
+    },
+    {
+      "controlId": "VIBE2-10",
+      "ref": "pytest:tests/capt_runtime/test_resource_governor.py::test_provider_driver_budget_rejection_occurs_before_network_dispatch"
+    },
+    {
+      "controlId": "VIBE2-11",
+      "ref": "pytest:tests/capt_runtime/test_bounded_ipc_framing.py::test_ipc_framing_oversized_frame"
+    },
+    {
+      "controlId": "VIBE2-13",
+      "ref": "pytest:tests/capt_runtime/test_release_security_assurance.py::test_memory_store_rejects_unsafe_persistence_shapes_but_preserves_untrusted_text"
+    },
+    {
+      "controlId": "VIBE2-18",
+      "ref": "pytest:tests/capt_runtime/test_security_audit_trail.py::test_security_rejection_audit_recording"
+    },
+    {
+      "controlId": "VIBE2-20",
+      "ref": "pytest:tests/capt_runtime/test_release_security_assurance.py::test_all_authoritative_runtime_sqlite_files_are_private_and_repaired"
+    }
+  ]
+}

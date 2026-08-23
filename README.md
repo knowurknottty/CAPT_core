@@ -16,14 +16,10 @@ CAPT Core has four distinct authority/evidence states that must not be collapsed
 
 1. **Numbered package:** `pyproject.toml` still declares `capt-solo 0.5.0`; preserved proof under `release_evidence/v0.5/` is historical.
 2. **Merged integration `main`:** PR #117 was merged on 2026-08-21, bringing the reconciled provider/native spine, CAPT-UPG-001→019, replay/checkpoint corrections, durable Cohorts + steering, governed artifact promotion, lease controls, forensic/provenance/epistemic/security projections, authored-skill approval binding, and macOS ↔ RuntimeService ↔ MCP authority acceptance onto `main`. Closed-unmerged PR #118's provider/model-coherence semantics are included through that reconciled line.
-3. **Release authorization:** still separate and **BLOCKED**. The exact merged PR #117 head `570babeef113943860c1268722200a48639e406d` passed M0-A and Native macOS CI but its `Release Security` workflow **failed** (run `32440329043`). Merge status is not release certification.
+3. **Release authorization:** exact-head and independent of merge status. The historical merged PR #117 head `570babeef113943860c1268722200a48639e406d` passed M0-A and Native macOS CI but its `Release Security` workflow **failed** (run `32440329043`). The security-closure implementation now supplies proof paths for all 21 applicable controls and locally projects **21 PASS / 0 FAIL / 0 NOT_VERIFIED / 26 NOT_APPLICABLE**; only the hosted `Release Security` result for the exact source SHA may authorize release security.
 4. **Separate open work:** CAPT-UPG-020→024, Inversion Labs/Forge edition work, and the public-release design/plan lineage remain independent PR lanes and are not silently counted as released Core functionality.
 
-Current release posture:
-
-`IMPLEMENTED_CROSS_SURFACE_VERIFIED_RELEASE_SECURITY_BLOCKED`
-
-Fresh 2026-08-19 convergence proof remains bound to its recorded frozen snapshots and exact candidate SHAs; those test counts and artifact hashes are not relabeled as evidence for later merge commits. Current `main` includes that implementation lineage, but a final release artifact set and exact-head security closure still have to be produced from an authorized source commit.
+Release-security authority is **per exact source SHA**. Historical blocked heads remain blocked evidence; a later commit becomes release-security authorized only when its own hosted Security Closure Cockpit returns PASS. Final public artifacts must still be rebuilt and re-hashed from the exact authorized source commit.
 
 See [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md), [`docs/PR_TOPOLOGY.md`](docs/PR_TOPOLOGY.md), [`docs/FUNCTIONALITY_MATRIX.md`](docs/FUNCTIONALITY_MATRIX.md), and [`docs/RELEASE_EVIDENCE.md`](docs/RELEASE_EVIDENCE.md) for the exact boundary.
 
