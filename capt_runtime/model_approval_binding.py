@@ -57,6 +57,7 @@ def build_bound_model_operator_approval(
     context_pack_digest: str = "",
     continuation_context: Optional[List[Dict[str, Any]]] = None,
     authored_skill_context: Optional[Dict[str, Any]] = None,
+    proposal_binding: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Return the model-visible assembly plus its execution admission binding."""
     assembly = build_model_operator_prompt_assembly(
@@ -107,6 +108,8 @@ def build_bound_model_operator_approval(
     authored_summary = summarize_skill_context(authored_skill_context)
     if authored_summary is not None:
         binding["authoredSkills"] = authored_summary
+    if proposal_binding:
+        binding.update(dict(proposal_binding))
     approval_digest = digest(
         {
             "basePromptAssemblyDigest": assembly["promptAssemblyDigest"],

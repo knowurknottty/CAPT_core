@@ -15,6 +15,13 @@ from capt_runtime import commands
 from capt_runtime.errors import AuthorityViolation, CaptRuntimeError, IdempotencyConflict
 from capt_runtime.approval_dispatch import register_expected_prompt_digest
 from capt_runtime.prompt_approval import request_model_prompt_approval
+from capt_runtime.prompt_compiler import PromptCompiler
+from capt_runtime.prompt_proposals import (
+    cancel_prompt_proposal,
+    compile_prompt_proposal,
+    request_prompt_proposal_approval,
+    revise_prompt_proposal,
+)
 from capt_runtime.services import RuntimeService
 from capt_runtime.store import EventStore
 from capt_runtime.tool_broker import ToolBrokerError, ToolUnavailable
@@ -38,6 +45,10 @@ _REQUIRED_ENVELOPE = (
 
 _VALID_OPS = (
     "create_mission",
+    "compile_prompt_proposal",
+    "revise_prompt_proposal",
+    "cancel_prompt_proposal",
+    "request_prompt_proposal_approval",
     "request_model_prompt_approval",
     "submit_approval_decision",
     "cancel_task",
@@ -70,6 +81,7 @@ class RuntimeCommandService:
         memory_engine: Any = None,
         runtime_service: Optional[RuntimeService] = None,
         tool_broker: Any = None,
+        prompt_compiler: Optional[PromptCompiler] = None,
     ) -> None:
         self.store = store
         self.svc = runtime_service or RuntimeService(store)
@@ -77,6 +89,7 @@ class RuntimeCommandService:
         self.session_id = session_id
         self.memory_engine = memory_engine
         self.tool_broker = tool_broker
+        self.prompt_compiler = prompt_compiler or PromptCompiler()
         self.fixed_openharness_runner = None
         self.approved_hermes_runner: Any = None
         self.lab_runner: Any = None
@@ -172,7 +185,49 @@ class RuntimeCommandService:
                     stream_id="tool_execution-" + str(result["toolExecutionId"]),
                 )
 
-            if op == "create_mission":
+            if op == "compile_prompt_proposal":
+                result = compile_prompt_proposal(
+                    self.svc, self.prompt_compiler, cmd["payload"], meta
+                )
+                status = "idempotent" if result.get("status") == "idempotent" else "accepted"
+                return self._receipt(
+                    cmd, status=status,
+                    classification="duplicate" if status == "idempotent" else "accepted",
+                    result=result,
+                    stream_id="prompt_proposal-" + str(result.get("proposalId", "")),
+                )
+
+            elif op == "revise_prompt_proposal":
+                result = revise_prompt_proposal(self.svc, cmd["payload"], meta)
+                status = "idempotent" if result.get("status") == "idempotent" else "accepted"
+                return self._receipt(
+                    cmd, status=status,
+                    classification="duplicate" if status == "idempotent" else "accepted",
+                    result=result,
+                    stream_id="prompt_proposal-" + str(result.get("proposalId", "")),
+                )
+
+            elif op == "cancel_prompt_proposal":
+                result = cancel_prompt_proposal(self.svc, cmd["payload"], meta)
+                status = "idempotent" if result.get("status") == "idempotent" else "accepted"
+                return self._receipt(
+                    cmd, status=status,
+                    classification="duplicate" if status == "idempotent" else "accepted",
+                    result=result,
+                    stream_id="prompt_proposal-" + str(result.get("proposalId", "")),
+                )
+
+            elif op == "request_prompt_proposal_approval":
+                result = request_prompt_proposal_approval(self.svc, cmd["payload"], meta)
+                status = "idempotent" if result.get("status") == "idempotent" else "accepted"
+                return self._receipt(
+                    cmd, status=status,
+                    classification="duplicate" if status == "idempotent" else "accepted",
+                    result=result,
+                    stream_id="human_approval-" + str(result.get("requestId", "")),
+                )
+
+            elif op == "create_mission":
                 if self.memory_engine is not None:
                     mid = cmd["payload"].get("missionId", "")
                     usage = self._mission_context_usage(cmd["payload"])
