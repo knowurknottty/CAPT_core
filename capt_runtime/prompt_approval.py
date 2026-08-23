@@ -102,6 +102,12 @@ def request_model_prompt_approval(
         context_pack_digest=continuation["contextPackDigest"],
         continuation_context=continuation["records"],
         authored_skill_context=skill_context,
+        proposal_binding={
+            key: intent[key] for key in (
+                "proposalId", "proposalRevision", "proposalSnapshotDigest",
+                "originalHumanPromptDigest", "selectedPromptKind", "selectedPromptDigest",
+            ) if key in intent
+        } or None,
     )
     expires_at = str(intent.get("expiresAt") or _expiry_from(operator_metadata["issuedAt"]))
     request = {
