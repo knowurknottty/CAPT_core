@@ -177,6 +177,7 @@
         "operation": { "type": ["string", "null"], "maxLength": 128 },
         "riskClassification": { "$ref": "common.schema.json#/$defs/RiskClassification" },
         "policyReason": { "type": ["string", "null"], "maxLength": 1024 },
+        "taskTitle": { "type": ["string", "null"], "minLength": 1, "maxLength": 512 },
         "taskId": { "type": ["string", "null"], "maxLength": 256 },
         "requestId": { "type": ["string", "null"], "maxLength": 256 }
       }

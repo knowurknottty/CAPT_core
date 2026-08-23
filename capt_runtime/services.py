@@ -154,7 +154,8 @@ class RuntimeService(object):
         return {
             "taskId": task_id,
             "missionId": intent["missionId"],
-            "title": intent.get("objective", "Operator task"),
+            "title": intent.get("taskTitle") or intent.get("objective", "Operator task"),
+            "instruction": intent.get("objective"),
             "state": "pending",
             "consequential": bool(intent.get("consequential", True)),
             "capabilityRequirements": [

@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:6f678ba0f511575039b56f09a82ced6bf5623818f4e5dc408e3199d02587033b
+# source digest:  sha256:555c4d3470ad99854ee33e042f9e98969313be5b370b3a5a3afcfde6bdfef96c
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -810,6 +810,7 @@ class OperatorMissionIntent(object):
     riskClassification: Optional[RiskClassification] = None
     successCriteria: List[Dict[str, Any]] = field(default_factory=list)
     taskId: Optional[str] = None
+    taskTitle: Optional[str] = None
     terminationCriteria: List[Dict[str, Any]] = field(default_factory=list)
     unresolvedAmbiguities: List[str] = field(default_factory=list)
 
@@ -1822,6 +1823,7 @@ class TaskNode(object):
     taskId: Identifier
     title: str
     assignedDriverId: Optional[Identifier] = None
+    instruction: Optional[str] = None
     recoveryState: Optional[TaskRecoveryState] = None
 
 

@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:6f678ba0f511575039b56f09a82ced6bf5623818f4e5dc408e3199d02587033b
+// source digest:  sha256:555c4d3470ad99854ee33e042f9e98969313be5b370b3a5a3afcfde6bdfef96c
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -702,6 +702,7 @@ export interface OperatorMissionIntent {
   readonly riskClassification?: RiskClassification;
   readonly successCriteria?: readonly Readonly<Record<string, unknown>>[];
   readonly taskId?: string | null;
+  readonly taskTitle?: string | null;
   readonly terminationCriteria?: readonly Readonly<Record<string, unknown>>[];
   readonly unresolvedAmbiguities?: readonly string[];
 }
@@ -1585,6 +1586,7 @@ export interface TaskNode {
   readonly taskId: Identifier;
   readonly title: string;
   readonly assignedDriverId?: Identifier | null;
+  readonly instruction?: string | null;
   readonly recoveryState?: TaskRecoveryState;
 }
 

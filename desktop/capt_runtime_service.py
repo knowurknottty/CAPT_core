@@ -763,8 +763,8 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     context_pack_digest=context_pack_digest,
                     continuation_context=continuation["records"],
                 )
-                if len(bound_assembly["modelVisiblePrompt"]) > 512:
-                    raise ValueError("MODEL_VISIBLE_PROMPT_TITLE_TOO_LONG")
+                if len(bound_assembly["modelVisiblePrompt"]) > 4096:
+                    raise ValueError("MODEL_VISIBLE_PROMPT_TOO_LONG")
                 # This read-only check catches a mismatched approval before the
                 # command service consumes the one-use receipt.
                 svc.require_approved_prompt_assembly(
@@ -903,6 +903,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     "schemaVersion": "1.0.0",
                     "missionId": mission_id,
                     "objective": model_visible_objective,
+                    "taskTitle": "Model inspection: " + task_id,
                     "scope": {"kind": "filesystem", "rootPath": target_root, "recursive": True},
                     "requiresApproval": False,
                     "constraints": [{"kind": "resource_boundary", "constraintId": "con-model-1",

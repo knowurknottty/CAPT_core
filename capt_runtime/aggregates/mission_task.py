@@ -143,6 +143,7 @@ class TaskAggregate(object):
             "taskId": node["taskId"],
             "missionId": node["missionId"],
             "title": node["title"],
+            "instruction": node.get("instruction"),
             "state": node.get("state", "pending"),
             "capabilityRequirements": node["capabilityRequirements"],
             "attempt": node.get("attempt", 0),

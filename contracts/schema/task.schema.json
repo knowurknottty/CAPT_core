@@ -37,6 +37,7 @@
         "taskId": { "$ref": "common.schema.json#/$defs/Identifier" },
         "missionId": { "$ref": "common.schema.json#/$defs/Identifier" },
         "title": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "instruction": { "type": ["string", "null"], "maxLength": 4096 },
         "state": { "$ref": "task.schema.json#/$defs/TaskState" },
         "consequential": {
           "description": "True when execution can produce an external side effect. Consequential tasks require a valid lease before dispatch (invariant 7).",

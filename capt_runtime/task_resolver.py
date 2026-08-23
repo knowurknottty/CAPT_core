@@ -42,7 +42,7 @@ class TaskResolver:
             raise AuthorityViolation("task %s is not owned by mission %s" % (task_id, mission_id))
         if task.get("state") in {"cancelled", "failed", "succeeded"}:
             raise AuthorityViolation("task %s is terminal: %s" % (task_id, task.get("state")))
-        objective = task.get("title")
+        objective = task.get("instruction") or task.get("title")
         requirements = task.get("capabilityRequirements") or []
         if not isinstance(objective, str) or not objective.strip() or len(requirements) != 1:
             raise AuthorityViolation("task %s lacks a bounded executable objective" % task_id)

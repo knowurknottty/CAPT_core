@@ -370,7 +370,7 @@ def test_deterministic_preflight_rejection_does_not_consume_approval(tmp_path: P
     client, _ledger, proc = _start_runtime(tmp_path / "runtime")
     try:
         payload = _payload(repo, exe, suffix)
-        payload["objective"] = "x" * 200  # bound assembly exceeds TaskNode title max before dispatch
+        payload["objective"] = "x" * 3900  # bound assembly exceeds the 4096 model-visible prompt ceiling before dispatch
         payload = _authorize_model_run(client, payload, suffix)
         receipt = client.command("run_approved_hermes_inspection", payload, "idem-ouro-preflight")
         assert receipt["status"] == "rejected", receipt

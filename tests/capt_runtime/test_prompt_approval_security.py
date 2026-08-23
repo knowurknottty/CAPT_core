@@ -156,6 +156,21 @@ def test_local_no_auth_provider_does_not_require_synthetic_credential():
     assert _provider_credential_required(P()) is True
 
 
+def test_model_operator_objective_can_exceed_task_title_limit_without_overflow(tmp_path):
+    from capt_runtime.contracts import require
+    long_objective = "evidence-grounded review " * 40
+    assert 512 < len(long_objective) < 4096
+    intent = {
+        "schemaVersion": "1.0.0",
+        "missionId": "m-long-objective",
+        "objective": long_objective,
+        "taskTitle": "Bounded model review",
+        "scope": {"kind": "filesystem", "rootPath": "/tmp", "recursive": True},
+        "requiresApproval": False,
+    }
+    require("OperatorMissionIntent", intent)
+
+
 def test_transport_whitespace_is_canonicalized_before_approval_binding(tmp_path):
     base = approval_intent(
         provider="mtplx", model="qwen3.8-27b-mtplx", executable=""
