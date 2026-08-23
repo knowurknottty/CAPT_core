@@ -67,3 +67,44 @@ def render_execution_prompt(original_prompt: str, result: StructuredStageResult)
     if result.outputs:
         sections.append("Expected outputs:\n- " + "\n- ".join(result.outputs))
     return "\n\n".join(sections)
+
+
+_STAGE_INSTRUCTIONS = {
+    PromptStageName.OMNI: (
+        "Resolve the user's outcome, scope, inputs, outputs, constraints, success criteria, "
+        "and ambiguities without changing the objective or inventing authority."
+    ),
+    PromptStageName.META: (
+        "Convert resolved intent into an execution-grade prompt and verification criteria; "
+        "preserve unresolved ambiguity and never enlarge capabilities."
+    ),
+    PromptStageName.FORGE: "Software specialist stage is advisory-only in this tranche.",
+    PromptStageName.SIGMA: "Adversarial reconciliation stage is advisory-only in this tranche.",
+}
+
+
+def stage_instructions(stage: PromptStageName) -> str:
+    return _STAGE_INSTRUCTIONS[stage]
+
+
+def stage_response_schema() -> dict[str, Any]:
+    string_array = {"type": "array", "items": {"type": "string"}, "maxItems": 32}
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "stage", "outcome", "scope", "inputs", "outputs", "constraints",
+            "successCriteria", "ambiguities",
+        ],
+        "properties": {
+            "stage": {"type": "string", "enum": [stage.value for stage in PromptStageName]},
+            "outcome": {"type": "string"},
+            "scope": {"type": "string"},
+            "inputs": string_array,
+            "outputs": string_array,
+            "constraints": string_array,
+            "successCriteria": string_array,
+            "ambiguities": string_array,
+            "requestedCapabilities": string_array,
+        },
+    }

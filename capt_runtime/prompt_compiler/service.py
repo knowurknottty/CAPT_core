@@ -11,6 +11,7 @@ from .models import (
     PromptCompileRequest,
     PromptStageName,
     PromptStageRecord,
+    PromptVerificationContract,
 )
 from .provider_runner import BoundedPromptCompilerRunner
 from .router import PromptRoute, route_stages
@@ -26,6 +27,7 @@ class PromptCompiler:
     ) -> None:
         self._runner = runner
         self._provider = provider
+
     def admit_stage_result(
         self,
         request: PromptCompileRequest,
@@ -69,18 +71,25 @@ class PromptCompiler:
                 requested_capabilities=request.requested_capabilities,
             )
 
+        if self._provider.endpoint_class == "remote" and not request.remote_compilation_authorized:
+            raise AuthorityViolation("REMOTE_COMPILATION_NOT_AUTHORIZED")
+
         current_prompt = request.original_prompt
         records = []
         unresolved = []
+        acceptance_criteria = ()
         for stage in route:
             if stage in (PromptStageName.FORGE, PromptStageName.SIGMA):
                 records.append(self._record(stage, current_prompt, current_prompt, False))
                 continue
-            result = self._runner.run(request, stage, current_prompt=current_prompt)
+            result = self._runner.run(
+                stage, request, self._provider, current_prompt=current_prompt
+            )
             self.admit_stage_result(request, result)
             next_prompt = render_execution_prompt(request.original_prompt, result)
             records.append(self._record(stage, current_prompt, next_prompt, True))
             unresolved.extend(result.ambiguities)
+            acceptance_criteria = result.success_criteria
             current_prompt = next_prompt
 
         status = "clarification_required" if unresolved else "ready_for_approval"
@@ -92,7 +101,9 @@ class PromptCompiler:
             stage_records=tuple(records),
             requested_capabilities=request.requested_capabilities,
             unresolved_questions=tuple(unresolved),
+            verification_contract=PromptVerificationContract(acceptance_criteria),
         )
+
     @staticmethod
     def _requires_clarification(route: PromptRoute) -> bool:
         return (
@@ -128,6 +139,7 @@ class PromptCompiler:
             self._record(stage, request.original_prompt, request.original_prompt, False)
             for stage in route
         )
+
     @staticmethod
     def _proposal(
         request: PromptCompileRequest,
@@ -138,6 +150,7 @@ class PromptCompiler:
         stage_records: Tuple[PromptStageRecord, ...],
         requested_capabilities: Tuple[str, ...],
         unresolved_questions: Tuple[str, ...] = (),
+        verification_contract: PromptVerificationContract = PromptVerificationContract(),
     ) -> PromptCompileProposal:
         return PromptCompileProposal(
             status=status,
@@ -146,6 +159,7 @@ class PromptCompiler:
             stage_chain=route.stage_chain,
             stage_records=stage_records,
             requested_capabilities=requested_capabilities,
+            verification_contract=verification_contract,
             unresolved_questions=unresolved_questions,
             rationale=route.rationale,
         )
