@@ -36,9 +36,9 @@ The merged #117 head has mixed-but-truthful CI evidence:
 
 The prior detailed Security Closure Cockpit snapshot at `33e24146094242d7a88612cea39267ef52a1d2e1` recorded `releaseAuthorized=false` with **2 PASS / 0 FAIL / 19 NOT_VERIFIED / 26 NOT_APPLICABLE**. Those exact counts belong to that exact candidate head and are not silently relabeled as later source.
 
-The release-security closure implementation adds exact-head evidence harvesting for existing controls, AES-256-GCM protection for sensitive file-backed EventStore JSON and MemoryStore content, private SQLite sidecars, bounded storage ingress, an independent spend-threshold alert, and a live OpenRouter hard-cap verifier. Its local 47-control projection is **21 PASS / 0 FAIL / 0 NOT_VERIFIED / 26 NOT_APPLICABLE**.
+The release-security closure landed through PR #124. Current `main` merge SHA `2199c036aa22af33fb3eb0700f63f820a35aa55a` reproduced the closure on hosted push CI: Release Security run `32617740908` returned **PASS** with **21 PASS / 0 FAIL / 0 NOT_VERIFIED / 26 NOT_APPLICABLE** and `blockingControls=[]`; M0-A run `32617740848` also passed on the same SHA. The merge-head security artifact is `capt-security-gate` artifact `9487471673` (ZIP SHA-256 `89f1cb0e6a7ee75e45367deca213538824f5a96fbc98753cfc521604bf221371`).
 
-**Merged does not mean release-certified. Hosted exact-head CI remains authoritative.** A commit is release-security authorized only if its own `Release Security` workflow returns PASS; neither this local projection nor merge status may substitute for that receipt. Final release artifacts must then be rebuilt/re-hashed from that authorized source commit.
+**Merged does not mean release-certified** as a general rule, but this exact merge SHA now has its own release-security receipt. `2199c036aa22af33fb3eb0700f63f820a35aa55a` is release-security authorized. That does not by itself create public artifacts: the release process must still rebuild and re-hash them from the authorized source, and signing/notarization/distribution proof remains a separate release class. Resolve literal current `main` from Git; every descendant commit remains subject to its own exact-head Release Security receipt.
 
 ### 4. Separate open work
 

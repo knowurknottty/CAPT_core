@@ -49,7 +49,7 @@ Post-fix GitHub evidence:
 - full-history gitleaks: **PASS**;
 - dependency closure pip-audit: **PASS**;
 - SecurityGate machinery tests: **11 passed**;
-- final Security Closure Cockpit enforcement: **BLOCKED by design** because applicable release-control evidence remains incomplete.
+- historical pre-closure Security Closure Cockpit enforcement: **BLOCKED by design** because applicable release-control evidence was incomplete at that source state.
 
 ## Cross-surface authority acceptance
 
@@ -81,9 +81,13 @@ The Security Closure Cockpit is integrated and intentionally fail-closed. The la
 
 The gate artifact is uploaded by the `Release Security` workflow for audit. `NOT_VERIFIED` is missing/incomplete evidence, not a discovered vulnerability and not permission to infer PASS from unrelated test suites.
 
-The subsequent exact merged head `570babeef113943860c1268722200a48639e406d` produced a failing Release Security workflow; that historical result remains immutable evidence. The security-closure implementation now maps the full Python assurance suite into explicit per-control attestations, verifies a live provider-side OpenRouter key cap independently, and requires the Python spend-alert proof before `CAPT-SUP-07` can pass. Local projection over the 47-control catalog is **21 PASS / 0 FAIL / 0 NOT_VERIFIED / 26 NOT_APPLICABLE**.
+The subsequent exact merged head `570babeef113943860c1268722200a48639e406d` produced a failing Release Security workflow; that historical result remains immutable evidence. PR #124 then closed the evidence and implementation gaps without relabeling that older receipt.
 
-That local projection is not itself release authorization. The exact source commit under consideration must reproduce PASS in hosted `Release Security`, after which release artifacts must be rebuilt and re-hashed from that authorized commit.
+### Release-security authorization — 2026-08-23
+
+Current `main` merge SHA `2199c036aa22af33fb3eb0700f63f820a35aa55a` reproduced the closure in hosted push CI. Release Security run `32617740908` returned **PASS** with **21 PASS / 0 FAIL / 0 NOT_VERIFIED / 26 NOT_APPLICABLE**, `blockingControls=[]`, Python 3.10/3.12 success, full-history gitleaks success, live billing-assurance success, and final checklist success. M0-A push run `32617740848` also passed on that exact SHA. The merge-head `capt-security-gate` artifact is ID `9487471673`, ZIP SHA-256 `89f1cb0e6a7ee75e45367deca213538824f5a96fbc98753cfc521604bf221371`; the live billing artifact is ID `9487451253`, ZIP SHA-256 `c33e4f7635ccb35c08c92faaf88e269870ebf0893bd87c51902a8a3020b287a0`.
+
+Therefore `2199c036aa22af33fb3eb0700f63f820a35aa55a` is **release-security authorized** for the current Core profile. This is source/security authorization, not a claim that public artifacts have already been rebuilt, re-hashed, signed, notarized, or distributed.
 
 ## Artifact evidence boundary
 

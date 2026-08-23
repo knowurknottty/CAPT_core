@@ -44,3 +44,18 @@ def test_old_candidate_language_is_not_current_authority():
     canonical = "\n".join((CURRENT, README, ROADMAP))
     assert "main is not the authority for the newer terminal convergence work" not in canonical.lower()
     assert "not yet a release-certified protected-main merge" not in canonical
+
+
+def test_docs_bind_release_security_to_exact_authorized_baseline():
+    canonical = "\n".join((CURRENT, TOPOLOGY, README, SECURITY))
+    assert "2199c036aa22af33fb3eb0700f63f820a35aa55a" in canonical
+    assert "32617740908" in canonical
+    assert "21 PASS / 0 FAIL / 0 NOT_VERIFIED / 26 NOT_APPLICABLE" in canonical
+    assert "release-security authorized" in canonical.lower()
+    assert "Resolve literal current `main` from Git" in canonical
+
+
+def test_security_docs_keep_release_security_separate_from_artifact_release():
+    canonical = "\n".join((CURRENT, README, SECURITY))
+    assert "signed/notarized" in canonical or "signed/notarized/distributed" in canonical
+    assert "rebuild" in canonical.lower() and "re-hash" in canonical.lower()

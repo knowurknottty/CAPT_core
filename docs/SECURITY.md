@@ -48,7 +48,7 @@ A red `Release Security` workflow is therefore now an intentional release-author
 
 Release-security authorization is bound to the exact source SHA being evaluated. The historical merged PR #117 head `570babeef113943860c1268722200a48639e406d` remains a **failed** Release Security receipt (run `32440329043`); later work does not rewrite that history.
 
-The security-closure implementation supplies explicit proof for all **21 applicable** controls in the 47-control Core profile. Its local projection is **21 PASS / 0 FAIL / 0 NOT_VERIFIED / 26 NOT_APPLICABLE**. The hosted `Release Security` workflow must reproduce PASS on the exact source SHA before that SHA is release-security authorized.
+The security-closure implementation supplies explicit proof for all **21 applicable** controls in the 47-control Core profile. Current `main` merge SHA `2199c036aa22af33fb3eb0700f63f820a35aa55a` reproduced that proof in hosted `Release Security` run `32617740908`: **21 PASS / 0 FAIL / 0 NOT_VERIFIED / 26 NOT_APPLICABLE**, no blockers. That exact SHA is therefore **release-security authorized** for this Core profile.
 
 The closure proof classes include:
 
