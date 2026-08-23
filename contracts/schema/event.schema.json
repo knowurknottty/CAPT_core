@@ -25,6 +25,7 @@
         "CapabilityLeaseRevoked",
         "DriverRunCreated",
         "DriverRunStateChanged",
+        "DriverRunReconciled",
         "ClaimCreated",
         "EvidenceRecorded",
         "ClaimVerified",
@@ -208,6 +209,23 @@
             "driverRunId": { "$ref": "common.schema.json#/$defs/Identifier" },
             "fromState": { "$ref": "driver.schema.json#/$defs/DriverRunState" },
             "toState": { "$ref": "driver.schema.json#/$defs/DriverRunState" }
+          }
+        },
+        {
+          "title": "DriverRunReconciledPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "driverRunId", "fromState", "toState", "disposition", "reason"],
+          "properties": {
+            "eventType": { "type": "string", "const": "DriverRunReconciled" },
+            "driverRunId": { "$ref": "common.schema.json#/$defs/Identifier" },
+            "fromState": { "$ref": "driver.schema.json#/$defs/DriverRunState" },
+            "toState": { "type": "string", "const": "reconciled" },
+            "disposition": {
+              "type": "string",
+              "enum": ["resolved_effect_absent", "resolved_effect_present", "resolved_external_unknown"]
+            },
+            "reason": { "type": "string", "minLength": 1, "maxLength": 2048 }
           }
         },
         {

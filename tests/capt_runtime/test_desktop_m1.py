@@ -185,6 +185,49 @@ def test_cancel_driver_run(client):
     assert run["state"] == "cancelled"
 
 
+def test_reconcile_lost_driver_run_via_governed_command(client):
+    mid = "m-reconcile-lost-" + uuid.uuid4().hex[:8]
+    resp = client.command("create_mission", _make_mission_payload(mid))
+    from capt_runtime import commands
+    from capt_runtime.services import RuntimeService
+    import capt_runtime.store as cs
+    ledger_file = client.identity()["ledgerPath"]
+    svc_store = cs.EventStore(ledger_file)
+    svc = RuntimeService(svc_store)
+    dr_id = "dr-lost-" + uuid.uuid4().hex[:8]
+    meta = lambda step: commands.command(
+        command_id="seed-reconcile-" + step, idempotency_key="seed-reconcile-" + step,
+        operation_fingerprint="sha256:" + "1" * 64, correlation_id="corr-reconcile",
+        actor_id="exec-1", actor_kind="execution_plane", issued_at="2026-08-03T00:00:00Z")
+    svc.create_driver_run(
+        {"schemaVersion": "1.0.0", "driverRunId": dr_id, "driverId": "provider",
+         "missionId": mid, "taskId": resp["result"].get("taskId") or "t-x",
+         "workOrderVersion": 1, "state": "created", "reconciliationStatus": "not_required",
+         "createdAt": "2026-08-03T00:00:00Z"}, meta("create"))
+    svc.transition_driver_run(dr_id, "submitted", meta("submitted"))
+    svc.transition_driver_run(dr_id, "running", meta("running"))
+    svc.transition_driver_run(dr_id, "lost", meta("lost"))
+    svc_store.close()
+
+    blocked = client.command("cancel_driver_run", {"driverRunId": dr_id, "reason": "wrong semantic"})
+    assert blocked["classification"] == "illegal_transition"
+    reconciled = client.command(
+        "reconcile_driver_run",
+        {"driverRunId": dr_id, "disposition": "resolved_effect_absent",
+         "reason": "external effect checked absent; safe to retry under a fresh run"},
+        idempotency_key="idem-reconcile-lost")
+    assert reconciled["classification"] == "accepted", reconciled
+    again = client.command(
+        "reconcile_driver_run",
+        {"driverRunId": dr_id, "disposition": "resolved_effect_absent", "reason": "same decision"},
+        idempotency_key="idem-reconcile-lost")
+    assert again["status"] == "idempotent"
+    state = project_authoritative_state(client)
+    run = [r for r in state["driverRuns"] if r["driverRunId"] == dr_id][0]
+    assert run["state"] == "reconciled"
+    assert run["reconciliationStatus"] == "resolved_effect_absent"
+
+
 def test_reconnect_reconstructs_state(client):
     mid = "m-recon-" + uuid.uuid4().hex[:8]
     client.command("create_mission", _make_mission_payload(mid))

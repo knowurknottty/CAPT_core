@@ -34,6 +34,16 @@ def raw_text_digest(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def canonical_model_operator_text(value: Any) -> str:
+    """Canonicalize operator-supplied boundary text before approval and dispatch.
+
+    Leading/trailing transport whitespace (notably a terminal newline from a
+    prompt file) must not make approval-time and dispatch-time identities
+    diverge. Internal whitespace remains significant.
+    """
+    return str(value or "").strip()
+
+
 def staging_root_for_ledger(ledger_path: str, driver_run_id: str) -> str:
     return str(Path(ledger_path).parent / "staging" / driver_run_id)
 
@@ -57,6 +67,11 @@ def build_bound_model_operator_approval(
     continuation_context: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Return the model-visible assembly plus its execution admission binding."""
+    human_prompt = canonical_model_operator_text(human_prompt)
+    target_root = canonical_model_operator_text(target_root)
+    provider = canonical_model_operator_text(provider)
+    model = canonical_model_operator_text(model)
+    executable = canonical_model_operator_text(executable)
     assembly = build_model_operator_prompt_assembly(
         human_prompt=human_prompt,
         response_mode=response_mode,

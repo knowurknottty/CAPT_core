@@ -174,6 +174,11 @@ class ClaimAggregate(object):
 # ---------------------------------------------------------------------------
 
 DRIVER_TERMINAL: FrozenSet[str] = frozenset({"completed", "failed", "cancelled", "reconciled"})
+DRIVER_RECONCILIATION_DISPOSITIONS: FrozenSet[str] = frozenset({
+    "resolved_effect_absent",
+    "resolved_effect_present",
+    "resolved_external_unknown",
+})
 
 DRIVER_TRANSITIONS: Dict[str, FrozenSet[str]] = {
     "created": frozenset({"submitted", "cancelled", "failed"}),
@@ -244,4 +249,17 @@ class DriverRunAggregate(object):
             nxt["reconciliationStatus"] = "required"
         if to_state == "reconciled":
             nxt["reconciliationStatus"] = "resolved_effect_absent"
+        return nxt
+
+    @staticmethod
+    def reconcile(state: Dict[str, Any], disposition: str) -> Dict[str, Any]:
+        if disposition not in DRIVER_RECONCILIATION_DISPOSITIONS:
+            raise AuthorityViolation("invalid driver reconciliation disposition %r" % disposition)
+        if state.get("state") != "lost":
+            raise IllegalTransition(
+                "driver run %s" % state["driverRunId"], state.get("state"), "reconciled"
+            )
+        nxt = dict(state)
+        nxt["state"] = "reconciled"
+        nxt["reconciliationStatus"] = disposition
         return nxt

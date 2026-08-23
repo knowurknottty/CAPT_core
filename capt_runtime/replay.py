@@ -129,6 +129,8 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         nxt = DriverRunAggregate.create(payload["driverRun"])
     elif event_type == "DriverRunStateChanged":
         nxt = DriverRunAggregate.transition(existing(), payload["toState"])
+    elif event_type == "DriverRunReconciled":
+        nxt = DriverRunAggregate.reconcile(existing(), payload["disposition"])
     elif event_type == "ClaimCreated":
         nxt = ClaimAggregate.propose(payload["claim"])
     elif event_type == "EvidenceRecorded":

@@ -931,6 +931,45 @@ class RuntimeService(object):
             }
         return self.transition_driver_run(driver_run_id, "cancelled", metadata)
 
+    def reconcile_driver_run(
+        self, driver_run_id: str, disposition: str, reason: str, metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        require("CommandMetadata", metadata)
+        require_authority("reconcile_driver_run", metadata["actor"]["kind"])
+        stream = DriverRunAggregate.stream_id(driver_run_id)
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            current = self.store.load_state(stream)
+            return {
+                "status": "idempotent",
+                "targetId": driver_run_id,
+                "state": current["state"] if current else None,
+                "reconciliationStatus": current.get("reconciliationStatus") if current else None,
+            }
+        expected = self.store.aggregate_version(stream)
+        current = self.store.require_state(stream)
+        state = DriverRunAggregate.reconcile(current, disposition)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1",
+            stream_id=stream,
+            event_type="DriverRunReconciled",
+            payload={
+                "eventType": "DriverRunReconciled",
+                "driverRunId": driver_run_id,
+                "fromState": current["state"],
+                "toState": "reconciled",
+                "disposition": disposition,
+                "reason": reason,
+            },
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+            mission_id=current.get("missionId"),
+            task_id=current.get("taskId"),
+        )
+        return self._commit(
+            [AppendRequest(stream, DriverRunAggregate.KIND, expected, event, state)], metadata
+        )
+
     def propose_claim(
         self, claim: Dict[str, Any], metadata: Dict[str, Any]
     ) -> Dict[str, Any]:

@@ -38,6 +38,7 @@ _VALID_OPS = (
     "submit_approval_decision",
     "cancel_task",
     "cancel_driver_run",
+    "reconcile_driver_run",
     "update_memory_trigger_policy",
     "run_fixed_openharness_inspection",
     "run_approved_hermes_inspection",
@@ -169,6 +170,15 @@ class RuntimeCommandService:
                 result = self.svc.cancel_driver_run(
                     cmd["payload"]["driverRunId"],
                     cmd["payload"].get("reason", "Operator cancelled."),
+                    meta,
+                )
+
+            elif op == "reconcile_driver_run":
+                p = cmd["payload"]
+                result = self.svc.reconcile_driver_run(
+                    p["driverRunId"],
+                    p["disposition"],
+                    p.get("reason", "Operator reconciled indeterminate driver run."),
                     meta,
                 )
 
@@ -470,7 +480,7 @@ class RuntimeCommandService:
             return "human_approval-" + str(p.get("requestId", ""))
         if cmd["op"] == "cancel_task":
             return "task-" + str(p.get("taskId", ""))
-        if cmd["op"] == "cancel_driver_run":
+        if cmd["op"] in ("cancel_driver_run", "reconcile_driver_run"):
             return "driverrun-" + str(p.get("driverRunId", ""))
         return None
 

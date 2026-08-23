@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:59bf06c0abc36da44f6f6841c1886dcde6b5d470790d65c42f5d5b15bfc0aa95
+# source digest:  sha256:6f678ba0f511575039b56f09a82ced6bf5623818f4e5dc408e3199d02587033b
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -1378,6 +1378,18 @@ class DriverRunCreatedPayload(object):
 
 
 @dataclass(frozen=True)
+class DriverRunReconciledPayload(object):
+    """DriverRunReconciledPayload"""
+
+    disposition: str
+    driverRunId: Identifier
+    eventType: Literal["DriverRunReconciled"]
+    fromState: DriverRunState
+    reason: str
+    toState: Literal["reconciled"]
+
+
+@dataclass(frozen=True)
 class DriverRunStateChangedPayload(object):
     """DriverRunStateChangedPayload"""
 
@@ -1506,7 +1518,7 @@ class TaskTransitionedPayload(object):
 
 
 # discriminated on 'eventType'
-EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload]
+EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, DriverRunReconciledPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload]
 
 
 class EventType(str, Enum):
@@ -1528,6 +1540,7 @@ class EventType(str, Enum):
     CAPABILITYLEASEREVOKED = "CapabilityLeaseRevoked"
     DRIVERRUNCREATED = "DriverRunCreated"
     DRIVERRUNSTATECHANGED = "DriverRunStateChanged"
+    DRIVERRUNRECONCILED = "DriverRunReconciled"
     CLAIMCREATED = "ClaimCreated"
     EVIDENCERECORDED = "EvidenceRecorded"
     CLAIMVERIFIED = "ClaimVerified"

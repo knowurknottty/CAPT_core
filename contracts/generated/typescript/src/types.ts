@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:59bf06c0abc36da44f6f6841c1886dcde6b5d470790d65c42f5d5b15bfc0aa95
+// source digest:  sha256:6f678ba0f511575039b56f09a82ced6bf5623818f4e5dc408e3199d02587033b
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -1175,6 +1175,16 @@ export interface DriverRunCreatedPayload {
   readonly eventType: "DriverRunCreated";
 }
 
+/** DriverRunReconciledPayload */
+export interface DriverRunReconciledPayload {
+  readonly disposition: string;
+  readonly driverRunId: Identifier;
+  readonly eventType: "DriverRunReconciled";
+  readonly fromState: DriverRunState;
+  readonly reason: string;
+  readonly toState: "reconciled";
+}
+
 /** DriverRunStateChangedPayload */
 export interface DriverRunStateChangedPayload {
   readonly driverRunId: Identifier;
@@ -1222,6 +1232,7 @@ export type EventPayload =
   | CapabilityLeaseRevokedPayload
   | DriverRunCreatedPayload
   | DriverRunStateChangedPayload
+  | DriverRunReconciledPayload
   | ClaimCreatedPayload
   | EvidenceRecordedPayload
   | ClaimVerifiedPayload
@@ -1231,7 +1242,7 @@ export type EventPayload =
   | HumanApprovalConsumedPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "DriverRunReconciled" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -1249,6 +1260,7 @@ export const EventTypeValues = [
   "CapabilityLeaseRevoked",
   "DriverRunCreated",
   "DriverRunStateChanged",
+  "DriverRunReconciled",
   "ClaimCreated",
   "EvidenceRecorded",
   "ClaimVerified",

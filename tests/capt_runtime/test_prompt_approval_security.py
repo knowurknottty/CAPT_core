@@ -140,6 +140,31 @@ def test_approval_digest_binds_every_execution_relevant_operator_input(tmp_path)
         assert changed_digest != base_digest, field
 
 
+def test_transport_whitespace_is_canonicalized_before_approval_binding(tmp_path):
+    base = approval_intent(
+        provider="mtplx", model="qwen3.8-27b-mtplx", executable=""
+    )
+    canonical = planner_result(tmp_path, "canonical-whitespace", base)
+    transported = deepcopy(base)
+    transported.update(
+        objective="  " + base["objective"] + "\n",
+        targetRoot=" " + base["targetRoot"] + " ",
+        provider=" mtplx ",
+        model=" qwen3.8-27b-mtplx\n",
+        executable=" ",
+    )
+    normalized = planner_result(tmp_path, "transport-whitespace", transported)
+
+    assert normalized["promptAssemblyDigest"] == canonical["promptAssemblyDigest"]
+    assert normalized["dispatchPromptDigest"] == canonical["dispatchPromptDigest"]
+    assert normalized["modelVisiblePromptDigest"] == canonical["modelVisiblePromptDigest"]
+
+    changed = deepcopy(base)
+    changed["objective"] = base["objective"].replace("bounded", "different")
+    distinct = planner_result(tmp_path, "semantic-change", changed)
+    assert distinct["promptAssemblyDigest"] != canonical["promptAssemblyDigest"]
+
+
 def test_planner_persists_one_use_execution_binding_and_exact_dispatch_digest(tmp_path):
     store = EventStore(str(tmp_path / "binding.db"))
     try:

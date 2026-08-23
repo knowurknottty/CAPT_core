@@ -516,7 +516,7 @@ class RuntimeQueryService:
                 return {"ok": True, "result": {
                     "schemaVersion": CONTRACT_SCHEMA_VERSION,
                     "queryOperations": ["identity", "capabilities", "list_aggregates", "get_state", "get_stream_events", "event_timeline", "claimguard", "verification", "get_memory_policy", "get_memory_state"],
-                    "commandOperations": ["create_mission", "request_model_prompt_approval", "submit_approval_decision", "cancel_task", "cancel_driver_run", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime"],
+                    "commandOperations": ["create_mission", "request_model_prompt_approval", "submit_approval_decision", "cancel_task", "cancel_driver_run", "reconcile_driver_run", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime"],
                     "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True},
                     "lifecycleOperations": {"checkpoint": True, "shutdown": True, "resume": True},
                 }}
@@ -683,8 +683,9 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             def _prepare_approved_hermes(command: Dict[str, Any]) -> PreparedApprovedModelExecution:
                 """Validate and freeze every deterministic dispatch input."""
                 payload = command.get("payload", {})
-                objective = payload.get("objective")
-                target_root = payload.get("targetRoot")
+                from capt_runtime.model_approval_binding import canonical_model_operator_text
+                objective = canonical_model_operator_text(payload.get("objective"))
+                target_root = canonical_model_operator_text(payload.get("targetRoot"))
                 if not objective or not target_root:
                     raise ValueError("MODEL_TASK_OBJECTIVE_OR_TARGET_MISSING")
                 command_id = command["commandId"]
@@ -696,9 +697,9 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 lease_id = payload.get("leaseId") or ("l-model-" + command_id)
                 claim_id = payload.get("claimId") or ("cl-model-" + command_id)
                 policy_id = payload.get("policyDecisionId") or ("pd-model-" + command_id)
-                executable = payload.get("executable") or None
-                provider_id = payload.get("provider")
-                provider_model = payload.get("model")
+                executable = canonical_model_operator_text(payload.get("executable")) or None
+                provider_id = canonical_model_operator_text(payload.get("provider")) or None
+                provider_model = canonical_model_operator_text(payload.get("model")) or None
                 provider = None
                 provider_key = ""
                 if provider_id:
