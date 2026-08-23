@@ -142,14 +142,16 @@ def test_approval_digest_binds_every_execution_relevant_operator_input(tmp_path)
 
 
 def test_local_no_auth_provider_does_not_require_synthetic_credential():
+    from capt_ui.operator.providers import ProviderKind
+
     class P:
-        kind = "local"
+        kind = ProviderKind.LOCAL
         key_ref = ""
 
     assert _provider_credential_required(P()) is False
     P.key_ref = "env:LOCAL_PROVIDER_KEY"
     assert _provider_credential_required(P()) is True
-    P.kind = "cloud"
+    P.kind = ProviderKind.CLOUD
     P.key_ref = ""
     assert _provider_credential_required(P()) is True
 

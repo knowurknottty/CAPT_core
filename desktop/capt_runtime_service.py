@@ -72,9 +72,11 @@ CONTRACT_SCHEMA_VERSION = "1.0.0"
 
 def _provider_credential_required(provider: Any) -> bool:
     """Require auth for remote providers or any provider declaring a key ref."""
+    kind = getattr(provider, "kind", "")
+    kind_value = getattr(kind, "value", kind)
     return (
         bool(str(getattr(provider, "key_ref", "") or "").strip())
-        or str(getattr(provider, "kind", "")) != "local"
+        or str(kind_value).lower() != "local"
     )
 
 
