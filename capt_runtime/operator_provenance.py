@@ -9,10 +9,37 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from .contracts import digest
+from .memory.accounting import estimate_tokens
 
 RESPONSE_MODES = ("MAX", "SPOCK", "CAVE CAPT", "MIN")
 ENHANCEMENT_ENGINES = ("OFF", "AUTO", "OMNI", "META", "FORGE", "SIGMA")
 CONTEXT_BUDGETS = tuple(range(32_000, 256_001, 32_000))
+
+MODEL_OUTPUT_RESERVE_TOKENS = 4_096
+
+
+def validate_model_visible_prompt_budget(
+    text: str,
+    *,
+    requested_context_budget: int,
+    effective_context_budget_value: Optional[int],
+) -> Dict[str, int]:
+    """Fail closed when the estimated prompt would consume the model output reserve."""
+    capacity = int(
+        effective_context_budget_value
+        if effective_context_budget_value is not None
+        else requested_context_budget
+    )
+    prompt_limit = max(0, capacity - MODEL_OUTPUT_RESERVE_TOKENS)
+    estimated = estimate_tokens(text)
+    if estimated > prompt_limit:
+        raise ValueError("MODEL_VISIBLE_PROMPT_TOO_LONG")
+    return {
+        "estimatedPromptTokens": estimated,
+        "capacityTokens": capacity,
+        "outputReserveTokens": MODEL_OUTPUT_RESERVE_TOKENS,
+        "promptTokenLimit": prompt_limit,
+    }
 _MODEL_OPERATOR_CONTEXT_REFERENCE = digest({"context": "not-selected-at-admission"})
 _MODEL_OPERATOR_TOOL_SCHEMA = digest(
     {"operations": ["RepositoryRead", "FilesystemRead", "ArtifactCreate", "AnalysisOnly"]}

@@ -4,6 +4,7 @@ from capt_runtime.operator_provenance import (
     build_cognitive_provenance,
     build_prompt_assembly,
     effective_context_budget,
+    validate_model_visible_prompt_budget,
 )
 
 
@@ -88,3 +89,34 @@ def test_prompt_assembly_rejects_noncanonical_engine():
             context_pack_digest="sha256:" + "a" * 64,
             tool_schema_digest="sha256:" + "b" * 64,
         )
+
+
+def test_model_visible_prompt_budget_uses_token_capacity_not_4096_character_ceiling():
+    evidence = validate_model_visible_prompt_budget(
+        "x" * 20_000,
+        requested_context_budget=32_000,
+        effective_context_budget_value=32_000,
+    )
+    assert evidence["estimatedPromptTokens"] == 5_000
+    assert evidence["capacityTokens"] == 32_000
+    assert evidence["outputReserveTokens"] == 4_096
+    assert evidence["promptTokenLimit"] == 27_904
+
+
+def test_model_visible_prompt_budget_rejects_prompt_that_consumes_output_reserve():
+    with pytest.raises(ValueError, match="MODEL_VISIBLE_PROMPT_TOO_LONG"):
+        validate_model_visible_prompt_budget(
+            "x" * 120_000,
+            requested_context_budget=32_000,
+            effective_context_budget_value=32_000,
+        )
+
+
+def test_model_visible_prompt_budget_uses_requested_budget_when_provider_capacity_unknown():
+    evidence = validate_model_visible_prompt_budget(
+        "x" * 100_000,
+        requested_context_budget=64_000,
+        effective_context_budget_value=None,
+    )
+    assert evidence["capacityTokens"] == 64_000
+    assert evidence["promptTokenLimit"] == 59_904

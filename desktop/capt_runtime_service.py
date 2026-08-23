@@ -58,6 +58,7 @@ from capt_runtime.verification import (
 from capt_runtime.composition import RuntimeComposition, create_runtime
 from capt_runtime.operator_provenance import (
     build_cognitive_provenance, build_prompt_assembly, effective_context_budget,
+    validate_model_visible_prompt_budget,
 )
 from capt_runtime.model_approval_binding import (
     build_bound_model_operator_approval, staging_root_for_ledger,
@@ -763,8 +764,11 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     context_pack_digest=context_pack_digest,
                     continuation_context=continuation["records"],
                 )
-                if len(bound_assembly["modelVisiblePrompt"]) > 4096:
-                    raise ValueError("MODEL_VISIBLE_PROMPT_TOO_LONG")
+                prompt_budget = validate_model_visible_prompt_budget(
+                    bound_assembly["modelVisiblePrompt"],
+                    requested_context_budget=requested_context_budget,
+                    effective_context_budget_value=effective_budget,
+                )
                 # This read-only check catches a mismatched approval before the
                 # command service consumes the one-use receipt.
                 svc.require_approved_prompt_assembly(
@@ -786,6 +790,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         "claimId": str(claim_id), "policyDecisionId": str(policy_id),
                         "requestedContextBudget": requested_context_budget,
                         "effectiveBudget": effective_budget,
+                        "promptBudget": prompt_budget,
                         "responseMode": response_mode,
                         "enhancementEngine": enhancement_engine,
                         "humanVerificationRequired": human_verification_required,
