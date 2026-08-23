@@ -56,6 +56,7 @@ class BoundedPromptCompilerRunner:
         provider: CompilerProvider,
         *,
         current_prompt: Optional[str] = None,
+        stage_context: Optional[Mapping[str, Any]] = None,
     ) -> StructuredStageResult:
         prompt = current_prompt or request.original_prompt
         payload = {
@@ -74,6 +75,8 @@ class BoundedPromptCompilerRunner:
                 "endpointClass": provider.endpoint_class,
             },
         }
+        if stage_context is not None:
+            payload["stageContext"] = dict(stage_context)
         prompt_tokens = self._estimate_tokens(payload)
         if self._governor is not None:
             self._governor.check_pre_dispatch(prompt_tokens)

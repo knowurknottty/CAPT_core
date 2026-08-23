@@ -16,6 +16,7 @@ from .models import (
 from .provider_runner import BoundedPromptCompilerRunner
 from .router import PromptRoute, route_stages
 from .stages import StructuredStageResult, render_execution_prompt
+from .repository_intelligence import stage_repository_context
 
 
 class PromptCompiler:
@@ -79,11 +80,13 @@ class PromptCompiler:
         unresolved = []
         acceptance_criteria = ()
         for stage in route:
+            stage_context = None
             if stage in (PromptStageName.FORGE, PromptStageName.SIGMA):
-                records.append(self._record(stage, current_prompt, current_prompt, False))
-                continue
+                stage_context = stage_repository_context(
+                    request.target_root, request.original_prompt, list(acceptance_criteria) or [request.original_prompt]
+                )
             result = self._runner.run(
-                stage, request, self._provider, current_prompt=current_prompt
+                stage, request, self._provider, current_prompt=current_prompt, stage_context=stage_context
             )
             self.admit_stage_result(request, result)
             next_prompt = render_execution_prompt(request.original_prompt, result)

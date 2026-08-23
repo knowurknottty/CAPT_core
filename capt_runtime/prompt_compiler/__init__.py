@@ -27,3 +27,11 @@ __all__ = [
     "StructuredStageResult",
     "route_stages",
 ]
+
+from .repository_intelligence import (
+    ForgeLimits,
+    analyze_repository,
+    gap_analysis,
+    sigma_brief,
+    stage_repository_context,
+)
