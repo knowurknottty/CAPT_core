@@ -2,7 +2,7 @@
 
 This is the current routing map for CAPT Core work. PR state, merge state, engineering verification, and release authorization are separate facts.
 
-Snapshot date: **2026-08-21**.
+Snapshot date: **2026-08-23**.
 
 ## Merged Core authority
 
@@ -10,7 +10,8 @@ Snapshot date: **2026-08-21**.
 - **PR #115 — pinned CAPT_Skills authored context**: merged earlier into the Core line.
 - **PR #121 — transparent provenance-canary telemetry disclosure**: merged before the final #117 merge-head reconciliation.
 - **PR #45 — preserved DeepSeek/Ouroboros research session**: merged after #117 as documentation/archive material; it does not alter runtime authority.
-- Current `main` at this snapshot: `a6601d61fa5a807f2ba04ca4fda84bc8d42505b0`.
+- **PR #124 — release-security gate closure**: merged; release-security implementation baseline `2199c036aa22af33fb3eb0700f63f820a35aa55a`.
+- Release-security implementation baseline at this snapshot: `2199c036aa22af33fb3eb0700f63f820a35aa55a`. Resolve literal current `main` from Git; documentation-only merges advance the SHA and must carry their own exact-head CI receipt.
 
 ### Release boundary on merged #117
 
@@ -21,6 +22,8 @@ The exact merged #117 head has:
 - Release Security: **FAIL** — workflow run `32440329043`.
 
 Therefore #117 is merged implementation authority but **not release-authorized**. The prior detailed gate projection at `33e24146094242d7a88612cea39267ef52a1d2e1` recorded `releaseAuthorized=false` with `2 PASS / 0 FAIL / 19 NOT_VERIFIED / 26 NOT_APPLICABLE`; those counts remain bound to that earlier exact head.
+
+PR #124 does not rewrite that history: it adds a newer authorized source state. On the release-security implementation baseline `2199c036aa22af33fb3eb0700f63f820a35aa55a`, Release Security run `32617740908` is **PASS** with **21 PASS / 0 FAIL / 0 NOT_VERIFIED / 26 NOT_APPLICABLE**, and M0-A run `32617740848` is PASS. Current `main` is therefore release-security authorized even though the older #117 exact head remains historically blocked.
 
 ## Closed/superseded Core implementation PRs
 
