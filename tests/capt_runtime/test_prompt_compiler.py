@@ -172,3 +172,50 @@ def test_runner_payload_contains_stage_instructions_and_closed_response_contract
     assert all(payload["responseSchema"]["additionalProperties"] is False for payload in seen)
     assert all("providerSecret" not in payload for payload in seen)
     assert all("tools" not in payload for payload in seen)
+
+
+def test_auto_routes_software_work_through_all_standard_engines():
+    route = route_stages(_request(original_prompt="Implement and test a provider selection fix."))
+    assert route.stage_chain == (
+        PromptStageName.OMNI,
+        PromptStageName.META,
+        PromptStageName.FORGE,
+        PromptStageName.SIGMA,
+    )
+
+
+def test_forge_sigma_execute_with_bounded_repository_context(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "README.md").write_text("provider selection requires tests\n", encoding="utf-8")
+    seen = []
+
+    def transport(payload):
+        seen.append(payload)
+        assert payload["analysisOnly"] is True
+        if payload["stage"] in {"FORGE", "SIGMA"}:
+            assert payload["stageContext"]["repository"]["fileCount"] == 1
+            assert payload["stageContext"]["epistemicClass"] == "advisory"
+        return {
+            "stage": payload["stage"],
+            "outcome": "provider selection fix",
+            "scope": "repository",
+            "inputs": ["bounded repository observation"],
+            "outputs": ["tested change"],
+            "constraints": ["preserve CAPT authority"],
+            "successCriteria": ["tests pass"],
+            "ambiguities": [],
+            "requestedCapabilities": [],
+        }
+
+    proposal = PromptCompiler(
+        runner=BoundedPromptCompilerRunner(transport),
+        provider=CompilerProvider("mtplx", "qwen3.8-27b-mtplx", "local"),
+    ).compile(_request(
+        original_prompt="Implement and test a provider selection fix.",
+        target_root=str(root),
+    ))
+
+    assert [p["stage"] for p in seen] == ["OMNI", "META", "FORGE", "SIGMA"]
+    assert all(record.execution_enabled for record in proposal.stage_records)
+    assert proposal.status == "ready_for_approval"

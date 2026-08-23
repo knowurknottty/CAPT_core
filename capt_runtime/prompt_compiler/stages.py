@@ -78,8 +78,14 @@ _STAGE_INSTRUCTIONS = {
         "Convert resolved intent into an execution-grade prompt and verification criteria; "
         "preserve unresolved ambiguity and never enlarge capabilities."
     ),
-    PromptStageName.FORGE: "Software specialist stage is advisory-only in this tranche.",
-    PromptStageName.SIGMA: "Adversarial reconciliation stage is advisory-only in this tranche.",
+    PromptStageName.FORGE: (
+        "Use the bounded repository observation to compile implementation requirements, acceptance criteria, "
+        "mutation boundaries, and proof obligations. Treat lexical evidence as advisory and never claim execution or verification."
+    ),
+    PromptStageName.SIGMA: (
+        "Reconcile the current execution contract with bounded repository evidence. Preserve contradictions, dissent, "
+        "unresolved tradeoffs, and verification debt; never claim authority, execution, or completion."
+    ),
 }
 
 
