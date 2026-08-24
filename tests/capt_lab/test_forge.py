@@ -183,6 +183,26 @@ def test_gap_analysis_does_not_treat_short_lexemes_as_inflections(tmp_path):
     assert gap["observedPaths"] == []
 
 
+def test_gap_analysis_normalizes_camel_and_snake_case_identifiers(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "README.md").write_text(
+        "DriverRun is durable.\ntask_state recovery is bounded.\n",
+        encoding="utf-8",
+    )
+    out = execute_forge(req("gap_analysis", {
+        "root": str(root),
+        "expectations": ["driver run", "task state"],
+    }), {})
+    gaps = {item["expectation"]: item for item in out.observation["gaps"]}
+    assert gaps["driver run"]["status"] == "related_text_found"
+    assert gaps["driver run"]["tokenCoverage"] == 1.0
+    assert gaps["driver run"]["observedPaths"] == ["README.md"]
+    assert gaps["task state"]["status"] == "related_text_found"
+    assert gaps["task state"]["tokenCoverage"] == 1.0
+    assert gaps["task state"]["observedPaths"] == ["README.md"]
+
+
 def test_gap_analysis_reports_partial_cross_repository_text_evidence(tmp_path):
     root = tmp_path / "repo"
     root.mkdir()
