@@ -151,4 +151,61 @@ extension CAPTChatCoordinatorTests {
             ["inversion-execute-now", "inversion-release-closure"]
         )
     }
+
+    private func promptProposalResponse() -> [String: Any] {
+        ["status": "accepted", "result": [
+            "proposalId": "pp-1", "revision": 0, "state": "active",
+            "status": "ready_for_approval", "originalPrompt": "implement fix",
+            "proposedPrompt": "compiled implementation contract",
+            "originalPromptDigest": "sha256:original", "proposedPromptDigest": "sha256:upgrade",
+            "stageChain": ["OMNI", "META", "FORGE", "SIGMA"], "stageRecords": [],
+            "verificationContract": ["acceptanceCriteria": ["tests pass"]],
+            "unresolvedQuestions": [], "targetRoot": "/repo",
+            "provider": "mtplx", "model": "qwen", "rationale": "software route"
+        ]]
+    }
+
+    func testCompileProposalUsesAuthoritativeAutoCommandWithoutApproval() throws {
+        let client = MockRuntimeClient()
+        client.responses["compile_prompt_proposal"] = promptProposalResponse()
+        let proposal = try CAPTChatCoordinator(client: client).compileProposal(
+            original: "implement fix", targetRoot: "/repo",
+            provider: "mtplx", model: "qwen", promptIntelligence: "AUTO"
+        )
+        XCTAssertEqual(proposal.stageChain, ["OMNI", "META", "FORGE", "SIGMA"])
+        XCTAssertEqual(client.calls.map(\.0), ["compile_prompt_proposal"])
+        XCTAssertEqual(client.calls[0].1["promptIntelligence"] as? String, "AUTO")
+    }
+
+    func testProposalSelectionMintsApprovalBoundToRevisionAndSelectedPrompt() throws {
+        let client = MockRuntimeClient()
+        client.responses["compile_prompt_proposal"] = promptProposalResponse()
+        client.responses["request_prompt_proposal_approval"] = approvalResponse()
+        let coordinator = CAPTChatCoordinator(client: client)
+        let proposal = try coordinator.compileProposal(
+            original: "implement fix", targetRoot: "/repo",
+            provider: "mtplx", model: "qwen"
+        )
+        let pending = try coordinator.requestApproval(
+            proposal: proposal, selection: .upgrade, missionID: "mission-1"
+        )
+        XCTAssertEqual(pending.objective, proposal.proposedPrompt)
+        XCTAssertEqual(pending.proposalID, "pp-1")
+        let payload = client.calls[1].1
+        XCTAssertEqual(payload["proposalId"] as? String, "pp-1")
+        XCTAssertEqual(payload["proposalRevision"] as? Int, 0)
+        XCTAssertEqual(payload["selection"] as? String, "upgrade")
+        XCTAssertEqual(payload["missionId"] as? String, "mission-1")
+    }
+
+    func testCancelProposalUsesCanonicalCommand() throws {
+        let client = MockRuntimeClient()
+        client.responses["cancel_prompt_proposal"] = ["status": "accepted"]
+        let proposal = try CAPTPromptProposal(
+            dictionary: promptProposalResponse()["result"] as! [String: Any]
+        )
+        try CAPTChatCoordinator(client: client).cancelProposal(proposal)
+        XCTAssertEqual(client.calls.map(\.0), ["cancel_prompt_proposal"])
+        XCTAssertEqual(client.calls[0].1["proposalId"] as? String, "pp-1")
+    }
 }

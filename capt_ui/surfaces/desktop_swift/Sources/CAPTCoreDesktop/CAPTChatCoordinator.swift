@@ -17,6 +17,84 @@ public final class CAPTChatCoordinator {
         self.client = client
     }
 
+    public func compileProposal(
+        original: String,
+        targetRoot: String,
+        provider: String,
+        model: String,
+        promptIntelligence: String = "AUTO",
+        remoteCompilationAuthorized: Bool = false
+    ) throws -> CAPTPromptProposal {
+        let response = try client.command(
+            op: "compile_prompt_proposal",
+            payload: [
+                "originalPrompt": original,
+                "targetRoot": targetRoot,
+                "promptIntelligence": promptIntelligence,
+                "mode": "normal",
+                "provider": provider,
+                "model": model,
+                "requestedContextBudget": 32_000,
+                "requestedCapabilities": [],
+                "remoteCompilationAuthorized": remoteCompilationAuthorized,
+            ],
+            idempotencyKey: "native-proposal-" + UUID().uuidString.lowercased()
+        )
+        try Self.ensureAcceptedOrApplied(response)
+        guard let result = response["result"] as? [String: Any] else {
+            throw CAPTRuntimeClientError.malformedResponse("prompt proposal result missing")
+        }
+        return try CAPTPromptProposal(dictionary: result)
+    }
+
+    public func cancelProposal(_ proposal: CAPTPromptProposal) throws {
+        let response = try client.command(
+            op: "cancel_prompt_proposal",
+            payload: [
+                "proposalId": proposal.proposalID,
+                "reason": "Cancelled from CAPT native macOS surface",
+            ],
+            idempotencyKey: "native-cancel-proposal-" + proposal.proposalID + "-r" + String(proposal.revision)
+        )
+        try Self.ensureAcceptedOrApplied(response)
+    }
+
+    public func requestApproval(
+        proposal: CAPTPromptProposal,
+        selection: CAPTPromptSelection,
+        editedPrompt: String = "",
+        missionID: String? = nil
+    ) throws -> CAPTPendingApproval {
+        let selected = proposal.selectedPrompt(selection, edited: editedPrompt)
+        guard !selected.isEmpty else {
+            throw CAPTRuntimeClientError.malformedResponse("selected prompt is empty")
+        }
+        var payload: [String: Any] = [
+            "proposalId": proposal.proposalID,
+            "proposalRevision": proposal.revision,
+            "selection": selection.rawValue,
+            "responseMode": "SPOCK",
+            "humanVerificationRequired": true,
+        ]
+        if selection == .edited { payload["editedPrompt"] = selected }
+        if let missionID, !missionID.isEmpty { payload["missionId"] = missionID }
+        let response = try client.command(
+            op: "request_prompt_proposal_approval",
+            payload: payload,
+            idempotencyKey: "native-proposal-approval-" + UUID().uuidString.lowercased()
+        )
+        try Self.ensureAcceptedOrApplied(response)
+        guard let result = response["result"] as? [String: Any] else {
+            throw CAPTRuntimeClientError.malformedResponse("proposal approval result missing")
+        }
+        return try Self.pendingApproval(
+            from: result, objective: selected, targetRoot: proposal.targetRoot,
+            provider: proposal.provider ?? "", model: proposal.model ?? "",
+            proposalID: proposal.proposalID, proposalRevision: proposal.revision,
+            selectedPromptKind: selection.rawValue
+        )
+    }
+
     public func requestApproval(
         objective: String,
         targetRoot: String,
@@ -119,6 +197,31 @@ public final class CAPTChatCoordinator {
         return CAPTExecutionResult(
             text: Self.extractAssistantText(run),
             taskState: taskState
+        )
+    }
+
+    private static func pendingApproval(
+        from result: [String: Any],
+        objective: String,
+        targetRoot: String,
+        provider: String,
+        model: String,
+        proposalID: String? = nil,
+        proposalRevision: Int? = nil,
+        selectedPromptKind: String? = nil
+    ) throws -> CAPTPendingApproval {
+        let requestID = try requireString("requestId", from: result)
+        let missionID = try requireString("missionId", from: result)
+        let taskID = try requireString("taskId", from: result)
+        let driverRunID = try requireString("driverRunId", from: result)
+        let digest = try requireString("promptAssemblyDigest", from: result)
+        let expiresAt = (result["expiresAt"] as? String).flatMap(parseTimestamp)
+        return CAPTPendingApproval(
+            requestID: requestID, missionID: missionID, taskID: taskID,
+            driverRunID: driverRunID, objective: objective, targetRoot: targetRoot,
+            provider: provider, model: model, promptAssemblyDigest: digest,
+            expiresAt: expiresAt, proposalID: proposalID,
+            proposalRevision: proposalRevision, selectedPromptKind: selectedPromptKind
         )
     }
 

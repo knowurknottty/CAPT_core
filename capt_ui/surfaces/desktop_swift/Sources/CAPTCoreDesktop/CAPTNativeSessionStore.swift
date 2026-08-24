@@ -12,13 +12,15 @@ public struct CAPTNativeSession: Identifiable, Codable, Equatable, Sendable {
     public var provider: String
     public var model: String
     public var targetRoot: String
+    public var promptProposal: CAPTPromptProposal?
     public var pendingApproval: CAPTPendingApproval?
 
     public init(
         id: UUID = UUID(), missionID: String? = nil, title: String,
         createdAt: Date = Date(), updatedAt: Date = Date(),
         messages: [CAPTChatMessage] = [], provider: String,
-        model: String, targetRoot: String, pendingApproval: CAPTPendingApproval? = nil
+        model: String, targetRoot: String, promptProposal: CAPTPromptProposal? = nil,
+        pendingApproval: CAPTPendingApproval? = nil
     ) {
         self.id = id
         self.missionID = missionID
@@ -29,6 +31,7 @@ public struct CAPTNativeSession: Identifiable, Codable, Equatable, Sendable {
         self.provider = provider
         self.model = model
         self.targetRoot = targetRoot
+        self.promptProposal = promptProposal
         self.pendingApproval = pendingApproval
     }
 }

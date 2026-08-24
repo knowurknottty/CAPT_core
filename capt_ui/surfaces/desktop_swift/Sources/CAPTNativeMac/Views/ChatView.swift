@@ -15,6 +15,26 @@ struct ChatView: View {
                                 .id(message.id)
                         }
 
+                        if store.activeChatFlow.phase == .compilingProposal {
+                            ChatProgressCard(
+                                title: "Compiling Prompt Intelligence",
+                                detail: "CAPT is running the governed prompt stage chain before any HumanApproval exists."
+                            )
+                            .id("chat-compiling-proposal")
+                        }
+
+                        if let proposal = store.promptProposal {
+                            PromptProposalCard(
+                                proposal: proposal,
+                                isBusy: store.isActiveChatBusy,
+                                select: { selection, edited in
+                                    store.selectPromptProposal(selection, editedPrompt: edited)
+                                },
+                                cancel: store.cancelPromptProposal
+                            )
+                            .id("prompt-proposal-" + proposal.proposalID)
+                        }
+
                         if store.activeChatFlow.phase == .requestingApproval {
                             ChatProgressCard(
                                 title: "Preparing governed approval",
@@ -52,6 +72,7 @@ struct ChatView: View {
             Divider()
             ComposerView(
                 draft: $draft,
+                promptIntelligence: $store.promptIntelligence,
                 enabled: store.canComposeInActiveChat
             ) {
                 guard store.canComposeInActiveChat else { return }
@@ -151,6 +172,10 @@ private struct ApprovalCard: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
+            if let proposalID = pending.proposalID {
+                LabeledContent("Proposal", value: proposalID + " · " + (pending.selectedPromptKind ?? "selected"))
+                    .font(.caption.monospaced())
+            }
             if let expiresAt = pending.expiresAt {
                 LabeledContent(
                     "Expires",
@@ -178,24 +203,45 @@ private struct ApprovalCard: View {
 
 private struct ComposerView: View {
     @Binding var draft: String
+    @Binding var promptIntelligence: String
     let enabled: Bool
     let send: () -> Void
 
+    private let modes = ["AUTO", "OFF", "OMNI", "META", "FORGE", "SIGMA"]
+
     var body: some View {
-        HStack(alignment: .bottom, spacing: 10) {
-            TextField("Message CAPT…", text: $draft, axis: .vertical)
-                .lineLimit(1...6)
-                .textFieldStyle(.plain)
-                .padding(10)
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
-            Button(action: send) {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.title2)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Label("Prompt Intelligence", systemImage: "brain.head.profile")
+                    .font(.caption.bold())
+                Picker("Prompt Intelligence", selection: $promptIntelligence) {
+                    ForEach(modes, id: \.self) { Text($0).tag($0) }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 110)
+                Text(promptIntelligence == "AUTO"
+                     ? "AUTO chooses the governed stage chain for this prompt."
+                     : "Explicit mode is recorded in the proposal provenance.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
             }
-            .buttonStyle(.plain)
-            .keyboardShortcut(.return, modifiers: [.command])
-            .disabled(!enabled || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .help("Send (⌘↩)")
+
+            HStack(alignment: .bottom, spacing: 10) {
+                TextField("Message CAPT…", text: $draft, axis: .vertical)
+                    .lineLimit(1...6)
+                    .textFieldStyle(.plain)
+                    .padding(10)
+                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                Button(action: send) {
+                    Image(systemName: "arrow.up.circle.fill").font(.title2)
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut(.return, modifiers: [.command])
+                .disabled(!enabled || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .help("Send (⌘↩)")
+            }
         }
         .padding(14)
     }

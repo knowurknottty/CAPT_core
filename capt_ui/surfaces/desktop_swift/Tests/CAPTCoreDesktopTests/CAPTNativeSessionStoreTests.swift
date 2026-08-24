@@ -202,3 +202,29 @@ final class CAPTNativeSessionStoreTests: XCTestCase {
         )
     }
 }
+
+extension CAPTNativeSessionStoreTests {
+    func testEncryptedSessionStoreRoundTripsPromptProposal() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let file = root.appendingPathComponent("native_sessions.enc")
+        let key = StaticSessionKeyProvider(bytes: Data(repeating: 0x61, count: 32))
+        let proposal = try CAPTPromptProposal(dictionary: [
+            "proposalId": "pp-cache", "revision": 1, "state": "active",
+            "status": "ready_for_approval", "originalPrompt": "private prompt",
+            "proposedPrompt": "compiled private prompt", "originalPromptDigest": "sha256:o",
+            "proposedPromptDigest": "sha256:p", "stageChain": ["OMNI", "META"],
+            "stageRecords": [], "verificationContract": ["acceptanceCriteria": ["proof"]],
+            "unresolvedQuestions": [], "targetRoot": "/repo", "rationale": "route"
+        ])
+        let session = CAPTNativeSession(
+            title: "Proposal", provider: "mtplx", model: "qwen", targetRoot: "/repo",
+            promptProposal: proposal
+        )
+        let store = CAPTEncryptedSessionStore(fileURL: file, keyProvider: key)
+        try store.save([session])
+        let restored = try store.load()
+        XCTAssertEqual(restored.first?.promptProposal?.proposalID, "pp-cache")
+        XCTAssertFalse(String(data: try Data(contentsOf: file), encoding: .utf8)?.contains("private prompt") ?? false)
+    }
+}
