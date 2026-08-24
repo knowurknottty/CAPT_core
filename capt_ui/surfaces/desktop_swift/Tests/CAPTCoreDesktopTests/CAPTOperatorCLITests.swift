@@ -43,4 +43,52 @@ extension CAPTOperatorCLITests {
         XCTAssertFalse(CAPTOperatorCLI.isSafeSecretReference("sk-raw-secret"))
         XCTAssertFalse(CAPTOperatorCLI.isSafeSecretReference("OPENROUTER_API_KEY"))
     }
+    func testPrewarmProviderArgumentsAreBoundToProviderAndModel() {
+        XCTAssertEqual(
+            CAPTOperatorCLI.prewarmArguments(
+                providerID: "mtplx", modelID: "qwen3.8-27b-mtplx"
+            ),
+            ["providers", "--prewarm", "mtplx", "--model", "qwen3.8-27b-mtplx", "--json"]
+        )
+    }
+
+    func testDecodeProviderWarmup() throws {
+        let data = Data(#"{"status":"warm","provider":"mtplx","model":"qwen3.8-27b-mtplx","endpoint_class":"local","latency_ms":1234}"#.utf8)
+        let snapshot = try CAPTOperatorCLI.decodeProviderWarmup(data)
+        XCTAssertEqual(snapshot.status, "warm")
+        XCTAssertEqual(snapshot.provider, "mtplx")
+        XCTAssertEqual(snapshot.model, "qwen3.8-27b-mtplx")
+        XCTAssertEqual(snapshot.endpointClass, "local")
+        XCTAssertEqual(snapshot.latencyMs, 1234)
+    }
+
+    func testPrewarmPolicyOnlyTargetsLocalOpenAICompatibleProviders() throws {
+        let local = try CAPTOperatorCLI.decodeProviders(Data(#"[{"id":"mtplx","name":"MTPLX","kind":"local","transport":"openai_compatible","key_ref":"","context_limit":262144,"enabled":true,"selected":true,"health":"green","models":["qwen3.8-27b-mtplx"],"capabilities":["chat"]}]"#.utf8))[0]
+        let ollama = try CAPTOperatorCLI.decodeProviders(Data(#"[{"id":"ollama","name":"Ollama","kind":"local","transport":"ollama","key_ref":"","context_limit":8192,"enabled":true,"selected":true,"health":"green","models":["m"],"capabilities":["chat"]}]"#.utf8))[0]
+        XCTAssertTrue(CAPTOperatorCLI.requiresPrewarm(local, modelID: "qwen3.8-27b-mtplx"))
+        XCTAssertFalse(CAPTOperatorCLI.requiresPrewarm(ollama, modelID: "m"))
+        XCTAssertFalse(CAPTOperatorCLI.requiresPrewarm(local, modelID: ""))
+    }
+
+    func testProviderActionRemainsAvailableWhenGlobalSelectionDiffersFromChat() throws {
+        let provider = try CAPTOperatorCLI.decodeProviders(Data(#"[{"id":"mtplx","name":"MTPLX","kind":"local","transport":"openai_compatible","key_ref":"","context_limit":262144,"enabled":true,"selected":true,"health":"green","models":["qwen3.8-27b-mtplx"],"capabilities":["chat"]}]"#.utf8))[0]
+        XCTAssertEqual(
+            CAPTOperatorCLI.providerActionLabel(provider: provider, executionProviderID: "ollama"),
+            "Use"
+        )
+        XCTAssertNil(
+            CAPTOperatorCLI.providerActionLabel(provider: provider, executionProviderID: "mtplx")
+        )
+    }
+
+    func testNewChatSelectionPrefersGlobalDefaultOverLegacySession() throws {
+        let models = try CAPTOperatorCLI.decodeModels(Data(#"{"active":"qwen3.8-27b-mtplx","provider":"Qwen3.8-27B MTPLX (Local MLX)","kind":"LOCAL","default":{"provider":"mtplx","model":"qwen3.8-27b-mtplx"},"available":["qwen3.8-27b-mtplx"],"favorites":[]}"#.utf8))
+        let selection = CAPTOperatorCLI.newChatSelection(
+            models: models, selectedProviderID: "mtplx",
+            fallbackProvider: "mlx", fallbackModel: "nvidia/nemotron-3.5-lightning:free"
+        )
+        XCTAssertEqual(selection.provider, "mtplx")
+        XCTAssertEqual(selection.model, "qwen3.8-27b-mtplx")
+    }
+
 }

@@ -46,6 +46,8 @@ class ProviderCapabilities:
     @property
     def support_level(self) -> str:
         """Honest single label of how much is actually implemented."""
+        if not self.registered:
+            return "UNREGISTERED"
         if self.cross_model_proven:
             return "CROSS_MODEL_PROVEN"
         if self.governed_execution_proven:
@@ -73,8 +75,8 @@ CAPABILITY_MATRIX: List[ProviderCapabilities] = [
                          discoverable=True, health_probe=True, model_list=True,
                          model_execution=False, notes="OpenAI-compatible /v1/models probe"),
     ProviderCapabilities("mlx", "MLX / mlx_lm", "local", "native",
-                         discoverable=False, health_probe=False, model_list=False,
-                         model_execution=False, notes="local fs/subprocess adapter not yet implemented"),
+                         registered=False, discoverable=False, health_probe=False, model_list=False,
+                         model_execution=False, notes="legacy placeholder retired until a real native adapter exists"),
     ProviderCapabilities("vllm", "vLLM", "hybrid", "openai_compatible",
                          discoverable=False, health_probe=True, model_list=True,
                          model_execution=False, notes="OpenAI-compatible endpoint"),

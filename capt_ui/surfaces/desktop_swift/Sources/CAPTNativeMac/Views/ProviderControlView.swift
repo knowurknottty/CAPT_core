@@ -56,8 +56,10 @@ struct ProviderControlView: View {
                     Spacer()
                     Button("Test") { store.testProvider(item.id) }
                         .disabled(store.isBusy)
-                    if !item.selected {
-                        Button("Activate") { store.activateProvider(item.id) }
+                    if let action = CAPTOperatorCLI.providerActionLabel(
+                        provider: item, executionProviderID: store.provider
+                    ) {
+                        Button(action) { store.activateProvider(item.id) }
                             .disabled(store.isBusy)
                     }
                 }

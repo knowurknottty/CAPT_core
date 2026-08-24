@@ -45,14 +45,17 @@ def _p(**kw) -> Provider:
 # -------------------------------------------------------- registered vs supported
 def test_registered_only_does_not_imply_supported():
     for cap in CAPABILITY_MATRIX:
-        assert cap.registered is True
-        # not every registered provider claims model execution
+        if cap.id == "mlx":
+            assert cap.registered is False
+        else:
+            assert cap.registered is True
         if cap.id in ("mlx", "hermes"):
             assert cap.model_execution is False
 
 
 def test_support_level_defaults_to_registered_only():
-    assert level_of("mlx") == "REGISTERED_ONLY"
+    assert capability_for("mlx").registered is False
+    assert level_of("mlx") == "UNREGISTERED"
     assert level_of("hermes") == "REGISTERED_ONLY"
 
 

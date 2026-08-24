@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from ..approval_dispatch import require_expected_prompt_digest
+from ..provider_endpoint import endpoint_class
 
 DRIVER_ID = "provider"
 DESCRIPTOR = {
@@ -171,6 +172,7 @@ class ProviderDriver:
                 self.runs[rid]["state"] = "failed"
             raise ProviderDriverFailure("provider returned no content")
         response_digest = "sha256:" + hashlib.sha256(text.encode()).hexdigest()
+        ep_class = endpoint_class(self.base_url)
         artifact = (
             "# CAPT Provider Observation\n\n"
             "Provider: %s\nModel: %s\nEndpointClass: %s\nPromptDigest: %s\n"
@@ -178,7 +180,7 @@ class ProviderDriver:
             % (
                 self.provider_id,
                 self.model,
-                "local" if self.provider_id == "ollama" else "cloud",
+                ep_class,
                 prompt_digest,
                 response_digest,
                 text,
@@ -221,7 +223,7 @@ class ProviderDriver:
             "diagnostics": {
                 "provider": self.provider_id,
                 "model": self.model,
-                "endpointClass": "local" if self.provider_id == "ollama" else "cloud",
+                "endpointClass": ep_class,
                 "promptDigest": prompt_digest,
                 "responseDigest": response_digest,
                 "dispatchBoundary": dispatch_boundary,
