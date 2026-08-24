@@ -7,6 +7,7 @@ from .cohort_state import CohortAggregate
 from .replay_fork import ReplayForkAggregate
 from .human_approval import HumanApprovalAggregate
 from .mission_task import MissionAggregate, TaskAggregate
+from .tool_execution import ToolExecutionAggregate
 
 ALL_AGGREGATES = (
     MissionAggregate,
@@ -18,6 +19,7 @@ ALL_AGGREGATES = (
     ReplayForkAggregate,
     HumanApprovalAggregate,
     ArtifactPromotionAggregate,
+    ToolExecutionAggregate,
 )
 
 __all__ = [
@@ -31,5 +33,6 @@ __all__ = [
     "HumanApprovalAggregate",
     "MissionAggregate",
     "TaskAggregate",
+    "ToolExecutionAggregate",
     "scope_contains",
 ]

@@ -39,7 +39,13 @@
         "CohortCreated",
         "CohortSnapshotPersisted",
         "CohortSteered",
-        "ReplayForkCreated"
+        "ReplayForkCreated",
+        "ToolExecutionPrepared",
+        "ToolExecutionAdmitted",
+        "ToolExecutionDispatching",
+        "ToolExecutionEffectObserved",
+        "ToolExecutionSettling",
+        "ToolExecutionTerminated"
       ]
     },
     "EventPayload": {
@@ -695,6 +701,114 @@
             },
             "fork": {
               "$ref": "replay.schema.json#/$defs/ReplayForkState"
+            }
+          }
+        },
+        {
+          "title": "ToolExecutionPreparedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "execution"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "ToolExecutionPrepared"
+            },
+            "execution": {
+              "$ref": "tool.schema.json#/$defs/ToolExecution"
+            }
+          }
+        },
+        {
+          "title": "ToolExecutionAdmittedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "execution"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "ToolExecutionAdmitted"
+            },
+            "execution": {
+              "$ref": "tool.schema.json#/$defs/ToolExecution"
+            }
+          }
+        },
+        {
+          "title": "ToolExecutionDispatchingPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "execution"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "ToolExecutionDispatching"
+            },
+            "execution": {
+              "$ref": "tool.schema.json#/$defs/ToolExecution"
+            }
+          }
+        },
+        {
+          "title": "ToolExecutionEffectObservedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "execution"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "ToolExecutionEffectObserved"
+            },
+            "execution": {
+              "$ref": "tool.schema.json#/$defs/ToolExecution"
+            }
+          }
+        },
+        {
+          "title": "ToolExecutionSettlingPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "execution"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "ToolExecutionSettling"
+            },
+            "execution": {
+              "$ref": "tool.schema.json#/$defs/ToolExecution"
+            }
+          }
+        },
+        {
+          "title": "ToolExecutionTerminatedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "execution"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "ToolExecutionTerminated"
+            },
+            "execution": {
+              "$ref": "tool.schema.json#/$defs/ToolExecution"
             }
           }
         }

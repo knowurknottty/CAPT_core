@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:9bd7748ad72f8dcf9237db796a1e54a2778334c97bce1e40bbd6b727cf2287df
+# source digest:  sha256:ec14253cc612aa2e429d6ac552eae1825a4a9c9eced19b37f7cc501b6a0dcd9a
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -1609,8 +1609,56 @@ class TaskTransitionedPayload(object):
     toState: TaskState
 
 
+@dataclass(frozen=True)
+class ToolExecutionAdmittedPayload(object):
+    """ToolExecutionAdmittedPayload"""
+
+    eventType: Literal["ToolExecutionAdmitted"]
+    execution: ToolExecution
+
+
+@dataclass(frozen=True)
+class ToolExecutionDispatchingPayload(object):
+    """ToolExecutionDispatchingPayload"""
+
+    eventType: Literal["ToolExecutionDispatching"]
+    execution: ToolExecution
+
+
+@dataclass(frozen=True)
+class ToolExecutionEffectObservedPayload(object):
+    """ToolExecutionEffectObservedPayload"""
+
+    eventType: Literal["ToolExecutionEffectObserved"]
+    execution: ToolExecution
+
+
+@dataclass(frozen=True)
+class ToolExecutionPreparedPayload(object):
+    """ToolExecutionPreparedPayload"""
+
+    eventType: Literal["ToolExecutionPrepared"]
+    execution: ToolExecution
+
+
+@dataclass(frozen=True)
+class ToolExecutionSettlingPayload(object):
+    """ToolExecutionSettlingPayload"""
+
+    eventType: Literal["ToolExecutionSettling"]
+    execution: ToolExecution
+
+
+@dataclass(frozen=True)
+class ToolExecutionTerminatedPayload(object):
+    """ToolExecutionTerminatedPayload"""
+
+    eventType: Literal["ToolExecutionTerminated"]
+    execution: ToolExecution
+
+
 # discriminated on 'eventType'
-EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, ReplayForkCreatedPayload]
+EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload]
 
 
 class EventType(str, Enum):
@@ -1647,6 +1695,12 @@ class EventType(str, Enum):
     COHORTSNAPSHOTPERSISTED = "CohortSnapshotPersisted"
     COHORTSTEERED = "CohortSteered"
     REPLAYFORKCREATED = "ReplayForkCreated"
+    TOOLEXECUTIONPREPARED = "ToolExecutionPrepared"
+    TOOLEXECUTIONADMITTED = "ToolExecutionAdmitted"
+    TOOLEXECUTIONDISPATCHING = "ToolExecutionDispatching"
+    TOOLEXECUTIONEFFECTOBSERVED = "ToolExecutionEffectObserved"
+    TOOLEXECUTIONSETTLING = "ToolExecutionSettling"
+    TOOLEXECUTIONTERMINATED = "ToolExecutionTerminated"
 
 
 @dataclass(frozen=True)
@@ -2011,8 +2065,127 @@ class StringArgument(object):
     value: str
 
 
+class TerminalBackendId(str, Enum):
+    """TerminalBackendId"""
+
+    LOCAL = "local"
+    SSH = "ssh"
+    DOCKER = "docker"
+
+
 # discriminated on 'kind'
 ToolArgument = Union[StringArgument, IntegerArgument, BooleanArgument, PathArgument]
+
+
+@dataclass(frozen=True)
+class ToolDescriptor(object):
+    """ToolDescriptor"""
+
+    artifactOutputs: List[str]
+    displayName: str
+    family: str
+    idempotencySupport: str
+    operationEffects: List[ToolOperationEffect]
+    operations: List[str]
+    platforms: List[str]
+    requiredCapabilities: List[str]
+    schemaVersion: SchemaVersion
+    supportsCancellation: bool
+    supportsTimeout: bool
+    terminalBackends: List[TerminalBackendId]
+    toolId: Identifier
+
+
+class ToolDispatchBoundary(str, Enum):
+    """ToolDispatchBoundary"""
+
+    NOT_STARTED = "not_started"
+    STARTED = "started"
+    EFFECT_OBSERVED = "effect_observed"
+    RESPONSE_COMPLETED = "response_completed"
+
+
+class ToolEffectClass(str, Enum):
+    """ToolEffectClass"""
+
+    PURE_READ_ONLY = "pure_read_only"
+    EPHEMERAL_EXTERNAL = "ephemeral_external"
+    DURABLE_LOCAL = "durable_local"
+    DURABLE_REMOTE = "durable_remote"
+    RESOURCE_CREATION = "resource_creation"
+
+
+@dataclass(frozen=True)
+class ToolExecution(object):
+    """Durable broker-owned execution state. Adapter output is evidence, not verification authority."""
+
+    adapterId: Identifier
+    backendId: Optional[TerminalBackendId]
+    consequential: bool
+    descriptorDigest: Digest
+    dispatchBoundary: ToolDispatchBoundary
+    effectClass: ToolEffectClass
+    grantId: Optional[Identifier]
+    leaseId: Optional[Identifier]
+    operation: str
+    operationFingerprint: Digest
+    operatorId: Identifier
+    preparedAt: Timestamp
+    reconciliationReason: Optional[str]
+    reservationId: Optional[Identifier]
+    result: Optional[ToolResult]
+    resultDigest: Optional[Digest]
+    schemaVersion: SchemaVersion
+    sessionId: Identifier
+    settlementStatus: ToolSettlementStatus
+    sideEffectIdentity: Optional[str]
+    state: ToolExecutionState
+    toolExecutionId: Identifier
+    toolId: Identifier
+    toolRequestId: Identifier
+    updatedAt: Timestamp
+
+
+class ToolExecutionState(str, Enum):
+    """ToolExecutionState"""
+
+    PREPARED = "prepared"
+    ADMITTED = "admitted"
+    DISPATCHING = "dispatching"
+    EFFECT_OBSERVED = "effect_observed"
+    SETTLING = "settling"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    INDETERMINATE = "indeterminate"
+
+
+@dataclass(frozen=True)
+class ToolOperationEffect(object):
+    """ToolOperationEffect"""
+
+    effectClass: ToolEffectClass
+    operation: str
+
+
+@dataclass(frozen=True)
+class ToolReadiness(object):
+    """ToolReadiness"""
+
+    checkedAt: Timestamp
+    reason: str
+    schemaVersion: SchemaVersion
+    status: ToolReadinessStatus
+    toolId: Identifier
+
+
+class ToolReadinessStatus(str, Enum):
+    """ToolReadinessStatus"""
+
+    AVAILABLE = "available"
+    DEGRADED = "degraded"
+    UNAVAILABLE = "unavailable"
+    UNVERIFIED = "unverified"
 
 
 @dataclass(frozen=True)
@@ -2029,8 +2202,12 @@ class ToolRequest(object):
     schemaVersion: SchemaVersion
     toolId: Identifier
     toolRequestId: Identifier
+    backendId: Optional[TerminalBackendId] = None
+    filesystemScope: Optional[str] = None
+    grantId: Optional[Identifier] = None
     leaseId: Optional[Identifier] = None
     reservationId: Optional[Identifier] = None
+    targetIdentity: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -2038,6 +2215,7 @@ class ToolResult(object):
     """ToolResult"""
 
     completedAt: Timestamp
+    output: List[ToolArgument]
     schemaVersion: SchemaVersion
     status: ToolResultStatus
     toolRequestId: Identifier
@@ -2055,6 +2233,15 @@ class ToolResultStatus(str, Enum):
     FAILED = "failed"
     INDETERMINATE = "indeterminate"
     DENIED = "denied"
+
+
+class ToolSettlementStatus(str, Enum):
+    """ToolSettlementStatus"""
+
+    NOT_SETTLED = "not_settled"
+    SETTLING = "settling"
+    SETTLED = "settled"
+    RECONCILIATION_REQUIRED = "reconciliation_required"
 
 
 @dataclass(frozen=True)
