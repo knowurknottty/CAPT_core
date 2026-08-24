@@ -75,11 +75,29 @@ def _profile(tmp_path: Path, *, image: str | None = None, mounts=(), network_mod
     )
 
 
-def test_desktop_linux_context_is_local_unix_socket_without_daemon_dependency() -> None:
-    _docker_cli()
-    endpoint = docker_context_endpoint("desktop-linux")
-    assert endpoint.startswith("unix://")
-    assert endpoint != "unix:///var/run/docker.sock" or Path("/var/run/docker.sock").is_absolute()
+def test_local_unix_context_is_discovered_without_daemon_dependency(tmp_path: Path) -> None:
+    docker = _docker_cli()
+    context_name = f"capt-unix-context-{os.getpid()}"
+    socket_path = tmp_path / "docker.sock"
+    try:
+        subprocess.run(
+            [docker, "context", "create", context_name, "--docker", f"host=unix://{socket_path}"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=5,
+            check=True,
+        )
+        endpoint = docker_context_endpoint(context_name)
+        assert endpoint == f"unix://{socket_path}"
+    finally:
+        subprocess.run(
+            [docker, "context", "rm", "-f", context_name],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+            check=False,
+        )
 
 
 def test_mounts_are_canonical_scoped_and_docker_socket_passthrough_is_denied(tmp_path: Path) -> None:
