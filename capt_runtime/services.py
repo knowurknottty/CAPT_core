@@ -21,6 +21,7 @@ from .aggregates import (
     HumanApprovalAggregate,
     MissionAggregate,
     TaskAggregate,
+    ToolExecutionAggregate,
 )
 from .authority import require_authority
 from .contracts import require
@@ -570,6 +571,8 @@ class RuntimeService(object):
         require("CapabilityReservation", reservation)
         require("CommandMetadata", metadata)
         require_authority("reserve_use", metadata["actor"]["kind"])
+        if self.store.find_idempotent(metadata["idempotencyKey"]) is not None:
+            return self._commit([], metadata)
 
         stream = CapabilityAggregate.stream_id(grant_id)
         expected = self.store.aggregate_version(stream)
@@ -596,6 +599,8 @@ class RuntimeService(object):
         require("CapabilityConsumptionRecord", consumption)
         require("CommandMetadata", metadata)
         require_authority("finalize_use", metadata["actor"]["kind"])
+        if self.store.find_idempotent(metadata["idempotencyKey"]) is not None:
+            return self._commit([], metadata)
 
         stream = CapabilityAggregate.stream_id(grant_id)
         expected = self.store.aggregate_version(stream)
@@ -656,6 +661,60 @@ class RuntimeService(object):
             operation,
             scope,
             now,
+        )
+
+    # -- tool execution (state model only; no adapter is contacted) ----------
+
+    def prepare_tool_execution(
+        self, execution: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        require("ToolExecution", execution)
+        require("CommandMetadata", metadata)
+        require_authority("prepare_tool_execution", metadata["actor"]["kind"])
+        stream = ToolExecutionAggregate.stream_id(execution["toolExecutionId"])
+        expected = self.store.aggregate_version(stream)
+        state = ToolExecutionAggregate.create(execution)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type="ToolExecutionPrepared",
+            payload={"eventType": "ToolExecutionPrepared", "execution": state},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+        )
+        return self._commit(
+            [AppendRequest(stream, ToolExecutionAggregate.KIND, expected, event, state)],
+            metadata,
+        )
+
+    def transition_tool_execution(
+        self, tool_execution_id: str, to_state: str, patch: Dict[str, Any],
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        require("CommandMetadata", metadata)
+        require_authority("transition_tool_execution", metadata["actor"]["kind"])
+        stream = ToolExecutionAggregate.stream_id(tool_execution_id)
+        expected = self.store.aggregate_version(stream)
+        current = self.store.require_state(stream)
+        effective_patch = dict(patch)
+        effective_patch.setdefault("updatedAt", metadata["issuedAt"])
+        state = ToolExecutionAggregate.transition(current, to_state, effective_patch)
+        if to_state == "admitted":
+            event_type = "ToolExecutionAdmitted"
+        elif to_state == "dispatching":
+            event_type = "ToolExecutionDispatching"
+        elif to_state == "effect_observed":
+            event_type = "ToolExecutionEffectObserved"
+        elif to_state == "settling":
+            event_type = "ToolExecutionSettling"
+        else:
+            event_type = "ToolExecutionTerminated"
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type=event_type, payload={"eventType": event_type, "execution": state},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+        )
+        return self._commit(
+            [AppendRequest(stream, ToolExecutionAggregate.KIND, expected, event, state)],
+            metadata,
         )
 
     # -- driver run (state model only; no driver is contacted) -------------
