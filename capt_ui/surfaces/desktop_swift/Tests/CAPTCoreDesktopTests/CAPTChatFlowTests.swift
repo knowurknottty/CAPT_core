@@ -83,3 +83,31 @@ final class CAPTChatFlowTests: XCTestCase {
         XCTAssertTrue(flow.canCompose)
     }
 }
+
+extension CAPTChatFlowTests {
+    private func proposal() throws -> CAPTPromptProposal {
+        try CAPTPromptProposal(dictionary: [
+            "proposalId": "pp-1", "revision": 0, "state": "active",
+            "status": "ready_for_approval", "originalPrompt": "fix",
+            "proposedPrompt": "compiled fix", "originalPromptDigest": "sha256:o",
+            "proposedPromptDigest": "sha256:p", "stageChain": ["OMNI", "META"],
+            "stageRecords": [], "verificationContract": ["acceptanceCriteria": []],
+            "unresolvedQuestions": [], "targetRoot": "/repo", "rationale": "route"
+        ])
+    }
+
+    func testProposalStartsInReviewAndBlocksComposition() throws {
+        let flow = CAPTChatFlow(proposal: try proposal())
+        XCTAssertEqual(flow.phase, .reviewingProposal)
+        XCTAssertEqual(flow.proposalID, "pp-1")
+        XCTAssertFalse(flow.canCompose)
+    }
+
+    func testCompilationTransitionsToProposalReview() throws {
+        var flow = CAPTChatFlow()
+        flow.beginCompilation()
+        XCTAssertEqual(flow.phase, .compilingProposal)
+        flow.proposalPrepared(try proposal())
+        XCTAssertEqual(flow.phase, .reviewingProposal)
+    }
+}

@@ -261,6 +261,36 @@ actor CAPTBackgroundRuntime {
         )
     }
 
+    func compileProposal(
+        original: String,
+        targetRoot: String,
+        provider: String,
+        model: String,
+        promptIntelligence: String,
+        remoteCompilationAuthorized: Bool = false
+    ) throws -> CAPTPromptProposal {
+        try coordinator.compileProposal(
+            original: original, targetRoot: targetRoot, provider: provider, model: model,
+            promptIntelligence: promptIntelligence,
+            remoteCompilationAuthorized: remoteCompilationAuthorized
+        )
+    }
+
+    func requestApproval(
+        proposal: CAPTPromptProposal,
+        selection: CAPTPromptSelection,
+        editedPrompt: String = "",
+        missionID: String? = nil
+    ) throws -> CAPTPendingApproval {
+        try coordinator.requestApproval(
+            proposal: proposal, selection: selection, editedPrompt: editedPrompt, missionID: missionID
+        )
+    }
+
+    func cancelProposal(_ proposal: CAPTPromptProposal) throws {
+        try coordinator.cancelProposal(proposal)
+    }
+
     func requestApproval(
         objective: String,
         targetRoot: String,

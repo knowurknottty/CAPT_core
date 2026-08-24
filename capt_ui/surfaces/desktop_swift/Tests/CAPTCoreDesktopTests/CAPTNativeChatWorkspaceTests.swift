@@ -46,7 +46,7 @@ final class CAPTNativeChatWorkspaceTests: XCTestCase {
         XCTAssertEqual(workspace.session(oldID)?.pendingApproval?.requestID, "approval-1")
     }
 
-    func testSwitchingAwayAndBackPreservesInFlightApprovalRequest() {
+    func testSwitchingAwayAndBackPreservesInFlightPromptCompilation() {
         var workspace = CAPTNativeChatWorkspace()
         _ = workspace.newChat(
             id: oldID, provider: "openrouter", model: "model-a", targetRoot: "/repo"
@@ -57,13 +57,13 @@ final class CAPTNativeChatWorkspaceTests: XCTestCase {
             ),
             oldID
         )
-        XCTAssertEqual(workspace.activeFlow.phase, .requestingApproval)
+        XCTAssertEqual(workspace.activeFlow.phase, .compilingProposal)
 
         _ = workspace.newChat(
             id: newID, provider: "openrouter", model: "model-a", targetRoot: "/repo"
         )
         XCTAssertTrue(workspace.activate(oldID))
-        XCTAssertEqual(workspace.activeFlow.phase, .requestingApproval)
+        XCTAssertEqual(workspace.activeFlow.phase, .compilingProposal)
         XCTAssertFalse(workspace.activeFlow.canCompose)
     }
 
@@ -268,7 +268,7 @@ final class CAPTNativeChatWorkspaceTests: XCTestCase {
 
         XCTAssertEqual(workspace.activeSessionID, newID)
         XCTAssertEqual(workspace.session(newID)?.messages.last?.text, "live prompt")
-        XCTAssertEqual(workspace.flow(for: newID).phase, .requestingApproval)
+        XCTAssertEqual(workspace.flow(for: newID).phase, .compilingProposal)
         XCTAssertEqual(workspace.session(oldID)?.missionID, "mission-restored")
         XCTAssertEqual(workspace.sessions.count, 2)
     }
@@ -306,7 +306,79 @@ final class CAPTNativeChatWorkspaceTests: XCTestCase {
         XCTAssertEqual(workspace.session(oldID)?.title, "Cached")
         XCTAssertEqual(workspace.session(oldID)?.model, "live-model")
         XCTAssertEqual(workspace.session(oldID)?.messages.last?.text, "live mutation")
-        XCTAssertEqual(workspace.flow(for: oldID).phase, .requestingApproval)
+        XCTAssertEqual(workspace.flow(for: oldID).phase, .compilingProposal)
         XCTAssertEqual(workspace.sessions.count, 1)
+    }
+}
+
+extension CAPTNativeChatWorkspaceTests {
+    private func proposal(
+        id: String = "pp-1", provider: String = "openrouter", model: String = "model-a"
+    ) throws -> CAPTPromptProposal {
+        try CAPTPromptProposal(dictionary: [
+            "proposalId": id, "revision": 0, "state": "active",
+            "status": "ready_for_approval", "originalPrompt": "first prompt",
+            "proposedPrompt": "compiled first prompt", "originalPromptDigest": "sha256:o",
+            "proposedPromptDigest": "sha256:p", "stageChain": ["OMNI", "META"],
+            "stageRecords": [], "verificationContract": ["acceptanceCriteria": []],
+            "unresolvedQuestions": [], "targetRoot": "/repo",
+            "provider": provider, "model": model, "rationale": "route"
+        ])
+    }
+
+    func testBeginPromptEntersCompilingProposal() {
+        var workspace = CAPTNativeChatWorkspace()
+        _ = workspace.newChat(
+            id: oldID, provider: "openrouter", model: "model-a", targetRoot: "/repo"
+        )
+        XCTAssertEqual(workspace.beginPrompt(
+            "first prompt", provider: "openrouter", model: "model-a", targetRoot: "/repo"
+        ), oldID)
+        XCTAssertEqual(workspace.activeFlow.phase, .compilingProposal)
+        XCTAssertNil(workspace.activePromptProposal)
+    }
+
+    func testLateProposalStaysOnOriginatingSessionAfterSwitch() throws {
+        var workspace = CAPTNativeChatWorkspace()
+        _ = workspace.newChat(
+            id: oldID, provider: "openrouter", model: "model-a", targetRoot: "/repo"
+        )
+        let origin = workspace.beginPrompt(
+            "first prompt", provider: "openrouter", model: "model-a", targetRoot: "/repo"
+        )!
+        _ = workspace.newChat(
+            id: newID, provider: "openrouter", model: "model-a", targetRoot: "/repo"
+        )
+        workspace.receiveProposal(try proposal(), for: origin)
+        XCTAssertEqual(workspace.activeSessionID, newID)
+        XCTAssertNil(workspace.activePromptProposal)
+        XCTAssertEqual(workspace.session(oldID)?.promptProposal?.proposalID, "pp-1")
+        XCTAssertEqual(workspace.flow(for: oldID).phase, .reviewingProposal)
+    }
+
+    func testConfigurationMutationInvalidatesProposal() throws {
+        let session = CAPTNativeSession(
+            id: oldID, title: "Old", provider: "openrouter", model: "model-a",
+            targetRoot: "/repo", promptProposal: try proposal()
+        )
+        var workspace = CAPTNativeChatWorkspace(sessions: [session], activeSessionID: oldID)
+        workspace.updateConfiguration(
+            for: oldID, provider: "mtplx", model: "qwen", targetRoot: "/repo"
+        )
+        XCTAssertNil(workspace.activePromptProposal)
+        XCTAssertEqual(workspace.activeFlow.phase, .recoverableFailure)
+        XCTAssertEqual(workspace.activeSession?.messages.last?.authorityState, "proposal_superseded")
+    }
+
+    func testBeginProposalApprovalReturnsBoundProposal() throws {
+        let session = CAPTNativeSession(
+            id: oldID, title: "Old", provider: "openrouter", model: "model-a",
+            targetRoot: "/repo", promptProposal: try proposal()
+        )
+        var workspace = CAPTNativeChatWorkspace(sessions: [session], activeSessionID: oldID)
+        let bound = workspace.beginProposalApproval(for: oldID)
+        XCTAssertEqual(bound?.proposalID, "pp-1")
+        XCTAssertEqual(workspace.activeFlow.phase, .requestingApproval)
+        XCTAssertFalse(workspace.activeFlow.canCompose)
     }
 }

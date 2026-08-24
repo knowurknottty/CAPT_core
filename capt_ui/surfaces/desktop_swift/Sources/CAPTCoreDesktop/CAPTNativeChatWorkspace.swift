@@ -13,7 +13,7 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         self.sessions = sessions.sorted { $0.updatedAt > $1.updatedAt }
         self.activeSessionID = activeSessionID
         self.flows = Dictionary(uniqueKeysWithValues: sessions.map {
-            ($0.id, CAPTChatFlow(pending: $0.pendingApproval, now: now))
+            ($0.id, CAPTChatFlow(pending: $0.pendingApproval, proposal: $0.promptProposal, now: now))
         })
     }
 
@@ -26,6 +26,10 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         activeSession?.pendingApproval
     }
 
+    public var activePromptProposal: CAPTPromptProposal? {
+        activeSession?.promptProposal
+    }
+
     public var activeFlow: CAPTChatFlow {
         guard let activeSessionID else { return CAPTChatFlow() }
         return flow(for: activeSessionID)
@@ -36,7 +40,9 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
     }
 
     public func flow(for id: UUID) -> CAPTChatFlow {
-        flows[id] ?? CAPTChatFlow(pending: session(id)?.pendingApproval)
+        flows[id] ?? CAPTChatFlow(
+            pending: session(id)?.pendingApproval, proposal: session(id)?.promptProposal
+        )
     }
 
     public mutating func mergeRestoredSessions(
@@ -49,6 +55,7 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
             sessions.append(restoredSession)
             flows[restoredSession.id] = CAPTChatFlow(
                 pending: restoredSession.pendingApproval,
+                proposal: restoredSession.promptProposal,
                 now: now
             )
             knownIDs.insert(restoredSession.id)
@@ -90,7 +97,9 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         guard session(id) != nil else { return false }
         activeSessionID = id
         if flows[id] == nil {
-            flows[id] = CAPTChatFlow(pending: session(id)?.pendingApproval, now: now)
+            flows[id] = CAPTChatFlow(
+                pending: session(id)?.pendingApproval, proposal: session(id)?.promptProposal, now: now
+            )
         }
         reconcileApprovalValidity(for: id, now: now)
         return true
@@ -107,7 +116,8 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         guard !trimmed.isEmpty,
               let id = activeSessionID,
               let index = index(of: id),
-              sessions[index].pendingApproval == nil else { return nil }
+              sessions[index].pendingApproval == nil,
+              sessions[index].promptProposal == nil else { return nil }
 
         var currentFlow = flow(for: id)
         guard currentFlow.canCompose else { return nil }
@@ -120,9 +130,67 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         sessions[index].targetRoot = targetRoot
         sessions[index].messages.append(CAPTChatMessage(role: .user, text: trimmed))
         sessions[index].updatedAt = Date()
-        currentFlow.beginApprovalRequest()
+        currentFlow.beginCompilation()
         flows[id] = currentFlow
         return id
+    }
+
+    public mutating func receiveProposal(
+        _ proposal: CAPTPromptProposal,
+        for id: UUID
+    ) {
+        guard let index = index(of: id) else { return }
+        guard proposalMatchesConfiguration(proposal, session: sessions[index]) else {
+            supersedeProposalOrApproval(for: id)
+            return
+        }
+        sessions[index].promptProposal = proposal
+        sessions[index].updatedAt = Date()
+        sessions[index].messages.append(CAPTChatMessage(
+            role: .system,
+            text: "CAPT Prompt Intelligence produced a reviewable proposal. No execution is authorized yet.",
+            authorityState: "proposal_review"
+        ))
+        var currentFlow = flow(for: id)
+        currentFlow.proposalPrepared(proposal)
+        flows[id] = currentFlow
+    }
+
+    public mutating func failProposalRequest(message: String, for id: UUID) {
+        guard let index = index(of: id) else { return }
+        sessions[index].promptProposal = nil
+        var currentFlow = flow(for: id)
+        currentFlow.proposalFailed(message: message)
+        flows[id] = currentFlow
+        sessions[index].messages.append(CAPTChatMessage(
+            role: .system, text: message, authorityState: "proposal_error"
+        ))
+        sessions[index].updatedAt = Date()
+    }
+
+    public mutating func beginProposalApproval(for id: UUID) -> CAPTPromptProposal? {
+        guard let index = index(of: id),
+              sessions[index].pendingApproval == nil,
+              let proposal = sessions[index].promptProposal, proposal.isActive else { return nil }
+        var currentFlow = flow(for: id)
+        guard currentFlow.phase == .reviewingProposal else { return nil }
+        currentFlow.beginApprovalRequest()
+        flows[id] = currentFlow
+        return proposal
+    }
+
+    public mutating func completeProposalCancellation(for id: UUID) {
+        guard let index = index(of: id) else { return }
+        sessions[index].promptProposal = nil
+        sessions[index].pendingApproval = nil
+        sessions[index].messages.append(CAPTChatMessage(
+            role: .system, text: "Prompt proposal cancelled. No execution was authorized.",
+            authorityState: "proposal_cancelled"
+        ))
+        sessions[index].updatedAt = Date()
+        var currentFlow = flow(for: id)
+        currentFlow.reset()
+        flows[id] = currentFlow
     }
 
     public mutating func receiveApproval(
@@ -131,8 +199,9 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         now: Date = Date()
     ) {
         guard let index = index(of: id) else { return }
-        guard approvalMatchesConfiguration(pending, session: sessions[index]) else {
-            supersedeApproval(for: id)
+        guard approvalMatchesConfiguration(pending, session: sessions[index]),
+              approvalMatchesProposal(pending, session: sessions[index]) else {
+            supersedeProposalOrApproval(for: id)
             return
         }
         sessions[index].pendingApproval = pending
@@ -164,7 +233,7 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
     ) {
         guard let index = index(of: id) else { return }
         var currentFlow = flow(for: id)
-        _ = currentFlow.executionFailed(message: message, pending: nil)
+        currentFlow.approvalRequestFailed(message: message)
         flows[id] = currentFlow
         sessions[index].messages.append(CAPTChatMessage(
             role: .system,
@@ -206,6 +275,7 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
     ) {
         guard let index = index(of: id) else { return }
         sessions[index].pendingApproval = nil
+        sessions[index].promptProposal = nil
         sessions[index].messages.append(CAPTChatMessage(
             role: .assistant,
             text: text,
@@ -233,6 +303,7 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
 
         if disposition.isTerminalForLocalActionCursor {
             sessions[index].pendingApproval = nil
+            sessions[index].promptProposal = nil
         }
 
         let rendered = Self.failurePresentation(
@@ -251,6 +322,7 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
     public mutating func completeDenial(for id: UUID) {
         guard let index = index(of: id) else { return }
         sessions[index].pendingApproval = nil
+        sessions[index].promptProposal = nil
         sessions[index].messages.append(CAPTChatMessage(
             role: .system,
             text: "Execution denied. No model dispatch was authorized.",
@@ -276,8 +348,9 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         sessions[index].model = model
         sessions[index].targetRoot = targetRoot
         sessions[index].updatedAt = Date()
-        if changed, sessions[index].pendingApproval != nil || flow(for: id).phase == .requestingApproval {
-            supersedeApproval(for: id)
+        if changed, sessions[index].pendingApproval != nil || sessions[index].promptProposal != nil ||
+            [.compilingProposal, .reviewingProposal, .requestingApproval].contains(flow(for: id).phase) {
+            supersedeProposalOrApproval(for: id)
         }
     }
 
@@ -303,7 +376,7 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
     ) {
         guard let pending = session(id)?.pendingApproval else { return }
         guard let current = session(id), approvalMatchesConfiguration(pending, session: current) else {
-            supersedeApproval(for: id)
+            supersedeProposalOrApproval(for: id)
             return
         }
         switch pending.validity(at: now) {
@@ -362,15 +435,37 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
             pending.targetRoot == session.targetRoot
     }
 
-    private mutating func supersedeApproval(for id: UUID) {
+    private func proposalMatchesConfiguration(
+        _ proposal: CAPTPromptProposal,
+        session: CAPTNativeSession
+    ) -> Bool {
+        proposal.targetRoot == session.targetRoot &&
+            (proposal.provider == nil || proposal.provider == session.provider) &&
+            (proposal.model == nil || proposal.model == session.model)
+    }
+
+    private func approvalMatchesProposal(
+        _ pending: CAPTPendingApproval,
+        session: CAPTNativeSession
+    ) -> Bool {
+        guard let proposalID = pending.proposalID else { return true }
+        return proposalID == session.promptProposal?.proposalID &&
+            pending.proposalRevision == session.promptProposal?.revision
+    }
+
+    private mutating func supersedeProposalOrApproval(for id: UUID) {
         guard let index = index(of: id) else { return }
+        let hadProposal = sessions[index].promptProposal != nil ||
+            [.compilingProposal, .reviewingProposal].contains(flow(for: id).phase)
         sessions[index].pendingApproval = nil
-        let message = "Pending approval retired because its bound provider, model, or target changed. Submit the prompt again to mint a fresh approval."
-        if sessions[index].messages.last?.authorityState != "approval_superseded" {
+        sessions[index].promptProposal = nil
+        let message = "Pending prompt proposal/approval retired because its bound provider, model, or target changed. Submit the prompt again to compile a fresh proposal."
+        let authority = hadProposal ? "proposal_superseded" : "approval_superseded"
+        if sessions[index].messages.last?.authorityState != authority {
             sessions[index].messages.append(CAPTChatMessage(
                 role: .system,
                 text: message,
-                authorityState: "approval_superseded"
+                authorityState: authority
             ))
         }
         sessions[index].updatedAt = Date()

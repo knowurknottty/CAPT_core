@@ -2,6 +2,8 @@ import Foundation
 
 public enum CAPTChatFlowPhase: String, Equatable, Sendable {
     case idle
+    case compilingProposal
+    case reviewingProposal
     case requestingApproval
     case awaitingApproval
     case executing
@@ -44,15 +46,25 @@ public enum CAPTApprovalRecoveryPolicy {
 public struct CAPTChatFlow: Equatable, Sendable {
     public private(set) var phase: CAPTChatFlowPhase
     public private(set) var requestID: String?
+    public private(set) var proposalID: String?
     public private(set) var failureMessage: String?
 
     public init(
         pending: CAPTPendingApproval? = nil,
+        proposal: CAPTPromptProposal? = nil,
         now: Date = Date()
     ) {
+        if pending == nil, let proposal, proposal.isActive {
+            phase = .reviewingProposal
+            requestID = nil
+            proposalID = proposal.proposalID
+            failureMessage = nil
+            return
+        }
         guard let pending else {
             phase = .idle
             requestID = nil
+            proposalID = nil
             failureMessage = nil
             return
         }
@@ -61,30 +73,60 @@ public struct CAPTChatFlow: Equatable, Sendable {
         case .valid:
             phase = .awaitingApproval
             requestID = pending.requestID
+            proposalID = pending.proposalID
             failureMessage = nil
         case .expired:
             phase = .recoverableFailure
             requestID = nil
+            proposalID = nil
             failureMessage = "Prompt approval expired"
         case .unknown:
             phase = .recoverableFailure
             requestID = nil
+            proposalID = nil
             failureMessage = "Prompt approval validity unavailable"
         }
     }
 
     public var isBusy: Bool {
-        phase == .requestingApproval || phase == .executing
+        phase == .compilingProposal || phase == .requestingApproval || phase == .executing
     }
 
     public var canCompose: Bool {
-        !isBusy && requestID == nil
+        !isBusy && phase != .reviewingProposal && requestID == nil
+    }
+
+    public mutating func beginCompilation() {
+        phase = .compilingProposal
+        requestID = nil
+        proposalID = nil
+        failureMessage = nil
+    }
+
+    public mutating func proposalPrepared(_ proposal: CAPTPromptProposal) {
+        phase = .reviewingProposal
+        requestID = nil
+        proposalID = proposal.proposalID
+        failureMessage = nil
     }
 
     public mutating func beginApprovalRequest() {
         phase = .requestingApproval
         requestID = nil
         failureMessage = nil
+    }
+
+    public mutating func proposalFailed(message: String) {
+        phase = .recoverableFailure
+        requestID = nil
+        proposalID = nil
+        failureMessage = message
+    }
+
+    public mutating func approvalRequestFailed(message: String) {
+        requestID = nil
+        failureMessage = message
+        phase = proposalID == nil ? .recoverableFailure : .reviewingProposal
     }
 
     public mutating func approvalPrepared(
@@ -95,14 +137,17 @@ public struct CAPTChatFlow: Equatable, Sendable {
         case .valid:
             phase = .awaitingApproval
             requestID = pending.requestID
+            proposalID = pending.proposalID ?? proposalID
             failureMessage = nil
         case .expired:
             phase = .recoverableFailure
             requestID = nil
+            proposalID = nil
             failureMessage = "Prompt approval expired"
         case .unknown:
             phase = .recoverableFailure
             requestID = nil
+            proposalID = nil
             failureMessage = "Prompt approval validity unavailable"
         }
     }
@@ -116,6 +161,7 @@ public struct CAPTChatFlow: Equatable, Sendable {
     public mutating func executionCompleted(taskState: String) {
         phase = taskState == "awaiting_verification" ? .awaitingVerification : .idle
         requestID = nil
+        proposalID = nil
         failureMessage = nil
     }
 
@@ -127,6 +173,7 @@ public struct CAPTChatFlow: Equatable, Sendable {
         let disposition = CAPTApprovalRecoveryPolicy.classify(message)
         phase = .recoverableFailure
         requestID = disposition.isTerminalForLocalActionCursor ? nil : pending?.requestID
+        proposalID = disposition.isTerminalForLocalActionCursor ? nil : (pending?.proposalID ?? proposalID)
         failureMessage = message
         return disposition
     }
@@ -134,12 +181,14 @@ public struct CAPTChatFlow: Equatable, Sendable {
     public mutating func approvalSuperseded(message: String) {
         phase = .recoverableFailure
         requestID = nil
+        proposalID = nil
         failureMessage = message
     }
 
     public mutating func reset() {
         phase = .idle
         requestID = nil
+        proposalID = nil
         failureMessage = nil
     }
 }

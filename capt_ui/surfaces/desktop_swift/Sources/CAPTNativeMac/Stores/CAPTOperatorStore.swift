@@ -17,6 +17,7 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var model = "qwen3.5-defiant-fable:latest"
     @Published var targetRoot = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("CAPT_core", isDirectory: true).path
+    @Published var promptIntelligence = "AUTO"
     @Published var runtimeIdentity = "Not connected"
     @Published var taskState = "—"
     @Published var isBusy = false
@@ -79,6 +80,10 @@ final class CAPTOperatorStore: ObservableObject {
         chatWorkspace.activePendingApproval
     }
 
+    var promptProposal: CAPTPromptProposal? {
+        chatWorkspace.activePromptProposal
+    }
+
     var activeChatFlow: CAPTChatFlow {
         chatWorkspace.activeFlow
     }
@@ -91,6 +96,7 @@ final class CAPTOperatorStore: ObservableObject {
         connectionState == .connected &&
             providerWarmState != "warming" &&
             pendingApproval == nil &&
+            promptProposal == nil &&
             activeChatFlow.canCompose
     }
 
@@ -215,50 +221,93 @@ final class CAPTOperatorStore: ObservableObject {
             syncSelectionFromActiveSession()
         }
 
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let sessionID = mutateWorkspace({
-            $0.beginPrompt(
-                text,
-                provider: provider,
-                model: model,
-                targetRoot: targetRoot
-            )
+            $0.beginPrompt(trimmed, provider: provider, model: model, targetRoot: targetRoot)
         }) else { return }
 
         saveSessions()
         lastError = nil
-        if activeSessionID == sessionID { taskState = "approval_preparing" }
+        if activeSessionID == sessionID { taskState = "proposal_compiling" }
 
         let selectedProvider = provider
         let selectedModel = model
         let root = targetRoot
-        let missionID = chatWorkspace.session(sessionID)?.missionID
+        let intelligence = promptIntelligence
 
         Task {
             do {
-                let pending = try await runtime.requestApproval(
-                    objective: text.trimmingCharacters(in: .whitespacesAndNewlines),
-                    targetRoot: root,
-                    provider: selectedProvider,
-                    model: selectedModel,
-                    missionID: missionID
+                let proposal = try await runtime.compileProposal(
+                    original: trimmed, targetRoot: root, provider: selectedProvider,
+                    model: selectedModel, promptIntelligence: intelligence
                 )
-                mutateWorkspace { $0.receiveApproval(pending, for: sessionID) }
+                mutateWorkspace { $0.receiveProposal(proposal, for: sessionID) }
                 if activeSessionID == sessionID {
                     updateTaskStateFromActiveFlow()
-                    if activeChatFlow.phase == .recoverableFailure {
-                        lastError = chatWorkspace.activeSession?.messages.last?.text
+                    if proposal.status != "ready_for_approval" {
+                        lastError = proposal.unresolvedQuestions.first
                     }
                 }
                 saveSessions()
                 refreshHistory()
             } catch {
                 let message = error.localizedDescription
-                mutateWorkspace { $0.failApprovalRequest(message: message, for: sessionID) }
+                mutateWorkspace { $0.failProposalRequest(message: message, for: sessionID) }
                 if activeSessionID == sessionID {
-                    taskState = "recoverable_failure"
+                    taskState = "proposal_error"
                     lastError = message
                 }
                 saveSessions()
+            }
+        }
+    }
+
+    func selectPromptProposal(
+        _ selection: CAPTPromptSelection,
+        editedPrompt: String = ""
+    ) {
+        guard let sessionID = activeSessionID, promptProposal != nil else { return }
+        guard let proposal = mutateWorkspace({
+            $0.beginProposalApproval(for: sessionID)
+        }) else { return }
+        taskState = "approval_preparing"
+        lastError = nil
+        let missionID = chatWorkspace.session(sessionID)?.missionID
+
+        Task {
+            do {
+                let pending = try await runtime.requestApproval(
+                    proposal: proposal, selection: selection, editedPrompt: editedPrompt,
+                    missionID: missionID
+                )
+                mutateWorkspace { $0.receiveApproval(pending, for: sessionID) }
+                if activeSessionID == sessionID { updateTaskStateFromActiveFlow() }
+                saveSessions()
+                refreshHistory()
+            } catch {
+                let message = error.localizedDescription
+                mutateWorkspace { $0.failApprovalRequest(message: message, for: sessionID) }
+                if activeSessionID == sessionID {
+                    updateTaskStateFromActiveFlow()
+                    lastError = message
+                }
+                saveSessions()
+            }
+        }
+    }
+
+    func cancelPromptProposal() {
+        guard let sessionID = activeSessionID, let proposal = promptProposal else { return }
+        lastError = nil
+        Task {
+            do {
+                try await runtime.cancelProposal(proposal)
+                mutateWorkspace { $0.completeProposalCancellation(for: sessionID) }
+                if activeSessionID == sessionID { updateTaskStateFromActiveFlow() }
+                saveSessions()
+                refreshHistory()
+            } catch {
+                if activeSessionID == sessionID { lastError = error.localizedDescription }
             }
         }
     }
@@ -924,6 +973,8 @@ final class CAPTOperatorStore: ObservableObject {
         }
         switch activeChatFlow.phase {
         case .idle: taskState = "—"
+        case .compilingProposal: taskState = "proposal_compiling"
+        case .reviewingProposal: taskState = "proposal_review"
         case .requestingApproval: taskState = "approval_preparing"
         case .awaitingApproval: taskState = "approval_required"
         case .executing: taskState = "executing"
