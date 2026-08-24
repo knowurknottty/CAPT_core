@@ -178,6 +178,7 @@ final class CAPTOperatorStore: ObservableObject {
                 refreshHistory()
                 refreshMemory()
                 refreshCapabilities()
+                refreshLabs()
             } catch {
                 let message = error.localizedDescription
                 lastError = message
@@ -606,9 +607,7 @@ final class CAPTOperatorStore: ObservableObject {
                     model: selectedModel,
                     targetRoot: originTargetRoot
                 )
-                if activeSessionID == originSessionID {
-                    await prewarmSelectedProviderIfNeeded()
-                }
+                await prewarmSelectedProviderIfNeeded()
             } catch { handleGlobal(error) }
         }
     }
@@ -699,9 +698,7 @@ final class CAPTOperatorStore: ObservableObject {
                     model: modelID,
                     targetRoot: originTargetRoot
                 )
-                if activeSessionID == originSessionID {
-                    await prewarmSelectedProviderIfNeeded()
-                }
+                await prewarmSelectedProviderIfNeeded()
             } catch { handleGlobal(error) }
         }
     }
