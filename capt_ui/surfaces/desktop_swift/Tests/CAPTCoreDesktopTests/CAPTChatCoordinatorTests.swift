@@ -130,3 +130,25 @@ extension CAPTChatCoordinatorTests {
         }
     }
 }
+
+extension CAPTChatCoordinatorTests {
+    func testRequestPreservesSelectedSkillNamesForOperatorReview() throws {
+        let client = MockRuntimeClient()
+        var response = approvalResponse()
+        var result = response["result"] as! [String: Any]
+        result["skillNames"] = ["inversion-execute-now", "inversion-release-closure"]
+        response["result"] = result
+        client.responses["request_model_prompt_approval"] = response
+        let coordinator = CAPTChatCoordinator(client: client)
+
+        let pending = try coordinator.requestApproval(
+            objective: "proceed and ship", targetRoot: "/repo",
+            provider: "ollama", model: "model-a"
+        )
+
+        XCTAssertEqual(
+            pending.skillNames,
+            ["inversion-execute-now", "inversion-release-closure"]
+        )
+    }
+}

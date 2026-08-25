@@ -154,6 +154,23 @@ final class CAPTNativeSessionStoreTests: XCTestCase {
         XCTAssertEqual((fileAttributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
     }
 
+    func testPendingApprovalDecodesLegacyPayloadWithoutSkillNames() throws {
+        let data = try JSONSerialization.data(withJSONObject: [
+            "requestID": "approval-legacy-shape",
+            "missionID": "mission-legacy-shape",
+            "taskID": "task-legacy-shape",
+            "driverRunID": "run-legacy-shape",
+            "objective": "legacy",
+            "targetRoot": "/repo",
+            "provider": "ollama",
+            "model": "qwen",
+            "promptAssemblyDigest": "sha256:" + String(repeating: "d", count: 64),
+        ])
+        let decoded = try JSONDecoder().decode(CAPTPendingApproval.self, from: data)
+        XCTAssertEqual(decoded.requestID, "approval-legacy-shape")
+        XCTAssertEqual(decoded.skillNames, [])
+    }
+
     func testMissingSessionCacheLoadsEmpty() throws {
         let file = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)

@@ -64,3 +64,12 @@ def test_explicit_oversized_skill_fails_instead_of_truncating(tmp_path: Path):
     root = tmp_path / "pack"; import_managed_skill_pack(source, root, pack_name="ultimate")
     with pytest.raises(ManagedSkillPackViolation, match="too large for inline authored-skill context"):
         prepare_managed_skill_context(root, "huge work", explicit_names=["huge"])
+
+
+def test_managed_context_is_valid_authored_skill_contract(tmp_path: Path):
+    from capt_runtime.contracts import require
+
+    root = _pack(tmp_path)
+    context, names = prepare_managed_skill_context(root, "Proceed and ship the release candidate")
+    assert names
+    require("AuthoredSkillContext", context)
