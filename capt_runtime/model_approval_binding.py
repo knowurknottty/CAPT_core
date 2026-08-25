@@ -11,6 +11,7 @@ import hashlib
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .authored_skills import summarize_skill_context
 from .contracts import digest
 from .drivers.hermes import build_prompt as build_hermes_prompt
 from .operator_provenance import build_model_operator_prompt_assembly
@@ -55,6 +56,7 @@ def build_bound_model_operator_approval(
     staging_root: str,
     context_pack_digest: str = "",
     continuation_context: Optional[List[Dict[str, Any]]] = None,
+    authored_skill_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Return the model-visible assembly plus its execution admission binding."""
     assembly = build_model_operator_prompt_assembly(
@@ -63,6 +65,7 @@ def build_bound_model_operator_approval(
         enhancement_engine=enhancement_engine,
         context_pack_digest=context_pack_digest or None,
         continuation_context=continuation_context,
+        authored_skill_context=authored_skill_context,
     )
     provider_id = str(provider or "")
     model_id = str(model or "")
@@ -101,6 +104,9 @@ def build_bound_model_operator_approval(
         "basePromptAssemblyDigest": assembly["promptAssemblyDigest"],
         "dispatchPromptDigest": dispatch_prompt_digest,
     }
+    authored_summary = summarize_skill_context(authored_skill_context)
+    if authored_summary is not None:
+        binding["authoredSkills"] = authored_summary
     approval_digest = digest(
         {
             "basePromptAssemblyDigest": assembly["promptAssemblyDigest"],

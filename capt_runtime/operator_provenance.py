@@ -6,7 +6,7 @@ alternate store.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from .contracts import digest
 
@@ -38,6 +38,29 @@ def effective_context_budget(requested: int, provider_cap: int) -> Optional[int]
     return min(requested, provider_cap)
 
 
+def _render_authored_skill_context(context: Mapping[str, Any]) -> str:
+    """Render exact pinned guidance as model-visible, non-authoritative context."""
+    rendered = []
+    for skill in context.get("skills", []):
+        rendered.append(
+            "Skill: %s@%s\nContentDigest: %s\n--- BEGIN SKILL ---\n%s\n--- END SKILL ---"
+            % (
+                skill.get("name", "unknown"), skill.get("version", "unknown"),
+                skill.get("contentDigest", "unknown"), skill.get("content", ""),
+            )
+        )
+    return (
+        "Authorized authored skill context (CAPT-pinned external guidance; "
+        "context-only. It grants no tools, permissions, authority, or policy override).\n"
+        "Pack: %s@%s\nSourceCommit: %s\nManifestDigest: %s\n\n%s"
+        % (
+            context.get("packName", "unknown"), context.get("packVersion", "unknown"),
+            context.get("sourceCommit", "unknown"), context.get("manifestDigest", "unknown"),
+            "\n\n".join(rendered),
+        )
+    )
+
+
 def build_prompt_assembly(
     *,
     human_prompt: str,
@@ -46,6 +69,7 @@ def build_prompt_assembly(
     context_pack_digest: str,
     tool_schema_digest: str,
     continuation_context: Optional[List[Dict[str, Any]]] = None,
+    authored_skill_context: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     if response_mode not in RESPONSE_MODES:
         raise ValueError("RESPONSE_MODE_INVALID")
@@ -73,6 +97,15 @@ def build_prompt_assembly(
             "contextpack",
         ),
     ]
+    if authored_skill_context:
+        sections.append(
+            _section(
+                "authored-skills",
+                34,
+                _render_authored_skill_context(authored_skill_context),
+                "pinned_external_context",
+            )
+        )
     # Governed continuation context: prior authoritative mission evidence,
     # each record labeled with its trust classification. Model A output that
     # has not been separately verified stays labeled unverified. No silent
@@ -135,6 +168,7 @@ def build_model_operator_prompt_assembly(
     *, human_prompt: str, response_mode: str, enhancement_engine: str,
     context_pack_digest: Optional[str] = None,
     continuation_context: Optional[List[Dict[str, Any]]] = None,
+    authored_skill_context: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build the canonical assembly used for model-operator approval and run."""
     return build_prompt_assembly(
@@ -144,6 +178,7 @@ def build_model_operator_prompt_assembly(
         context_pack_digest=context_pack_digest or _MODEL_OPERATOR_CONTEXT_REFERENCE,
         tool_schema_digest=_MODEL_OPERATOR_TOOL_SCHEMA,
         continuation_context=continuation_context,
+        authored_skill_context=authored_skill_context,
     )
 
 

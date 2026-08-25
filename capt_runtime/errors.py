@@ -100,6 +100,26 @@ class CapabilityViolation(CaptRuntimeError):
         self.reason = reason
 
 
+class AuthoredSkillPackViolation(CaptRuntimeError):
+    """A managed or pinned authored-skill pack failed import/verification/selection."""
+
+    category = "authored_skill_pack_violation"
+
+    def __init__(self, reason: str) -> None:
+        CaptRuntimeError.__init__(self, reason)
+        self.reason = reason
+
+
+class AuthoredSkillRequestViolation(AuthoredSkillPackViolation):
+    """An operator-authored-skill request was malformed or referenced an unknown skill."""
+
+    category = "authored_skill_request_violation"
+
+    def __init__(self, reason: str) -> None:
+        AuthoredSkillPackViolation.__init__(self, reason)
+        self.reason = reason
+
+
 class ReconciliationRequired(CaptRuntimeError):
     """An indeterminate operation must be resolved before proceeding."""
 

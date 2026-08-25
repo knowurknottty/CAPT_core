@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:59bf06c0abc36da44f6f6841c1886dcde6b5d470790d65c42f5d5b15bfc0aa95
+# source digest:  sha256:3d3149c1000bbe1907688840c02acbda8a0b758cb7edc948beeb22f0c39df895
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -982,6 +982,31 @@ class WorkspaceLease(object):
 
 
 @dataclass(frozen=True)
+class AuthoredSkillContext(object):
+    """Digest-bound authored skill material selected by CAPT from a pinned external or managed local pack. Context-only; never a grant, policy, claim, proof, or executable Foundry skill."""
+
+    manifestDigest: str
+    packName: str
+    packVersion: str
+    skills: List[AuthoredSkillContextEntry]
+    sourceCommit: str
+    sourceRef: str
+    sourceRepository: str
+    sourceTree: str
+    trust: Any
+
+
+@dataclass(frozen=True)
+class AuthoredSkillContextEntry(object):
+    """Digest-bound authored guidance selected by CAPT for one driver invocation. It grants no authority or capability."""
+
+    content: str
+    contentDigest: str
+    name: str
+    version: str
+
+
+@dataclass(frozen=True)
 class ContextSlice(object):
     """Minimal read-only projection handed to a driver. MUST NOT contain governance, policy, claim, capability-graph, ledger, or aggregate references (ADR-0125)."""
 
@@ -994,6 +1019,7 @@ class ContextSlice(object):
     terminationConditions: DriverTerminationCondition
     contextPackRef: Optional[Any] = None
     networkPolicy: Optional[NetworkPolicy] = None
+    skillContext: Optional[AuthoredSkillContext] = None
 
 
 @dataclass(frozen=True)
