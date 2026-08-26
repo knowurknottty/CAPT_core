@@ -87,3 +87,49 @@ def test_skills_show_returns_verified_content(tmp_path, monkeypatch, capsys):
     assert shown["name"] == "inversion-motion-craft"
     assert shown["contentDigest"] == "sha256:" + lock["skills"][0]["sha256"]
     assert shown["content"].startswith("---\nname: inversion-motion-craft")
+
+
+def test_skills_import_and_verify_managed_pack(tmp_path, capsys):
+    source = tmp_path / "source"
+    skill = source / "demo"
+    skill.mkdir(parents=True)
+    skill.joinpath("SKILL.md").write_text(
+        "---\nname: demo-skill\ndescription: Use for demo work.\nversion: 1.0.0\n---\n\n# Demo\n"
+    )
+    state = tmp_path / "state"
+    rc = capt_cli.main([
+        "--json", "skills", "import", "--source", str(source),
+        "--name", "ultimate", "--state-dir", str(state),
+    ])
+    assert rc == 0
+    imported = json.loads(capsys.readouterr().out)
+    assert imported["status"] == "IMPORTED"
+    assert imported["skillCount"] == 1
+    assert imported["root"] == str(state / "skills" / "ultimate")
+
+    rc = capt_cli.main([
+        "--json", "skills", "verify", "--name", "ultimate", "--state-dir", str(state),
+    ])
+    assert rc == 0
+    verified = json.loads(capsys.readouterr().out)
+    assert verified["status"] == "VERIFIED"
+    assert verified["trust"] == "managed_local"
+    assert verified["manifestDigest"] == imported["manifestDigest"]
+
+
+def test_managed_skills_default_to_runtime_state_not_capt_solo_home(tmp_path, monkeypatch, capsys):
+    source = tmp_path / "source-runtime-root"
+    skill = source / "demo"
+    skill.mkdir(parents=True)
+    skill.joinpath("SKILL.md").write_text(
+        "---\nname: demo-skill\ndescription: Use for demo work.\nversion: 1.0.0\n---\n\n# Demo\n"
+    )
+    runtime_state = tmp_path / "runtime-state"
+    monkeypatch.setenv("CAPT_SOLO_HOME", str(tmp_path / "solo-state"))
+    monkeypatch.delenv("CAPT_STATE_DIR", raising=False)
+    monkeypatch.setattr(capt_cli, "default_state_dir", lambda: runtime_state, raising=False)
+    rc = capt_cli.main(["--json", "skills", "import", "--source", str(source), "--name", "ultimate"])
+    assert rc == 0
+    imported = json.loads(capsys.readouterr().out)
+    assert imported["root"] == str(runtime_state / "skills" / "ultimate")
+    assert not (tmp_path / "solo-state" / "skills" / "ultimate").exists()

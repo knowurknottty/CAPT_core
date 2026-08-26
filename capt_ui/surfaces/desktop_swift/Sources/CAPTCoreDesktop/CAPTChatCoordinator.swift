@@ -49,6 +49,7 @@ public final class CAPTChatCoordinator {
         let taskID = try Self.requireString("taskId", from: result)
         let driverRunID = try Self.requireString("driverRunId", from: result)
         let digest = try Self.requireString("promptAssemblyDigest", from: result)
+        let skillNames = result["skillNames"] as? [String] ?? []
         let expiresAt = (result["expiresAt"] as? String).flatMap(Self.parseTimestamp)
         return CAPTPendingApproval(
             requestID: requestID,
@@ -60,6 +61,7 @@ public final class CAPTChatCoordinator {
             provider: provider,
             model: model,
             promptAssemblyDigest: digest,
+            skillNames: skillNames,
             expiresAt: expiresAt
         )
     }

@@ -62,6 +62,7 @@ public struct CAPTPendingApproval: Codable, Equatable, Sendable {
     public let provider: String
     public let model: String
     public let promptAssemblyDigest: String
+    public let skillNames: [String]
     public let expiresAt: Date?
 
     public init(
@@ -74,6 +75,7 @@ public struct CAPTPendingApproval: Codable, Equatable, Sendable {
         provider: String,
         model: String,
         promptAssemblyDigest: String,
+        skillNames: [String] = [],
         expiresAt: Date? = nil
     ) {
         self.requestID = requestID
@@ -85,7 +87,28 @@ public struct CAPTPendingApproval: Codable, Equatable, Sendable {
         self.provider = provider
         self.model = model
         self.promptAssemblyDigest = promptAssemblyDigest
+        self.skillNames = skillNames
         self.expiresAt = expiresAt
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case requestID, missionID, taskID, driverRunID, objective, targetRoot
+        case provider, model, promptAssemblyDigest, skillNames, expiresAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        requestID = try c.decode(String.self, forKey: .requestID)
+        missionID = try c.decode(String.self, forKey: .missionID)
+        taskID = try c.decode(String.self, forKey: .taskID)
+        driverRunID = try c.decode(String.self, forKey: .driverRunID)
+        objective = try c.decode(String.self, forKey: .objective)
+        targetRoot = try c.decode(String.self, forKey: .targetRoot)
+        provider = try c.decode(String.self, forKey: .provider)
+        model = try c.decode(String.self, forKey: .model)
+        promptAssemblyDigest = try c.decode(String.self, forKey: .promptAssemblyDigest)
+        skillNames = try c.decodeIfPresent([String].self, forKey: .skillNames) ?? []
+        expiresAt = try c.decodeIfPresent(Date.self, forKey: .expiresAt)
     }
 
     public func validity(at date: Date = Date()) -> CAPTApprovalValidity {

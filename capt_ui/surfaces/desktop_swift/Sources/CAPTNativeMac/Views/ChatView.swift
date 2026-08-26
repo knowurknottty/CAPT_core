@@ -145,6 +145,12 @@ private struct ApprovalCard: View {
             LabeledContent("Prompt digest", value: pending.promptAssemblyDigest)
                 .font(.caption2.monospaced())
                 .lineLimit(1)
+            if !pending.skillNames.isEmpty {
+                LabeledContent("Skills", value: pending.skillNames.joined(separator: " · "))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
             if let expiresAt = pending.expiresAt {
                 LabeledContent(
                     "Expires",

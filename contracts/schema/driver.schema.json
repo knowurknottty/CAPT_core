@@ -194,7 +194,7 @@
     },
     "AuthoredSkillContext": {
       "title": "AuthoredSkillContext",
-      "description": "Pinned external skill-pack material explicitly selected by CAPT. Context-only; never a grant, policy, claim, proof, or executable Foundry skill.",
+      "description": "Digest-bound authored skill material selected by CAPT from a pinned external or managed local pack. Context-only; never a grant, policy, claim, proof, or executable Foundry skill.",
       "type": "object",
       "additionalProperties": false,
       "required": ["packName", "packVersion", "sourceRepository", "sourceRef", "sourceCommit", "sourceTree", "manifestDigest", "trust", "skills"],
@@ -206,7 +206,7 @@
         "sourceCommit": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
         "sourceTree": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
         "manifestDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
-        "trust": { "const": "pinned_external" },
+        "trust": { "enum": ["pinned_external", "managed_local"] },
         "skills": { "type": "array", "minItems": 1, "maxItems": 16, "items": { "$ref": "driver.schema.json#/$defs/AuthoredSkillContextEntry" } }
       }
     },

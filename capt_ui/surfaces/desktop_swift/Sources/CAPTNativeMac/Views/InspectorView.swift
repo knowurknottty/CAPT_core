@@ -58,6 +58,12 @@ struct InspectorView: View {
                                 .font(.caption2.monospaced())
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
+                            if !pending.skillNames.isEmpty {
+                                Text("Skills: " + pending.skillNames.joined(separator: " · "))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
