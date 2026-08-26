@@ -195,6 +195,8 @@ def test_runtime_managed_skill_context_is_bound_identically_through_dispatch(
             "driverRunId": planned["driverRunId"],
         }, "managed-skill-run")
         assert run["status"] == "accepted", run
+        assert run["result"]["authoredSkills"]["trust"] == "managed_local"
+        assert run["result"]["authoredSkills"]["skills"][0]["name"] == "inversion-execute-now"
         sent = _LocalOpenAIHandler.seen["body"]["messages"][0]["content"]
         assert "CAPT_MANAGED_SKILL_MARKER" in sent
     finally:

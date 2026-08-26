@@ -1175,6 +1175,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     "observations": out.get("observations", []), "driver": "provider" if provider is not None else "hermes",
                     "providerProvenance": out.get("diagnostics", {}) if provider is not None else {},
                     "cognitiveProvenance": cognitive_provenance,
+                    "authoredSkills": summarize_skill_context(ctx.get("skillContext")),
                 }
                 store.complete_claimed_command(key, command_fingerprint, receipt)
                 return receipt
