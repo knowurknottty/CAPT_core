@@ -67,6 +67,13 @@ from capt_solo.foundry import (  # noqa: E402
 from capt_solo.ctp.journal import CTPRuntime  # noqa: E402
 from capt_runtime.composition import create_runtime  # noqa: E402
 from capt_runtime import commands as runtime_commands  # noqa: E402
+from capt_runtime.authored_skills import (  # noqa: E402
+    AuthoredSkillPackViolation, load_capt_skills_lock, verify_skill_pack,
+)
+from capt_runtime.managed_skills import (  # noqa: E402
+    ManagedSkillPackViolation, default_managed_skill_root,
+    import_managed_skill_pack, verify_managed_skill_pack,
+)
 
 
 def _json_or_human(data: Any, as_json: bool) -> str:
@@ -186,6 +193,20 @@ def main(argv: Optional[List[str]] = None) -> int:
     fws.add_parser("curate")
     fws.add_parser("audit")
 
+    # authored skills: governed model guidance, separate from Foundry procedures
+    sk = sub.add_parser("skills", help="verify, inspect, import, and manage authored skills")
+    sks = sk.add_subparsers(dest="action")
+    p = sks.add_parser("status"); p.add_argument("--root", required=True)
+    p = sks.add_parser("list"); p.add_argument("--root", required=True)
+    p = sks.add_parser("show"); p.add_argument("name"); p.add_argument("--root", required=True)
+    p = sks.add_parser("import", help="import a managed local Agent Skills pack")
+    p.add_argument("--source", required=True)
+    p.add_argument("--name", default="ultimate")
+    p.add_argument("--state-dir", default=None)
+    p = sks.add_parser("verify", help="verify an installed managed local skill pack")
+    p.add_argument("--name", default="ultimate")
+    p.add_argument("--state-dir", default=None)
+
     # One canonical bounded CAPT Core transaction, constructed via create_runtime().
     rr = sub.add_parser("runtime", help="canonical CAPT Core runtime operations")
     rrs = rr.add_subparsers(dest="action")
@@ -280,6 +301,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return _cmd_runtime(args, as_json)
     if args.group == "harness":
         return _cmd_harness(args)
+    if args.group == "skills":
+        return _cmd_authored_skills(args, as_json)
     try:
         eng = MemoryEngine()
         mgr = LifecycleManager(eng)
@@ -306,6 +329,62 @@ def main(argv: Optional[List[str]] = None) -> int:
             pass
     return 1
 
+
+
+def _cmd_authored_skills(args, as_json: bool) -> int:
+    """Inspect pinned packs or import/verify managed local authored skills."""
+    if args.action in {"import", "verify"}:
+        state_root = Path(
+            args.state_dir
+            or os.environ.get("CAPT_STATE_DIR")
+            or os.environ.get("CAPT_SOLO_HOME")
+            or (Path.home() / ".capt")
+        ).expanduser()
+        root = default_managed_skill_root(state_root, args.name)
+        try:
+            if args.action == "import":
+                verified = import_managed_skill_pack(args.source, root, pack_name=args.name)
+                status = "IMPORTED"
+            else:
+                verified = verify_managed_skill_pack(root)
+                status = "VERIFIED"
+        except ManagedSkillPackViolation as exc:
+            return _fail(str(exc))
+        return _ok({
+            "status": status,
+            "trust": verified["trust"],
+            "packName": verified["packName"],
+            "packVersion": verified["packVersion"],
+            "manifestDigest": verified["manifestDigest"],
+            "skillCount": verified["skillCount"],
+            "root": str(root),
+        }, as_json)
+
+    try:
+        verified = verify_skill_pack(args.root, load_capt_skills_lock())
+    except AuthoredSkillPackViolation as exc:
+        return _fail(str(exc))
+    if args.action == "status":
+        return _ok({
+            "status": "VERIFIED", "trust": "pinned_external",
+            "packName": verified["packName"], "packVersion": verified["packVersion"],
+            "repository": verified["repository"], "ref": verified["ref"],
+            "commit": verified["commit"], "tree": verified["tree"],
+            "manifestDigest": verified["manifestDigest"],
+            "skillCount": len(verified["skills"]),
+        }, as_json)
+    if args.action == "list":
+        return _ok([
+            {"name": item["name"], "version": item["version"],
+             "contentDigest": item["contentDigest"]}
+            for item in verified["skills"]
+        ], as_json)
+    if args.action == "show":
+        for item in verified["skills"]:
+            if item["name"] == args.name:
+                return _ok(item, as_json)
+        return _fail(f"authored skill not found: {args.name}")
+    return _fail("skills action required")
 
 def _cmd_harness(args) -> int:
     if args.action == "start":
