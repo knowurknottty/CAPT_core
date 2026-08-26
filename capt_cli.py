@@ -67,6 +67,7 @@ from capt_solo.foundry import (  # noqa: E402
 from capt_solo.ctp.journal import CTPRuntime  # noqa: E402
 from capt_runtime.composition import create_runtime  # noqa: E402
 from capt_runtime import commands as runtime_commands  # noqa: E402
+from capt_runtime.cli_ramp import default_state_dir  # noqa: E402
 from capt_runtime.authored_skills import (  # noqa: E402
     AuthoredSkillPackViolation, load_capt_skills_lock, verify_skill_pack,
 )
@@ -333,12 +334,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 def _cmd_authored_skills(args, as_json: bool) -> int:
     """Inspect pinned packs or import/verify managed local authored skills."""
     if args.action in {"import", "verify"}:
-        state_root = Path(
-            args.state_dir
-            or os.environ.get("CAPT_STATE_DIR")
-            or os.environ.get("CAPT_SOLO_HOME")
-            or (Path.home() / ".capt")
-        ).expanduser()
+        state_root = (
+            Path(args.state_dir).expanduser() if args.state_dir else default_state_dir()
+        )
         root = default_managed_skill_root(state_root, args.name)
         try:
             if args.action == "import":
