@@ -274,3 +274,13 @@ def test_prompt_approval_auto_selects_managed_default_pack(tmp_path):
         assert state["scope"]["approvalBinding"]["authoredSkills"] == result["authoredSkills"]
     finally:
         store.close()
+
+
+def test_authored_skill_violation_type_has_single_canonical_definition():
+    import capt_runtime.authored_skills as authored
+    import capt_runtime.driver_host as driver_host
+    import capt_runtime.errors as errors
+
+    assert "AuthoredSkillPackViolation" not in vars(errors)
+    assert "AuthoredSkillRequestViolation" not in vars(errors)
+    assert driver_host.AuthoredSkillPackViolation is authored.AuthoredSkillPackViolation
