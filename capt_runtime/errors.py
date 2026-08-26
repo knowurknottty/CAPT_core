@@ -100,6 +100,7 @@ class CapabilityViolation(CaptRuntimeError):
         self.reason = reason
 
 
+
 class ReconciliationRequired(CaptRuntimeError):
     """An indeterminate operation must be resolved before proceeding."""
 

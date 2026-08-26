@@ -65,6 +65,9 @@ from capt_runtime.model_approval_binding import (
 )
 from capt_runtime.prepared_execution import PreparedApprovedModelExecution, freeze
 from capt_runtime.verification_baseline import capture_verification_baseline
+from capt_runtime.authored_skills import (
+    parse_authored_skill_request, prepare_runtime_skill_context, summarize_skill_context,
+)
 
 from desktop.m1_command_service import RuntimeCommandService
 
@@ -730,6 +733,13 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 response_mode = str(payload.get("responseMode", "SPOCK"))
                 enhancement_engine = str(payload.get("promptEnhancement", "OFF"))
                 human_verification_required = bool(payload.get("humanVerificationRequired", True))
+                # Explicit authored-skill selection outranks contextual selection.
+                # When no explicit selection is present and a verified managed pack
+                # exists under the state root, CAPT auto-selects applicable skills
+                # before approval and freezes the selection through dispatch.
+                skill_context, skill_names = prepare_runtime_skill_context(
+                    payload, state_root=Path(ledger_path).parent
+                )
                 # Governed continuation context selection (PR #47 context gate).
                 # Prior authoritative mission evidence is selected HERE, from the
                 # ledger, before approval/admission. No manual injection, no
@@ -747,6 +757,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     context_pack_digest=context_pack_digest,
                     tool_schema_digest=contracts.digest({"operations": ["RepositoryRead", "FilesystemRead", "ArtifactCreate", "AnalysisOnly"]}),
                     continuation_context=continuation["records"],
+                    authored_skill_context=skill_context,
                 )
                 # Runtime authority binds human approval to the exact
                 # model-visible assembly. Client booleans are provenance only;
@@ -765,6 +776,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     staging_root=staging_root_for_ledger(store.path, str(run_id)),
                     context_pack_digest=context_pack_digest,
                     continuation_context=continuation["records"],
+                    authored_skill_context=skill_context,
                 )
                 # This read-only check catches a mismatched approval before the
                 # command service consumes the one-use receipt.
@@ -794,6 +806,8 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         "dispatchPrompt": bound_assembly["dispatchPrompt"],
                         "contextPackDigest": context_pack_digest,
                         "continuationContext": continuation["records"],
+                        "authoredSkillContext": skill_context,
+                        "skillNames": skill_names,
                     }),
                     context_pack_digest=context_pack_digest,
                 )
@@ -833,6 +847,11 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 prompt_assembly = prepared.data["promptAssembly"]
                 model_visible_objective = prompt_assembly["modelVisiblePrompt"]
                 dispatch_prompt = prepared.data["dispatchPrompt"]
+                skill_context = (
+                    json.loads(json.dumps(prepared.data["authoredSkillContext"]))
+                    if prepared.data.get("authoredSkillContext") else None
+                )
+                skill_names = list(prepared.data.get("skillNames") or ())
                 task_title = str(objective).strip()[:512] or "Model operator task"
                 cognitive_provenance = build_cognitive_provenance(
                     assembly=prompt_assembly, provider_id=provider.id if provider is not None else "hermes",
@@ -1019,6 +1038,8 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         executable=executable, enforce_memory=False,
                         dispatch_prompt=str(dispatch_prompt),
                     )
+                if skill_context is not None:
+                    host.bind_prepared_authored_skills(skill_context, skill_names)
                 ctx = host.build_context(
                     {"leaseId": lease["leaseId"], "operations": lease["operations"],
                      "scope": lease["scope"], "validFrom": lease["validFrom"],
@@ -1026,6 +1047,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     ["terminal"], {"maxSeconds": 600, "maxArtifacts": 1, "maxObservations": 10},
                     [{"artifactPath": str(staging / "model-analysis.md"), "artifactKind": "report"}],
                     {"onUnexpectedWrite": "fail"},
+                    skill_names=skill_names or None,
                 )
                 wo = {
                     "schemaVersion": "1.0.0", "driverRunId": run_id, "driverId": "provider" if provider is not None else "hermes",
@@ -1153,6 +1175,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     "observations": out.get("observations", []), "driver": "provider" if provider is not None else "hermes",
                     "providerProvenance": out.get("diagnostics", {}) if provider is not None else {},
                     "cognitiveProvenance": cognitive_provenance,
+                    "authoredSkills": summarize_skill_context(ctx.get("skillContext")),
                 }
                 store.complete_claimed_command(key, command_fingerprint, receipt)
                 return receipt
