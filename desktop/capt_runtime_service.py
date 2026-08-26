@@ -757,6 +757,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     context_pack_digest=context_pack_digest,
                     tool_schema_digest=contracts.digest({"operations": ["RepositoryRead", "FilesystemRead", "ArtifactCreate", "AnalysisOnly"]}),
                     continuation_context=continuation["records"],
+                    authored_skill_context=skill_context,
                 )
                 # Runtime authority binds human approval to the exact
                 # model-visible assembly. Client booleans are provenance only;
@@ -775,6 +776,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     staging_root=staging_root_for_ledger(store.path, str(run_id)),
                     context_pack_digest=context_pack_digest,
                     continuation_context=continuation["records"],
+                    authored_skill_context=skill_context,
                 )
                 # This read-only check catches a mismatched approval before the
                 # command service consumes the one-use receipt.
@@ -804,6 +806,8 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         "dispatchPrompt": bound_assembly["dispatchPrompt"],
                         "contextPackDigest": context_pack_digest,
                         "continuationContext": continuation["records"],
+                        "authoredSkillContext": skill_context,
+                        "skillNames": skill_names,
                     }),
                     context_pack_digest=context_pack_digest,
                 )
