@@ -352,7 +352,10 @@ class RuntimeCommandService:
                     use_id=prepared.idempotency_key,
                     now=prepared.issued_at,
                     metadata=admission_meta,
-                    driver_id="provider" if prepared.provider_id else "hermes",
+                    driver_id=(
+                        "hermes" if prepared.data.get("agentToolProfile")
+                        else ("provider" if prepared.provider_id else "hermes")
+                    ),
                     prepared_execution_digest=prepared.prepared_execution_digest,
                 )
                 if admission.get("status") == "idempotent":

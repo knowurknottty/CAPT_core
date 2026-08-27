@@ -417,3 +417,63 @@ def test_hermes_driver_absent_does_not_break_reference_scenario(env):
     assert vr["status"]["kind"] == "verified"
     assert tree_digest(env["repo"]) == before
     del asyncio
+
+
+def test_toolbridge_launch_is_mcp_only_and_credential_is_file_scoped(env):
+    from pathlib import Path
+    from capt_runtime.drivers.hermes import build_toolbridge_launch
+    from capt_runtime.hermes_toolbridge import ToolBridgeBinding
+
+    binding = ToolBridgeBinding(
+        grant_id="g-bridge-driver", lease_id="l-bridge-driver",
+        filesystem_scope=env["repo"], runtime_sock="/tmp/capt.sock", token_file="/tmp/capt.token",
+    )
+    mcp = Path(env["tmp"]) / "capt-workspace-mcp"
+    mcp.write_text("#!/bin/sh\nexit 0\n"); mcp.chmod(0o700)
+    argv, child_env, home = build_toolbridge_launch(
+        staging_root=env["staging"], run_id="dr-bridge-launch",
+        executable="/usr/local/bin/hermes", prompt="inspect and fix",
+        binding=binding, provider_id="openrouter", model="z-ai/glm-5.3-flash",
+        provider_api_key="super-secret", workspace_mcp_executable=str(mcp),
+    )
+    assert argv[:3] == ["/usr/local/bin/hermes", "-z", "inspect and fix"]
+    assert argv[argv.index("-t") + 1] == "capt_broker"
+    assert "terminal" not in argv and "file" not in argv
+    assert "--safe-mode" not in argv
+    assert "--ignore-rules" in argv
+    assert argv[argv.index("--provider") + 1] == "openrouter"
+    assert argv[argv.index("-m") + 1] == "z-ai/glm-5.3-flash"
+    assert child_env["HERMES_HOME"] == str(home)
+    assert "super-secret" not in " ".join(child_env.values())
+    assert (home / ".env").read_text() == "OPENROUTER_API_KEY=super-secret\n"
+
+
+def test_toolbridge_mode_executes_with_mcp_only_launch(env):
+    import asyncio
+    from pathlib import Path
+    from capt_runtime.hermes_toolbridge import ToolBridgeBinding
+
+    fake = Path(env["tmp"]) / "fake-hermes"
+    fake.write_text("#!/bin/sh\nprintf 'bridge execution ok\\n'\n")
+    fake.chmod(0o700)
+    mcp = Path(env["tmp"]) / "capt-workspace-mcp"
+    mcp.write_text("#!/bin/sh\nexit 0\n"); mcp.chmod(0o700)
+    binding = ToolBridgeBinding(
+        grant_id="g-driver-live", lease_id="l-driver-live",
+        filesystem_scope=env["repo"], runtime_sock="/tmp/capt.sock", token_file="/tmp/capt.token",
+    )
+    driver = HermesDriver(
+        env["staging"], executable=str(fake), dispatch_prompt="approved tool task",
+        tool_bridge_binding=binding, provider_id="openrouter",
+        provider_model="z-ai/glm-5.3-flash", provider_api_key="secret-live",
+        workspace_mcp_executable=str(mcp),
+    )
+    lease = _lease(env["repo"])
+    ctx = _ctx(env["repo"], env["staging"], lease)
+    result = asyncio.run(driver.submit(_wo("dr-bridge-live", ctx)))
+    diag = result["diagnostics"]
+    assert diag["argvShape"][diag["argvShape"].index("-t") + 1] == "capt_broker"
+    assert "--safe-mode" not in diag["argvShape"]
+    assert "HERMES_HOME" in diag["envKeys"]
+    assert not any("API_KEY" in key for key in diag["envKeys"])
+    assert result["observations"][0]["summary"] == "bridge execution ok"

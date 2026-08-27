@@ -21,6 +21,7 @@ from .model_approval_binding import (
 )
 from .authored_skills import prepare_runtime_skill_context, summarize_skill_context
 from .continuation_context import select_continuation_context
+from .model_agent_tools import configured_agent_tool_mode
 
 
 def _expiry_from(issued_at: str) -> str:
@@ -64,10 +65,13 @@ def request_model_prompt_approval(
         mission_id + "-task-" + suffix if explicit_mission else mission_id + "-task-1"
     ))
     driver_run_id = str(intent.get("driverRunId") or ("dr-model-" + suffix))
+    agent_mode = configured_agent_tool_mode(driver_run_id)
     response_mode = str(intent.get("responseMode", "SPOCK"))
     enhancement_engine = str(intent.get("promptEnhancement", "OFF"))
     provider = str(intent.get("provider", "")).strip()
     model = str(intent.get("model", "")).strip()
+    if agent_mode["enabled"] and (not provider or not model):
+        raise AuthorityViolation("MODEL_AGENT_TOOLBRIDGE_REQUIRES_PROVIDER_MODEL")
     requested_context_budget = int(intent.get("requestedContextBudget", 32_000))
     human_verification_required = bool(intent.get("humanVerificationRequired", True))
     executable = str(intent.get("executable", "") or "")
@@ -102,6 +106,10 @@ def request_model_prompt_approval(
         context_pack_digest=continuation["contextPackDigest"],
         continuation_context=continuation["records"],
         authored_skill_context=skill_context,
+        agent_tool_profile=str(agent_mode["profile"]),
+        agent_tool_operations=list(agent_mode["operations"]),
+        agent_tool_grant_id=str(agent_mode["grantId"]),
+        agent_tool_lease_id=str(agent_mode["leaseId"]),
     )
     expires_at = str(intent.get("expiresAt") or _expiry_from(operator_metadata["issuedAt"]))
     request = {
@@ -109,7 +117,7 @@ def request_model_prompt_approval(
         "requestId": request_id,
         "missionId": mission_id,
         "taskId": task_id,
-        "requestedCapability": "cap.fs.read",
+        "requestedCapability": "cap.agent.tools" if agent_mode["enabled"] else "cap.fs.read",
         "resource": target_root,
         "operation": "ModelOperatorInspection",
         "scope": {
@@ -118,9 +126,12 @@ def request_model_prompt_approval(
             "recursive": True,
             "approvalBinding": assembly["executionBinding"],
         },
-        "riskClassification": "low",
+        "riskClassification": "medium" if agent_mode["enabled"] else "low",
         "policyReason": (
-            "Approve one concrete %s/%s read-only model execution bound to exact dispatch text."
+            ("Approve one concrete %s/%s CAPT ToolBroker coding-agent execution "
+             "bound to exact dispatch text and tool profile."
+             if agent_mode["enabled"] else
+             "Approve one concrete %s/%s read-only model execution bound to exact dispatch text.")
             % (provider or "hermes", model or "hermes")
         ),
         "requestedBy": {"actorId": "exec-1", "kind": "execution_plane"},
@@ -161,5 +172,7 @@ def request_model_prompt_approval(
         "modelVisiblePromptDigest": assembly["modelVisiblePromptDigest"],
         "authoredSkills": summarize_skill_context(skill_context),
         "skillNames": skill_names,
+        "agentToolProfile": str(agent_mode["profile"]),
+        "agentToolOperations": list(agent_mode["operations"]),
         "expiresAt": authoritative["expiresAt"],
     }

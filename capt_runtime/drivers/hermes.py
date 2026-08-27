@@ -16,9 +16,9 @@ Authority rules enforced here (ADR-0110/0120/0122/0125/0126):
   aggregate handles, no secrets are passed.
 * Hermes is launched with ``shell=False``, an explicit argv list, a minimized
   environment, a read-only working directory, and a wall-clock timeout.
-* Hermes is granted NO write capability. The analysis artifact is written by
-  THIS adapter (CAPT side) into the CAPT-owned staging root; Hermes never
-  writes an artifact itself.
+* Default Hermes mode is read-only. Governed agent mode exposes only the
+  CAPT Workspace MCP ToolBroker profile; all writes/tests cross CAPT authority
+  and become durable ToolExecution evidence. Hermes never receives raw authority.
 * Hermes stdout is treated as untrusted text. Any attempt to emit an
   authoritative CAPT record is rejected before the observation is built.
 * If the Hermes runtime is unavailable or fails, the adapter raises. It never
@@ -113,6 +113,17 @@ def resolve_hermes_executable(explicit: Optional[str] = None) -> str:
     return resolved
 
 
+def resolve_workspace_mcp_executable(explicit: Optional[str] = None) -> str:
+    """Locate the canonical CAPT Workspace MCP executable."""
+    cand = explicit or os.environ.get("CAPT_WORKSPACE_MCP_EXECUTABLE") or "capt-workspace-mcp"
+    resolved = shutil.which(cand) if os.path.sep not in cand else cand
+    if not resolved or not os.path.isfile(resolved) or not os.access(resolved, os.X_OK):
+        raise HermesDriverUnavailable(
+            "CAPT Workspace MCP executable not found or not executable: %r" % cand
+        )
+    return os.path.realpath(resolved)
+
+
 def probe_hermes_identity(executable: str, timeout: float = 60.0) -> Dict[str, Any]:
     """Read the external runtime's self-reported identity (diagnostics only)."""
     proc = subprocess.run(  # noqa: S603 - argv list, shell=False
@@ -152,6 +163,49 @@ def minimal_env(extra: Optional[Dict[str, str]] = None) -> Dict[str, str]:
             raise ValueError("refusing to forward credential-shaped env var %r" % key)
         env[key] = value
     return env
+
+
+def build_toolbridge_launch(
+    *,
+    staging_root: str,
+    run_id: str,
+    executable: str,
+    prompt: str,
+    binding: Any,
+    provider_id: str,
+    model: str,
+    provider_api_key: str,
+    workspace_mcp_executable: Optional[str] = None,
+) -> tuple[List[str], Dict[str, str], Path]:
+    """Build an isolated Hermes launch whose only tool surface is CAPT MCP."""
+    from ..hermes_toolbridge import MCP_SERVER_NAME, build_isolated_hermes_home
+
+    home = Path(staging_root) / ("hermes-home-" + run_id)
+    mcp_executable = resolve_workspace_mcp_executable(workspace_mcp_executable)
+    build_isolated_hermes_home(
+        home,
+        mcp_executable=mcp_executable,
+        binding=binding,
+        provider=provider_id,
+        model=model,
+        provider_api_key=provider_api_key,
+    )
+    argv = [
+        executable,
+        "-z",
+        prompt,
+        "-t",
+        MCP_SERVER_NAME,
+        "--ignore-rules",
+        "--ignore-user-config",
+        "--provider",
+        provider_id,
+        "-m",
+        model,
+        "--pass-session-id",
+    ]
+    env = minimal_env({"HERMES_HOME": str(home), "CAPT_DRIVER_RUN_ID": run_id})
+    return argv, env, home
 
 
 def reject_forged_authority(text: str) -> None:
@@ -230,6 +284,31 @@ def build_prompt(
     )
 
 
+def build_agent_prompt(
+    context_slice: Dict[str, Any], tool_operations: List[str], *, objective: str
+) -> str:
+    """Build exact model text for a CAPT ToolBroker-governed agent run."""
+    fs = context_slice["filesystemPolicy"]
+    target = fs.get("rootPath")
+    allowed = fs.get("allowedPaths", [])
+    budgets = context_slice.get("budgets", {})
+    return (
+        "You are executing a CAPT-governed coding-agent work order.\n"
+        f"Target directory: {target}\n"
+        f"Authorized filesystem scope: {', '.join(allowed)}\n"
+        "All filesystem and process actions MUST use the CAPT ToolBroker MCP tools.\n"
+        "Tool availability is not authority; CAPT revalidates every tool call.\n"
+        "Do not bypass CAPT with direct terminal/file tools, plugins, user config, "
+        "network/package installation, deployment, or git push.\n"
+        f"Potential broker operations: {', '.join(tool_operations)}\n"
+        f"Time budget (seconds): {budgets.get('maxSeconds', 'unspecified')}\n"
+        f"Task: {objective}\n"
+        "Use the smallest evidence-backed change. Run focused verification through "
+        "CAPT tools. Do not claim completion or verification without returned evidence."
+    )
+
+
+
 class HermesDriver:
     """Real external Hermes runtime bound to the frozen ExecutionDriver surface."""
 
@@ -245,6 +324,11 @@ class HermesDriver:
         default_timeout: float = 300.0,
         task_resolver: Optional[Any] = None,
         dispatch_prompt: str = "",
+        tool_bridge_binding: Optional[Any] = None,
+        provider_id: Optional[str] = None,
+        provider_model: Optional[str] = None,
+        provider_api_key: str = "",
+        workspace_mcp_executable: Optional[str] = None,
     ) -> None:
         self._staging_root = Path(staging_root)
         self._staging_root.mkdir(parents=True, exist_ok=True)
@@ -254,6 +338,16 @@ class HermesDriver:
         self._default_timeout = default_timeout
         self._task_resolver = task_resolver
         self._dispatch_prompt = dispatch_prompt
+        self._tool_bridge_binding = tool_bridge_binding
+        self._provider_id = provider_id
+        self._provider_model = provider_model
+        self._provider_api_key = provider_api_key
+        self._workspace_mcp_executable = workspace_mcp_executable
+        if tool_bridge_binding is not None:
+            if not provider_id or not provider_model:
+                raise ValueError("tool bridge mode requires provider_id and provider_model")
+            if self._extra_args:
+                raise ValueError("tool bridge mode forbids extra Hermes argv overrides")
         self._runs: Dict[str, Dict[str, Any]] = {}
 
     # -- ExecutionDriver surface ------------------------------------------
@@ -365,17 +459,40 @@ class HermesDriver:
         budgets = ctx.get("budgets", {})
         timeout = float(budgets.get("maxSeconds") or self._default_timeout)
 
-        argv = [
-            self._executable,
-            "-z",
-            prompt,
-            "-t",
-            self._toolsets,
-            "--safe-mode",
-            "--pass-session-id",
-            *self._extra_args,
-        ]
-        env = minimal_env({"CAPT_DRIVER_RUN_ID": run_id})
+        if self._tool_bridge_binding is not None:
+            argv, env, _bridge_home = build_toolbridge_launch(
+                staging_root=str(self._staging_root),
+                run_id=run_id,
+                executable=self._executable,
+                prompt=prompt,
+                binding=self._tool_bridge_binding,
+                provider_id=str(self._provider_id),
+                model=str(self._provider_model),
+                provider_api_key=self._provider_api_key,
+                workspace_mcp_executable=self._workspace_mcp_executable,
+            )
+            argv_shape = [
+                "<exe>", "-z", "<prompt>", "-t", "capt_broker",
+                "--ignore-rules", "--ignore-user-config", "--provider",
+                str(self._provider_id), "-m", str(self._provider_model),
+                "--pass-session-id",
+            ]
+        else:
+            argv = [
+                self._executable,
+                "-z",
+                prompt,
+                "-t",
+                self._toolsets,
+                "--safe-mode",
+                "--pass-session-id",
+                *self._extra_args,
+            ]
+            env = minimal_env({"CAPT_DRIVER_RUN_ID": run_id})
+            argv_shape = [
+                "<exe>", "-z", "<prompt>", "-t", self._toolsets,
+                "--safe-mode", "--pass-session-id",
+            ]
 
         started = time.time()
         proc = subprocess.Popen(  # noqa: S603 - argv list, shell=False
@@ -460,8 +577,7 @@ class HermesDriver:
             "exitCode": exit_code,
             "elapsedSeconds": round(elapsed, 3),
             "executable": self._executable,
-            "argvShape": ["<exe>", "-z", "<prompt>", "-t", self._toolsets,
-                          "--safe-mode", "--pass-session-id"],
+            "argvShape": argv_shape,
             "stderrTail": (stderr or "").strip()[-1000:],
             "envKeys": sorted(env.keys()),
             "promptDigest": prompt_digest,

@@ -77,6 +77,9 @@ class RuntimeComposition:
     def hermes_host(
         self, *, target_repo: str, staging_root: str, executable: Optional[str] = None,
         enforce_memory: bool = True, dispatch_prompt: str = "",
+        tool_bridge_binding: Optional[Any] = None, provider_id: Optional[str] = None,
+        provider_model: Optional[str] = None, provider_api_key: str = "",
+        workspace_mcp_executable: Optional[str] = None,
     ) -> DriverHost:
         from .drivers.hermes import DESCRIPTOR as HERMES_DESCRIPTOR, HermesDriver
         if not self.registry.is_registered(HERMES_DESCRIPTOR["driverId"]):
@@ -85,7 +88,10 @@ class RuntimeComposition:
                           memory_engine=self.memory_engine if enforce_memory else None)
         host.select_driver(HermesDriver(
             staging_root, executable=executable, task_resolver=self.task_resolver(),
-            dispatch_prompt=dispatch_prompt,
+            dispatch_prompt=dispatch_prompt, tool_bridge_binding=tool_bridge_binding,
+            provider_id=provider_id, provider_model=provider_model,
+            provider_api_key=provider_api_key,
+            workspace_mcp_executable=workspace_mcp_executable,
         ))
         return host
 

@@ -713,6 +713,8 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 mission_id = payload.get("missionId") or ("m-model-" + command_id)
                 task_id = payload.get("taskId") or (mission_id + "-task-1")
                 run_id = payload.get("driverRunId") or ("dr-model-" + command_id)
+                from capt_runtime.model_agent_tools import configured_agent_tool_mode
+                agent_mode = configured_agent_tool_mode(str(run_id))
                 grant_id = payload.get("grantId") or ("g-model-" + command_id)
                 lease_id = payload.get("leaseId") or ("l-model-" + command_id)
                 claim_id = payload.get("claimId") or ("cl-model-" + command_id)
@@ -720,6 +722,8 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 executable = payload.get("executable") or None
                 provider_id = payload.get("provider")
                 provider_model = payload.get("model")
+                if agent_mode["enabled"] and (not provider_id or not provider_model):
+                    raise ValueError("MODEL_AGENT_TOOLBRIDGE_REQUIRES_PROVIDER_MODEL")
                 provider = None
                 provider_key = ""
                 if provider_id:
@@ -781,6 +785,10 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     context_pack_digest=context_pack_digest,
                     continuation_context=continuation["records"],
                     authored_skill_context=skill_context,
+                    agent_tool_profile=str(agent_mode["profile"]),
+                    agent_tool_operations=list(agent_mode["operations"]),
+                    agent_tool_grant_id=str(agent_mode["grantId"]),
+                    agent_tool_lease_id=str(agent_mode["leaseId"]),
                 )
                 # This read-only check catches a mismatched approval before the
                 # command service consumes the one-use receipt.
@@ -812,6 +820,10 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         "continuationContext": continuation["records"],
                         "authoredSkillContext": skill_context,
                         "skillNames": skill_names,
+                        "agentToolProfile": str(agent_mode["profile"]),
+                        "agentToolOperations": list(agent_mode["operations"]),
+                        "agentToolGrantId": str(agent_mode["grantId"]),
+                        "agentToolLeaseId": str(agent_mode["leaseId"]),
                     }),
                     context_pack_digest=context_pack_digest,
                 )
@@ -856,6 +868,13 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     if prepared.data.get("authoredSkillContext") else None
                 )
                 skill_names = list(prepared.data.get("skillNames") or ())
+                agent_tool_profile = str(prepared.data.get("agentToolProfile") or "")
+                agent_tool_operations = list(prepared.data.get("agentToolOperations") or ())
+                agent_tool_grant_id = str(prepared.data.get("agentToolGrantId") or "")
+                agent_tool_lease_id = str(prepared.data.get("agentToolLeaseId") or "")
+                agent_enabled = bool(agent_tool_profile)
+                if agent_enabled and (provider is None or not provider_model):
+                    raise ValueError("MODEL_AGENT_TOOLBRIDGE_REQUIRES_PROVIDER_MODEL")
                 task_title = str(objective).strip()[:512] or "Model operator task"
                 cognitive_provenance = build_cognitive_provenance(
                     assembly=prompt_assembly, provider_id=provider.id if provider is not None else "hermes",
@@ -941,10 +960,10 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     "terminationCriteria": [{"criterionId": "tc-model-1",
                                              "statement": "Invariant violation terminates the mission.",
                                              "terminalState": "failed"}],
-                    "requestedCapability": "cap.fs.read",
+                    "requestedCapability": "cap.agent.tools" if agent_enabled else "cap.fs.read",
                     "resource": target_root,
                     "operation": "ModelOperatorInspection",
-                    "riskClassification": "low",
+                    "riskClassification": "medium" if agent_enabled else "low",
                     "taskId": task_id,
                 }
                 existing_mission = store.load_state("mission-" + str(mission_id))
@@ -1025,11 +1044,67 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 svc.activate_lease(lease, gk_meta("activate_lease"))
                 dispatch_lease = dict(lease)
                 dispatch_lease["scope"] = {**lease["scope"], "allowedPaths": [target_root]}
+                if agent_enabled:
+                    tool_policy_id = "pd-agent-tools-" + run_id
+                    tool_bundle_digest = contracts.digest({
+                        "policyBundle": "model-agent-toolbroker", "version": 1,
+                        "profile": agent_tool_profile,
+                    })
+                    tool_policy = {
+                        "schemaVersion": "1.0.0", "policyDecisionId": tool_policy_id,
+                        "policyBundleDigest": tool_bundle_digest,
+                        "effect": "allow_with_conditions",
+                        "subject": {"actorId": "tool-broker", "kind": "execution_plane"},
+                        "missionId": mission_id, "taskId": task_id,
+                        "requestedOperations": agent_tool_operations,
+                        "requestedScope": {"kind": "filesystem", "rootPath": target_root, "recursive": True},
+                        "conditions": [{"kind": "isolated_worktree", "worktreeRoot": target_root}],
+                        "rationale": "Approval-bound CAPT MCP coding-agent tools.",
+                        "decidedBy": {"actorId": "gk-1", "kind": "governance_kernel"},
+                        "decidedAt": now,
+                    }
+                    svc.evaluate_policy(tool_policy, gk_meta("evaluate_agent_tool_policy"))
+                    tool_grant = {
+                        "schemaVersion": "1.0.0", "grantId": agent_tool_grant_id,
+                        "subject": {"actorId": "tool-broker", "kind": "execution_plane"},
+                        "capabilityId": "cap.agent.tools", "operations": agent_tool_operations,
+                        "scope": {"kind": "filesystem", "rootPath": target_root, "recursive": True},
+                        "policyDecisionId": tool_policy_id, "policyBundleDigest": tool_bundle_digest,
+                        "conditions": [{"kind": "isolated_worktree", "worktreeRoot": target_root}],
+                        "maxUses": 128, "validFrom": now, "validUntil": "2030-01-01T00:00:00Z",
+                        "issuedBy": {"actorId": "gk-1", "kind": "governance_kernel"}, "issuedAt": now,
+                    }
+                    svc.issue_grant(tool_grant, gk_meta("issue_agent_tool_grant"))
+                    tool_lease = {
+                        "schemaVersion": "1.0.0", "leaseId": agent_tool_lease_id,
+                        "grantId": agent_tool_grant_id, "missionId": mission_id, "taskId": task_id,
+                        "executionContextId": "ec-agent-tools-" + command_id,
+                        "operations": agent_tool_operations,
+                        "scope": {"kind": "filesystem", "rootPath": target_root, "recursive": True},
+                        "maxUses": 128, "validFrom": now, "validUntil": "2030-01-01T00:00:00Z",
+                        "activatedAt": now,
+                    }
+                    svc.activate_lease(tool_lease, gk_meta("activate_agent_tool_lease"))
                 # 3. DriverHost dispatch with the resolved authoritative task.
                 worktree = Path(target_root)
                 staging = Path(ledger_path).parent / "staging" / run_id
                 staging.mkdir(parents=True, exist_ok=True)
-                if provider is not None:
+                if agent_enabled:
+                    from capt_runtime.hermes_toolbridge import ToolBridgeBinding
+                    bridge_binding = ToolBridgeBinding(
+                        grant_id=agent_tool_grant_id, lease_id=agent_tool_lease_id,
+                        filesystem_scope=str(worktree), runtime_sock=str(sock_path),
+                        token_file=str(tf),
+                    )
+                    host = runtime.hermes_host(
+                        target_repo=str(worktree), staging_root=str(staging),
+                        executable=executable, enforce_memory=False,
+                        dispatch_prompt=str(dispatch_prompt),
+                        tool_bridge_binding=bridge_binding, provider_id=provider.id,
+                        provider_model=str(provider_model), provider_api_key=provider_key,
+                        workspace_mcp_executable=os.environ.get("CAPT_WORKSPACE_MCP_EXECUTABLE"),
+                    )
+                elif provider is not None:
                     host = runtime.provider_host(
                         target_repo=str(worktree), staging_root=str(staging),
                         provider_id=provider.id, model=str(provider_model),
@@ -1048,13 +1123,15 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     {"leaseId": lease["leaseId"], "operations": lease["operations"],
                      "scope": lease["scope"], "validFrom": lease["validFrom"],
                      "validUntil": lease["validUntil"]},
-                    ["terminal"], {"maxSeconds": 600, "maxArtifacts": 1, "maxObservations": 10},
+                    (["capt_broker"] if agent_enabled else ["terminal"]),
+                    {"maxSeconds": 600, "maxArtifacts": 1, "maxObservations": 10},
                     [{"artifactPath": str(staging / "model-analysis.md"), "artifactKind": "report"}],
                     {"onUnexpectedWrite": "fail"},
                     skill_names=skill_names or None,
                 )
                 wo = {
-                    "schemaVersion": "1.0.0", "driverRunId": run_id, "driverId": "provider" if provider is not None else "hermes",
+                    "schemaVersion": "1.0.0", "driverRunId": run_id,
+                    "driverId": "hermes" if agent_enabled else ("provider" if provider is not None else "hermes"),
                     "missionId": mission_id, "taskId": task_id, "workOrderVersion": 1,
                     "contextSlice": ctx,
                     "operations": ["RepositoryRead", "FilesystemRead", "ArtifactCreate", "AnalysisOnly"],

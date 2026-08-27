@@ -207,3 +207,68 @@ def test_runtime_managed_skill_context_is_bound_identically_through_dispatch(
         client.disconnect()
         upstream.shutdown()
         upstream.server_close()
+
+
+def test_runtime_agent_toolbridge_uses_hermes_and_separate_tool_authority(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("CAPT_MODEL_OPERATOR_TOOLBRIDGE", "1")
+    monkeypatch.setenv("CAPT_WORKSPACE_MCP_EXECUTABLE", "/usr/bin/true")
+    target = tmp_path / "agent-target"; target.mkdir()
+    (target / "README.md").write_text("agent route\n")
+    fake_hermes = tmp_path / "hermes"
+    fake_hermes.write_text("#!/bin/sh\nprintf 'CAPT_AGENT_DRIVER_OK\\n'\n")
+    fake_hermes.chmod(0o700)
+
+    state = tmp_path / "agent-state"
+    pm = ProviderManager(state / "ui")
+    pm.add(Provider(
+        id="mtplx", name="MTPLX Local", kind=ProviderKind.LOCAL,
+        transport="openai_compatible", base_url="http://127.0.0.1:18085/v1",
+        context_limit=262144, enabled=True,
+    ))
+    ledger, sock, token = state / "runtime.db", state / "runtime.sock", state / "runtime.token"
+    state.mkdir(parents=True, exist_ok=True)
+    threading.Thread(target=serve, args=(str(ledger), sock, str(token), False), daemon=True).start()
+    _wait_for(sock); _wait_for(token)
+    client = RuntimeClient(str(sock), str(token))
+    try:
+        client.connect()
+        objective = "Inspect, make the smallest safe change if needed, and verify it."
+        approval = client.command("request_model_prompt_approval", {
+            "objective": objective, "targetRoot": str(target),
+            "provider": "mtplx", "model": "qwen3.8-27b-mtplx",
+            "executable": str(fake_hermes), "expiresAt": "2030-01-01T00:00:00Z",
+        }, "agent-tool-approval")
+        assert approval["status"] == "accepted", approval
+        planned = approval["result"]
+        assert planned["agentToolProfile"] == "capt-workspace-mcp:agent:v1"
+        approval_state = client.get_state("human_approval-" + planned["requestId"])
+        binding = approval_state["scope"]["approvalBinding"]
+        assert binding["driverKind"] == "hermes-agent"
+        assert binding["agentToolGrantId"] == "g-agent-tools-" + planned["driverRunId"]
+        assert client.command("submit_approval_decision", {
+            "requestId": planned["requestId"], "decision": "approve"
+        }, "agent-tool-decision")["status"] == "accepted"
+        run = client.command("run_approved_hermes_inspection", {
+            "objective": objective, "targetRoot": str(target),
+            "provider": "mtplx", "model": "qwen3.8-27b-mtplx",
+            "executable": str(fake_hermes),
+            "approvalRequestId": planned["requestId"], "missionId": planned["missionId"],
+            "taskId": planned["taskId"], "driverRunId": planned["driverRunId"],
+        }, "agent-tool-run")
+        assert run["status"] == "accepted", run
+        assert run["result"]["observations"][0]["summary"] == "CAPT_AGENT_DRIVER_OK"
+        driver = client.get_state("driverrun-" + planned["driverRunId"])
+        assert driver["driverId"] == "hermes"
+        tool_grant_id = "g-agent-tools-" + planned["driverRunId"]
+        capability = client.get_state("capability-" + tool_grant_id)
+        assert set(capability["operations"]) == {
+            "file.read", "file.search", "file.write", "file.patch", "terminal.exec"
+        }
+        assert capability["lease"]["leaseId"] == "l-agent-tools-" + planned["driverRunId"]
+        assert capability["maxUses"] == 128
+    finally:
+        try: client.command("shutdown", {}, "agent-tool-shutdown")
+        except Exception: pass
+        client.disconnect()

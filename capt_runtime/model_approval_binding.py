@@ -13,7 +13,10 @@ from typing import Any, Dict, List, Optional
 
 from .authored_skills import summarize_skill_context
 from .contracts import digest
-from .drivers.hermes import build_prompt as build_hermes_prompt
+from .drivers.hermes import (
+    build_agent_prompt,
+    build_prompt as build_hermes_prompt,
+)
 from .operator_provenance import build_model_operator_prompt_assembly
 
 MODEL_OPERATOR_OPERATIONS = [
@@ -57,6 +60,10 @@ def build_bound_model_operator_approval(
     context_pack_digest: str = "",
     continuation_context: Optional[List[Dict[str, Any]]] = None,
     authored_skill_context: Optional[Dict[str, Any]] = None,
+    agent_tool_profile: str = "",
+    agent_tool_operations: Optional[List[str]] = None,
+    agent_tool_grant_id: str = "",
+    agent_tool_lease_id: str = "",
 ) -> Dict[str, Any]:
     """Return the model-visible assembly plus its execution admission binding."""
     assembly = build_model_operator_prompt_assembly(
@@ -70,22 +77,26 @@ def build_bound_model_operator_approval(
     provider_id = str(provider or "")
     model_id = str(model or "")
     executable_selector = str(executable or "")
-    driver_kind = "provider" if provider_id else "hermes"
-
+    agent_ops = list(agent_tool_operations or [])
+    driver_kind = "hermes-agent" if agent_tool_profile else ("provider" if provider_id else "hermes")
+    hermes_context = {
+        "filesystemPolicy": {
+            "rootPath": target_root,
+            "allowedPaths": [target_root, staging_root],
+            "writesAllowed": False,
+        },
+        "permittedTools": list(MODEL_OPERATOR_TOOLS),
+        "budgets": dict(MODEL_OPERATOR_BUDGETS),
+    }
     if driver_kind == "provider":
         dispatch_prompt = assembly["modelVisiblePrompt"]
+    elif driver_kind == "hermes-agent":
+        dispatch_prompt = build_agent_prompt(
+            hermes_context, agent_ops, objective=assembly["modelVisiblePrompt"]
+        )
     else:
         dispatch_prompt = build_hermes_prompt(
-            {
-                "filesystemPolicy": {
-                    "rootPath": target_root,
-                    "allowedPaths": [target_root, staging_root],
-                    "writesAllowed": False,
-                },
-                "permittedTools": list(MODEL_OPERATOR_TOOLS),
-                "budgets": dict(MODEL_OPERATOR_BUDGETS),
-            },
-            list(MODEL_OPERATOR_OPERATIONS),
+            hermes_context, list(MODEL_OPERATOR_OPERATIONS),
             objective=assembly["modelVisiblePrompt"],
         )
 
@@ -104,6 +115,13 @@ def build_bound_model_operator_approval(
         "basePromptAssemblyDigest": assembly["promptAssemblyDigest"],
         "dispatchPromptDigest": dispatch_prompt_digest,
     }
+    if agent_tool_profile:
+        binding.update({
+            "agentToolProfile": str(agent_tool_profile),
+            "agentToolOperations": agent_ops,
+            "agentToolGrantId": str(agent_tool_grant_id),
+            "agentToolLeaseId": str(agent_tool_lease_id),
+        })
     authored_summary = summarize_skill_context(authored_skill_context)
     if authored_summary is not None:
         binding["authoredSkills"] = authored_summary
