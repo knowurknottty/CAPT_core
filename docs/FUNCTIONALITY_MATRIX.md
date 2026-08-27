@@ -1,43 +1,59 @@
 # CAPT Functionality Matrix
 
-This matrix describes **merged `main`** after PR #117. Implementation presence and release authorization remain different states.
+This matrix describes **merged Core `main` as of 2026-08-27**. Implementation presence, exact-head engineering verification, installed-runtime proof, and public-release authorization are distinct states.
 
 | Capability | Merged `main` | Release/evidence boundary |
 |---|---|---|
 | runtime lifecycle / EventStore authority | yes | authoritative runtime foundation |
 | checkpoint / exact historical replay | exact-prefix replay + governed replay fork | historical proof remains SHA-bound |
 | durable memory / ContextPack | yes | approval/context binding integrated |
-| authored-skill verification | yes | exact selected bytes bound into model-visible approval |
+| pinned external authored skills | yes | immutable selected bytes bound into model-visible approval |
+| managed-local authored skills | yes | import/verify + deterministic contextual selection + anti-drift |
 | evidence / verification / ClaimGuard separation | yes | no auto-verification |
-| bounded IPC framing + rejection audit | integrated | release-control evidence still exact-head gated |
+| bounded IPC framing + rejection audit | integrated | release-control evidence is exact-source gated |
 | capability lease inspect/revoke | integrated | governed authority path |
 | governed artifact promotion | integrated | promotion != verification |
+| ToolBroker / ToolExecution | integrated | durable execution/effect/reconciliation state |
+| local terminal tool | integrated | capability governed |
+| SSH terminal tool | integrated | profile/readiness required |
+| Docker terminal tool | integrated | real-daemon acceptance environment dependent |
+| governed file/code tools | integrated | bounded adapters, not unrestricted authority |
 | provider registry/health/model list | integrated | health != governed execution proof |
 | governed Ollama generation | integrated | provider result remains evidence |
-| local OpenAI-compatible generation/prewarm | integrated | loopback/local boundary enforced |
+| local/authenticated OpenAI-compatible generation/prewarm | integrated | endpoint/resource/provenance bounds apply |
 | provider/model session isolation | integrated native behavior | distribution proof separate |
-| generic native MLX adapter | **unregistered unless materially configured** | MTPLX/OpenAI-compatible path is separate |
+| generic direct native MLX adapter | **not claimed** | materially configured OpenAI-compatible MLX/MTPLX path is separate |
 | Textual/Tk operator surfaces | merged | thin clients over RuntimeService |
 | native `CAPTNativeMac` executable target | merged / builds and tests | signing/notarization/distribution remain separate |
 | human approve/deny | integrated | exact model-visible approval binding |
+| selected authored-skill visibility in native approvals | integrated | display is projection, not authority |
 | cross-model continuation context | integrated | source/evidence identity remains bound |
 | durable Cohorts + Chamber | integrated | quorum/consensus != verification |
 | `.capt-flight` forensic bundle | integrated | projection/evidence only |
-| Provenance Lens / DAG | integrated | provenance != correctness |
-| Security Closure Cockpit | integrated, fail-closed | **release authorization blocked** |
-| macOS ↔ RuntimeService ↔ MCP shared authority | acceptance proven on recorded snapshot | not model-quality proof |
-| public release authorization | **NO** | exact merged-head Release Security failed |
+| provenance / epistemic projections | integrated | provenance != correctness |
+| Security Closure Cockpit | integrated, fail-closed | authorization is exact-SHA evidence |
+| macOS ↔ RuntimeService ↔ MCP shared authority | acceptance recorded on bound snapshots | not model-quality proof |
+| Secure Intake / Quarantine | design/plans on main | implementation not claimed |
+| Projects / public composer palette | design/plans on main | implementation not claimed |
+| Search / Deep Research governance | design/plans on main | implementation not claimed |
+| Cohort Council product layer | design/plans on main | low-level Cohorts do not imply Council |
+| public release authorization for arbitrary current head | **NO INHERITANCE** | evaluate exact release source; old receipts do not transfer |
 
 ## Verification boundary
 
-The frozen 2026-08-19 convergence snapshots remain valid for the SHAs that produced them: Core Python **1,055 passed / 57 skipped / 12 deselected**, Swift **64 / 7 skipped / 0 failures**, strict concurrency PASS, ThreadSanitizer PASS, contract drift PASS, MCP PR #2 PASS, and cross-surface acceptance PASS.
+Important SHA-bound evidence includes:
 
-The exact merged PR #117 head `570babeef113943860c1268722200a48639e406d` has M0-A PASS, Native macOS Swift PASS, and Release Security **FAIL**. Do not relabel older artifact hashes or gate counts as merge-head evidence.
+- PR #117 exact head `570babeef113943860c1268722200a48639e406d`: M0-A PASS, Native macOS Swift PASS, Release Security FAIL.
+- release-security closure baseline `2199c036aa22af33fb3eb0700f63f820a35aa55a`: Release Security PASS with **21 PASS / 0 FAIL / 0 NOT_VERIFIED / 26 NOT_APPLICABLE** and M0-A PASS.
+- ToolBroker PR #126 exact head `b21ed6e7ff3996d48c756e342b278b69af0d666f`: full engineering gates plus hosted M0-A and Release Security PASS. Its squash merge is content/tree-identical but has a different SHA.
+- managed-skills PR #129 head `e55037d92e89c5a960ecad908a1714c06c0aad0b`: focused managed/authored/runtime tests, full Python suite, Swift suite, installed-wheel and live skill-selection/anti-drift evidence recorded in the PR.
 
-## Deliberate separate lines
+At audit start, current `main` `3aee737…` had a mixed M0-A push result caused by a Python 3.10 Docker availability-probe timeout while the Python 3.12, contract, and TypeScript jobs passed. The failed job was retried; treat the hosted retry as the authoritative current-run fact when complete.
 
-CAPT-UPG-020→024 remain benchmark/probe/pending-verification work. Inversion Labs/Forge remains a separate governed edition line. Public-release design/planning remains on #111/#116. None is silently counted as merged Core release functionality.
+## Deliberately separate lines
+
+CAPT-UPG-020→024 (#89/#91/#93/#95/#97) remain the open benchmark/probe lane. Inversion Labs/Forge remains a separate edition/history lineage. The approved public-release design and plans are now preserved on Core `main` via PR #128, but their product features are not silently counted as implemented.
 
 ## Authority boundary
 
-Every UI and compatibility surface is a projection/control client. RuntimeService/EventStore remain authoritative.
+Every UI, compatibility surface, skill pack, provider adapter, and tool adapter is subordinate to RuntimeService/EventStore/governance. None becomes an alternate authority plane.
