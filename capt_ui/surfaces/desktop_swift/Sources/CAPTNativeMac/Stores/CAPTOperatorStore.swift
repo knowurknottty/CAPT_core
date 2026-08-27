@@ -9,6 +9,8 @@ final class CAPTOperatorStore: ObservableObject {
         role: .system,
         text: "CAPT native surface ready. Connect to RuntimeService to begin."
     )
+    private static let defaultNewChatTargetRoot = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("CAPT_core", isDirectory: true).path
 
     @Published var connectionState: CAPTRuntimeConnectionState = .disconnected
     @Published var provider = "ollama"
@@ -48,6 +50,8 @@ final class CAPTOperatorStore: ObservableObject {
     private let runtime: CAPTBackgroundRuntime
     private let sessionStore: CAPTEncryptedSessionStore
     private var providerWarmIdentity: String?
+    private var cachedOperatorProvider = "ollama"
+    private var cachedOperatorModel = "qwen3.5-defiant-fable:latest"
 
     init(
         runtime: CAPTBackgroundRuntime = CAPTBackgroundRuntime(),
@@ -200,9 +204,15 @@ final class CAPTOperatorStore: ObservableObject {
         guard connectionState == .connected else { return }
 
         if activeSessionID == nil {
+            let defaults = newChatDefaults
             _ = mutateWorkspace {
-                $0.newChat(provider: provider, model: model, targetRoot: targetRoot)
+                $0.newChat(
+                    provider: defaults.providerID,
+                    model: defaults.modelID,
+                    targetRoot: defaults.targetRoot
+                )
             }
+            syncSelectionFromActiveSession()
         }
 
         guard let sessionID = mutateWorkspace({
@@ -368,13 +378,15 @@ final class CAPTOperatorStore: ObservableObject {
         modelSnapshot = snapshot.models
         verbosity = snapshot.verbosity
         operatorStateError = nil
+        let selection = CAPTOperatorPreferenceResolver.resolve(
+            providers: snapshot.providers,
+            models: snapshot.models,
+            fallbackProvider: cachedOperatorProvider,
+            fallbackModel: cachedOperatorModel
+        )
+        cachedOperatorProvider = selection.providerID
+        cachedOperatorModel = selection.modelID
         if activeSessionID == nil {
-            let selection = CAPTOperatorPreferenceResolver.resolve(
-                providers: snapshot.providers,
-                models: snapshot.models,
-                fallbackProvider: provider,
-                fallbackModel: model
-            )
             provider = selection.providerID
             model = selection.modelID
         }
@@ -433,6 +445,33 @@ final class CAPTOperatorStore: ObservableObject {
             do { applyOperatorSnapshot(try await runtime.operatorSnapshot()) }
             catch { operatorStateError = error.localizedDescription }
         }
+    }
+
+    var operatorPreferenceSelection: CAPTOperatorPreferenceSelection {
+        guard let modelSnapshot else {
+            return CAPTOperatorPreferenceSelection(
+                providerID: cachedOperatorProvider,
+                modelID: cachedOperatorModel
+            )
+        }
+        return CAPTOperatorPreferenceResolver.resolve(
+            providers: providers,
+            models: modelSnapshot,
+            fallbackProvider: cachedOperatorProvider,
+            fallbackModel: cachedOperatorModel
+        )
+    }
+
+    private var newChatDefaults: CAPTNewChatDefaults {
+        let operatorSelection = operatorPreferenceSelection
+        return CAPTNewChatDefaultsResolver.resolve(
+            operatorProvider: operatorSelection.providerID,
+            operatorModel: operatorSelection.modelID,
+            defaultTargetRoot: Self.defaultNewChatTargetRoot,
+            activeSessionProvider: chatWorkspace.activeSession?.provider,
+            activeSessionModel: chatWorkspace.activeSession?.model,
+            activeSessionTargetRoot: chatWorkspace.activeSession?.targetRoot
+        )
     }
 
     func refreshCapabilities() {
@@ -809,33 +848,21 @@ final class CAPTOperatorStore: ObservableObject {
 
     func newChat() {
         Task {
-            var liveModels = modelSnapshot
-            var selectedProviderID = providers.first(where: { $0.selected })?.id
             do {
-                let snapshot = try await runtime.operatorSnapshot()
-                applyOperatorSnapshot(snapshot)
-                liveModels = snapshot.models
-                selectedProviderID = snapshot.providers.first(where: { $0.selected })?.id
+                applyOperatorSnapshot(try await runtime.operatorSnapshot())
             } catch {
-                // New Chat must remain available even if the preference read fails.
-                // Cached operator state is a safe fallback; RuntimeService authority
-                // is not involved in this presentation-only selection.
                 runtimeControlMessage = "Using cached provider/model preference: " + error.localizedDescription
             }
 
-            if let liveModels {
-                let selection = CAPTOperatorCLI.newChatSelection(
-                    models: liveModels,
-                    selectedProviderID: selectedProviderID,
-                    fallbackProvider: provider,
-                    fallbackModel: model
-                )
-                provider = selection.provider
-                model = selection.model
-            }
+            let defaults = newChatDefaults
             _ = mutateWorkspace {
-                $0.newChat(provider: provider, model: model, targetRoot: targetRoot)
+                $0.newChat(
+                    provider: defaults.providerID,
+                    model: defaults.modelID,
+                    targetRoot: defaults.targetRoot
+                )
             }
+            syncSelectionFromActiveSession()
             taskState = "—"
             lastError = nil
             if !runtimeControlMessage.hasPrefix("Using cached provider/model preference:") {

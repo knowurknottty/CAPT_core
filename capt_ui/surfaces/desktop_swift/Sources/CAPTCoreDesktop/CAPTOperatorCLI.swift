@@ -124,6 +124,34 @@ public enum CAPTOperatorPreferenceResolver {
     }
 }
 
+
+public struct CAPTNewChatDefaults: Equatable, Sendable {
+    public let providerID: String
+    public let modelID: String
+    public let targetRoot: String
+}
+
+public enum CAPTNewChatDefaultsResolver {
+    public static func resolve(
+        operatorProvider: String,
+        operatorModel: String,
+        defaultTargetRoot: String,
+        activeSessionProvider: String? = nil,
+        activeSessionModel: String? = nil,
+        activeSessionTargetRoot: String? = nil
+    ) -> CAPTNewChatDefaults {
+        // Active-session coordinates are intentionally not fallback authority for New Chat.
+        _ = activeSessionProvider
+        _ = activeSessionModel
+        _ = activeSessionTargetRoot
+        return CAPTNewChatDefaults(
+            providerID: operatorProvider,
+            modelID: operatorModel,
+            targetRoot: defaultTargetRoot
+        )
+    }
+}
+
 public enum CAPTOperatorCLIError: Error, LocalizedError {
     case executableMissing(String)
     case commandFailed(String)
