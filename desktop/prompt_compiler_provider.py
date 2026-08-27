@@ -20,22 +20,10 @@ class LocalPromptCompilerSelection:
     base_url: str
 
 
-def select_local_prompt_compiler(ui_config_dir: Path) -> Optional[LocalPromptCompilerSelection]:
-    """Resolve the configured default only when it is an enabled loopback provider."""
-    try:
-        providers_doc = json.loads((Path(ui_config_dir) / "providers.json").read_text())
-        models_doc = json.loads((Path(ui_config_dir) / "models.json").read_text())
-    except (OSError, ValueError, TypeError):
-        return None
-    default = models_doc.get("default") if isinstance(models_doc, dict) else None
-    if not isinstance(default, dict):
-        return None
-    provider_id = str(default.get("provider") or "")
-    model = str(default.get("model") or "")
+def _local_selection(
+    providers: list[Any], provider_id: str, model: str
+) -> Optional[LocalPromptCompilerSelection]:
     if not provider_id or not model:
-        return None
-    providers = providers_doc.get("providers") if isinstance(providers_doc, dict) else None
-    if not isinstance(providers, list):
         return None
     for provider in providers:
         if not isinstance(provider, dict) or str(provider.get("id")) != provider_id:
@@ -50,6 +38,64 @@ def select_local_prompt_compiler(ui_config_dir: Path) -> Optional[LocalPromptCom
             return LocalPromptCompilerSelection(provider_id, model, base_url.rstrip("/"))
         return None
     return None
+
+
+def select_local_prompt_compiler(ui_config_dir: Path) -> Optional[LocalPromptCompilerSelection]:
+    """Resolve Prompt Intelligence independently from the execution-model default.
+
+    Priority is an explicit ``prompt-compiler.json`` binding, then a legacy local
+    execution default, then one unambiguous configured loopback compiler. A cloud
+    execution default never becomes a prompt compiler and ambiguity fails closed.
+    """
+    ui = Path(ui_config_dir)
+    try:
+        providers_doc = json.loads((ui / "providers.json").read_text())
+    except (OSError, ValueError, TypeError):
+        return None
+    providers = providers_doc.get("providers") if isinstance(providers_doc, dict) else None
+    if not isinstance(providers, list):
+        return None
+
+    explicit_path = ui / "prompt-compiler.json"
+    if explicit_path.exists():
+        try:
+            explicit = json.loads(explicit_path.read_text())
+        except (OSError, ValueError, TypeError):
+            return None
+        if not isinstance(explicit, dict):
+            return None
+        return _local_selection(
+            providers, str(explicit.get("provider") or ""), str(explicit.get("model") or "")
+        )
+
+    try:
+        models_doc = json.loads((ui / "models.json").read_text())
+    except (OSError, ValueError, TypeError):
+        models_doc = {}
+    default = models_doc.get("default") if isinstance(models_doc, dict) else None
+    if isinstance(default, dict):
+        legacy = _local_selection(
+            providers, str(default.get("provider") or ""), str(default.get("model") or "")
+        )
+        if legacy is not None:
+            return legacy
+
+    candidates: list[LocalPromptCompilerSelection] = []
+    for provider in providers:
+        if not isinstance(provider, dict):
+            continue
+        provider_id = str(provider.get("id") or "")
+        models = provider.get("models")
+        if not isinstance(models, list):
+            continue
+        model_ids = [str(item) for item in models if isinstance(item, str) and item.strip()]
+        if not model_ids:
+            continue
+        preferred = next((item for item in model_ids if not item.startswith("/")), model_ids[0])
+        selection = _local_selection(providers, provider_id, preferred)
+        if selection is not None:
+            candidates.append(selection)
+    return candidates[0] if len(candidates) == 1 else None
 
 
 class OpenAICompatiblePromptCompilerTransport:
