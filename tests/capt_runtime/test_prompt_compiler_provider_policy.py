@@ -72,3 +72,15 @@ def test_compiler_rejects_remote_provider_without_separate_compilation_consent()
 
     with pytest.raises(AuthorityViolation, match="REMOTE_COMPILATION_NOT_AUTHORIZED"):
         compiler.compile(request)
+
+
+def test_policy_prefers_explicit_authorized_remote_over_available_local():
+    resolved = PromptCompilerProviderPolicy().resolve(
+        local_available=True,
+        remote_allowed=True,
+        requested_remote="openrouter",
+        local_provider="mtplx",
+        local_model="qwen",
+    )
+    assert resolved.provider_id == "openrouter"
+    assert resolved.endpoint_class == "remote"

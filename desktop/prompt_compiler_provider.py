@@ -1,4 +1,8 @@
-"""Local-only Prompt Intelligence compiler transport selection for desktop runtime."""
+"""Prompt Intelligence compiler transport selection for desktop runtime.
+
+Prompt enhancement and chat execution are independent axes. A configured remote
+compiler may enhance a prompt before a different provider/model executes it.
+"""
 from __future__ import annotations
 
 import json
@@ -9,53 +13,94 @@ from typing import Any, Mapping, Optional
 
 from capt_runtime.provider_endpoint import endpoint_class
 from capt_runtime.resource_governor import TokenCostGovernor
+from capt_ui.operator.secrets import resolve as resolve_secret
 
 _MAX_RESPONSE_BYTES = 262_144
 
 
 @dataclass(frozen=True)
-class LocalPromptCompilerSelection:
+class PromptCompilerSelection:
     provider_id: str
     model: str
     base_url: str
+    endpoint_class: str = "local"
+    key_ref: str = ""
+    remote_authorized: bool = False
 
 
-def _local_selection(
-    providers: list[Any], provider_id: str, model: str
-) -> Optional[LocalPromptCompilerSelection]:
+# Backward-compatible name used by the existing local transport tests.
+LocalPromptCompilerSelection = PromptCompilerSelection
+
+
+def _load_providers(ui: Path) -> list[Any]:
+    try:
+        doc = json.loads((ui / "providers.json").read_text())
+    except (OSError, ValueError, TypeError):
+        return []
+    providers = doc.get("providers") if isinstance(doc, dict) else None
+    return providers if isinstance(providers, list) else []
+
+
+def _selection(
+    providers: list[Any], provider_id: str, model: str, *, remote_authorized: bool = False
+) -> Optional[PromptCompilerSelection]:
     if not provider_id or not model:
         return None
     for provider in providers:
         if not isinstance(provider, dict) or str(provider.get("id")) != provider_id:
             continue
-        base_url = str(provider.get("base_url") or "")
-        if (
-            provider.get("enabled", True)
-            and str(provider.get("kind")) == "local"
-            and str(provider.get("transport")) == "openai_compatible"
-            and endpoint_class(base_url) == "local"
-        ):
-            return LocalPromptCompilerSelection(provider_id, model, base_url.rstrip("/"))
+        if not provider.get("enabled", True) or str(provider.get("transport")) != "openai_compatible":
+            return None
+        base_url = str(provider.get("base_url") or "").rstrip("/")
+        eclass = endpoint_class(base_url)
+        kind = str(provider.get("kind") or "")
+        models = provider.get("models")
+        if isinstance(models, list) and models and model not in [str(item) for item in models]:
+            return None
+        if kind == "local" and eclass == "local":
+            return PromptCompilerSelection(provider_id, model, base_url, "local", str(provider.get("key_ref") or ""), False)
+        if kind == "cloud" and eclass == "cloud" and remote_authorized:
+            return PromptCompilerSelection(provider_id, model, base_url, "remote", str(provider.get("key_ref") or ""), True)
         return None
     return None
 
 
-def select_local_prompt_compiler(ui_config_dir: Path) -> Optional[LocalPromptCompilerSelection]:
-    """Resolve Prompt Intelligence independently from the execution-model default.
-
-    Priority is an explicit ``prompt-compiler.json`` binding, then a legacy local
-    execution default, then one unambiguous configured loopback compiler. A cloud
-    execution default never becomes a prompt compiler and ambiguity fails closed.
-    """
-    ui = Path(ui_config_dir)
+def _local_fallback(ui: Path, providers: list[Any]) -> Optional[PromptCompilerSelection]:
     try:
-        providers_doc = json.loads((ui / "providers.json").read_text())
+        models_doc = json.loads((ui / "models.json").read_text())
     except (OSError, ValueError, TypeError):
-        return None
-    providers = providers_doc.get("providers") if isinstance(providers_doc, dict) else None
-    if not isinstance(providers, list):
-        return None
+        models_doc = {}
+    default = models_doc.get("default") if isinstance(models_doc, dict) else None
+    if isinstance(default, dict):
+        legacy = _selection(
+            providers, str(default.get("provider") or ""), str(default.get("model") or "")
+        )
+        if legacy is not None and legacy.endpoint_class == "local":
+            return legacy
 
+    candidates: list[PromptCompilerSelection] = []
+    for provider in providers:
+        if not isinstance(provider, dict) or str(provider.get("kind")) != "local":
+            continue
+        models = provider.get("models")
+        if not isinstance(models, list):
+            continue
+        model_ids = [str(item) for item in models if isinstance(item, str) and item.strip()]
+        if not model_ids:
+            continue
+        preferred = next((item for item in model_ids if not item.startswith("/")), model_ids[0])
+        candidate = _selection(providers, str(provider.get("id") or ""), preferred)
+        if candidate is not None:
+            candidates.append(candidate)
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def select_local_prompt_compiler(ui_config_dir: Path) -> Optional[PromptCompilerSelection]:
+    """Resolve only a local loopback Prompt Intelligence compiler."""
+    ui = Path(ui_config_dir)
+    providers = _load_providers(ui)
+    if not providers:
+        return None
     explicit_path = ui / "prompt-compiler.json"
     if explicit_path.exists():
         try:
@@ -64,47 +109,90 @@ def select_local_prompt_compiler(ui_config_dir: Path) -> Optional[LocalPromptCom
             return None
         if not isinstance(explicit, dict):
             return None
-        return _local_selection(
+        prefs = explicit.get("preferences")
+        if isinstance(prefs, list):
+            for pref in prefs:
+                if not isinstance(pref, dict):
+                    continue
+                candidate = _selection(
+                    providers, str(pref.get("provider") or ""), str(pref.get("model") or "")
+                )
+                if candidate is not None and candidate.endpoint_class == "local":
+                    return candidate
+            return None
+        candidate = _selection(
             providers, str(explicit.get("provider") or ""), str(explicit.get("model") or "")
         )
+        return candidate if candidate is not None and candidate.endpoint_class == "local" else None
+    return _local_fallback(ui, providers)
 
-    try:
-        models_doc = json.loads((ui / "models.json").read_text())
-    except (OSError, ValueError, TypeError):
-        models_doc = {}
-    default = models_doc.get("default") if isinstance(models_doc, dict) else None
-    if isinstance(default, dict):
-        legacy = _local_selection(
-            providers, str(default.get("provider") or ""), str(default.get("model") or "")
-        )
-        if legacy is not None:
-            return legacy
 
-    candidates: list[LocalPromptCompilerSelection] = []
-    for provider in providers:
-        if not isinstance(provider, dict):
-            continue
-        provider_id = str(provider.get("id") or "")
-        models = provider.get("models")
-        if not isinstance(models, list):
-            continue
-        model_ids = [str(item) for item in models if isinstance(item, str) and item.strip()]
-        if not model_ids:
-            continue
-        preferred = next((item for item in model_ids if not item.startswith("/")), model_ids[0])
-        selection = _local_selection(providers, provider_id, preferred)
-        if selection is not None:
-            candidates.append(selection)
-    return candidates[0] if len(candidates) == 1 else None
+def select_prompt_compiler(ui_config_dir: Path) -> Optional[PromptCompilerSelection]:
+    """Resolve configured Prompt Intelligence preference independently of execution.
+
+    ``prompt-compiler.json`` may provide an ordered ``preferences`` list. Remote
+    entries are admitted only when ``remoteCompilationAuthorized`` is true.
+    Local loopback selection remains the fallback.
+    """
+    ui = Path(ui_config_dir)
+    providers = _load_providers(ui)
+    if not providers:
+        return None
+    explicit_path = ui / "prompt-compiler.json"
+    if explicit_path.exists():
+        try:
+            explicit = json.loads(explicit_path.read_text())
+        except (OSError, ValueError, TypeError):
+            return None
+        if not isinstance(explicit, dict):
+            return None
+        remote_authorized = bool(explicit.get("remoteCompilationAuthorized", False))
+        prefs = explicit.get("preferences")
+        if isinstance(prefs, list):
+            for pref in prefs:
+                if not isinstance(pref, dict):
+                    continue
+                candidate = _selection(
+                    providers,
+                    str(pref.get("provider") or ""),
+                    str(pref.get("model") or ""),
+                    remote_authorized=remote_authorized,
+                )
+                if candidate is not None:
+                    return candidate
+        else:
+            candidate = _selection(
+                providers,
+                str(explicit.get("provider") or ""),
+                str(explicit.get("model") or ""),
+                remote_authorized=remote_authorized,
+            )
+            if candidate is not None:
+                return candidate
+    return _local_fallback(ui, providers)
 
 
 class OpenAICompatiblePromptCompilerTransport:
-    """Bounded JSON-schema transport for a verified loopback compiler endpoint."""
+    """Bounded JSON-schema transport for local or explicitly authorized remote compiler."""
 
-    def __init__(self, selection: LocalPromptCompilerSelection, *, timeout_seconds: int = 120):
-        if endpoint_class(selection.base_url) != "local":
-            raise ValueError("prompt compiler transport requires a loopback endpoint")
+    def __init__(
+        self,
+        selection: PromptCompilerSelection,
+        *,
+        api_key: str = "",
+        timeout_seconds: int = 120,
+    ):
+        actual = endpoint_class(selection.base_url)
+        if selection.endpoint_class == "local" and actual != "local":
+            raise ValueError("local prompt compiler transport requires a loopback endpoint")
+        if selection.endpoint_class == "remote" and actual != "cloud":
+            raise ValueError("remote prompt compiler transport requires a remote endpoint")
+        if selection.endpoint_class == "remote" and not selection.remote_authorized:
+            raise ValueError("remote prompt compiler is not authorized")
+        if selection.endpoint_class == "remote" and not api_key:
+            raise ValueError("remote prompt compiler credential unavailable")
         self.selection = selection
+        self.api_key = api_key
         self.timeout_seconds = int(timeout_seconds)
         self._resolved_model: Optional[str] = None
 
@@ -113,6 +201,8 @@ class OpenAICompatiblePromptCompilerTransport:
         return "".join(ch.lower() for ch in value if ch.isalnum())
 
     def _request_model(self) -> str:
+        if self.selection.endpoint_class == "remote":
+            return self.selection.model
         if self._resolved_model is not None:
             return self._resolved_model
         request = urllib.request.Request(
@@ -144,9 +234,7 @@ class OpenAICompatiblePromptCompilerTransport:
         needle = self._normalized_model_id(self.selection.model)
         matches = [
             model_id for model_id in advertised
-            if not model_id.startswith("/")
-            and needle
-            and needle in self._normalized_model_id(model_id)
+            if not model_id.startswith("/") and needle and needle in self._normalized_model_id(model_id)
         ]
         if len(matches) == 1:
             self._resolved_model = matches[0]
@@ -178,17 +266,16 @@ class OpenAICompatiblePromptCompilerTransport:
             "max_tokens": 4096,
             "response_format": {
                 "type": "json_schema",
-                "json_schema": {
-                    "name": "capt_prompt_stage",
-                    "strict": True,
-                    "schema": dict(response_schema),
-                },
+                "json_schema": {"name": "capt_prompt_stage", "strict": True, "schema": dict(response_schema)},
             },
         }
+        headers = {"Content-Type": "application/json", "Accept": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = "Bearer " + self.api_key
         request = urllib.request.Request(
             self.selection.base_url + "/chat/completions",
             data=json.dumps(body).encode("utf-8"),
-            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            headers=headers,
             method="POST",
         )
         with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
@@ -206,14 +293,14 @@ class OpenAICompatiblePromptCompilerTransport:
         return result
 
 
-def build_local_prompt_compiler(ui_config_dir: Path):
-    """Construct a bounded local compiler or return None; never falls back to remote."""
-    selection = select_local_prompt_compiler(Path(ui_config_dir))
-    if selection is None:
-        return None
-    from capt_runtime.prompt_compiler import (
-        BoundedPromptCompilerRunner, CompilerProvider, PromptCompiler,
-    )
+def _compiler_from_selection(selection: PromptCompilerSelection):
+    from capt_runtime.prompt_compiler import BoundedPromptCompilerRunner, CompilerProvider, PromptCompiler
+
+    api_key = ""
+    if selection.endpoint_class == "remote":
+        api_key = resolve_secret(selection.provider_id, selection.key_ref)
+        if not api_key:
+            return None
     governor = TokenCostGovernor(
         max_tokens_per_session=131_072,
         max_cost_usd_per_session=0.01,
@@ -222,7 +309,20 @@ def build_local_prompt_compiler(ui_config_dir: Path):
     )
     return PromptCompiler(
         runner=BoundedPromptCompilerRunner(
-            OpenAICompatiblePromptCompilerTransport(selection), governor=governor
+            OpenAICompatiblePromptCompilerTransport(selection, api_key=api_key), governor=governor
         ),
-        provider=CompilerProvider(selection.provider_id, selection.model, "local"),
+        provider=CompilerProvider(selection.provider_id, selection.model, selection.endpoint_class),
+        remote_compilation_authorized=selection.remote_authorized,
     )
+
+
+def build_prompt_compiler(ui_config_dir: Path):
+    """Construct the configured Prompt Intelligence compiler preference."""
+    selection = select_prompt_compiler(Path(ui_config_dir))
+    return _compiler_from_selection(selection) if selection is not None else None
+
+
+def build_local_prompt_compiler(ui_config_dir: Path):
+    """Backward-compatible local-only factory used by tests and safe fallback callers."""
+    selection = select_local_prompt_compiler(Path(ui_config_dir))
+    return _compiler_from_selection(selection) if selection is not None else None

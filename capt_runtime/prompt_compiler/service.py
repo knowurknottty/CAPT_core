@@ -25,9 +25,11 @@ class PromptCompiler:
         *,
         runner: Optional[BoundedPromptCompilerRunner] = None,
         provider: Optional[CompilerProvider] = None,
+        remote_compilation_authorized: bool = False,
     ) -> None:
         self._runner = runner
         self._provider = provider
+        self._remote_compilation_authorized = bool(remote_compilation_authorized)
 
     def admit_stage_result(
         self,
@@ -72,7 +74,11 @@ class PromptCompiler:
                 requested_capabilities=request.requested_capabilities,
             )
 
-        if self._provider.endpoint_class == "remote" and not request.remote_compilation_authorized:
+        if (
+            self._provider.endpoint_class == "remote"
+            and not request.remote_compilation_authorized
+            and not self._remote_compilation_authorized
+        ):
             raise AuthorityViolation("REMOTE_COMPILATION_NOT_AUTHORIZED")
 
         current_prompt = request.original_prompt
