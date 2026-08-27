@@ -165,3 +165,13 @@ def test_hash_chain_integrity():
     store._conn.commit()
     with pytest.raises(Exception):
         store.verify_chain()
+
+
+def test_read_recent_events_returns_latest_window():
+    store = EventStore(":memory:")
+    svc = RuntimeService(store)
+    svc.create_mission(_valid_mission_spec("recent"), _mission_cmd("recent-1"))
+    svc.transition_mission("recent", "authorized", "ok", _mission_cmd("recent-2"))
+    svc.transition_mission("recent", "executing", "ok", _mission_cmd("recent-3"))
+    recent = store.read_recent_events(after_sequence=0, limit=2)
+    assert [event["streamVersion"] for event in recent] == [2, 3]
