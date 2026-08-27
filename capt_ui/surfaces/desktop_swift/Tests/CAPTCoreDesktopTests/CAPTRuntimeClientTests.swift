@@ -1,4 +1,5 @@
 import XCTest
+import Darwin
 @testable import CAPTCoreDesktop
 
 final class CAPTRuntimeClientTests: XCTestCase {
@@ -14,6 +15,23 @@ final class CAPTRuntimeClientTests: XCTestCase {
         XCTAssertThrowsError(
             try CAPTRuntimeClient.validateFrameLength(CAPTRuntimeClient.maximumFrameBytes + 1)
         )
+    }
+
+    func testSocketConfiguratorSuppressesSIGPIPE() throws {
+        var pair: [Int32] = [-1, -1]
+        XCTAssertEqual(Darwin.socketpair(AF_UNIX, SOCK_STREAM, 0, &pair), 0)
+        defer {
+            if pair[0] >= 0 { Darwin.close(pair[0]) }
+            if pair[1] >= 0 { Darwin.close(pair[1]) }
+        }
+        try CAPTRuntimeClient.configureNoSigPipe(fd: pair[0])
+        var value: Int32 = 0
+        var length = socklen_t(MemoryLayout<Int32>.size)
+        XCTAssertEqual(
+            Darwin.getsockopt(pair[0], SOL_SOCKET, SO_NOSIGPIPE, &value, &length),
+            0
+        )
+        XCTAssertEqual(value, 1)
     }
 
     func testCommandEnvelopeBindsAuthenticatedIdentity() throws {
