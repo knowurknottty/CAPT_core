@@ -109,7 +109,9 @@ actor CAPTBackgroundRuntime {
             return CAPTOperatorProjection.approval(state)
         }.reversed()
 
-        let eventResponse = try client.query(op: "event_timeline", payload: ["after": 0])
+        let eventResponse = try client.query(
+            op: "event_timeline", payload: ["after": 0, "limit": 250]
+        )
         let rawEvents = eventResponse["result"] as? [[String: Any]] ?? []
         let events = rawEvents.suffix(250).map(CAPTOperatorProjection.event).reversed()
         return CAPTHistorySnapshot(

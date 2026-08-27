@@ -437,8 +437,9 @@ class RuntimeQueryService:
     def get_stream_events(self, stream_id: str) -> List[Dict[str, Any]]:
         return self.store.read_stream(stream_id)
 
-    def event_timeline(self, after: int = 0) -> List[Dict[str, Any]]:
-        return self.store.read_events(after)
+    def event_timeline(self, after: int = 0, limit: int = 250) -> List[Dict[str, Any]]:
+        bounded = max(1, min(int(limit), 1000))
+        return self.store.read_recent_events(after_sequence=after, limit=bounded)
 
     def _claim_id_for_statement(self, statement: str) -> Optional[str]:
         """Find the most recent claim with this exact statement, if any."""
@@ -536,7 +537,9 @@ class RuntimeQueryService:
             if op == "get_stream_events":
                 return {"ok": True, "result": self.get_stream_events(request["streamId"])}
             if op == "event_timeline":
-                return {"ok": True, "result": self.event_timeline(int(request.get("after", 0)))}
+                return {"ok": True, "result": self.event_timeline(
+                    int(request.get("after", 0)), int(request.get("limit", 250))
+                )}
             if op == "claimguard":
                 return {"ok": True, "result": self.claimguard_disposition(
                     request["statement"], request.get("claimId")

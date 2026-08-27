@@ -88,6 +88,10 @@ public final class CAPTRuntimeClient: CAPTRuntimeCommanding {
     public func disconnect() {
         lock.lock()
         defer { lock.unlock() }
+        disconnectUnlocked()
+    }
+
+    private func disconnectUnlocked() {
         if socketFD >= 0 {
             Darwin.close(socketFD)
             socketFD = -1
@@ -182,8 +186,13 @@ public final class CAPTRuntimeClient: CAPTRuntimeCommanding {
         guard socketFD >= 0 else {
             throw CAPTRuntimeClientError.socketFailure("CAPT runtime socket is not connected")
         }
-        try sendUnlocked(payload: payload)
-        return try receiveUnlocked()
+        do {
+            try sendUnlocked(payload: payload)
+            return try receiveUnlocked()
+        } catch {
+            disconnectUnlocked()
+            throw error
+        }
     }
 
     private func send(payload: [String: Any]) throws {
