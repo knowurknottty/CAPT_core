@@ -1,6 +1,11 @@
 name: Native macOS Swift
 
 on:
+  push:
+    branches: [integration/inversion-labs-current-r2, integration/inversion-labs-core-converged-r3]
+    paths:
+      - "capt_ui/surfaces/desktop_swift/**"
+      - ".github/workflows/native-macos-swift.yml"
   pull_request:
     paths:
       - "capt_ui/surfaces/desktop_swift/**"

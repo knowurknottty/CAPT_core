@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main, integration/inversion-labs-current-r2]
   push:
-    branches: [main, release/capt-standalone-final]
+    branches: [main, release/capt-standalone-final, integration/inversion-labs-current-r2, integration/inversion-labs-core-converged-r3]
 
 permissions:
   contents: read
