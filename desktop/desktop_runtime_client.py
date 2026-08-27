@@ -127,10 +127,20 @@ class RuntimeClient:
         if self.operator_id is None or self.session_id is None:
             raise RuntimeClientError("not authenticated")
         import hashlib
-        command_id = "cmd-" + hashlib.sha256(
-            (op + json.dumps(payload, sort_keys=True)).encode()
-        ).hexdigest()[:16]
-        idek = idempotency_key or (command_id + "-idem")
+        payload_seed = op + json.dumps(payload, sort_keys=True)
+        if idempotency_key is None:
+            # Preserve the legacy deterministic identity for callers that do
+            # not provide an explicit retry/idempotency key.
+            command_id = "cmd-" + hashlib.sha256(payload_seed.encode()).hexdigest()[:16]
+            idek = command_id + "-idem"
+        else:
+            # A distinct explicit idempotency key represents a distinct
+            # command attempt. Bind command identity to that key so retrying
+            # the same op+payload cannot reuse event identities in the ledger.
+            idek = idempotency_key
+            command_id = "cmd-" + hashlib.sha256(
+                (payload_seed + "\n" + idek).encode()
+            ).hexdigest()[:16]
         envelope = {
             "commandId": command_id,
             "operatorId": self.operator_id,
