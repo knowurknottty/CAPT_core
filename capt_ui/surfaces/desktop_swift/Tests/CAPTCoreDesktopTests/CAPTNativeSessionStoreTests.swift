@@ -154,6 +154,26 @@ final class CAPTNativeSessionStoreTests: XCTestCase {
         XCTAssertEqual((fileAttributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
     }
 
+    func testEncryptedSessionStoreRepairsExistingDirectoryPermissions() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let directory = root.appendingPathComponent("ui", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o755]
+        )
+        let file = directory.appendingPathComponent("native_sessions.enc")
+        let store = CAPTEncryptedSessionStore(
+            fileURL: file,
+            keyProvider: StaticSessionKeyProvider(bytes: Data(repeating: 0x52, count: 32))
+        )
+        try store.save([CAPTNativeSession(
+            title: "permission repair", provider: "ollama", model: "qwen", targetRoot: "/repo"
+        )])
+        let attributes = try FileManager.default.attributesOfItem(atPath: directory.path)
+        XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.intValue, 0o700)
+    }
+
     func testPendingApprovalDecodesLegacyPayloadWithoutSkillNames() throws {
         let data = try JSONSerialization.data(withJSONObject: [
             "requestID": "approval-legacy-shape",
