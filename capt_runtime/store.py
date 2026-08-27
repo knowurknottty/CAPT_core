@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
 import threading
 import time
@@ -20,6 +21,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 from .contracts import canonical_json, digest, require
+from .state_security import AtRestProtector, harden_sqlite_path
 from .errors import (
     ConcurrencyConflict,
     IdempotencyConflict,
@@ -74,8 +76,18 @@ CREATE TABLE IF NOT EXISTS checkpoints (
     global_sequence INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS security_rejections (
+    rejection_id    TEXT PRIMARY KEY,
+    timestamp       TEXT NOT NULL,
+    rejection_kind  TEXT NOT NULL,
+    source_ip       TEXT,
+    actor_id        TEXT,
+    details_json    TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_events_stream ON events (stream_id, stream_version);
 CREATE INDEX IF NOT EXISTS idx_outbox_pending ON outbox (status, global_sequence);
+CREATE INDEX IF NOT EXISTS idx_security_rejections ON security_rejections (rejection_kind, timestamp);
 """
 
 GENESIS_CHAIN = "sha256:" + "0" * 64
@@ -113,11 +125,20 @@ class EventStore(object):
     def __init__(self, path: str) -> None:
         self.path = path
         if path != ":memory:":
-            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            parent = Path(path).parent
+            if not parent.exists():
+                parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    os.chmod(parent, 0o700)
+                except OSError:
+                    pass
         self._lock = threading.RLock()
+        self._protector = AtRestProtector.for_path(path)
         self._conn = sqlite3.connect(
             path, isolation_level=None, check_same_thread=False, timeout=5.0
         )
+        if path != ":memory:":
+            self._harden_permissions()
         self._conn.execute("PRAGMA busy_timeout=5000")
         self._conn.row_factory = sqlite3.Row
         # Two runtime processes can open an empty ledger concurrently before
@@ -132,7 +153,72 @@ class EventStore(object):
                     self._conn.close()
                     raise
                 time.sleep(0.05 * (attempt + 1))
+        if path != ":memory:":
+            self._migrate_plaintext_json()
+            self._harden_permissions()
         self._subscribers: List[Callable[[Dict[str, Any]], None]] = []
+
+    def _harden_permissions(self) -> None:
+        """Restrict the SQLite database and sidecars to the owning user."""
+        if self.path == ":memory:":
+            return
+        db = Path(self.path)
+        for target in (db, db.with_name(db.name + "-wal"), db.with_name(db.name + "-shm")):
+            if target.exists():
+                try:
+                    os.chmod(target, 0o600)
+                except OSError:
+                    pass
+
+    @staticmethod
+    def _json_context(table: str, column: str, key: str) -> str:
+        return "%s.%s:%s" % (table, column, key)
+
+    def _seal_json(self, value: Dict[str, Any], *, table: str, column: str, key: str) -> str:
+        return self._protector.seal_text(
+            canonical_json(value), context=self._json_context(table, column, key)
+        )
+
+    def _open_json(self, stored: str, *, table: str, column: str, key: str) -> Dict[str, Any]:
+        clear = self._protector.open_text(
+            stored, context=self._json_context(table, column, key)
+        )
+        return json.loads(clear)
+
+    def _migrate_plaintext_json(self) -> None:
+        specs = (
+            ("events", "event_id", "envelope_json"),
+            ("aggregates", "stream_id", "state_json"),
+            ("idempotency", "idempotency_key", "result_json"),
+            ("checkpoints", "checkpoint_id", "manifest_json"),
+            ("security_rejections", "rejection_id", "details_json"),
+        )
+        changed = False
+        with self.transaction() as conn:
+            for table, key_col, value_col in specs:
+                rows = conn.execute(
+                    "SELECT %s, %s FROM %s" % (key_col, value_col, table)
+                ).fetchall()
+                for row in rows:
+                    stored = str(row[value_col])
+                    if not stored:
+                        continue
+                    context = self._json_context(table, value_col, str(row[key_col]))
+                    if self._protector.is_sealed(stored):
+                        self._protector.open_text(stored, context=context)
+                        continue
+                    sealed = self._protector.seal_text(
+                        stored,
+                        context=context,
+                    )
+                    conn.execute(
+                        "UPDATE %s SET %s = ? WHERE %s = ?" % (table, value_col, key_col),
+                        (sealed, row[key_col]),
+                    )
+                    changed = True
+        if changed:
+            self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            self._conn.execute("VACUUM")
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -165,9 +251,11 @@ class EventStore(object):
 
     def load_state(self, stream_id: str) -> Optional[Dict[str, Any]]:
         row = self._conn.execute(
-            "SELECT state_json FROM aggregates WHERE stream_id = ?", (stream_id,)
+            "SELECT stream_id, state_json FROM aggregates WHERE stream_id = ?", (stream_id,)
         ).fetchone()
-        return json.loads(row["state_json"]) if row else None
+        return self._open_json(
+            row["state_json"], table="aggregates", column="state_json", key=row["stream_id"]
+        ) if row else None
 
     def require_state(self, stream_id: str) -> Dict[str, Any]:
         state = self.load_state(stream_id)
@@ -187,19 +275,23 @@ class EventStore(object):
 
     def read_events(self, after_sequence: int = 0) -> List[Dict[str, Any]]:
         rows = self._conn.execute(
-            "SELECT envelope_json FROM events WHERE global_sequence > ? "
+            "SELECT event_id, envelope_json FROM events WHERE global_sequence > ? "
             "ORDER BY global_sequence ASC",
             (after_sequence,),
         ).fetchall()
-        return [json.loads(r["envelope_json"]) for r in rows]
+        return [self._open_json(
+            r["envelope_json"], table="events", column="envelope_json", key=r["event_id"]
+        ) for r in rows]
 
     def read_stream(self, stream_id: str) -> List[Dict[str, Any]]:
         rows = self._conn.execute(
-            "SELECT envelope_json FROM events WHERE stream_id = ? "
+            "SELECT event_id, envelope_json FROM events WHERE stream_id = ? "
             "ORDER BY stream_version ASC",
             (stream_id,),
         ).fetchall()
-        return [json.loads(r["envelope_json"]) for r in rows]
+        return [self._open_json(
+            r["envelope_json"], table="events", column="envelope_json", key=r["event_id"]
+        ) for r in rows]
 
     def all_aggregates(self) -> List[Tuple[str, str, int]]:
         rows = self._conn.execute(
@@ -222,7 +314,9 @@ class EventStore(object):
     def idempotent_result(self, key: str) -> Optional[Dict[str, Any]]:
         """Return a defensive copy of a durable command receipt."""
         row = self.find_idempotent(key)
-        return json.loads(row["result_json"]) if row is not None else None
+        return self._open_json(
+            row["result_json"], table="idempotency", column="result_json", key=key
+        ) if row is not None else None
 
     def claim_command(self, idempotency_key: str, operation_fingerprint: str,
                       command_id: str) -> Dict[str, Any]:
@@ -244,7 +338,10 @@ class EventStore(object):
                         "idempotency key %r reused with a different operation fingerprint"
                         % idempotency_key
                     )
-                result = json.loads(prior["result_json"])
+                result = self._open_json(
+                    prior["result_json"], table="idempotency", column="result_json",
+                    key=idempotency_key,
+                )
                 result["status"] = "idempotent" if result.get("status") != "in_progress" else "in_progress"
                 result["replayed"] = True
                 return result
@@ -254,7 +351,8 @@ class EventStore(object):
             }
             conn.execute(
                 "INSERT INTO idempotency (idempotency_key, operation_fingerprint, command_id, result_json, global_sequence) VALUES (?,?,?,?,NULL)",
-                (idempotency_key, operation_fingerprint, command_id, canonical_json(result)),
+                (idempotency_key, operation_fingerprint, command_id,
+                 self._seal_json(result, table="idempotency", column="result_json", key=idempotency_key)),
             )
             return result
 
@@ -269,7 +367,7 @@ class EventStore(object):
                 raise IdempotencyConflict("cannot complete an unowned command admission")
             conn.execute(
                 "UPDATE idempotency SET result_json = ? WHERE idempotency_key = ?",
-                (canonical_json(result), idempotency_key),
+                (self._seal_json(result, table="idempotency", column="result_json", key=idempotency_key), idempotency_key),
             )
 
     # -- the single write path --------------------------------------------
@@ -304,7 +402,10 @@ class EventStore(object):
                             operation_fingerprint,
                         )
                     )
-                replayed = json.loads(prior["result_json"])
+                replayed = self._open_json(
+                    prior["result_json"], table="idempotency", column="result_json",
+                    key=idempotency_key,
+                )
                 replayed["status"] = "idempotent"
                 replayed["replayed"] = True
                 return replayed
@@ -322,7 +423,10 @@ class EventStore(object):
                             "idempotency key %r reused with a different operation "
                             "fingerprint" % idempotency_key
                         )
-                    replayed = json.loads(again["result_json"])
+                    replayed = self._open_json(
+                        again["result_json"], table="idempotency", column="result_json",
+                        key=idempotency_key,
+                    )
                     replayed["status"] = "idempotent"
                     replayed["replayed"] = True
                     return replayed
@@ -376,10 +480,14 @@ class EventStore(object):
                     conn.execute(
                         "UPDATE events SET envelope_json = ?, chain_digest = ? "
                         "WHERE global_sequence = ?",
-                        (canonical_json(envelope), chain, global_sequence),
+                        (self._seal_json(
+                            envelope, table="events", column="envelope_json", key=envelope["eventId"]
+                         ), chain, global_sequence),
                     )
 
-                    state_json = canonical_json(append.state)
+                    state_json = self._seal_json(
+                        append.state, table="aggregates", column="state_json", key=append.stream_id
+                    )
                     conn.execute(
                         "INSERT INTO aggregates (stream_id, kind, version, state_json, "
                         "state_digest) VALUES (?,?,?,?,?) "
@@ -421,7 +529,9 @@ class EventStore(object):
                         idempotency_key,
                         operation_fingerprint,
                         command_id,
-                        canonical_json(result),
+                        self._seal_json(
+                            result, table="idempotency", column="result_json", key=idempotency_key
+                        ),
                         written[-1]["globalSequence"] if written else None,
                     ),
                 )
@@ -441,13 +551,15 @@ class EventStore(object):
         delivered = 0
         for event_id in self.pending_outbox():
             row = self._conn.execute(
-                "SELECT envelope_json FROM events WHERE event_id = ?", (event_id,)
+                "SELECT event_id, envelope_json FROM events WHERE event_id = ?", (event_id,)
             ).fetchone()
             if row is None:
                 raise IntegrityViolation(
                     "outbox references event %s with no ledger row" % event_id
                 )
-            envelope = json.loads(row["envelope_json"])
+            envelope = self._open_json(
+                row["envelope_json"], table="events", column="envelope_json", key=row["event_id"]
+            )
             for handler in self._subscribers:
                 handler(envelope)
             with self.transaction() as conn:
@@ -471,7 +583,9 @@ class EventStore(object):
         ).fetchall()
         last_by_stream: Dict[str, int] = {}
         for row in rows:
-            envelope = json.loads(row["envelope_json"])
+            envelope = self._open_json(
+                row["envelope_json"], table="events", column="envelope_json", key=row["event_id"]
+            )
             recomputed_payload = digest(envelope["payload"])
             if recomputed_payload != row["payload_digest"]:
                 raise IntegrityViolation(
@@ -498,7 +612,9 @@ class EventStore(object):
                 "integrity_digest, global_sequence) VALUES (?,?,?,?)",
                 (
                     manifest["checkpointId"],
-                    canonical_json(manifest),
+                    self._seal_json(
+                        manifest, table="checkpoints", column="manifest_json", key=manifest["checkpointId"]
+                    ),
                     manifest["integrityDigest"],
                     manifest["ledgerPosition"]["globalSequence"],
                 ),
@@ -506,15 +622,62 @@ class EventStore(object):
 
     def load_checkpoint(self, checkpoint_id: str) -> Dict[str, Any]:
         row = self._conn.execute(
-            "SELECT manifest_json FROM checkpoints WHERE checkpoint_id = ?",
+            "SELECT checkpoint_id, manifest_json FROM checkpoints WHERE checkpoint_id = ?",
             (checkpoint_id,),
         ).fetchone()
         if row is None:
             raise NotFound("no checkpoint %s" % checkpoint_id)
-        return json.loads(row["manifest_json"])
+        return self._open_json(
+            row["manifest_json"], table="checkpoints", column="manifest_json", key=row["checkpoint_id"]
+        )
 
     def latest_checkpoint(self) -> Optional[Dict[str, Any]]:
         row = self._conn.execute(
-            "SELECT manifest_json FROM checkpoints ORDER BY global_sequence DESC, rowid DESC LIMIT 1"
+            "SELECT checkpoint_id, manifest_json FROM checkpoints ORDER BY global_sequence DESC, rowid DESC LIMIT 1"
         ).fetchone()
-        return json.loads(row["manifest_json"]) if row else None
+        return self._open_json(
+            row["manifest_json"], table="checkpoints", column="manifest_json", key=row["checkpoint_id"]
+        ) if row else None
+
+    def record_security_rejection(
+        self,
+        rejection_id: str,
+        rejection_kind: str,
+        details: Dict[str, Any],
+        source_ip: Optional[str] = None,
+        actor_id: Optional[str] = None,
+        timestamp: Optional[str] = None,
+    ) -> None:
+        """Append one non-secret security rejection to the durable audit trail."""
+        ts = timestamp or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        with self.transaction() as conn:
+            conn.execute(
+                "INSERT INTO security_rejections "
+                "(rejection_id, timestamp, rejection_kind, source_ip, actor_id, details_json) "
+                "VALUES (?,?,?,?,?,?)",
+                (rejection_id, ts, rejection_kind, source_ip, actor_id,
+                 self._seal_json(
+                     details, table="security_rejections", column="details_json", key=rejection_id
+                 )),
+            )
+
+    def list_security_rejections(self, limit: int = 100) -> List[Dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT rejection_id, timestamp, rejection_kind, source_ip, actor_id, details_json "
+            "FROM security_rejections ORDER BY timestamp DESC, rowid DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [
+            {
+                "rejectionId": row["rejection_id"],
+                "timestamp": row["timestamp"],
+                "rejectionKind": row["rejection_kind"],
+                "sourceIp": row["source_ip"],
+                "actorId": row["actor_id"],
+                "details": self._open_json(
+                    row["details_json"], table="security_rejections", column="details_json",
+                    key=row["rejection_id"],
+                ),
+            }
+            for row in rows
+        ]
