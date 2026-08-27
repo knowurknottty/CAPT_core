@@ -169,6 +169,9 @@ public final class CAPTEncryptedSessionStore: @unchecked Sendable {
             at: directory, withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o700]
         )
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700], ofItemAtPath: directory.path
+        )
         let clear = try JSONEncoder().encode(sessions)
         let keyData = try keyProvider.keyData()
         guard keyData.count == 32 else { throw CAPTSessionStoreError.invalidKey }
