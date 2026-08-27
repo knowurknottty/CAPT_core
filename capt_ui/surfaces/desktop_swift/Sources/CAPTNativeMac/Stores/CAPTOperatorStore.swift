@@ -607,7 +607,9 @@ final class CAPTOperatorStore: ObservableObject {
                     model: selectedModel,
                     targetRoot: originTargetRoot
                 )
-                await prewarmSelectedProviderIfNeeded()
+                if activeSessionID == originSessionID {
+                    await prewarmSelectedProviderIfNeeded()
+                }
             } catch { handleGlobal(error) }
         }
     }
@@ -698,7 +700,9 @@ final class CAPTOperatorStore: ObservableObject {
                     model: modelID,
                     targetRoot: originTargetRoot
                 )
-                await prewarmSelectedProviderIfNeeded()
+                if activeSessionID == originSessionID {
+                    await prewarmSelectedProviderIfNeeded()
+                }
             } catch { handleGlobal(error) }
         }
     }
