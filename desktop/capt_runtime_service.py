@@ -65,7 +65,7 @@ from capt_runtime.verification_baseline import capture_verification_baseline
 from capt_runtime.authored_skills import (
     parse_authored_skill_request, prepare_runtime_skill_context, summarize_skill_context,
 )
-from desktop.prompt_compiler_provider import build_local_prompt_compiler
+from desktop.prompt_compiler_provider import build_prompt_compiler
 
 
 RUNTIME_VERSION = getattr(capt_runtime, "RUNTIME_VERSION", "0.1.0")
@@ -689,7 +689,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             probe.close()
 
     runtime = create_runtime(str(ledger_path))
-    prompt_compiler = build_local_prompt_compiler(Path(ledger_path).parent / "ui")
+    prompt_compiler = build_prompt_compiler(Path(ledger_path).parent / "ui")
     _reconcile_stranded_driver_runs(runtime, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     runtime.reconcile_stranded_tools()
     store = runtime.store

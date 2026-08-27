@@ -24,12 +24,12 @@ class PromptCompilerProviderPolicy:
         local_provider: str = "local",
         local_model: str = "",
     ) -> CompilerProvider:
+        if requested_remote and remote_allowed:
+            return CompilerProvider(requested_remote, "", "remote")
         if local_available:
             return CompilerProvider(local_provider, local_model, "local")
         if requested_remote and not remote_allowed:
             raise AuthorityViolation("REMOTE_COMPILATION_NOT_AUTHORIZED")
-        if requested_remote and remote_allowed:
-            return CompilerProvider(requested_remote, "", "remote")
         raise AuthorityViolation("NO_PERMITTED_COMPILER_PROVIDER")
 
 
