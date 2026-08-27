@@ -2,7 +2,7 @@ name: M0-A Contract & Runtime Proof
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, integration/inversion-labs-current-r2]
   push:
     branches: [main, release/capt-standalone-final]
 
