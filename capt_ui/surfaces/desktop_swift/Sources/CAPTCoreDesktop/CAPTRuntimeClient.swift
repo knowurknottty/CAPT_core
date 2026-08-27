@@ -41,18 +41,14 @@ public final class CAPTRuntimeClient: CAPTRuntimeCommanding {
     }
 
     public convenience init() {
-        let env = ProcessInfo.processInfo.environment
-        let stateDirectory: String
-        if let override = env["CAPT_STATE_DIR"], !override.isEmpty {
-            stateDirectory = NSString(string: override).expandingTildeInPath
-        } else {
-            stateDirectory = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent(".capt", isDirectory: true).path
-        }
+        self.init(profile: CAPTRuntimeProfile.current())
+    }
+
+    public convenience init(profile: CAPTRuntimeProfile) {
         self.init(
-            socketPath: URL(fileURLWithPath: stateDirectory)
+            socketPath: URL(fileURLWithPath: profile.stateDirectory)
                 .appendingPathComponent("runtime.sock").path,
-            tokenPath: URL(fileURLWithPath: stateDirectory)
+            tokenPath: URL(fileURLWithPath: profile.stateDirectory)
                 .appendingPathComponent("runtime.token").path
         )
     }

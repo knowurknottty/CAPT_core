@@ -92,3 +92,17 @@ extension CAPTOperatorCLITests {
     }
 
 }
+
+extension CAPTOperatorCLITests {
+    func testDogfoodStateUsesStableOperatorExecutableButKeepsDogfoodState() {
+        let cli = CAPTOperatorCLI(
+            stateDirectory: "/tmp/labs-dogfood-state",
+            environment: ["CAPT_CLI": "/Users/tester/.capt/runtime-venv/bin/capt"],
+            home: "/Users/tester",
+            bundleIdentifier: "com.inversionlabs.capt.lab",
+            fileExists: { $0 == "/Users/tester/.capt/runtime-venv/bin/capt-ui" }
+        )
+        XCTAssertEqual(cli.stateDirectory, "/tmp/labs-dogfood-state")
+        XCTAssertEqual(cli.executablePath, "/Users/tester/.capt/runtime-venv/bin/capt-ui")
+    }
+}

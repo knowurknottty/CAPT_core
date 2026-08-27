@@ -26,10 +26,11 @@ actor CAPTBackgroundRuntime {
         )
         self.client = client
         self.coordinator = CAPTChatCoordinator(client: client)
-        self.bootstrapper = CAPTRuntimeBootstrapper(stateDirectory: root)
+        self.bootstrapper = CAPTRuntimeBootstrapper(
+            stateDirectory: root, bundleIdentifier: CAPTRuntimeProfile.labsBundleIdentifier
+        )
         self.operatorCLI = CAPTOperatorCLI(
-            executablePath: URL(fileURLWithPath: root).appendingPathComponent("runtime-venv/bin/capt-ui").path,
-            stateDirectory: root
+            stateDirectory: root, bundleIdentifier: CAPTRuntimeProfile.labsBundleIdentifier
         )
     }
 

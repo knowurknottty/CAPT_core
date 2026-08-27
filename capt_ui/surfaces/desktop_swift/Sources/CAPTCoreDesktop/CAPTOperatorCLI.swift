@@ -167,16 +167,33 @@ public enum CAPTOperatorCLIError: Error, LocalizedError {
 }
 public struct CAPTOperatorCLI: Sendable {
     public let executablePath: String
-    public let stateDirectory: String?
+    public let stateDirectory: String
+    private let processEnvironment: [String: String]
 
-    public init(executablePath: String? = nil, stateDirectory: String? = nil) {
-        self.stateDirectory = stateDirectory.map { NSString(string: $0).expandingTildeInPath }
-        if let executablePath {
-            self.executablePath = executablePath
-        } else {
-            self.executablePath = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent(".capt/runtime-venv/bin/capt-ui").path
+    public init(
+        executablePath: String? = nil,
+        stateDirectory: String? = nil,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        home: String = FileManager.default.homeDirectoryForCurrentUser.path,
+        bundleIdentifier: String? = Bundle.main.bundleIdentifier,
+        fileExists: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
+    ) {
+        var effectiveEnvironment = environment
+        if let stateDirectory {
+            effectiveEnvironment["CAPT_STATE_DIR"] =
+                NSString(string: stateDirectory).expandingTildeInPath
         }
+        let profile = CAPTRuntimeProfile.resolve(
+            home: home, environment: effectiveEnvironment, bundleIdentifier: bundleIdentifier
+        )
+        self.stateDirectory = profile.stateDirectory
+        self.executablePath = executablePath.map { NSString(string: $0).expandingTildeInPath }
+            ?? CAPTRuntimeProfile.resolveExecutable(
+                candidates: profile.operatorExecutableCandidates, fileExists: fileExists
+            )
+            ?? profile.operatorExecutableCandidates[0]
+        effectiveEnvironment["CAPT_STATE_DIR"] = profile.stateDirectory
+        self.processEnvironment = effectiveEnvironment
     }
 
     public static func isSafeSecretReference(_ value: String) -> Bool {
@@ -292,11 +309,7 @@ public struct CAPTOperatorCLI: Sendable {
         let stderr = Pipe()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = arguments
-        if let stateDirectory {
-            var environment = ProcessInfo.processInfo.environment
-            environment["CAPT_STATE_DIR"] = stateDirectory
-            process.environment = environment
-        }
+        process.environment = processEnvironment
         process.standardOutput = stdout
         process.standardError = stderr
         do { try process.run() }
