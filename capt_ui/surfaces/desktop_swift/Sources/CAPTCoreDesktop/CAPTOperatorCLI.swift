@@ -70,6 +70,60 @@ public struct CAPTOperatorStateSnapshot: Equatable, Sendable {
     }
 }
 
+
+public struct CAPTOperatorStateLoader: Sendable {
+    public let cli: CAPTOperatorCLI
+
+    public init(cli: CAPTOperatorCLI) {
+        self.cli = cli
+    }
+
+    public func load() throws -> CAPTOperatorStateSnapshot {
+        CAPTOperatorStateSnapshot(
+            providers: try cli.providers(),
+            models: try cli.models(),
+            verbosity: try cli.verbosity()
+        )
+    }
+}
+
+public struct CAPTOperatorPreferenceSelection: Equatable, Sendable {
+    public let providerID: String
+    public let modelID: String
+
+    public init(providerID: String, modelID: String) {
+        self.providerID = providerID
+        self.modelID = modelID
+    }
+}
+
+public enum CAPTOperatorPreferenceResolver {
+    public static func resolve(
+        providers: [CAPTProviderSnapshot],
+        models: CAPTModelSelectionSnapshot,
+        fallbackProvider: String,
+        fallbackModel: String
+    ) -> CAPTOperatorPreferenceSelection {
+        let providerID = providers.first(where: { $0.selected })?.id
+            ?? models.defaultSelection?.provider
+            ?? fallbackProvider
+        let provider = providers.first(where: { $0.id == providerID })
+        let modelID: String
+        if let configured = models.defaultSelection,
+           configured.provider == providerID,
+           provider?.models.contains(configured.model) != false {
+            modelID = configured.model
+        } else if provider?.models.contains(fallbackModel) == true {
+            modelID = fallbackModel
+        } else if let first = provider?.models.first {
+            modelID = first
+        } else {
+            modelID = fallbackModel
+        }
+        return CAPTOperatorPreferenceSelection(providerID: providerID, modelID: modelID)
+    }
+}
+
 public enum CAPTOperatorCLIError: Error, LocalizedError {
     case executableMissing(String)
     case commandFailed(String)
@@ -83,7 +137,7 @@ public enum CAPTOperatorCLIError: Error, LocalizedError {
         }
     }
 }
-public struct CAPTOperatorCLI {
+public struct CAPTOperatorCLI: Sendable {
     public let executablePath: String
     public let stateDirectory: String?
 

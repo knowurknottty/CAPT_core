@@ -8,7 +8,7 @@ struct ProviderControlView: View {
     @State private var showAdvancedCredentialReference = false
 
     private var selectedProvider: CAPTProviderSnapshot? {
-        store.providers.first(where: { $0.id == store.provider })
+        store.providers.first(where: { $0.id == store.operatorPreferenceSelection.providerID })
             ?? store.providers.first(where: { $0.selected })
     }
 
@@ -25,6 +25,7 @@ struct ProviderControlView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .navigationTitle("Providers")
+        .onAppear { store.refreshOperatorState() }
     }
 
     private var header: some View {
@@ -38,6 +39,11 @@ struct ProviderControlView: View {
     private var providersSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Providers").font(.headline)
+            if let error = store.operatorStateError {
+                Text("Operator provider state unavailable: \(error)")
+                    .font(.callout)
+                    .foregroundStyle(.red)
+            }
             ForEach(store.providers) { item in
                 HStack(spacing: 12) {
                     Circle()
@@ -74,8 +80,8 @@ struct ProviderControlView: View {
             Text("Default model").font(.headline)
             if let item = selectedProvider, !item.models.isEmpty {
                 Picker("Model", selection: Binding(
-                    get: { store.model },
-                    set: { store.setDefaultModel($0) }
+                    get: { store.operatorPreferenceSelection.modelID },
+                    set: { store.setDefaultModel(providerID: item.id, modelID: $0) }
                 )) {
                     ForEach(item.models, id: \.self) { model in
                         Text(model).tag(model)
@@ -83,7 +89,7 @@ struct ProviderControlView: View {
                 }
                 .pickerStyle(.menu)
                 .disabled(store.isBusy)
-                Text("Active: \(store.modelSnapshot?.active ?? store.model)")
+                Text("Default: \(store.operatorPreferenceSelection.modelID)")
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 Text("No discovered models for the selected provider. Test the provider to refresh inventory.")

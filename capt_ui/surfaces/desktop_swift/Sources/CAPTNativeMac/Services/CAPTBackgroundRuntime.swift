@@ -122,11 +122,7 @@ actor CAPTBackgroundRuntime {
     }
 
     func operatorSnapshot() throws -> CAPTOperatorStateSnapshot {
-        CAPTOperatorStateSnapshot(
-            providers: try operatorCLI.providers(),
-            models: try operatorCLI.models(),
-            verbosity: try operatorCLI.verbosity()
-        )
+        try CAPTOperatorStateLoader(cli: operatorCLI).load()
     }
 
     func activateProvider(_ providerID: String) throws -> [CAPTProviderSnapshot] {

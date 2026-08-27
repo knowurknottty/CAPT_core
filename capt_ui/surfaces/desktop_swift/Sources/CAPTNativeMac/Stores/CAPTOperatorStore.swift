@@ -26,6 +26,7 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var recentEvents: [CAPTEventSummary] = []
     @Published var providers: [CAPTProviderSnapshot] = []
     @Published var modelSnapshot: CAPTModelSelectionSnapshot?
+    @Published var operatorStateError: String?
     @Published var verbosity = "normal"
     @Published var memorySnapshot: CAPTMemoryRuntimeSnapshot?
     @Published var checkpointSnapshot: CAPTCheckpointSnapshot?
@@ -55,6 +56,7 @@ final class CAPTOperatorStore: ObservableObject {
         self.runtime = runtime
         self.sessionStore = sessionStore
         restoreSessionsAsync()
+        refreshOperatorState()
     }
 
     var messages: [CAPTChatMessage] {
@@ -183,6 +185,7 @@ final class CAPTOperatorStore: ObservableObject {
                 let message = error.localizedDescription
                 lastError = message
                 connectionState = .failed(message)
+                refreshOperatorState()
             }
         }
     }
@@ -364,13 +367,16 @@ final class CAPTOperatorStore: ObservableObject {
         providers = snapshot.providers
         modelSnapshot = snapshot.models
         verbosity = snapshot.verbosity
+        operatorStateError = nil
         if activeSessionID == nil {
-            if let selected = snapshot.providers.first(where: { $0.selected }) {
-                provider = selected.id
-            } else if let selected = snapshot.models.defaultSelection {
-                provider = selected.provider
-            }
-            if !snapshot.models.active.isEmpty { model = snapshot.models.active }
+            let selection = CAPTOperatorPreferenceResolver.resolve(
+                providers: snapshot.providers,
+                models: snapshot.models,
+                fallbackProvider: provider,
+                fallbackModel: model
+            )
+            provider = selection.providerID
+            model = selection.modelID
         }
     }
 
@@ -425,7 +431,7 @@ final class CAPTOperatorStore: ObservableObject {
     func refreshOperatorState() {
         Task {
             do { applyOperatorSnapshot(try await runtime.operatorSnapshot()) }
-            catch { lastError = error.localizedDescription }
+            catch { operatorStateError = error.localizedDescription }
         }
     }
 
@@ -589,26 +595,15 @@ final class CAPTOperatorStore: ObservableObject {
 
     func activateProvider(_ providerID: String) {
         guard !isBusy else { return }
-        let originSessionID = activeSessionID
-        let originTargetRoot = originSessionID.flatMap { chatWorkspace.session($0)?.targetRoot } ?? targetRoot
-        let originModel = originSessionID.flatMap { chatWorkspace.session($0)?.model } ?? model
         isBusy = true
         Task {
             defer { isBusy = false }
             do {
                 providers = try await runtime.activateProvider(providerID)
-                let snapshot = try await runtime.operatorSnapshot()
-                modelSnapshot = snapshot.models
-                let selectedModel = providers.first(where: { $0.id == providerID })?.models.first
-                    ?? originModel
-                persistConfiguration(
-                    for: originSessionID,
-                    provider: providerID,
-                    model: selectedModel,
-                    targetRoot: originTargetRoot
-                )
-                await prewarmSelectedProviderIfNeeded()
-            } catch { handleGlobal(error) }
+                applyOperatorSnapshot(try await runtime.operatorSnapshot())
+            } catch {
+                operatorStateError = error.localizedDescription
+            }
         }
     }
 
@@ -679,11 +674,8 @@ final class CAPTOperatorStore: ObservableObject {
         }
     }
 
-    func setDefaultModel(_ modelID: String) {
+    func setDefaultModel(providerID: String, modelID: String) {
         guard !isBusy else { return }
-        let providerID = provider
-        let originSessionID = activeSessionID
-        let originTargetRoot = originSessionID.flatMap { chatWorkspace.session($0)?.targetRoot } ?? targetRoot
         isBusy = true
         Task {
             defer { isBusy = false }
@@ -692,14 +684,10 @@ final class CAPTOperatorStore: ObservableObject {
                     providerID: providerID,
                     modelID: modelID
                 )
-                persistConfiguration(
-                    for: originSessionID,
-                    provider: providerID,
-                    model: modelID,
-                    targetRoot: originTargetRoot
-                )
-                await prewarmSelectedProviderIfNeeded()
-            } catch { handleGlobal(error) }
+                applyOperatorSnapshot(try await runtime.operatorSnapshot())
+            } catch {
+                operatorStateError = error.localizedDescription
+            }
         }
     }
 
