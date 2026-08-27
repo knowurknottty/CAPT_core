@@ -30,7 +30,7 @@ A merge is source authority, not automatic release authorization. A final public
 
 ## Current open Core PR lane
 
-As of this snapshot, the open Core queue is CAPT-UPG-020→024:
+The current open Core PR lane is CAPT-UPG-020→024. As of this snapshot, the open Core queue is:
 
 - **#89 — CAPT-UPG-020** reciprocal-review benchmark harness: harness verified; empirical campaign evidence pending.
 - **#91 — CAPT-UPG-021** sparse symbol-index probe: real-repository benchmark pending.

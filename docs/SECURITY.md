@@ -71,6 +71,8 @@ Security authorization is bound to the exact source SHA evaluated.
 
 Do not call `3aee737…` release-authorized merely because it descends from an authorized source. A later SHA needs its own evidence.
 
+For a public artifact release, rebuild and hash the wheel/sdist/native artifacts from the exact authorized source, then complete any required signing, notarization, and distribution proof.
+
 ## Data at rest
 
 Covered sensitive EventStore JSON payload/state/receipt/checkpoint/security-detail fields and MemoryStore content use authenticated encryption. Legacy plaintext rows are migrated on open, and wrong keys or modified ciphertext fail closed.
