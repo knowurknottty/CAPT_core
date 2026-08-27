@@ -126,7 +126,7 @@ def resolve_workspace_mcp_executable(explicit: Optional[str] = None) -> str:
     if override:
         candidates.append(str(override))
     else:
-        candidates.append(str(Path(sys.executable).resolve().parent / "capt-workspace-mcp"))
+        candidates.append(str(Path(sys.prefix) / "bin" / "capt-workspace-mcp"))
         found = shutil.which("capt-workspace-mcp")
         if found:
             candidates.append(found)

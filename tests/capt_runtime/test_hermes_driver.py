@@ -479,14 +479,30 @@ def test_toolbridge_mode_executes_with_mcp_only_launch(env):
     assert result["observations"][0]["summary"] == "bridge execution ok"
 
 
-def test_workspace_mcp_resolver_prefers_sibling_runtime_executable(tmp_path, monkeypatch):
+def test_workspace_mcp_resolver_falls_back_to_path(tmp_path, monkeypatch):
     import capt_runtime.drivers.hermes as hermes
 
-    sibling = tmp_path / "capt-workspace-mcp"
+    bin_dir = tmp_path / "path-bin"
+    bin_dir.mkdir()
+    executable = bin_dir / "capt-workspace-mcp"
+    executable.write_text("#!/bin/sh\nexit 0\n")
+    executable.chmod(0o700)
+    monkeypatch.setattr(hermes.sys, "prefix", str(tmp_path / "missing-venv"))
+    monkeypatch.delenv("CAPT_WORKSPACE_MCP_EXECUTABLE", raising=False)
+    monkeypatch.setenv("PATH", f"{bin_dir}:/usr/bin:/bin")
+
+    assert hermes.resolve_workspace_mcp_executable() == str(executable.resolve())
+
+
+def test_workspace_mcp_resolver_uses_active_venv_prefix(tmp_path, monkeypatch):
+    import capt_runtime.drivers.hermes as hermes
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    sibling = bin_dir / "capt-workspace-mcp"
     sibling.write_text("#!/bin/sh\nexit 0\n")
     sibling.chmod(0o700)
-    fake_python = tmp_path / "python"
-    monkeypatch.setattr(hermes.sys, "executable", str(fake_python))
+    monkeypatch.setattr(hermes.sys, "prefix", str(tmp_path))
     monkeypatch.delenv("CAPT_WORKSPACE_MCP_EXECUTABLE", raising=False)
     monkeypatch.setenv("PATH", "/usr/bin:/bin")
 
