@@ -1,6 +1,8 @@
 # CAPT Core — Current State
 
-This is the concise public status source for the repository. It intentionally separates the numbered package version, merged integration state, release authorization, and independent open work.
+This is the concise public status source for the repository. It separates package version, merged source state, exact-head engineering evidence, release-security authorization, and independent work.
+
+Snapshot date: **2026-08-27**. Literal `main` at audit start: `3aee7370bac880aed99ce3c9ecfaa6d9ff48101e`.
 
 ## Truth classes
 
@@ -8,64 +10,73 @@ This is the concise public status source for the repository. It intentionally se
 
 `pyproject.toml` still declares **`capt-solo 0.5.0`**. Preserved evidence under `release_evidence/v0.5/` applies to that historical release lineage only.
 
-### 2. Merged integration `main`
+### 2. Merged `main`
 
-The `main` baseline inspected for this reconciliation was `a6601d61fa5a807f2ba04ca4fda84bc8d42505b0`. Resolve the literal current `main` SHA from Git; this documentation merge itself will advance it. PR #117 was merged at merge commit `4a654a74083cf341f8557983ce256949198a02e7`; PR #45 then added the preserved DeepSeek/Ouroboros research record without changing runtime semantics.
+Current `main` contains the August 21 convergence plus three material later merges:
 
-PR #117's merged head was `570babeef113943860c1268722200a48639e406d`. The merge brought the formerly stacked Core implementation through UPG-019/native/provider convergence onto `main`, including:
+- **PR #117** — terminal native/provider/UPG/MCP convergence, merge `4a654a74083cf341f8557983ce256949198a02e7`;
+- **PR #126** — governed ToolBroker and durable ToolExecution with local, SSH, Docker, file, and code adapters, squash merge `bcfdff9d43b35b5b192cc998b68ce16cc73b9985`;
+- **PR #128** — exact-byte convergence of the owner-approved public-release design and executable plans onto current Core, merge `54ac314294fb456cb2d9089615996b31dfeca753`; this is documentation authority, not implementation completion;
+- **PR #129** — governed managed authored skills R1, merge `3aee7370bac880aed99ce3c9ecfaa6d9ff48101e`.
 
-- CAPT-UPG-001→019 and corrected exact historical replay/checkpoint semantics;
-- bounded production IPC framing, rejection audit, state permissions, resource ceilings, and injection-assurance work;
-- governed cross-model continuation/context binding and no-repeat recovery semantics;
-- durable Cohort EventStore persistence, evidence admission, operator steering, Chamber projection, and stale-epoch/quorum semantics;
-- governed artifact promotion, capability lease inspect/revoke, `.capt-flight`, provenance DAG, epistemic ladder, replay fork, and Security Closure Cockpit;
-- first-class local OpenAI-compatible provider execution/prewarm and coherent provider/model persistence;
-- native Swift `CAPTNativeMac` governed chat/operator source with session isolation, typed runtime projections, encrypted session cache, and origin-session-bound async updates;
-- pinned authored-skill bytes bound into exact model-visible approval identity;
-- macOS ↔ RuntimeService ↔ MCP shared-ledger acceptance.
+Merged runtime capabilities therefore include:
 
-Closed-unmerged PR #118 is not a separately merged authority; its provider/model-coherence semantics were reconciled into the #117 line before merge.
+- CAPT-UPG-001→019, exact historical replay/checkpoint corrections, durable Cohorts + steering, governed artifact promotion, lease controls, forensic/provenance/epistemic/security projections;
+- authenticated RuntimeService/EventStore authority with governed provider execution and native macOS/MCP control surfaces;
+- governed ToolBroker execution with durable effect/reconciliation state and bounded local/SSH/Docker terminal backends;
+- pinned external authored-skill context plus managed-local Agent Skills import/verify, deterministic contextual selection, approval-time binding, and execution-time anti-drift checking;
+- native approval visibility for selected authored skills.
 
-### 3. Engineering verification vs release authorization
+Closed-unmerged historical PRs are not separate current authority merely because useful semantics once lived there.
 
-The merged #117 head has mixed-but-truthful CI evidence:
+### 3. Engineering evidence vs release-security authorization
 
-- M0-A Contract & Runtime Proof: **PASS**;
-- Native macOS Swift: **PASS**;
-- Release Security: **FAIL** on run `32440329043` for exact head `570babeef113943860c1268722200a48639e406d`.
+Release/security evidence is **SHA-bound**.
 
-The prior detailed Security Closure Cockpit snapshot at `33e24146094242d7a88612cea39267ef52a1d2e1` recorded `releaseAuthorized=false` with **2 PASS / 0 FAIL / 19 NOT_VERIFIED / 26 NOT_APPLICABLE**. Those exact counts belong to that exact candidate head and are not silently relabeled as later source.
+Historical facts remain historical:
 
-The release-security closure landed through PR #124. Current `main` merge SHA `2199c036aa22af33fb3eb0700f63f820a35aa55a` reproduced the closure on hosted push CI: Release Security run `32617740908` returned **PASS** with **21 PASS / 0 FAIL / 0 NOT_VERIFIED / 26 NOT_APPLICABLE** and `blockingControls=[]`; M0-A run `32617740848` also passed on the same SHA. The merge-head security artifact is `capt-security-gate` artifact `9487471673` (ZIP SHA-256 `89f1cb0e6a7ee75e45367deca213538824f5a96fbc98753cfc521604bf221371`).
+- merged PR #117 head `570babeef113943860c1268722200a48639e406d`: M0-A PASS, Native macOS Swift PASS, Release Security **FAIL** on run `32440329043`;
+- release-security closure baseline `2199c036aa22af33fb3eb0700f63f820a35aa55a`: hosted Release Security run `32617740908` **PASS**, **21 PASS / 0 FAIL / 0 NOT_VERIFIED / 26 NOT_APPLICABLE**, and M0-A run `32617740848` PASS;
+- ToolBroker PR #126 exact head `b21ed6e7ff3996d48c756e342b278b69af0d666f`: hosted M0-A and Release Security both PASS; its squash merge `bcfdff9…` is tree-identical but is a different commit SHA, so the PR-head security receipt is not relabeled as a merge-SHA receipt.
 
-**Merged does not mean release-certified** as a general rule, but this exact merge SHA now has its own release-security receipt. `2199c036aa22af33fb3eb0700f63f820a35aa55a` is release-security authorized. That does not by itself create public artifacts: the release process must still rebuild and re-hash them from the authorized source, and signing/notarization/distribution proof remains a separate release class. Resolve literal current `main` from Git; every descendant commit remains subject to its own exact-head Release Security receipt.
+At audit start, literal `main` `3aee737…` had an M0-A push run where Python 3.12, contract drift, and TypeScript parity passed while Python 3.10 failed because the Docker-daemon availability probe timed out during test collection. That failed job was retried during this documentation audit; do not infer the retry result until the hosted run completes.
 
-### 4. Separate open work
+A descendant of an authorized SHA is not automatically release-security authorized. Final public artifacts must be rebuilt and re-hashed from the exact source commit selected for release, with signing/notarization/distribution evidence handled separately.
 
-The following remain independent of the merged Core authority unless separately reconciled and merged:
+### 4. Independent work
 
-- CAPT-UPG-020→024 benchmark/probe work: PRs #89, #91, #93, #95, #97;
-- Inversion Labs / Forge edition lineage: PRs #104, #108, #109, #110, #112, #119;
-- public-release design/planning authority: PRs #111 and #116;
-- workflow/archive material such as #99; historical merge #45 remains a documentation record, not runtime authority.
+The current open Core PR queue is the CAPT-UPG-020→024 benchmark/probe lane:
+
+- #89 reciprocal-review benchmark;
+- #91 sparse symbol-index probe;
+- #93 Tree-sitter structural-hash probe;
+- #95 FastCDC/content-defined chunk probe;
+- #97 cognitive-debt cockpit.
+
+The former Inversion Labs/Forge PR line is not an open Core-main queue. It remains a separate edition/history lineage; for example #104 is closed unmerged and #119 merged into its separate Labs integration base, not Core `main`.
+
+The owner-approved public-release design (#111) and plans (#116) were preserved on current `main` through PR #128. Secure Intake/Quarantine, Projects, human-first results, composer context palette, Search/Deep Research governance, and Cohort Council remain implementation work unless separately proven in source.
 
 See [`PR_TOPOLOGY.md`](PR_TOPOLOGY.md) for the routing map.
 
+## Tool execution status
+
+ToolBroker is merged. It models durable ToolExecution lifecycle and reconciliation separately from adapter effects and supports the initial terminal backends `local | ssh | docker`, plus governed file/code adapters.
+
+Consequential effects remain capability/lease governed. If CAPT cannot prove the external dispatch/result boundary, reconciliation is required rather than blind redispatch.
+
+## Authored-skill status
+
+CAPT now has two governed authored-skill trust classes:
+
+- `pinned_external` — immutable release-pinned packs such as `CAPT_Skills`;
+- `managed_local` — imported, digest-bound local Agent Skills packs under the CAPT state root.
+
+Explicit pinned selection outranks contextual managed-local auto-selection. Skills are context/guidance only: they do not grant filesystem, network, tool, provider, approval, or policy authority. See [`AUTHORED_SKILLS.md`](AUTHORED_SKILLS.md).
+
 ## Native macOS status
 
-The native surface is no longer “SwiftUI contract only.” `CAPTNativeMac` is a real buildable Swift application target with governed chat, approval, runtime/provider controls, session persistence, and cross-surface tests.
-
-What is **not** implied: current convergence-head signing/notarization/distribution/auto-update release proof. A successful source build is not a notarized product release.
-
-## Cohort status
-
-Cohorts are no longer “durability later.” Merged `main` contains durable Cohort EventStore state, reconstruction, evidence admission, governed steering, epoch handling, and the Cohort Chamber projection. Council-scale public-product orchestration remains a separate planned tranche.
-
-## Provider status
-
-Local OpenAI-compatible endpoints (including the configured MTPLX path), Ollama, and governed provider execution are present in merged `main`. Provider activation persists a coherent provider/model tuple and legacy provider registries are backfilled without overwriting user configuration.
-
-The dormant generic native `MLX / mlx_lm` placeholder is intentionally **not** represented as a working native adapter. A materially configured local OpenAI-compatible MLX/MTPLX service is a different path.
+`CAPTNativeMac` is a real buildable Swift application target with governed chat, approvals, runtime/provider controls, session persistence, authored-skill visibility, and cross-surface tests. A source-buildable app is not the same evidence class as a signed/notarized/distributed public release.
 
 ## Authority invariant
 
@@ -78,10 +89,10 @@ Operator surfaces
                 |
        governance + EventStore
        memory/context + evidence
-       DriverHost / bounded drivers
+       DriverHost + ToolBroker
                 |
                 v
-        replaceable inference models
+    replaceable models / bounded tools
 ```
 
-No UI, MCP client, model, Cohort projection, security checker, provider manager, or prompt-enhancement engine becomes a parallel source of CAPT authority.
+No UI, MCP client, model, skill pack, Cohort projection, security checker, provider manager, prompt enhancer, or tool adapter becomes a parallel source of CAPT authority.
