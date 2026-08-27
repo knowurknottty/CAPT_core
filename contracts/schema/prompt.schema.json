@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.capt.dev/prompt.schema.json",
+  "title": "CAPT durable prompt proposal contracts",
+  "x-domain": "prompt",
+  "$defs": {
+    "PromptMode": {
+      "title": "PromptMode",
+      "type": "string",
+      "enum": ["normal", "software-development"]
+    },
+    "PromptStageName": {
+      "title": "PromptStageName",
+      "type": "string",
+      "enum": ["OMNI", "META", "FORGE", "SIGMA"]
+    },
+    "PromptStageRecord": {
+      "title": "PromptStageRecord",
+      "description": "Advisory output from one bounded prompt-compilation stage; it has no execution or approval authority.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "version", "proposedPromptDigest", "rationale", "assumptions", "unresolvedQuestions", "constraintsAdded", "acceptanceCriteriaAdded", "confidence", "limitations", "provenanceDigest"],
+      "properties": {
+        "stage": {"$ref": "prompt.schema.json#/$defs/PromptStageName"},
+        "version": {"type": "string", "maxLength": 128},
+        "proposedPromptDigest": {"$ref": "common.schema.json#/$defs/Digest"},
+        "rationale": {"type": "string", "maxLength": 8192},
+        "assumptions": {"type": "array", "maxItems": 128, "items": {"type": "string", "maxLength": 2048}},
+        "unresolvedQuestions": {"type": "array", "maxItems": 128, "items": {"type": "string", "maxLength": 2048}},
+        "constraintsAdded": {"type": "array", "maxItems": 128, "items": {"type": "string", "maxLength": 2048}},
+        "acceptanceCriteriaAdded": {"type": "array", "maxItems": 128, "items": {"type": "string", "maxLength": 2048}},
+        "confidence": {"type": "number"},
+        "limitations": {"type": "array", "maxItems": 128, "items": {"type": "string", "maxLength": 2048}},
+        "provenanceDigest": {"$ref": "common.schema.json#/$defs/Digest"},
+        "provider": {"type": ["string", "null"], "maxLength": 256},
+        "model": {"type": ["string", "null"], "maxLength": 256},
+        "endpointClass": {"type": ["string", "null"], "enum": ["local", "remote", null]},
+        "executionEnabled": {"type": "boolean"},
+        "inputDigest": {"$ref": "common.schema.json#/$defs/Digest"}
+      }
+    },
+    "PromptCapabilityRequest": {
+      "title": "PromptCapabilityRequest",
+      "description": "A proposed capability envelope. RuntimeService and human approval remain the sole admission authorities.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability", "resource", "rationale"],
+      "properties": {
+        "capability": {"type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,128}$"},
+        "resource": {"type": "string", "maxLength": 4096},
+        "rationale": {"type": "string", "maxLength": 2048}
+      }
+    },
+    "PromptVerificationContract": {
+      "title": "PromptVerificationContract",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["acceptanceCriteria"],
+      "properties": {
+        "acceptanceCriteria": {"type": "array", "maxItems": 128, "items": {"type": "string", "maxLength": 2048}},
+        "buildCommands": {"type": "array", "maxItems": 64, "items": {"type": "string", "maxLength": 2048}},
+        "testCommands": {"type": "array", "maxItems": 64, "items": {"type": "string", "maxLength": 2048}},
+        "runCommands": {"type": "array", "maxItems": 64, "items": {"type": "string", "maxLength": 2048}}
+      }
+    },
+    "PromptProposalState": {
+      "title": "PromptProposalState",
+      "type": "string",
+      "enum": ["active", "cancelled"]
+    },
+    "PromptProposalSnapshot": {
+      "title": "PromptProposalSnapshot",
+      "description": "Durable prompt proposal state. It is distinct from, and cannot authorize, a HumanApproval stream.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proposalId", "originalPrompt", "originalPromptDigest", "proposedPrompt", "proposedPromptDigest", "mode", "stageChain", "stageRecords", "targetRoot", "provider", "model", "requestedContextBudget", "effectiveContextBudget", "capabilityRequests", "verificationContract", "state", "revision"],
+      "properties": {
+        "proposalId": {"$ref": "common.schema.json#/$defs/Identifier"},
+        "originalPrompt": {"type": "string", "minLength": 1, "maxLength": 131072},
+        "originalPromptDigest": {"$ref": "common.schema.json#/$defs/Digest"},
+        "proposedPrompt": {"type": "string", "minLength": 1, "maxLength": 131072},
+        "proposedPromptDigest": {"$ref": "common.schema.json#/$defs/Digest"},
+        "mode": {"$ref": "prompt.schema.json#/$defs/PromptMode"},
+        "stageChain": {"type": "array", "minItems": 0, "maxItems": 8, "items": {"$ref": "prompt.schema.json#/$defs/PromptStageName"}},
+        "stageRecords": {"type": "array", "maxItems": 8, "items": {"$ref": "prompt.schema.json#/$defs/PromptStageRecord"}},
+        "targetRoot": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "provider": {"type": ["string", "null"], "maxLength": 256},
+        "model": {"type": ["string", "null"], "maxLength": 256},
+        "requestedContextBudget": {"type": "integer", "minimum": 0, "maximum": 10000000},
+        "effectiveContextBudget": {"type": "integer", "minimum": 0, "maximum": 10000000},
+        "capabilityRequests": {"type": "array", "maxItems": 128, "items": {"$ref": "prompt.schema.json#/$defs/PromptCapabilityRequest"}},
+        "verificationContract": {"$ref": "prompt.schema.json#/$defs/PromptVerificationContract"},
+        "state": {"$ref": "prompt.schema.json#/$defs/PromptProposalState"},
+        "revision": {"type": "integer", "minimum": 0},
+        "cancelReason": {"type": ["string", "null"], "maxLength": 2048}
+      }
+    },
+    "PromptProposalRevision": {
+      "title": "PromptProposalRevision",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proposedPrompt", "stageChain", "stageRecords", "capabilityRequests", "verificationContract"],
+      "properties": {
+        "proposedPrompt": {"type": "string", "minLength": 1, "maxLength": 131072},
+        "stageChain": {"type": "array", "minItems": 0, "maxItems": 8, "items": {"$ref": "prompt.schema.json#/$defs/PromptStageName"}},
+        "stageRecords": {"type": "array", "maxItems": 8, "items": {"$ref": "prompt.schema.json#/$defs/PromptStageRecord"}},
+        "provider": {"type": ["string", "null"], "maxLength": 256},
+        "model": {"type": ["string", "null"], "maxLength": 256},
+        "requestedContextBudget": {"type": "integer", "minimum": 0, "maximum": 10000000},
+        "effectiveContextBudget": {"type": "integer", "minimum": 0, "maximum": 10000000},
+        "capabilityRequests": {"type": "array", "maxItems": 128, "items": {"$ref": "prompt.schema.json#/$defs/PromptCapabilityRequest"}},
+        "verificationContract": {"$ref": "prompt.schema.json#/$defs/PromptVerificationContract"}
+      }
+    },
+    "PromptProposalCancellation": {
+      "title": "PromptProposalCancellation",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proposalId", "reason"],
+      "properties": {
+        "proposalId": {"$ref": "common.schema.json#/$defs/Identifier"},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 2048}
+      }
+    }
+  }
+}

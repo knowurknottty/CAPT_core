@@ -7,6 +7,7 @@ from .cohort_state import CohortAggregate
 from .replay_fork import ReplayForkAggregate
 from .human_approval import HumanApprovalAggregate
 from .mission_task import MissionAggregate, TaskAggregate
+from .prompt_proposal import PromptProposalAggregate
 from .tool_execution import ToolExecutionAggregate
 
 ALL_AGGREGATES = (
@@ -18,6 +19,7 @@ ALL_AGGREGATES = (
     CohortAggregate,
     ReplayForkAggregate,
     HumanApprovalAggregate,
+    PromptProposalAggregate,
     ArtifactPromotionAggregate,
     ToolExecutionAggregate,
 )
@@ -32,6 +34,7 @@ __all__ = [
     "DriverRunAggregate",
     "HumanApprovalAggregate",
     "MissionAggregate",
+    "PromptProposalAggregate",
     "TaskAggregate",
     "ToolExecutionAggregate",
     "scope_contains",
