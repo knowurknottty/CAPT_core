@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence
 
 from .errors import CaptRuntimeError
+from .managed_skills import default_managed_skill_root, prepare_managed_skill_context
 
 
 class AuthoredSkillPackViolation(CaptRuntimeError):
@@ -250,6 +251,33 @@ def prepare_authored_skill_context(
     )
     return context, names
 
+
+
+def prepare_runtime_skill_context(
+    payload: Mapping[str, Any],
+    *,
+    state_root: str | Path,
+    lock: Mapping[str, Any] | None = None,
+) -> tuple[Dict[str, Any] | None, List[str]]:
+    """Resolve explicit pinned skills or the state-local managed default pack.
+
+    Explicit `skillPackRoot`/`skillNames` remains highest authority. When no
+    explicit selection is present, a verified `<state>/skills/ultimate` pack is
+    contextually ranked unless `autoSelectSkills` is explicitly false.
+    """
+    if payload.get("skillPackRoot") is not None or payload.get("skillNames") is not None:
+        return prepare_authored_skill_context(payload, lock=lock)
+    if payload.get("autoSelectSkills") is False:
+        return None, []
+    root = default_managed_skill_root(state_root)
+    if not root.is_dir():
+        return None, []
+    objective = str(payload.get("objective", ""))
+    try:
+        limit = int(payload.get("skillLimit", 4))
+    except (TypeError, ValueError) as exc:
+        raise AuthoredSkillRequestViolation("skillLimit must be an integer") from exc
+    return prepare_managed_skill_context(root, objective, limit=limit)
 
 def summarize_skill_context(context: Mapping[str, Any] | None) -> Dict[str, Any] | None:
     """Return provenance-only skill evidence; never echo instruction bodies."""

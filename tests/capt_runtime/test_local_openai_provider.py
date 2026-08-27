@@ -177,3 +177,108 @@ def test_credentialless_policy_cannot_be_bypassed_by_local_label() -> None:
     assert credential_required("mtplx", ProviderKind.LOCAL, "http://127.0.0.1:18085/v1") is False
     assert credential_required("fake-local", ProviderKind.LOCAL, "https://example.com/v1") is True
     assert credential_required("cloud-on-loopback", ProviderKind.CLOUD, "http://127.0.0.1:18085/v1") is True
+
+
+def test_runtime_auto_selects_managed_skill_and_rejects_post_approval_tamper(tmp_path: Path, monkeypatch) -> None:
+    from capt_runtime.managed_skills import import_managed_skill_pack
+
+    monkeypatch.delenv("CAPT_PROVIDER_KEY_MTPLX", raising=False)
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "README.md").write_text("managed skill runtime regression\n")
+
+    state = tmp_path / "state"
+    source = tmp_path / "managed-source"
+    skill = source / "inversion-execute-now"
+    skill.mkdir(parents=True)
+    marker = "MANAGED_EXECUTE_MARKER"
+    skill.joinpath("SKILL.md").write_text(
+        "---\n"
+        "name: inversion-execute-now\n"
+        "description: Use when the user says proceed, continue, apply it, approved, or ship it.\n"
+        "version: 1.0.0\n"
+        "---\n\n"
+        f"# Execute Now\n\n{marker}\n"
+    )
+    imported = import_managed_skill_pack(
+        source, state / "skills" / "ultimate", pack_name="ultimate"
+    )
+    assert imported["skillCount"] == 1
+
+    upstream = ThreadingHTTPServer(("127.0.0.1", 0), _LocalOpenAIHandler)
+    upstream_thread = threading.Thread(target=upstream.serve_forever, daemon=True)
+    upstream_thread.start()
+
+    ui = state / "ui"
+    pm = ProviderManager(ui)
+    pm.add(Provider(
+        id="mtplx-managed",
+        name="MTPLX Managed",
+        kind=ProviderKind.LOCAL,
+        transport="openai_compatible",
+        base_url=f"http://127.0.0.1:{upstream.server_port}/v1",
+        context_limit=262144,
+        enabled=True,
+    ))
+    ledger = state / "runtime.db"
+    sock = state / "runtime.sock"
+    token = state / "runtime.token"
+    state.mkdir(parents=True, exist_ok=True)
+    runtime_thread = threading.Thread(
+        target=serve, args=(str(ledger), sock, str(token), False), daemon=True
+    )
+    runtime_thread.start()
+    _wait_for(sock); _wait_for(token)
+    client = RuntimeClient(str(sock), str(token))
+    try:
+        client.connect()
+        objective = "Proceed with this task and reply exactly CAPT_LOCAL_NOAUTH_OK."
+        approval = client.command("request_model_prompt_approval", {
+            "objective": objective,
+            "targetRoot": str(target),
+            "provider": "mtplx-managed",
+            "model": "qwen3.8-27b-mtplx",
+            "expiresAt": "2030-01-01T00:00:00Z",
+        }, "managed-auto-approval")
+        assert approval["status"] == "accepted", approval
+        planned = approval["result"]
+        assert planned["skillNames"] == ["inversion-execute-now"]
+        assert planned["authoredSkills"]["trust"] == "managed_local"
+        decision = client.command("submit_approval_decision", {
+            "requestId": planned["requestId"], "decision": "approve"
+        }, "managed-auto-decision")
+        assert decision["status"] == "accepted"
+        run_payload = {
+            "objective": objective,
+            "targetRoot": str(target),
+            "provider": "mtplx-managed",
+            "model": "qwen3.8-27b-mtplx",
+            "approvalRequestId": planned["requestId"],
+            "missionId": planned["missionId"],
+            "taskId": planned["taskId"],
+            "driverRunId": planned["driverRunId"],
+        }
+        installed = state / "skills" / "ultimate" / "skills" / "inversion-execute-now" / "SKILL.md"
+        approved_bytes = installed.read_text()
+        installed.write_text(approved_bytes + "\nTAMPER_AFTER_APPROVAL\n")
+        tampered = client.command(
+            "run_approved_hermes_inspection", run_payload, "managed-auto-run-tampered"
+        )
+        assert tampered["status"] == "rejected", tampered
+        approval_state = client.get_state("human_approval-" + planned["requestId"])
+        assert approval_state["state"] == "approved"
+        assert approval_state["remainingUses"] == 1
+        installed.write_text(approved_bytes)
+        run = client.command("run_approved_hermes_inspection", run_payload, "managed-auto-run")
+        assert run["status"] == "accepted", run
+        assert run["result"]["authoredSkills"]["trust"] == "managed_local"
+        assert run["result"]["authoredSkills"]["skills"][0]["name"] == "inversion-execute-now"
+        outbound = _LocalOpenAIHandler.seen["body"]["messages"][0]["content"]
+        assert outbound.count(marker) == 1
+    finally:
+        try:
+            client.command("shutdown", {}, "managed-auto-shutdown")
+        except Exception:
+            pass
+        client.disconnect()
+        upstream.shutdown(); upstream.server_close()

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from . import commands
-from .authored_skills import prepare_authored_skill_context, summarize_skill_context
+from .authored_skills import prepare_runtime_skill_context, summarize_skill_context
 from .contracts import require
 from .errors import AuthorityViolation
 from .model_approval_binding import (
@@ -73,7 +73,9 @@ def request_model_prompt_approval(
     executable = str(intent.get("executable", "") or "")
     # Explicit authored-skill selection is verified before approval state exists.
     # The resulting exact bytes are included in the approved model-visible prompt.
-    skill_context, _skill_names = prepare_authored_skill_context(intent)
+    skill_context, skill_names = prepare_runtime_skill_context(
+        intent, state_root=Path(service.store.path).parent
+    )
     # Governed continuation context selection: the approval binding must be
     # computed against the SAME prior-evidence selection the run will use, so
     # the approval digest and the prepared/dispatch digest stay consistent
@@ -158,5 +160,6 @@ def request_model_prompt_approval(
         "dispatchPromptDigest": assembly["dispatchPromptDigest"],
         "modelVisiblePromptDigest": assembly["modelVisiblePromptDigest"],
         "authoredSkills": summarize_skill_context(skill_context),
+        "skillNames": skill_names,
         "expiresAt": authoritative["expiresAt"],
     }

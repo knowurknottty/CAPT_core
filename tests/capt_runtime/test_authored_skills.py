@@ -241,3 +241,36 @@ def test_prompt_approval_skill_tamper_fails_before_authority_mutation(tmp_path, 
         assert store.head_sequence() == 0
     finally:
         store.close()
+
+
+def test_prompt_approval_auto_selects_managed_default_pack(tmp_path):
+    from capt_runtime.managed_skills import import_managed_skill_pack
+    from capt_runtime.prompt_approval import request_model_prompt_approval
+    from capt_runtime.services import RuntimeService
+    from capt_runtime.store import EventStore
+
+    source = tmp_path / "source"
+    for name, desc in (
+        ("inversion-execute-now", "Use when the user says proceed, continue, apply it, approved, or ship it."),
+        ("inversion-release-closure", "Use when work is ready, mergeable, shippable, or release-candidate."),
+    ):
+        root = source / name
+        root.mkdir(parents=True)
+        root.joinpath("SKILL.md").write_text(
+            f"---\nname: {name}\ndescription: >\n  {desc}\nversion: 1.0.0\n---\n\n# {name}\n"
+        )
+    import_managed_skill_pack(source, tmp_path / "skills" / "ultimate", pack_name="ultimate")
+    store = EventStore(str(tmp_path / "approval-managed.db"))
+    try:
+        result = request_model_prompt_approval(
+            RuntimeService(store),
+            {"objective": "Proceed and ship this release candidate once mergeable",
+             "targetRoot": "/tmp/project", "provider": "local-openai", "model": "qwen"},
+            _approval_meta("managed-auto"),
+        )
+        assert result["skillNames"][:2] == ["inversion-execute-now", "inversion-release-closure"]
+        assert result["authoredSkills"]["trust"] == "managed_local"
+        state = store.require_state("human_approval-" + result["requestId"])
+        assert state["scope"]["approvalBinding"]["authoredSkills"] == result["authoredSkills"]
+    finally:
+        store.close()

@@ -62,7 +62,7 @@ from capt_runtime.model_approval_binding import (
 from capt_runtime.prepared_execution import PreparedApprovedModelExecution, freeze
 from capt_runtime.verification_baseline import capture_verification_baseline
 from capt_runtime.authored_skills import (
-    parse_authored_skill_request, prepare_authored_skill_context, summarize_skill_context,
+    parse_authored_skill_request, prepare_runtime_skill_context, summarize_skill_context,
 )
 
 
@@ -797,7 +797,9 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     provider_key = resolve(provider.id, provider.key_ref)
                     if credential_required(provider.id, provider.kind, provider.base_url) and not provider_key:
                         raise ValueError("PROVIDER_CREDENTIAL_UNAVAILABLE")
-                skill_context, skill_names = prepare_authored_skill_context(payload)
+                skill_context, skill_names = prepare_runtime_skill_context(
+                    payload, state_root=Path(ledger_path).parent
+                )
                 requested_context_budget = int(payload.get("requestedContextBudget", 32_000))
                 effective_budget = effective_context_budget(
                     requested_context_budget, provider.context_limit if provider is not None else 0)
