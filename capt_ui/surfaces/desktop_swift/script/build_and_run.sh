@@ -27,7 +27,11 @@ while IFS= read -r pid; do
   kill "$pid" 2>/dev/null || true
 done < <(bundle_pids)
 LAB_STATE_DIR="${CAPT_LAB_STATE_DIR:-$HOME/.capt-inversion-labs}"
-if [[ ! -x "$LAB_STATE_DIR/runtime-venv/bin/capt" ]]; then
+REPO_ROOT="$(cd "$ROOT/../../.." && pwd)"
+CURRENT_SOURCE_HEAD="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+INSTALLED_SOURCE_HEAD="$(cat "$LAB_STATE_DIR/runtime-venv/CAPT_SOURCE_HEAD" 2>/dev/null || true)"
+if [[ ! -x "$LAB_STATE_DIR/runtime-venv/bin/capt"    || ! -x "$LAB_STATE_DIR/runtime-venv/bin/capt-ui"    || "$INSTALLED_SOURCE_HEAD" != "$CURRENT_SOURCE_HEAD" ]]; then
+  echo "Refreshing Inversion Labs CAPT runtime for source $CURRENT_SOURCE_HEAD"
   CAPT_LAB_STATE_DIR="$LAB_STATE_DIR" "$ROOT/script/install_local_runtime.sh"
 fi
 cd "$ROOT"
