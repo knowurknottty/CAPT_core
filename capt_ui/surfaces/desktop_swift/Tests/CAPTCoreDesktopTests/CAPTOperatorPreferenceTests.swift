@@ -48,4 +48,19 @@ esac
         XCTAssertEqual(snapshot.models.defaultSelection?.provider, "openrouter")
         XCTAssertEqual(snapshot.verbosity, "detailed")
     }
+
+    func testNewChatDefaultsUseCachedOperatorPreferencesNotActiveSessionCoordinates() {
+        let defaults = CAPTNewChatDefaultsResolver.resolve(
+            operatorProvider: "openrouter",
+            operatorModel: "z-ai/glm-5.3-flash",
+            defaultTargetRoot: "/Users/knowurknot/CAPT_core",
+            activeSessionProvider: "ollama",
+            activeSessionModel: "stealth/ox-alpha",
+            activeSessionTargetRoot: "/tmp/flock-worktree"
+        )
+        XCTAssertEqual(defaults.providerID, "openrouter")
+        XCTAssertEqual(defaults.modelID, "z-ai/glm-5.3-flash")
+        XCTAssertEqual(defaults.targetRoot, "/Users/knowurknot/CAPT_core")
+    }
+
 }
