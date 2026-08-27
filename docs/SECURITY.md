@@ -2,86 +2,102 @@
 
 CAPT is local-first and fail-closed where its contracts require it, but local execution is not automatically high-assurance security.
 
+Snapshot date: **2026-08-27**.
+
 ## Threat model
 
-The current public Core primarily assumes one trusted local OS user. The host OS/account, filesystem, language runtimes, and local model/provider processes are part of the trusted computing base unless separately isolated. CAPT does not currently claim protection from a compromised host/account or full multi-user authorization.
+The current public Core primarily assumes one trusted local OS user. The host OS/account, filesystem, language runtimes, container/SSH endpoints, and local model/provider processes are part of the trusted computing base unless separately isolated. CAPT does not claim protection from a compromised host/account or full multi-user authorization.
 
-## Integrated security controls on merged `main`
+## Integrated controls on merged `main`
 
-Merged `main` incorporates the security infrastructure and UPG-001→019 hardening rather than leaving them as independent stale PRs. Implemented mechanisms include:
+Current `main` includes:
 
 - authenticated local RuntimeService socket/token access;
-- bounded production JSON framing and oversized/malformed-frame rejection;
-- explicit capability/lease/governance boundaries and governed revoke;
+- bounded production JSON framing and malformed/oversized-frame rejection;
+- capability/lease/governance boundaries and governed revoke;
 - ordered EventStore history and integrity checks;
-- durable security-rejection auditing for the covered invalid-authority paths;
-- restrictive persistence permissions for covered runtime database/state files;
+- covered security-rejection auditing;
+- restrictive permissions for covered runtime state files;
 - request/token/cost resource ceilings at governed provider admission;
 - prompt/context/provider injection-assurance regressions;
 - durable idempotency/checkpoint/recovery and indeterminate-dispatch handling;
-- exact model-visible human-approval binding, one-use consumption, and stale/mismatched rejection;
-- provider secret references/scrubbing rather than evidence persistence of raw credentials;
-- encrypted native session-cache storage with explicit private filesystem-permission tests;
+- exact model-visible human-approval binding and one-use consumption;
+- provider secret references/scrubbing rather than raw-secret evidence persistence;
+- authenticated encryption for covered sensitive EventStore/MemoryStore content and encrypted native session-cache storage;
 - evidence/verification/ClaimGuard/task-completion separation;
-- Security Closure Cockpit projection over a **47-control** catalog, including the explicit paid-service billing-cap/alert requirement.
+- the 47-control Security Closure Cockpit;
+- governed ToolBroker/ToolExecution lifecycle and reconciliation for bounded external tools;
+- authored-skill provenance, exact approval binding, and execution-time anti-drift checks.
 
-These implementation/test facts do **not** automatically mark their corresponding release controls PASS. SecurityGate requires the evidence class specified for each exact-head control.
+These implementation facts do **not** automatically mark corresponding release controls PASS. SecurityGate requires the evidence class specified for each exact source identity.
+
+## Tool execution security boundary
+
+PR #126 added governed ToolBroker support for local, SSH, and Docker terminal backends plus file/code adapters without moving authority into adapters.
+
+Important constraints:
+
+- readiness is not effect proof;
+- a requested cancellation does not prove an external process or side effect stopped;
+- consequential execution remains capability/lease governed;
+- durable ToolExecution state records dispatch/effect/settlement boundaries;
+- unknown external effect state becomes reconciliation-required rather than a blind retry;
+- SSH/Docker profiles and remote/container trust remain part of the deployment threat model.
+
+ToolBroker is not a sandbox guarantee. Stronger process/container isolation remains a separate assurance class.
+
+## Authored-skill security boundary
+
+PR #129 adds `managed_local` authored-skill packs alongside existing `pinned_external` packs.
+
+Skills are non-authoritative context. They cannot grant filesystem/network/tool capability, provider credentials, approvals, verification, or policy overrides.
+
+Selected skill identity/content is bound before approval and revalidated before dispatch. Changed approved bytes fail closed. Oversized skills above the current inline contract are not silently truncated.
 
 ## CI gate integrity
 
-The terminal convergence work corrected a material CI-authority mismatch: the inherited workflow named `Release Security` did not actually execute the Security Closure Cockpit. It could therefore report workflow success while CAPT's release gate remained blocked.
+The `Release Security` workflow is intended to be a real release-authority gate rather than a decorative badge. It checks out the exact source, runs its security/regression/build/install checks, evaluates the Security Closure Cockpit evidence, uploads the gate artifacts, and fails when required evidence is not authorized.
 
-The workflow now:
+The M0-A workflow similarly remains an engineering gate, not a release declaration.
 
-1. checks out the exact pull-request head;
-2. runs Python security/regression/build/install/invariant/dependency-audit checks;
-3. runs full-history gitleaks;
-4. verifies SecurityGate/evidence machinery;
-5. generates ephemeral exact-head attestations from checks that really passed;
-6. evaluates the 47-control CAPT Core profile;
-7. uploads `security-evidence.json` and `security-gate-result.json`;
-8. fails the workflow if the exact-head gate is not authorized.
+## SHA-bound release-security history
 
-A red `Release Security` workflow is therefore now an intentional release-authority signal when required evidence is incomplete, not a generic test badge.
+Security authorization is bound to the exact source SHA evaluated.
 
-## Release-security authority and closure status
+- Historical merged PR #117 head `570babeef113943860c1268722200a48639e406d` remains **Release Security FAIL** on run `32440329043`.
+- Release-security closure baseline `2199c036aa22af33fb3eb0700f63f820a35aa55a` passed hosted run `32617740908` with **21 PASS / 0 FAIL / 0 NOT_VERIFIED / 26 NOT_APPLICABLE** and no blockers. M0-A run `32617740848` also passed on that SHA.
+- ToolBroker PR #126 exact head `b21ed6e7ff3996d48c756e342b278b69af0d666f` passed hosted M0-A and Release Security before squash merge. The squash merge `bcfdff9d43b35b5b192cc998b68ce16cc73b9985` is tree-identical but a different commit SHA; the PR-head receipt is not relabeled.
+- At audit start, literal `main` `3aee7370bac880aed99ce3c9ecfaa6d9ff48101e` had an M0-A push run where Python 3.12, contract drift, and TypeScript parity passed but Python 3.10 failed because a Docker availability probe timed out during test collection. The failed job was retried during this audit.
 
-Release-security authorization is bound to the exact source SHA being evaluated. The historical merged PR #117 head `570babeef113943860c1268722200a48639e406d` remains a **failed** Release Security receipt (run `32440329043`); later work does not rewrite that history.
+Do not call `3aee737…` release-authorized merely because it descends from an authorized source. A later SHA needs its own evidence.
 
-The security-closure implementation supplies explicit proof for all **21 applicable** controls in the 47-control Core profile. Current `main` merge SHA `2199c036aa22af33fb3eb0700f63f820a35aa55a` reproduced that proof in hosted `Release Security` run `32617740908`: **21 PASS / 0 FAIL / 0 NOT_VERIFIED / 26 NOT_APPLICABLE**, no blockers. That exact SHA is therefore **release-security authorized** for this Core profile.
-
-The closure proof classes include:
-
-- full-history secret scanning and dependency closure audit;
-- named Python tests for authentication, authorization, parameterized queries, input bounds, output minimization, injection resistance, resource ceilings, denied-access paths, audit events, and AI-output verification;
-- AES-256-GCM authenticated encryption of sensitive file-backed EventStore JSON fields and MemoryStore content, with legacy plaintext migration, wrong-key/tamper startup rejection, and private DB/sidecar permissions;
-- a one-shot CAPT spend-threshold alert that contains cost/request counters only;
-- a live OpenRouter inference-key policy query that rejects missing hard caps and refuses management/provisioning credentials in CI.
-
-A green checklist decision does **not** imply protection from a compromised host account, comprehensive multi-user/tenant authorization, universal process/container isolation, exactly-once arbitrary external side effects, or signed/notarized native distribution. Those remain separate assurance/release classes. Any additional paid provider added to the release profile must provide its own provider-side hard cap plus independent alert evidence before release authorization can remain green.
-
-## External execution
-
-Driver output is untrusted until admitted through evidence/verification boundaries. A timeout/cancel request does not prove an external process or HTTP request was physically aborted unless the adapter proves it. If dispatch state is indeterminate, CAPT suspends/reconciles rather than blindly replaying consequential work.
-
-## Provider secrets and remote execution
-
-Do not persist raw API keys in memory, evidence, diagnostics, or prompt payloads. Prefer environment/keychain-backed references. Remote/cloud provider selection must remain visibly distinguishable from local inference, and remote billing/resource controls require their own closure evidence.
+For a public artifact release, rebuild and hash the wheel/sdist/native artifacts from the exact authorized source, then complete any required signing, notarization, and distribution proof.
 
 ## Data at rest
 
-The native session cache remains encrypted. Core file-backed runtime persistence now additionally protects sensitive EventStore JSON payload/state/receipt/checkpoint/security-detail fields and MemoryStore content with AES-256-GCM authenticated encryption. Legacy plaintext rows are migrated on open and the SQLite WAL is checkpointed before vacuuming; unexpected plaintext after migration, wrong keys, and modified ciphertext fail closed.
+Covered sensitive EventStore JSON payload/state/receipt/checkpoint/security-detail fields and MemoryStore content use authenticated encryption. Legacy plaintext rows are migrated on open, and wrong keys or modified ciphertext fail closed.
 
-On macOS, the runtime state key is stored in Keychain when available. CI/tests may provide an explicit 32-byte base64 key; other supported hosts fall back to a user-private `~/.capt/keys/` key file (`0700` directory / `0600` key file). SQLite DB/WAL/SHM files are owner-private, but CAPT does not chmod caller-owned pre-existing parent directories.
+On macOS, the runtime state key is stored in Keychain when available. CI/tests may provide an explicit key; other supported hosts can use a user-private key file. SQLite DB/WAL/SHM files are owner-private, but CAPT does not chmod caller-owned pre-existing parent directories.
 
-This is field-level protection for sensitive persisted content, not whole-disk encryption. Indexing identifiers, schema metadata, digests, and some non-SQLite artifact files remain outside that encrypted content boundary. A compromised OS account/host remains outside the current threat claim and should still be mitigated with host full-disk/filesystem protection.
+This is field-level protection for covered persisted content, not whole-disk encryption. Some metadata, digests, identifiers, and non-SQLite artifacts remain outside that encrypted-content boundary. Host full-disk/filesystem protection is still relevant.
 
-## Verification rule
+## Provider secrets and remote execution
 
-Security claims are tied to exact source/evidence identities. General Python/Swift suites, sanitizer passes, and cross-surface acceptance support engineering correctness; they do not independently authorize release-security controls whose required evidence has not been supplied.
+Do not persist raw API keys in prompts, evidence, diagnostics, or durable config. Prefer environment/keychain-backed references. Remote/cloud provider selection must remain visibly distinguishable from local inference, and every paid provider admitted to a release profile needs its own billing-cap/alert evidence where required.
+
+## Remaining assurance boundaries
+
+A green exact-source gate does **not** imply:
+
+- protection from a compromised OS account/host;
+- comprehensive multi-user/tenant authorization;
+- universal process/container isolation;
+- exactly-once arbitrary external side effects;
+- model correctness or prompt-safety guarantees;
+- signed/notarized/distributed native release proof.
 
 ## Vulnerability reporting
 
 Do not publish real secrets or sensitive CAPT data in a public issue. Use a private maintainer/security channel where available.
 
-See [`CURRENT_STATE.md`](CURRENT_STATE.md) and [`RELEASE_EVIDENCE.md`](RELEASE_EVIDENCE.md) for current integration and evidence status.
+See [`CURRENT_STATE.md`](CURRENT_STATE.md) and [`RELEASE_EVIDENCE.md`](RELEASE_EVIDENCE.md) for the current source/evidence boundary.

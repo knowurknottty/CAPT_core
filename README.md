@@ -1,27 +1,27 @@
 # CAPT Core
 
-**Local-first governed runtime, continuity substrate, and operator layer for AI systems.**
+**Local-first governed runtime, continuity substrate, and operator layer for AI systems and bounded tools.**
 
-> **The model is replaceable. CAPT keeps the state, authority, evidence, memory, and recovery.**
+> **The model is replaceable. CAPT keeps the state, authority, evidence, memory, recovery, and effect history.**
 
-CAPT moves responsibilities that should not live inside a transient model session into a durable local runtime: authoritative state, memory, execution history, governance, evidence, verification, capability control, context policy, checkpoint/recovery, and operator control.
+CAPT moves responsibilities that should not live inside a transient model session into a durable local runtime: authoritative state, memory, execution history, governance, evidence, verification, capability control, context policy, checkpoint/recovery, tool-effect reconciliation, and operator control.
 
-The model is an inference component. **CAPT is the system of record around it.**
+The model is an inference component. Tools are effect adapters. **RuntimeService + EventStore + governance are the authority plane around them.**
 
 ---
 
-## Current repository status
+## Current repository status — 2026-08-27
 
-CAPT Core has four distinct authority/evidence states that must not be collapsed:
+CAPT Core deliberately distinguishes source state from proof state:
 
-1. **Numbered package:** `pyproject.toml` still declares `capt-solo 0.5.0`; preserved proof under `release_evidence/v0.5/` is historical.
-2. **Merged integration `main`:** PR #117 was merged on 2026-08-21, bringing the reconciled provider/native spine, CAPT-UPG-001→019, replay/checkpoint corrections, durable Cohorts + steering, governed artifact promotion, lease controls, forensic/provenance/epistemic/security projections, authored-skill approval binding, and macOS ↔ RuntimeService ↔ MCP authority acceptance onto `main`. Closed-unmerged PR #118's provider/model-coherence semantics are included through that reconciled line.
-3. **Release authorization:** exact-head and independent of merge status. The historical merged PR #117 head `570babeef113943860c1268722200a48639e406d` remains a failed Release Security receipt (run `32440329043`). PR #124 closed the applicable Core controls; release-security implementation baseline `2199c036aa22af33fb3eb0700f63f820a35aa55a` is **release-security authorized** by hosted Release Security run `32617740908`, which returned **21 PASS / 0 FAIL / 0 NOT_VERIFIED / 26 NOT_APPLICABLE** with no blockers. M0-A push run `32617740848` also passed on that exact merge SHA.
-4. **Separate open work:** CAPT-UPG-020→024, Inversion Labs/Forge edition work, and the public-release design/plan lineage remain independent PR lanes and are not silently counted as released Core functionality.
+1. **Numbered package:** `pyproject.toml` still declares `capt-solo 0.5.0`; preserved `release_evidence/v0.5/` is historical.
+2. **Merged Core `main`:** current audit-start head `3aee7370bac880aed99ce3c9ecfaa6d9ff48101e` includes the August 21 convergence plus governed ToolBroker (#126), approved public-release design/plan convergence (#128), and managed authored skills R1 (#129).
+3. **Release/security evidence:** authorization is exact-SHA. Historical #117 remains a failed security receipt; `2199c036…` has an exact hosted Release Security PASS; ToolBroker PR #126 head `b21ed6e…` also had hosted M0-A + Release Security PASS before squash merge. Those receipts do not automatically transfer to later SHAs.
+4. **Current open Core work:** CAPT-UPG-020→024 (#89/#91/#93/#95/#97). The old Labs/Forge and #111/#116 design PRs are no longer the open Core queue.
 
-Release-security authority is **per exact source SHA**. Historical blocked heads remain blocked evidence; a later commit becomes release-security authorized only when its own hosted Security Closure Cockpit returns PASS. Final public artifacts must still be rebuilt and re-hashed from the exact authorized source commit.
+At audit start, M0-A push run `32958741310` for `3aee737…` had Python 3.12, contract drift, and TypeScript parity PASS while Python 3.10 failed because the Docker availability probe timed out during test collection. The failed job was retried during this documentation audit; do not infer a green exact-head state from older receipts.
 
-See [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md), [`docs/PR_TOPOLOGY.md`](docs/PR_TOPOLOGY.md), [`docs/FUNCTIONALITY_MATRIX.md`](docs/FUNCTIONALITY_MATRIX.md), and [`docs/RELEASE_EVIDENCE.md`](docs/RELEASE_EVIDENCE.md) for the exact boundary.
+See [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md), [`docs/PR_TOPOLOGY.md`](docs/PR_TOPOLOGY.md), [`docs/FUNCTIONALITY_MATRIX.md`](docs/FUNCTIONALITY_MATRIX.md), and [`docs/RELEASE_EVIDENCE.md`](docs/RELEASE_EVIDENCE.md).
 
 ---
 
@@ -50,7 +50,7 @@ capt evidence
 capt checkpoint
 ```
 
-Launch the merged TUI:
+Launch the TUI:
 
 ```zsh
 capt-ui dashboard
@@ -73,71 +73,102 @@ For the guided path, use [`START_HERE.md`](START_HERE.md).
 
 ### Governed runtime and continuity
 
-- authoritative ordered EventStore history and replay;
+- authoritative ordered EventStore history and exact-prefix replay;
 - authenticated local RuntimeService IPC;
 - mission/task/runtime aggregates and governed state transitions;
-- capability grants and bounded leases;
+- capability grants, bounded leases, inspection, and revoke;
 - DriverHost and execution-driver boundaries;
 - checkpoint, restart, idempotency, and no-repeat recovery;
-- CAPT Solo durable Memory Engine;
-- Runtime Memory Governor and ContextPack policy;
-- CTP operational transaction/recovery journaling;
-- KHSB in-process coordination;
-- evidence and verification machinery;
-- ClaimGuard;
-- proof/workflow/Foundry/Knowledge Bubble components;
-- pinned external authored-skill verification and governed `ContextSlice.skillContext`;
-- bounded Hermes compatibility execution.
+- durable Memory Engine, Memory Governor, and ContextPack policy;
+- CTP operational transaction/recovery journaling and KHSB in-process coordination;
+- evidence, verification, ClaimGuard, proof/Foundry/Knowledge Bubble machinery;
+- durable Cohorts, evidence admission, epochs/rounds, steering, and Chamber projection;
+- governed artifact promotion, forensic flight bundle, provenance DAG, epistemic and security projections;
+- bounded Hermes compatibility execution and governed provider execution.
 
-### Normal operator surfaces
+### Governed ToolBroker
+
+PR #126 adds durable `ToolExecution` state and a ToolBroker subordinate to RuntimeService/EventStore authority.
+
+Initial terminal backends are exactly:
+
+- `local`
+- `ssh`
+- `docker`
+
+The runtime also registers bounded file/code adapters. Consequential execution remains capability/lease governed. Readiness is not effect proof, and indeterminate effects enter reconciliation instead of blind redispatch.
+
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and the ToolBroker implementation/tests for the exact boundary.
+
+### Authored skills
+
+CAPT supports two governed context trust classes:
+
+- **`pinned_external`** — immutable release-pinned authored packs such as `CAPT_Skills`;
+- **`managed_local`** — local Agent Skills imported into CAPT-managed state and integrity-bound by manifest/content/tree digests.
+
+Operator surfaces include:
+
+```zsh
+# pinned external inspection
+capt skills status --root /path/to/CAPT_Skills
+capt skills list --root /path/to/CAPT_Skills
+capt skills show inversion-creative-director --root /path/to/CAPT_Skills
+
+# managed local pack
+capt skills import --source /path/to/skills
+capt skills verify
+```
+
+Explicit pinned selection outranks contextual managed-local selection. Selected skill context is bound before model approval and revalidated before dispatch. Skill text is guidance only and cannot grant filesystem/network/tool/provider/approval/policy authority.
+
+The current inline contract fails closed rather than truncating a skill above 32,768 characters.
+
+See [`docs/AUTHORED_SKILLS.md`](docs/AUTHORED_SKILLS.md).
+
+### Operator surfaces
 
 | Surface / capability | Merged status |
 |---|---|
-| `capt` normal CLI | **SHIPPED** |
-| runtime lifecycle / evidence / doctor | **SHIPPED** |
-| durable memory CLI | **SHIPPED / PROVEN** |
-| `capt skills status/list/show` pinned authored-skill inspection | **SHIPPED** |
-| shared `capt_ui.operator` facade | **SHIPPED** |
-| Textual TUI | **SHIPPED MVP** |
-| governed approve/deny in TUI | **SHIPPED MVP** |
-| provider registration/configuration | **SHIPPED** |
-| provider health/model discovery where supported | **SHIPPED** |
-| model selection/favorites/overrides | **SHIPPED FOUNDATION** |
-| CaveCAPT Minimal/Normal/Detailed/Diagnostic | **SHIPPED** |
-| first-run onboarding | **SHIPPED** |
+| `capt` normal CLI | **SHIPPED SOURCE SURFACE** |
+| runtime lifecycle / evidence / doctor | **MERGED** |
+| durable memory CLI | **MERGED** |
+| `capt skills status/list/show` | **MERGED** |
+| `capt skills import/verify` | **MERGED** |
+| shared `capt_ui.operator` facade | **MERGED** |
+| Textual TUI | **MERGED MVP** |
+| governed approve/deny in TUI | **MERGED MVP** |
+| provider registration/configuration | **MERGED** |
+| provider health/model discovery where supported | **MERGED** |
+| governed Ollama/OpenAI-compatible execution | **MERGED** |
+| model selection/favorites/overrides | **MERGED FOUNDATION** |
+| CaveCAPT Minimal/Normal/Detailed/Diagnostic | **MERGED** |
+| first-run onboarding | **MERGED** |
 | Tk desktop operator | **OPERATOR MVP / reference fallback** |
-| native SwiftUI / `CAPTNativeMac` | **MERGED / BUILDABLE APPLICATION** |
-| true process-boundary cross-model continuity | **MERGED / INTEGRATED; RELEASE PROOF SEPARATE** |
+| native SwiftUI `CAPTNativeMac` | **MERGED / BUILDABLE APPLICATION** |
+| ToolBroker local/SSH/Docker terminal execution | **MERGED** |
+| true process-boundary cross-model continuation | **MERGED / INTEGRATED; RELEASE PROOF SEPARATE** |
 
-The UI is deliberately thin. **CLI, TUI, and desktop surfaces do not become alternate runtimes.**
-
-Pinned external authored skills are a separate trust class from bundled CAPT operation skills and executable Skill Foundry procedures. CAPT verifies the `CAPT_Skills` release lock, freezes explicitly selected bytes before authoritative mutation, carries them only inside the validated `ContextSlice`, and emits provenance-only receipt evidence. See [`docs/AUTHORED_SKILLS.md`](docs/AUTHORED_SKILLS.md).
-
----
-
-## Operator surfaces and native macOS convergence
-
-Current `main` includes the Textual TUI/Tk operator foundation and the PR #117 reconciled cockpit/provider/runtime projections, including the real `CAPTNativeMac` application target.
-
-The native app remains a thin RuntimeService client: governed chat/approval flow, runtime/provider controls, encrypted session-cache persistence, typed projections, and origin-session-bound asynchronous configuration updates do not create a second authority plane.
-
-Fresh candidate verification includes **64 Swift tests / 7 deliberate live/cross-surface skips / 0 failures**, strict concurrency + warnings-as-errors PASS, and ThreadSanitizer PASS with no sanitizer finding.
-
-A source-buildable/tested native app is not yet the same evidence class as a signed/notarized/distributed release.
-
-See [`docs/DESKTOP.md`](docs/DESKTOP.md) and [`docs/TUI.md`](docs/TUI.md).
+The UI is deliberately thin. **CLI, TUI, desktop, MCP, providers, and tool adapters do not become alternate runtimes.**
 
 ---
 
-## Provider execution status
+## Public-release design vs implementation
 
-The terminal convergence provider spine supports governed Ollama and local/authenticated OpenAI-compatible execution, endpoint/model provenance, resource ceilings, and bounded local prewarm.
+PR #128 preserves the exact owner-approved public-release design (#111) and implementation plans (#116) on current Core ancestry without importing their stale runtime bases.
 
-PR #118 closes a real native-selection defect by keeping global provider/model persistence coherent, backfilling provider defaults without overwriting user configuration, and preserving session-vs-global selection semantics. The false generic native `MLX / mlx_lm` placeholder is retired unless materially configured; a real local OpenAI-compatible MTPLX/MLX service is a separate supported path.
+That means the plans are current documentation authority. It does **not** mean the planned product features are implemented.
 
-Provider health or model discovery is not itself governed-execution proof. Controlled loopback execution proves authority/transport/idempotency, not model quality or release authorization.
+Still implementation-gated unless later source proves otherwise:
 
-See [`docs/PROVIDERS.md`](docs/PROVIDERS.md).
+- Secure Intake / Quarantine;
+- Projects and project-context eligibility;
+- human-first results layer;
+- composer capability palette;
+- Search / Deep Research governed surfaces;
+- Cohort Council public product layer.
+
+Merged low-level Cohorts do not by themselves equal the planned Council product.
 
 ---
 
@@ -146,7 +177,7 @@ See [`docs/PROVIDERS.md`](docs/PROVIDERS.md).
 ```text
 Human / Application / Agent Host
             |
-      CLI / TUI / Desktop
+      CLI / TUI / Desktop / MCP
             |
       shared Operator facade
             |
@@ -162,43 +193,40 @@ runtime history     grants/leases    durable memory
   |                    |                |
   +---------- governed execution -------+
             |
-        DriverHost
-            |
-  bounded model/tool drivers
-            |
-   replaceable inference
+      +-----+------+
+      |            |
+  DriverHost    ToolBroker
+      |            |
+ model drivers  tool adapters
 ```
 
-### Authority boundaries
+### Authority rules
 
 - EventStore owns authoritative runtime event history.
 - CTP is an operational transaction/recovery journal, not the runtime ledger.
-- KHSB is currently in-process and non-durable.
+- KHSB is in-process and non-durable.
 - durable memory and bounded working context are separate layers.
 - evidence is not verification.
 - verification is not claim acceptance.
 - claim acceptance is not task completion.
 - task completion is not mission completion.
-- driver output is untrusted until admitted through CAPT boundaries.
+- model/tool output is untrusted until admitted through CAPT boundaries.
 - a UI action is a request, not UI-owned authority.
-- provider discovery does not prove provider execution.
-- synthetic model switching does not prove real cross-model continuity.
+- provider/tool discovery or readiness does not prove execution/effects.
+- a skill is context, not capability.
+- synthetic model switching does not prove every real cross-model boundary.
 
 ---
 
-## Cohorts and multi-perspective cognition
+## Provider execution
 
-Merged `main` moves beyond the old “coordination contracts, durability later” status. It contains durable Cohort EventStore persistence/reconstruction, evidence admission, governed steering, epochs/rounds, stale-result handling, quorum/dissent semantics, and the Cohort Chamber projection.
+Merged `main` supports governed Ollama and local/authenticated OpenAI-compatible execution with endpoint/model provenance, resource ceilings, and bounded local prewarm.
 
-Cohort consensus remains advisory cognition. It cannot manufacture verification, grant capability, or bypass RuntimeService/EventStore authority. Council-scale public-product orchestration is a later tranche.
+The generic direct native `MLX / mlx_lm` placeholder is not represented as a working adapter unless materially configured. A real local OpenAI-compatible MLX/MTPLX service is a supported path through the OpenAI-compatible boundary.
 
----
+Provider health/model discovery is not itself governed-execution proof, and controlled execution proves authority/transport—not model quality.
 
-## Discovery, replay, and execution hardening
-
-Merged `main` contains the reconciled bounded discovery, long-running execution recovery, replay correction, lease governance, artifact promotion, and forensic/provenance projections in one authority spine.
-
-Central rule: **if CAPT cannot prove whether consequential external dispatch occurred, it does not silently replay the work.** Historical replay reconstructs the exact ledger prefix; replay forks create new history without reactivating old approvals/capabilities.
+See [`docs/PROVIDERS.md`](docs/PROVIDERS.md).
 
 ---
 
@@ -206,11 +234,29 @@ Central rule: **if CAPT cannot prove whether consequential external dispatch occ
 
 CAPT is local-first; local-first is not automatically high-assurance.
 
-Merged `main` includes the 47-control Security Closure Cockpit and substantial hardening—bounded IPC framing, covered rejection auditing, restrictive state permissions, resource ceilings, injection-assurance regressions, one-use exact approval binding, and encrypted native session-cache handling.
+Merged source includes the 47-control Security Closure Cockpit, bounded IPC framing, rejection auditing, restrictive state permissions, resource ceilings, injection-assurance regressions, exact one-use approval binding, covered authenticated at-rest protection, ToolExecution reconciliation, and authored-skill anti-drift.
 
-Those implementation/test facts are **not** automatically control attestations. For the release-security implementation baseline `2199c036aa22af33fb3eb0700f63f820a35aa55a`, the exact-head Release Security gate is now **PASS**. Core file-backed authoritative EventStore/MemoryStore sensitive content has authenticated at-rest protection, and the configured paid OpenRouter release/runtime credential has provider-side hard-cap evidence plus an independent CAPT spend alert. Open higher-assurance areas still include independently rooted/signed audit attestations, universal process isolation, compromised-host resistance, and final signed/notarized native distribution proof. The release process must still rebuild and re-hash artifacts from the authorized source commit.
+Security evidence is exact-source. `2199c036…` has an authorized hosted closure receipt; the ToolBroker PR #126 head `b21ed6e…` also has exact-head hosted M0-A + Release Security PASS. Later commits do not inherit those labels automatically.
 
-Read [`docs/SECURITY.md`](docs/SECURITY.md) before higher-trust use.
+Open higher-assurance areas include independently rooted/signed audit attestations, universal process isolation, compromised-host resistance, multi-principal isolation, exactly-once arbitrary external-effect proof, and final signed/notarized distribution evidence.
+
+Read [`docs/SECURITY.md`](docs/SECURITY.md).
+
+---
+
+## Current open Core lane
+
+As of 2026-08-27, the open Core PR lane is:
+
+- #89 — CAPT-UPG-020 reciprocal-review benchmark;
+- #91 — CAPT-UPG-021 sparse symbol-index probe;
+- #93 — CAPT-UPG-022 Tree-sitter structural-hash probe;
+- #95 — CAPT-UPG-023 FastCDC/content-defined chunk probe;
+- #97 — CAPT-UPG-024 cognitive-debt cockpit.
+
+Treat those as separate benchmark/probe work until semantically reconciled and proven against current `main`.
+
+The Inversion Labs/Forge branch lineage is separate edition/history work, not the current open Core-main queue.
 
 ---
 
@@ -219,20 +265,21 @@ Read [`docs/SECURITY.md`](docs/SECURITY.md) before higher-trust use.
 | I want to... | Read this |
 |---|---|
 | See exact current state | [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md) |
+| See PR/branch routing | [`docs/PR_TOPOLOGY.md`](docs/PR_TOPOLOGY.md) |
 | Get CAPT running | [`START_HERE.md`](START_HERE.md) |
 | Navigate all docs | [`docs/README.md`](docs/README.md) |
 | Understand CAPT in one screen | [`docs/MENTAL_MODEL.md`](docs/MENTAL_MODEL.md) |
+| Use authored skills | [`docs/AUTHORED_SKILLS.md`](docs/AUTHORED_SKILLS.md) |
 | Use the TUI | [`docs/TUI.md`](docs/TUI.md) |
 | See capability truth | [`docs/CAPABILITY_MATRIX.md`](docs/CAPABILITY_MATRIX.md) |
 | See operator/runtime functionality | [`docs/FUNCTIONALITY_MATRIX.md`](docs/FUNCTIONALITY_MATRIX.md) |
 | Configure providers | [`docs/PROVIDERS.md`](docs/PROVIDERS.md) |
-| Inspect UI acceptance | [`capt_ui/ACCEPTANCE_STATUS.md`](capt_ui/ACCEPTANCE_STATUS.md) |
 | Run workflows | [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) |
-| Run demos | [`docs/DEMOS.md`](docs/DEMOS.md) |
 | Troubleshoot | [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) |
 | Understand architecture | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) |
 | Review security | [`docs/SECURITY.md`](docs/SECURITY.md) |
 | Inspect evidence | [`docs/RELEASE_EVIDENCE.md`](docs/RELEASE_EVIDENCE.md) |
+| See roadmap | [`docs/ROADMAP.md`](docs/ROADMAP.md) |
 | Read the whitepaper | [`docs/WHITEPAPER.md`](docs/WHITEPAPER.md) |
 | See agent/provenance rules | [`AGENTS.md`](AGENTS.md) |
 
@@ -248,7 +295,9 @@ implemented
  -> integrated
  -> exact-head verified
  -> installed-runtime verified
- -> live external dependency/provider verified (when applicable)
+ -> live external dependency/provider/tool verified (when applicable)
+ -> release-security authorized
+ -> artifact rebuilt/re-hashed/signed/notarized as required
  -> release-proven
 ```
 
