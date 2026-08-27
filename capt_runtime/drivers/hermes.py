@@ -33,6 +33,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -114,14 +115,29 @@ def resolve_hermes_executable(explicit: Optional[str] = None) -> str:
 
 
 def resolve_workspace_mcp_executable(explicit: Optional[str] = None) -> str:
-    """Locate the canonical CAPT Workspace MCP executable."""
-    cand = explicit or os.environ.get("CAPT_WORKSPACE_MCP_EXECUTABLE") or "capt-workspace-mcp"
-    resolved = shutil.which(cand) if os.path.sep not in cand else cand
-    if not resolved or not os.path.isfile(resolved) or not os.access(resolved, os.X_OK):
-        raise HermesDriverUnavailable(
-            "CAPT Workspace MCP executable not found or not executable: %r" % cand
-        )
-    return os.path.realpath(resolved)
+    """Locate the canonical CAPT Workspace MCP executable.
+
+    Explicit/operator configuration wins. Otherwise prefer the executable
+    installed beside the active runtime Python so native GUI launches do not
+    depend on an interactive shell PATH. PATH discovery is the final fallback.
+    """
+    override = explicit or os.environ.get("CAPT_WORKSPACE_MCP_EXECUTABLE")
+    candidates: list[str] = []
+    if override:
+        candidates.append(str(override))
+    else:
+        candidates.append(str(Path(sys.executable).resolve().parent / "capt-workspace-mcp"))
+        found = shutil.which("capt-workspace-mcp")
+        if found:
+            candidates.append(found)
+    for cand in candidates:
+        resolved = shutil.which(cand) if os.path.sep not in cand else cand
+        if resolved and os.path.isfile(resolved) and os.access(resolved, os.X_OK):
+            return os.path.realpath(resolved)
+    shown = override or "capt-workspace-mcp (runtime sibling/PATH)"
+    raise HermesDriverUnavailable(
+        "CAPT Workspace MCP executable not found or not executable: %r" % shown
+    )
 
 
 def probe_hermes_identity(executable: str, timeout: float = 60.0) -> Dict[str, Any]:

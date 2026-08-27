@@ -477,3 +477,17 @@ def test_toolbridge_mode_executes_with_mcp_only_launch(env):
     assert "HERMES_HOME" in diag["envKeys"]
     assert not any("API_KEY" in key for key in diag["envKeys"])
     assert result["observations"][0]["summary"] == "bridge execution ok"
+
+
+def test_workspace_mcp_resolver_prefers_sibling_runtime_executable(tmp_path, monkeypatch):
+    import capt_runtime.drivers.hermes as hermes
+
+    sibling = tmp_path / "capt-workspace-mcp"
+    sibling.write_text("#!/bin/sh\nexit 0\n")
+    sibling.chmod(0o700)
+    fake_python = tmp_path / "python"
+    monkeypatch.setattr(hermes.sys, "executable", str(fake_python))
+    monkeypatch.delenv("CAPT_WORKSPACE_MCP_EXECUTABLE", raising=False)
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+
+    assert hermes.resolve_workspace_mcp_executable() == str(sibling.resolve())
