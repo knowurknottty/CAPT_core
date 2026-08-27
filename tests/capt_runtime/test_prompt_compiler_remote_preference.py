@@ -128,3 +128,48 @@ def test_configured_remote_preference_is_persisted_compilation_authorization(mon
     assert proposal.status == "ready_for_approval"
     assert proposal.stage_records[0].provider_id == "openrouter"
     assert proposal.stage_records[0].model == "z-ai/glm-5.3-flash"
+
+
+def test_remote_glm_malformed_stage_falls_back_to_configured_local_compiler(monkeypatch, tmp_path):
+    from desktop.prompt_compiler_provider import build_prompt_compiler
+    from capt_runtime.prompt_compiler import PromptCompileRequest
+
+    ui = _write_ui(tmp_path)
+    calls = []
+
+    class Response:
+        def __init__(self, payload): self.payload = payload
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+        def read(self, _limit=-1): return json.dumps(self.payload).encode()
+
+    valid_stage = {
+        "stage": "OMNI", "outcome": "enhanced", "scope": "prompt",
+        "inputs": ["operator prompt"], "outputs": ["fallback execution prompt"],
+        "constraints": [], "successCriteria": ["clear"], "ambiguities": [],
+        "requestedCapabilities": [],
+    }
+
+    def fake_urlopen(request, timeout):
+        calls.append(request.full_url)
+        if request.full_url.startswith("https://openrouter.ai/"):
+            return Response({"choices": [{"message": {"content": '{"stage":"OMNI"'}}]})
+        if request.full_url.endswith("/models"):
+            return Response({"data": [{"id": "Youssofal/Qwen3.8-27B-MTPLX-Optimized-Speed"}]})
+        return Response({"choices": [{"message": {"content": json.dumps(valid_stage)}}]})
+
+    monkeypatch.setattr("desktop.prompt_compiler_provider.resolve_secret", lambda *_a, **_k: "secret-test-key")
+    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen", fake_urlopen)
+
+    compiler = build_prompt_compiler(ui)
+    proposal = compiler.compile(PromptCompileRequest(
+        original_prompt="Enhance this robustly.", requested_engine="OMNI",
+        execution_provider="openrouter", execution_model="xiaomi/mimo-v2.5",
+        remote_compilation_authorized=False,
+    ))
+
+    assert proposal.status == "ready_for_approval"
+    assert proposal.stage_records[0].provider_id == "mtplx"
+    assert proposal.stage_records[0].model == "Youssofal/Qwen3.8-27B-MTPLX-Optimized-Speed"
+    assert calls[0] == "https://openrouter.ai/api/v1/chat/completions"
+    assert "http://127.0.0.1:18085/v1/chat/completions" in calls

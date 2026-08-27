@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
+from capt_runtime.errors import AuthorityViolation
 from capt_runtime.provider_endpoint import endpoint_class
 from capt_runtime.resource_governor import TokenCostGovernor
 from capt_ui.operator.secrets import resolve as resolve_secret
@@ -127,28 +128,25 @@ def select_local_prompt_compiler(ui_config_dir: Path) -> Optional[PromptCompiler
     return _local_fallback(ui, providers)
 
 
-def select_prompt_compiler(ui_config_dir: Path) -> Optional[PromptCompilerSelection]:
-    """Resolve configured Prompt Intelligence preference independently of execution.
-
-    ``prompt-compiler.json`` may provide an ordered ``preferences`` list. Remote
-    entries are admitted only when ``remoteCompilationAuthorized`` is true.
-    Local loopback selection remains the fallback.
-    """
+def select_prompt_compiler_preferences(ui_config_dir: Path) -> list[PromptCompilerSelection]:
+    """Resolve all configured Prompt Intelligence preferences in declared order."""
     ui = Path(ui_config_dir)
     providers = _load_providers(ui)
     if not providers:
-        return None
+        return []
     explicit_path = ui / "prompt-compiler.json"
     if explicit_path.exists():
         try:
             explicit = json.loads(explicit_path.read_text())
         except (OSError, ValueError, TypeError):
-            return None
+            return []
         if not isinstance(explicit, dict):
-            return None
+            return []
         remote_authorized = bool(explicit.get("remoteCompilationAuthorized", False))
         prefs = explicit.get("preferences")
         if isinstance(prefs, list):
+            resolved: list[PromptCompilerSelection] = []
+            seen: set[tuple[str, str, str]] = set()
             for pref in prefs:
                 if not isinstance(pref, dict):
                     continue
@@ -158,8 +156,14 @@ def select_prompt_compiler(ui_config_dir: Path) -> Optional[PromptCompilerSelect
                     str(pref.get("model") or ""),
                     remote_authorized=remote_authorized,
                 )
-                if candidate is not None:
-                    return candidate
+                if candidate is None:
+                    continue
+                key = (candidate.provider_id, candidate.model, candidate.base_url)
+                if key not in seen:
+                    resolved.append(candidate)
+                    seen.add(key)
+            if resolved:
+                return resolved
         else:
             candidate = _selection(
                 providers,
@@ -168,8 +172,15 @@ def select_prompt_compiler(ui_config_dir: Path) -> Optional[PromptCompilerSelect
                 remote_authorized=remote_authorized,
             )
             if candidate is not None:
-                return candidate
-    return _local_fallback(ui, providers)
+                return [candidate]
+    fallback = _local_fallback(ui, providers)
+    return [fallback] if fallback is not None else []
+
+
+def select_prompt_compiler(ui_config_dir: Path) -> Optional[PromptCompilerSelection]:
+    """Resolve the first configured Prompt Intelligence preference."""
+    preferences = select_prompt_compiler_preferences(ui_config_dir)
+    return preferences[0] if preferences else None
 
 
 class OpenAICompatiblePromptCompilerTransport:
@@ -316,10 +327,36 @@ def _compiler_from_selection(selection: PromptCompilerSelection):
     )
 
 
+class FailoverPromptCompiler:
+    """Try configured compiler preferences in order without weakening authority checks."""
+
+    def __init__(self, compilers: list[Any]) -> None:
+        self._compilers = tuple(compilers)
+
+    def compile(self, request):
+        last_error: Optional[BaseException] = None
+        for compiler in self._compilers:
+            try:
+                return compiler.compile(request)
+            except AuthorityViolation:
+                raise
+            except (OSError, TimeoutError, ValueError) as exc:
+                last_error = exc
+        if last_error is not None:
+            raise last_error
+        raise ValueError("no configured prompt compiler available")
+
+
 def build_prompt_compiler(ui_config_dir: Path):
-    """Construct the configured Prompt Intelligence compiler preference."""
-    selection = select_prompt_compiler(Path(ui_config_dir))
-    return _compiler_from_selection(selection) if selection is not None else None
+    """Construct the ordered Prompt Intelligence compiler preference chain."""
+    compilers = []
+    for selection in select_prompt_compiler_preferences(Path(ui_config_dir)):
+        compiler = _compiler_from_selection(selection)
+        if compiler is not None:
+            compilers.append(compiler)
+    if not compilers:
+        return None
+    return compilers[0] if len(compilers) == 1 else FailoverPromptCompiler(compilers)
 
 
 def build_local_prompt_compiler(ui_config_dir: Path):

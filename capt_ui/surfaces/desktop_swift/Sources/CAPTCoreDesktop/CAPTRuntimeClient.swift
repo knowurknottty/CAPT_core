@@ -131,7 +131,11 @@ public final class CAPTRuntimeClient: CAPTRuntimeCommanding {
         correlationID: String,
         timestamp: String
     ) throws -> [String: Any] {
-        let seed = try canonicalJSONData(["op": op, "payload": payload])
+        var identitySeed: [String: Any] = ["op": op, "payload": payload]
+        if let idempotencyKey {
+            identitySeed["idempotencyKey"] = idempotencyKey
+        }
+        let seed = try canonicalJSONData(identitySeed)
         let digest = SHA256.hash(data: seed).map { String(format: "%02x", $0) }.joined()
         let commandID = "cmd-" + String(digest.prefix(16))
         return [
