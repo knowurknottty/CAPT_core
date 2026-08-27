@@ -32,6 +32,9 @@
         "HumanApprovalRequested",
         "HumanApprovalDecided",
         "HumanApprovalConsumed",
+        "PromptProposalCreated",
+        "PromptProposalRevised",
+        "PromptProposalCancelled",
         "ArtifactPromotionPrepared",
         "ArtifactPromotionAuthorized",
         "ArtifactPromotionAdopted",
@@ -809,6 +812,60 @@
             },
             "execution": {
               "$ref": "tool.schema.json#/$defs/ToolExecution"
+            }
+          }
+        },
+        {
+          "title": "PromptProposalCreatedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "proposal"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "PromptProposalCreated"
+            },
+            "proposal": {
+              "$ref": "prompt.schema.json#/$defs/PromptProposalSnapshot"
+            }
+          }
+        },
+        {
+          "title": "PromptProposalRevisedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "revision"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "PromptProposalRevised"
+            },
+            "revision": {
+              "$ref": "prompt.schema.json#/$defs/PromptProposalRevision"
+            }
+          }
+        },
+        {
+          "title": "PromptProposalCancelledPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "cancellation"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "PromptProposalCancelled"
+            },
+            "cancellation": {
+              "$ref": "prompt.schema.json#/$defs/PromptProposalCancellation"
             }
           }
         }

@@ -20,6 +20,7 @@ from .aggregates import (
     DriverRunAggregate,
     HumanApprovalAggregate,
     MissionAggregate,
+    PromptProposalAggregate,
     ReplayForkAggregate,
     TaskAggregate,
 )
@@ -85,6 +86,7 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         "DriverRunCreated",
         "ClaimCreated",
         "HumanApprovalRequested",
+        "PromptProposalCreated",
         "ArtifactPromotionPrepared",
         "CohortCreated",
         "ReplayForkCreated",
@@ -188,6 +190,15 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         )
     elif event_type == "ReplayForkCreated":
         nxt = ReplayForkAggregate.create(payload["fork"])
+    elif event_type == "PromptProposalCreated":
+        nxt = PromptProposalAggregate.replay_create(payload["proposal"])
+    elif event_type == "PromptProposalRevised":
+        nxt = PromptProposalAggregate.revise(existing(), payload["revision"])
+    elif event_type == "PromptProposalCancelled":
+        cancellation = payload["cancellation"]
+        if cancellation["proposalId"] != existing()["proposalId"]:
+            raise IntegrityViolation("prompt proposal cancellation identity mismatch")
+        nxt = PromptProposalAggregate.cancel(existing(), cancellation["reason"])
     elif event_type in ("CheckpointCreated", "MissionResumed"):
         # Bookkeeping events: they advance the stream version but carry no
         # aggregate state change.
@@ -277,6 +288,7 @@ def checkpoint_replay(store: EventStore, manifest: Dict[str, Any]) -> ReplayStat
         "driverRunVersions",
         "claimVersions",
         "humanApprovalVersions",
+        "promptProposalVersions",
         "artifactPromotionVersions",
         "cohortVersions",
         "replayForkVersions",

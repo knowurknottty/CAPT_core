@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:319bd8343c1a1426d2ac45287501e373ba6a5fe6fe3fdf82635228ae1d9c05ae
+// source digest:  sha256:51f30dcd24e8a0bd166929a5b695fa9d42ff0ab651fa4eb67e8f1cdb09c24592
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -237,6 +237,7 @@ export interface CheckpointManifest {
   readonly artifactPromotionVersions?: readonly StreamVersionEntry[];
   readonly cohortVersions?: readonly StreamVersionEntry[];
   readonly humanApprovalVersions?: readonly StreamVersionEntry[];
+  readonly promptProposalVersions?: readonly StreamVersionEntry[];
   readonly replayForkVersions?: readonly StreamVersionEntry[];
 }
 
@@ -1320,10 +1321,13 @@ export type EventPayload =
   | ToolExecutionDispatchingPayload
   | ToolExecutionEffectObservedPayload
   | ToolExecutionSettlingPayload
-  | ToolExecutionTerminatedPayload;
+  | ToolExecutionTerminatedPayload
+  | PromptProposalCreatedPayload
+  | PromptProposalRevisedPayload
+  | PromptProposalCancelledPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "PromptProposalCreated" | "PromptProposalRevised" | "PromptProposalCancelled" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -1348,6 +1352,9 @@ export const EventTypeValues = [
   "HumanApprovalRequested",
   "HumanApprovalDecided",
   "HumanApprovalConsumed",
+  "PromptProposalCreated",
+  "PromptProposalRevised",
+  "PromptProposalCancelled",
   "ArtifactPromotionPrepared",
   "ArtifactPromotionAuthorized",
   "ArtifactPromotionAdopted",
@@ -1413,6 +1420,24 @@ export interface MissionStateChangedPayload {
 export interface PolicyEvaluatedPayload {
   readonly eventType: "PolicyEvaluated";
   readonly policyDecision: PolicyDecision;
+}
+
+/** PromptProposalCancelledPayload */
+export interface PromptProposalCancelledPayload {
+  readonly cancellation: PromptProposalCancellation;
+  readonly eventType: "PromptProposalCancelled";
+}
+
+/** PromptProposalCreatedPayload */
+export interface PromptProposalCreatedPayload {
+  readonly eventType: "PromptProposalCreated";
+  readonly proposal: PromptProposalSnapshot;
+}
+
+/** PromptProposalRevisedPayload */
+export interface PromptProposalRevisedPayload {
+  readonly eventType: "PromptProposalRevised";
+  readonly revision: PromptProposalRevision;
 }
 
 /** ReplayForkCreatedPayload */
@@ -1682,6 +1707,105 @@ export const PolicyEffectValues = [
   "allow_with_conditions",
   "escalate",
 ] as const;
+
+/** A proposed capability envelope. RuntimeService and human approval remain the sole admission authorities. */
+export interface PromptCapabilityRequest {
+  readonly capability: string;
+  readonly rationale: string;
+  readonly resource: string;
+}
+
+/** PromptMode */
+export type PromptMode = "normal" | "software-development";
+export const PromptModeValues = [
+  "normal",
+  "software-development",
+] as const;
+
+/** PromptProposalCancellation */
+export interface PromptProposalCancellation {
+  readonly proposalId: Identifier;
+  readonly reason: string;
+}
+
+/** PromptProposalRevision */
+export interface PromptProposalRevision {
+  readonly capabilityRequests: readonly PromptCapabilityRequest[];
+  readonly proposedPrompt: string;
+  readonly stageChain: readonly PromptStageName[];
+  readonly stageRecords: readonly PromptStageRecord[];
+  readonly verificationContract: PromptVerificationContract;
+  readonly effectiveContextBudget?: number;
+  readonly model?: string | null;
+  readonly provider?: string | null;
+  readonly requestedContextBudget?: number;
+}
+
+/** Durable prompt proposal state. It is distinct from, and cannot authorize, a HumanApproval stream. */
+export interface PromptProposalSnapshot {
+  readonly capabilityRequests: readonly PromptCapabilityRequest[];
+  readonly effectiveContextBudget: number;
+  readonly mode: PromptMode;
+  readonly model: string | null;
+  readonly originalPrompt: string;
+  readonly originalPromptDigest: Digest;
+  readonly proposalId: Identifier;
+  readonly proposedPrompt: string;
+  readonly proposedPromptDigest: Digest;
+  readonly provider: string | null;
+  readonly requestedContextBudget: number;
+  readonly revision: number;
+  readonly stageChain: readonly PromptStageName[];
+  readonly stageRecords: readonly PromptStageRecord[];
+  readonly state: PromptProposalState;
+  readonly targetRoot: string;
+  readonly verificationContract: PromptVerificationContract;
+  readonly cancelReason?: string | null;
+}
+
+/** PromptProposalState */
+export type PromptProposalState = "active" | "cancelled";
+export const PromptProposalStateValues = [
+  "active",
+  "cancelled",
+] as const;
+
+/** PromptStageName */
+export type PromptStageName = "OMNI" | "META" | "FORGE" | "SIGMA";
+export const PromptStageNameValues = [
+  "OMNI",
+  "META",
+  "FORGE",
+  "SIGMA",
+] as const;
+
+/** Advisory output from one bounded prompt-compilation stage; it has no execution or approval authority. */
+export interface PromptStageRecord {
+  readonly acceptanceCriteriaAdded: readonly string[];
+  readonly assumptions: readonly string[];
+  readonly confidence: number;
+  readonly constraintsAdded: readonly string[];
+  readonly limitations: readonly string[];
+  readonly proposedPromptDigest: Digest;
+  readonly provenanceDigest: Digest;
+  readonly rationale: string;
+  readonly stage: PromptStageName;
+  readonly unresolvedQuestions: readonly string[];
+  readonly version: string;
+  readonly endpointClass?: string | null;
+  readonly executionEnabled?: boolean;
+  readonly inputDigest?: Digest;
+  readonly model?: string | null;
+  readonly provider?: string | null;
+}
+
+/** PromptVerificationContract */
+export interface PromptVerificationContract {
+  readonly acceptanceCriteria: readonly string[];
+  readonly buildCommands?: readonly string[];
+  readonly runCommands?: readonly string[];
+  readonly testCommands?: readonly string[];
+}
 
 /** High-level human request to create a new draft mission bound to an exact historical replay position. RuntimeService builds the MissionSpec; transport/UI may not fabricate aggregate state. */
 export interface ReplayForkIntent {

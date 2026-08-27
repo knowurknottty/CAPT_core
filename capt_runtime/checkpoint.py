@@ -32,6 +32,7 @@ _KIND_TO_FIELD = {
     "driverrun": "driverRunVersions",
     "claim": "claimVersions",
     "human_approval": "humanApprovalVersions",
+    "prompt_proposal": "promptProposalVersions",
     "artifact_promotion": "artifactPromotionVersions",
     "cohort": "cohortVersions",
     "replay_fork": "replayForkVersions",
@@ -120,6 +121,9 @@ def create_checkpoint(
         "claimVersions": sorted(versions["claimVersions"], key=lambda e: e["streamId"]),
         "humanApprovalVersions": sorted(
             versions["humanApprovalVersions"], key=lambda e: e["streamId"]
+        ),
+        "promptProposalVersions": sorted(
+            versions["promptProposalVersions"], key=lambda e: e["streamId"]
         ),
         "artifactPromotionVersions": sorted(
             versions["artifactPromotionVersions"], key=lambda e: e["streamId"]
