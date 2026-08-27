@@ -48,7 +48,7 @@ class RuntimeComposition:
     ssh_profile_registry: SSHProfileRegistry
     docker_profile_registry: DockerProfileRegistry
 
-    def command_service(self, operator_id: str, session_id: str):
+    def command_service(self, operator_id: str, session_id: str, *, prompt_compiler=None):
         # Import lazily to avoid a desktop-to-runtime import cycle at module load.
         from desktop.replay_command_service import ReplayRuntimeCommandService
 
@@ -59,6 +59,7 @@ class RuntimeComposition:
             memory_engine=self.memory_engine,
             runtime_service=self.service,
             tool_broker=self.tool_broker,
+            prompt_compiler=prompt_compiler,
         )
 
     def openharness_host(

@@ -172,6 +172,35 @@ def cancel_prompt_proposal(service: Any, intent: Dict[str, Any],
     return {"status": "applied", **state}
 
 
+def authoritative_proposal_binding_for_execution(
+    store: Any, approval_request_id: str, objective: str
+) -> Dict[str, Any] | None:
+    """Recover proposal identity only from authoritative HumanApproval state."""
+    approval = store.require_state("human_approval-" + str(approval_request_id))
+    scope = approval.get("scope") if isinstance(approval, dict) else None
+    binding = scope.get("approvalBinding") if isinstance(scope, dict) else None
+    if not isinstance(binding, dict) or not binding.get("proposalId"):
+        return None
+    keys = (
+        "proposalId", "proposalRevision", "proposalSnapshotDigest",
+        "originalHumanPromptDigest", "selectedPromptKind", "selectedPromptDigest",
+    )
+    if any(key not in binding for key in keys):
+        raise AuthorityViolation("PROMPT_PROPOSAL_APPROVAL_BINDING_INCOMPLETE")
+    if str(binding["selectedPromptDigest"]) != digest(str(objective)):
+        raise AuthorityViolation("PROMPT_PROPOSAL_SELECTED_PROMPT_MISMATCH_AT_EXECUTION")
+    proposal = store.require_state(PromptProposalAggregate.stream_id(str(binding["proposalId"])))
+    if proposal.get("state") != "active":
+        raise AuthorityViolation("PROMPT_PROPOSAL_NOT_ACTIVE_AT_EXECUTION")
+    if int(binding["proposalRevision"]) != int(proposal.get("revision", -1)):
+        raise AuthorityViolation("PROMPT_PROPOSAL_REVISION_MISMATCH_AT_EXECUTION")
+    if str(binding["originalHumanPromptDigest"]) != str(proposal.get("originalPromptDigest")):
+        raise AuthorityViolation("PROMPT_PROPOSAL_ORIGINAL_DIGEST_MISMATCH_AT_EXECUTION")
+    if str(binding["proposalSnapshotDigest"]) != digest(proposal):
+        raise AuthorityViolation("PROMPT_PROPOSAL_SNAPSHOT_MISMATCH_AT_EXECUTION")
+    return {key: binding[key] for key in keys}
+
+
 def request_prompt_proposal_approval(service: Any, intent: Dict[str, Any],
                                      metadata: Dict[str, Any]) -> Dict[str, Any]:
     _require_human(metadata)

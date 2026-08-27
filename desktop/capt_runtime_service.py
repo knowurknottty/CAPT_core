@@ -60,10 +60,12 @@ from capt_runtime.model_approval_binding import (
     build_bound_model_operator_approval, staging_root_for_ledger,
 )
 from capt_runtime.prepared_execution import PreparedApprovedModelExecution, freeze
+from capt_runtime.prompt_proposals import authoritative_proposal_binding_for_execution
 from capt_runtime.verification_baseline import capture_verification_baseline
 from capt_runtime.authored_skills import (
     parse_authored_skill_request, prepare_runtime_skill_context, summarize_skill_context,
 )
+from desktop.prompt_compiler_provider import build_local_prompt_compiler
 
 
 RUNTIME_VERSION = getattr(capt_runtime, "RUNTIME_VERSION", "0.1.0")
@@ -582,7 +584,7 @@ class RuntimeQueryService:
                 return {"ok": True, "result": {
                     "schemaVersion": CONTRACT_SCHEMA_VERSION,
                     "queryOperations": ["identity", "capabilities", "list_aggregates", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state"] + (["lab_engines"] if self.lab_registry is not None else []),
-                    "commandOperations": ["create_mission", "request_model_prompt_approval", "submit_approval_decision", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool"] + (["run_lab_engine_advisory"] if self.lab_registry is not None else []),
+                    "commandOperations": ["create_mission", "compile_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool"] + (["run_lab_engine_advisory"] if self.lab_registry is not None else []),
                     "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True, "toolRegistry": True, "toolBroker": True, "labEngines": self.lab_registry is not None},
                     "lifecycleOperations": {"checkpoint": True, "shutdown": True, "resume": True},
                 }}
@@ -687,6 +689,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             probe.close()
 
     runtime = create_runtime(str(ledger_path))
+    prompt_compiler = build_local_prompt_compiler(Path(ledger_path).parent / "ui")
     _reconcile_stranded_driver_runs(runtime, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     runtime.reconcile_stranded_tools()
     store = runtime.store
@@ -745,7 +748,9 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             # reusing a stale session's authority (Phase 3).
             operator_id = "operator-" + (getpass.getuser() or "local")
             session_id = "sess-" + secrets.token_hex(8)
-            cmd_svc = runtime.command_service(operator_id, session_id)
+            cmd_svc = runtime.command_service(
+                operator_id, session_id, prompt_compiler=prompt_compiler
+            )
             provider_governor = _build_provider_governor(store)
             # Fixed v0.5 OpenHarness inspection: service-owned runner uses the
             # already-created canonical RuntimeComposition; no duplicate runtime.
@@ -820,6 +825,13 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     exclude_run_id=str(run_id), ledger_dir=ledger_dir,
                 )
                 context_pack_digest = continuation["contextPackDigest"]
+                # Recover proposal identity only from authoritative approval state.
+                approval_request_id = payload.get("approvalRequestId")
+                if not approval_request_id:
+                    raise AuthorityViolation("MODEL_PROMPT_APPROVAL_RECEIPT_REQUIRED")
+                proposal_binding = authoritative_proposal_binding_for_execution(
+                    store, str(approval_request_id), str(objective)
+                )
                 prompt_assembly = build_prompt_assembly(
                     human_prompt=str(objective), response_mode=response_mode,
                     enhancement_engine=enhancement_engine,
@@ -831,9 +843,6 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 # Runtime authority binds human approval to the exact
                 # model-visible assembly. Client booleans are provenance only;
                 # no client can use OFF/no-transform as a governance bypass.
-                approval_request_id = payload.get("approvalRequestId")
-                if not approval_request_id:
-                    raise AuthorityViolation("MODEL_PROMPT_APPROVAL_RECEIPT_REQUIRED")
                 bound_assembly = build_bound_model_operator_approval(
                     human_prompt=str(objective), response_mode=response_mode,
                     enhancement_engine=enhancement_engine, mission_id=str(mission_id),
@@ -846,6 +855,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     context_pack_digest=context_pack_digest,
                     continuation_context=continuation["records"],
                     authored_skill_context=skill_context,
+                    proposal_binding=proposal_binding,
                 )
                 # This read-only check catches a mismatched approval before the
                 # command service consumes the one-use receipt.
