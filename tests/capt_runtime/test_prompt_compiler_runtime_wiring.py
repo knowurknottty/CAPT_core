@@ -197,3 +197,41 @@ def test_transport_resolves_unambiguous_local_model_alias(monkeypatch):
     })
 
     assert seen["body"]["model"] == "Youssofal/Qwen3.8-27B-MTPLX-Optimized-Speed"
+
+
+def test_remote_prompt_compiler_default_timeout_is_bounded(monkeypatch):
+    from desktop.prompt_compiler_provider import (
+        OpenAICompatiblePromptCompilerTransport,
+        PromptCompilerSelection,
+    )
+
+    seen = {}
+
+    def fake_urlopen(request, timeout):
+        seen["timeout"] = timeout
+        content = json.dumps(_stage("OMNI"))
+        payload = {"choices": [{"message": {"content": content}}]}
+        return _Response(json.dumps(payload).encode("utf-8"))
+
+    monkeypatch.setattr(
+        "desktop.prompt_compiler_provider.urllib.request.urlopen", fake_urlopen
+    )
+    transport = OpenAICompatiblePromptCompilerTransport(
+        PromptCompilerSelection(
+            "openrouter",
+            "z-ai/glm-5.3-flash",
+            "https://openrouter.ai/api/v1",
+            "remote",
+            "keychain:openrouter",
+            True,
+        ),
+        api_key="test-key",
+    )
+    transport({
+        "stage": "OMNI",
+        "allowedCapabilities": [],
+        "responseSchema": {"type": "object"},
+        "currentPrompt": "stress prompt",
+    })
+
+    assert 0 < seen["timeout"] <= 20

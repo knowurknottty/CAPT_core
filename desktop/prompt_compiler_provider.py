@@ -191,7 +191,7 @@ class OpenAICompatiblePromptCompilerTransport:
         selection: PromptCompilerSelection,
         *,
         api_key: str = "",
-        timeout_seconds: int = 120,
+        timeout_seconds: Optional[int] = None,
     ):
         actual = endpoint_class(selection.base_url)
         if selection.endpoint_class == "local" and actual != "local":
@@ -204,7 +204,11 @@ class OpenAICompatiblePromptCompilerTransport:
             raise ValueError("remote prompt compiler credential unavailable")
         self.selection = selection
         self.api_key = api_key
-        self.timeout_seconds = int(timeout_seconds)
+        self.timeout_seconds = (
+            int(timeout_seconds)
+            if timeout_seconds is not None
+            else (20 if selection.endpoint_class == "remote" else 120)
+        )
         self._resolved_model: Optional[str] = None
 
     @staticmethod

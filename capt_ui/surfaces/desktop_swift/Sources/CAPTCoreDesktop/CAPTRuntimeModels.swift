@@ -46,6 +46,25 @@ public struct CAPTChatMessage: Identifiable, Codable, Equatable, Sendable {
     }
 }
 
+public struct CAPTChatMessagePresentation: Equatable, Sendable {
+    public let fullText: String
+    public let collapsedText: String
+    public let characterCount: Int
+    public let requiresExpansion: Bool
+
+    public init(text: String, collapsedCharacterLimit: Int = 1_600) {
+        precondition(collapsedCharacterLimit > 0, "collapsedCharacterLimit must be positive")
+        fullText = text
+        characterCount = text.count
+        requiresExpansion = characterCount > collapsedCharacterLimit
+        if requiresExpansion {
+            collapsedText = String(text.prefix(collapsedCharacterLimit)) + "…"
+        } else {
+            collapsedText = text
+        }
+    }
+}
+
 public enum CAPTApprovalValidity: String, Equatable, Sendable {
     case valid
     case expired

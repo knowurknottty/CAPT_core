@@ -96,8 +96,10 @@ struct ChatView: View {
 
 private struct MessageRow: View {
     let message: CAPTChatMessage
+    @State private var showsFullMessage = false
 
     var body: some View {
+        let presentation = CAPTChatMessagePresentation(text: message.text)
         HStack {
             if message.role == .user { Spacer(minLength: 80) }
             VStack(alignment: .leading, spacing: 7) {
@@ -113,10 +115,32 @@ private struct MessageRow: View {
                             .background(.quaternary, in: Capsule())
                     }
                 }
-                Text(message.text)
-                    .textSelection(.enabled)
-                    .font(.body)
+                if presentation.requiresExpansion && showsFullMessage {
+                    ScrollView {
+                        Text(presentation.fullText)
+                            .textSelection(.enabled)
+                            .font(.body)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: 360)
+                } else {
+                    Text(presentation.collapsedText)
+                        .textSelection(.enabled)
+                        .font(.body)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if presentation.requiresExpansion {
+                    Button(showsFullMessage
+                           ? "Collapse message"
+                           : "Show full message (\(presentation.characterCount) chars)") {
+                        showsFullMessage.toggle()
+                    }
+                    .buttonStyle(.link)
+                    .font(.caption)
+                }
             }
+            .frame(maxWidth: 760, alignment: .leading)
             .padding(13)
             .background(
                 message.role == .user ? AnyShapeStyle(Color.accentColor.opacity(0.15)) : AnyShapeStyle(.thinMaterial),
