@@ -445,12 +445,13 @@ def _seed_memory_store(mem_store) -> None:
 class RuntimeQueryService:
     def __init__(
         self, store: EventStore, demo: Optional[Dict[str, Any]] = None,
-        memory_engine: Any = None, lab_registry: Any = None,
+        memory_engine: Any = None, lab_registry: Any = None, mcp_manager: Any = None,
     ) -> None:
         self.store = store
         self.demo = demo or {}
         self.memory_engine = memory_engine
         self.lab_registry = lab_registry
+        self.mcp_manager = mcp_manager
 
     def identity(self) -> Dict[str, Any]:
         return {
@@ -583,9 +584,9 @@ class RuntimeQueryService:
             if op == "capabilities":
                 return {"ok": True, "result": {
                     "schemaVersion": CONTRACT_SCHEMA_VERSION,
-                    "queryOperations": ["identity", "capabilities", "list_aggregates", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state"] + (["lab_engines"] if self.lab_registry is not None else []),
+                    "queryOperations": ["identity", "capabilities", "list_aggregates", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers"] + (["lab_engines"] if self.lab_registry is not None else []),
                     "commandOperations": ["create_mission", "compile_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool"] + (["run_lab_engine_advisory"] if self.lab_registry is not None else []),
-                    "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True, "toolRegistry": True, "toolBroker": True, "labEngines": self.lab_registry is not None},
+                    "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True, "toolRegistry": True, "toolBroker": True, "labEngines": self.lab_registry is not None, "mcpClient": self.mcp_manager is not None},
                     "lifecycleOperations": {"checkpoint": True, "shutdown": True, "resume": True},
                 }}
             if op == "list_aggregates":
@@ -638,6 +639,12 @@ class RuntimeQueryService:
                     "hardStopTokens": p.hard_stop_tokens(),
                     "modelSafeLimitTokens": p.model_safe_limit_tokens(),
                 }}
+            if op == "mcp_servers":
+                if self.mcp_manager is None:
+                    return {"ok": True, "result": {
+                        "schemaVersion": "1.0.0", "stateDirectory": None, "servers": []
+                    }}
+                return {"ok": True, "result": self.mcp_manager.snapshot()}
             if op == "get_memory_state":
                 if self.memory_engine is None:
                     return {"ok": False, "error": "memory engine not active"}
@@ -688,7 +695,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
         finally:
             probe.close()
 
-    runtime = create_runtime(str(ledger_path))
+    runtime = create_runtime(str(ledger_path), enable_mcp=True)
     prompt_compiler = build_prompt_compiler(Path(ledger_path).parent / "ui")
     _reconcile_stranded_driver_runs(runtime, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     runtime.reconcile_stranded_tools()
@@ -708,7 +715,9 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
     from capt_lab.registry import build_default_registry
     from capt_lab.runtime import run_lab_advisory
     lab_registry = build_default_registry()
-    query = RuntimeQueryService(store, demo, memory_engine, lab_registry=lab_registry)
+    query = RuntimeQueryService(
+        store, demo, memory_engine, lab_registry=lab_registry, mcp_manager=runtime.mcp_manager
+    )
 
     token = secrets.token_hex(32)
     tf = Path(token_file)

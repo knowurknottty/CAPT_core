@@ -16,6 +16,7 @@ from .drivers.openharness import DESCRIPTOR, OpenHarnessDriver
 from .drivers.registry import DriverRegistry
 from .steered_service import SteeredRuntimeService
 from .memory.engine import MemoryTriggerEngine
+from .mcp import MCPManager
 from .memory.store import MemoryStore
 from .services import RuntimeService
 from .store import EventStore
@@ -47,6 +48,7 @@ class RuntimeComposition:
     tool_broker: ToolBroker
     ssh_profile_registry: SSHProfileRegistry
     docker_profile_registry: DockerProfileRegistry
+    mcp_manager: MCPManager | None
 
     def command_service(self, operator_id: str, session_id: str, *, prompt_compiler=None):
         # Import lazily to avoid a desktop-to-runtime import cycle at module load.
@@ -122,6 +124,8 @@ class RuntimeComposition:
         return self.tool_broker.reconcile_stranded()
 
     def close(self) -> None:
+        if self.mcp_manager is not None:
+            self.mcp_manager.close()
         self.memory_engine.close()
         self.memory_store.close()
         self.store.close()
@@ -134,6 +138,8 @@ def create_runtime(
     model_safe_limit_steps: int = 8,
     ssh_profiles: Iterable[SSHProfile] = (),
     docker_profiles: Iterable[DockerProfile] = (),
+    enable_mcp: bool = False,
+    mcp_timeout: float = 3.0,
 ) -> RuntimeComposition:
     """Construct every operator-owned runtime dependency exactly once."""
     ledger = str(Path(ledger_path))
@@ -178,6 +184,16 @@ def create_runtime(
             adapter,
             readiness_probe=readiness_probe(descriptor["toolId"], adapter.readiness),
         )
+    mcp_manager = None
+    if enable_mcp:
+        mcp_manager = MCPManager(Path(ledger).parent, timeout=mcp_timeout)
+        mcp_manager.refresh_all()
+        for descriptor, adapter in mcp_manager.tool_bindings():
+            tool_registry.register(
+                descriptor,
+                adapter,
+                readiness_probe=readiness_probe(descriptor["toolId"], adapter.readiness),
+            )
     now = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     tool_broker = ToolBroker(service, tool_registry, now=now)
     return RuntimeComposition(
@@ -190,4 +206,5 @@ def create_runtime(
         tool_broker=tool_broker,
         ssh_profile_registry=ssh_profile_registry,
         docker_profile_registry=docker_profile_registry,
+        mcp_manager=mcp_manager,
     )

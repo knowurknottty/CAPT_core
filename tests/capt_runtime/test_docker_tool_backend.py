@@ -41,14 +41,37 @@ def _daemon_available(context: str = "desktop-linux") -> bool:
     docker = shutil.which("docker")
     if not docker:
         return False
-    completed = subprocess.run(
-        [docker, "--context", context, "info", "--format", "{{.ServerVersion}}"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        timeout=5,
-        check=False,
-    )
+    try:
+        completed = subprocess.run(
+            [docker, "--context", context, "info", "--format", "{{.ServerVersion}}"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return False
     return completed.returncode == 0
+
+
+def test_daemon_available_treats_probe_timeout_as_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/docker")
+
+    def timeout(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd=args[0], timeout=kwargs.get("timeout", 5))
+
+    monkeypatch.setattr(subprocess, "run", timeout)
+    assert _daemon_available() is False
+
+
+def test_daemon_available_treats_probe_oserror_as_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(shutil, "which", lambda name: "/usr/bin/docker")
+
+    def unavailable(*args, **kwargs):
+        raise OSError("docker probe unavailable")
+
+    monkeypatch.setattr(subprocess, "run", unavailable)
+    assert _daemon_available() is False
 
 
 def _profile(tmp_path: Path, *, image: str | None = None, mounts=(), network_mode="none") -> DockerProfile:
