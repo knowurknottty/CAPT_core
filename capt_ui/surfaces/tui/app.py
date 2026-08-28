@@ -99,7 +99,7 @@ class CaptTUI(App):
     CSS = """
     #workbench { height: auto; }
     #left, #center, #right { width: 1fr; padding: 1; }
-    #model-filter, #prompt, #provider-select, #model-select { margin: 1 0; }
+    #model-filter, #workspace-root, #prompt, #provider-select, #model-select { margin: 1 0; }
     #output, #current-run { height: auto; min-height: 5; }
     Button { margin-right: 1; }
     """
@@ -144,6 +144,7 @@ class CaptTUI(App):
                     yield Static("Governed provider run", id="run-title")
                     yield Select([("Ollama", "ollama"), ("OpenRouter", "openrouter")], value="ollama", id="provider-select")
                     yield Input(placeholder="Filter models. Tab selects the model list.", id="model-filter")
+                    yield Input(placeholder="Workspace root (required, e.g. /path/to/project)", id="workspace-root")
                     with Horizontal():
                         yield Select([], id="model-select")
                         yield Select([(mode, mode) for mode in RESPONSE_MODES], value="SPOCK", id="response-mode")
@@ -391,23 +392,32 @@ class CaptTUI(App):
         self._current_run = {"provider": self._selected_provider, "model": self._selected_model, "status": "submitting"}
         self._show_current_run()
         self._set_status("connected")
+        workspace_root = self.query_one("#workspace-root", Input).value.strip()
+        if not workspace_root:
+            self._run_busy = False
+            self.query_one("#run", Button).disabled = False
+            self._show_output("Run failed: TARGET_WORKSPACE_REQUIRED")
+            self.notify("Workspace root required", severity="error")
+            return
         self._dispatch_run(
-            self._selected_provider, self._selected_model, prompt, engine,
+            self._selected_provider, self._selected_model, prompt, engine, workspace_root,
             str(self.query_one("#response-mode", Select).value),
             int(str(self.query_one("#context-budget", Select).value)), verification_required,
         )
 
     @work(thread=True, exclusive=True)
-    def _dispatch_run(self, provider: str, model: str, prompt: str, engine: str,
+    def _dispatch_run(self, provider: str, model: str, prompt: str, engine: str, workspace_root: str,
                       response_mode: str, context_budget: int, verification_required: bool) -> None:
         """The blocking socket operation runs off the Textual event loop."""
         receipt: dict[str, Any] | None = None
         error = ""
         try:
             assert self._op is not None
+            from capt_runtime.workspace import resolve_target_root
+            target_root = resolve_target_root(workspace_root)
             receipt = self._op.client.command(
                 "run_approved_hermes_inspection",
-                {"provider": provider, "model": model, "objective": prompt, "targetRoot": str(Path.cwd()),
+                {"provider": provider, "model": model, "objective": prompt, "targetRoot": target_root,
                  "promptEnhancement": engine, "responseMode": response_mode,
                  "requestedContextBudget": context_budget, "humanVerificationRequired": verification_required},
                 "tui-run-" + uuid.uuid4().hex,

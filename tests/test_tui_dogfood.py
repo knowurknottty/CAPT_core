@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from types import SimpleNamespace
 
 from capt_ui.operator.contract import Dashboard, OperatorStatus, RuntimeHealth
@@ -110,6 +111,7 @@ def test_run_receipt_releases_busy_and_payload_matches_visible_selection(monkeyp
             app._refresh_models("ollama", preserve_model=False)
             app.query_one("#enhancement-select").value = "OFF"
             app.query_one("#prompt").text = "exact prompt"
+            app.query_one("#workspace-root").value = str(Path.cwd())
             app.action_run()
             for _ in range(10):
                 await asyncio.sleep(0.05)
@@ -121,6 +123,7 @@ def test_run_receipt_releases_busy_and_payload_matches_visible_selection(monkeyp
             assert operation == "run_approved_hermes_inspection"
             assert payload["provider"] == "ollama"
             assert payload["model"] == "muse-glimmer:30b-mlx"
+            assert payload["targetRoot"] == str(Path.cwd().resolve())
             assert "CAPT TEST" in str(app.query_one("#output").render())
             assert "dr-ui" in str(app.query_one("#current-run").render())
             assert "requested 32k / effective 8k" in str(app.query_one("#current-run").render())

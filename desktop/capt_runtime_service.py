@@ -681,9 +681,10 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 payload = command.get("payload", {})
                 command_fingerprint = commands.fingerprint("run_approved_hermes_inspection", payload)
                 objective = payload.get("objective")
-                target_root = payload.get("targetRoot")
-                if not objective or not target_root:
-                    raise ValueError("MODEL_TASK_OBJECTIVE_OR_TARGET_MISSING")
+                from capt_runtime.workspace import resolve_target_root
+                if not objective:
+                    raise ValueError("MODEL_TASK_OBJECTIVE_MISSING")
+                target_root = resolve_target_root(payload.get("targetRoot"))
                 command_id = command["commandId"]
                 now = command.get("timestamp") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
                 mission_id = payload.get("missionId") or ("m-model-" + command_id)

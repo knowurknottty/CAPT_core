@@ -256,6 +256,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--provider", required=True, choices=["ollama", "openrouter"])
     p.add_argument("--model", required=True)
     p.add_argument("--prompt", required=True)
+    p.add_argument("--target-root", required=True, help="explicit repository/workspace root for governed filesystem access")
     p.add_argument("--state-dir", default=None)
     p.add_argument("--idempotency-key", default=None)
     sub.add_parser("tui", help="launch the interactive CAPT operator console")
@@ -363,7 +364,12 @@ def _cmd_run(args, as_json: bool) -> int:
     client=RuntimeClient(str(paths["sock"]),str(paths["token"]))
     try:
         client.connect()
-        receipt=client.command("run_approved_hermes_inspection", {"provider":args.provider,"model":args.model,"objective":args.prompt,"targetRoot":str(Path.cwd())}, args.idempotency_key)
+        from capt_runtime.workspace import resolve_target_root
+        try:
+            target_root = resolve_target_root(args.target_root)
+        except ValueError as exc:
+            return _fail(str(exc))
+        receipt=client.command("run_approved_hermes_inspection", {"provider":args.provider,"model":args.model,"objective":args.prompt,"targetRoot":target_root}, args.idempotency_key)
         print(_json_or_human(receipt,as_json))
         return 0 if receipt.get("status") in ("accepted","idempotent") else 1
     finally: client.disconnect()
