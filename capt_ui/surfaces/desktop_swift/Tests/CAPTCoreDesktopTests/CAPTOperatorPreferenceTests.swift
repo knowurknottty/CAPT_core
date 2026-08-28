@@ -63,4 +63,36 @@ esac
         XCTAssertEqual(defaults.targetRoot, "/Users/knowurknot/CAPT_core")
     }
 
+
+    func testExecutionSelectionResolverKeepsCurrentChatModelVisibleWithDiscoveredInventory() throws {
+        let providers = try CAPTOperatorCLI.decodeProviders(Data(#"""
+        [{"id":"openrouter","name":"OpenRouter","kind":"cloud","transport":"openai_compatible","key_ref":"keychain:openrouter","context_limit":1048576,"enabled":true,"selected":true,"health":"green","latency_ms":42,"models":["z-ai/glm-5.3-flash","tencent/hy3","xiaomi/mimo-v2.5"],"capabilities":["chat"]}]
+        """#.utf8))
+
+        XCTAssertEqual(
+            CAPTExecutionSelectionResolver.modelIDs(
+                providers: providers,
+                providerID: "openrouter",
+                currentModel: "custom/session-model"
+            ),
+            ["custom/session-model", "z-ai/glm-5.3-flash", "tencent/hy3", "xiaomi/mimo-v2.5"]
+        )
+    }
+
+    func testExecutionSelectionResolverUsesProviderDefaultWhenCurrentModelIsInvalid() throws {
+        let providers = try CAPTOperatorCLI.decodeProviders(Data(#"""
+        [
+          {"id":"openrouter","name":"OpenRouter","kind":"cloud","transport":"openai_compatible","key_ref":"keychain:openrouter","context_limit":1048576,"enabled":true,"selected":true,"health":"green","latency_ms":42,"models":["z-ai/glm-5.3-flash","tencent/hy3"],"capabilities":["chat"]},
+          {"id":"ollama","name":"Ollama","kind":"local","transport":"ollama","key_ref":"<none>","context_limit":32768,"enabled":true,"selected":false,"health":"green","latency_ms":12,"models":["qwen-local"],"capabilities":["chat"]}
+        ]
+        """#.utf8))
+        let chosen = CAPTExecutionSelectionResolver.modelWhenSwitchingProvider(
+            providers: providers,
+            providerID: "openrouter",
+            currentModel: "qwen-local",
+            operatorDefault: .init(providerID: "openrouter", modelID: "z-ai/glm-5.3-flash")
+        )
+        XCTAssertEqual(chosen, "z-ai/glm-5.3-flash")
+    }
+
 }

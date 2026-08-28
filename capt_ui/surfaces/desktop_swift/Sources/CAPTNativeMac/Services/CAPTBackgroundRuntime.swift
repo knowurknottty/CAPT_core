@@ -48,6 +48,21 @@ actor CAPTBackgroundRuntime {
 
     func disconnect() { client.disconnect() }
 
+    func authoritativeTaskState(taskID: String) throws -> String {
+        let response: [String: Any]
+        do {
+            response = try client.query(op: "get_state", payload: ["streamId": "task-" + taskID])
+        } catch {
+            _ = try client.connect()
+            response = try client.query(op: "get_state", payload: ["streamId": "task-" + taskID])
+        }
+        if let result = response["result"] as? [String: Any],
+           let state = result["state"] as? String {
+            return state
+        }
+        return response["state"] as? String ?? "unknown"
+    }
+
     func identity() throws -> CAPTRuntimeIdentitySnapshot {
         CAPTRuntimeControlProjection.identity(
             try client.query(op: "identity", payload: [:])

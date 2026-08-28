@@ -288,6 +288,44 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
     }
 
     @discardableResult
+    public mutating func reconcileAuthoritativeExecutionState(
+        _ taskState: String,
+        for id: UUID
+    ) -> Bool {
+        let normalized = taskState.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let terminalProblemStates: Set<String> = ["suspended", "failed", "cancelled", "canceled"]
+        guard terminalProblemStates.contains(normalized),
+              let index = index(of: id) else { return false }
+
+        var currentFlow = flow(for: id)
+        guard currentFlow.phase == .executing ||
+                currentFlow.phase == .awaitingApproval ||
+                currentFlow.phase == .requestingApproval else { return false }
+
+        let authorityState: String
+        let message: String
+        if normalized == "suspended" {
+            authorityState = "reconciliation_required"
+            message = "RuntimeService suspended this task because the external dispatch outcome is indeterminate. Governed reconciliation is required before any retry."
+        } else {
+            authorityState = normalized == "canceled" ? "cancelled" : normalized
+            message = "RuntimeService reports the authoritative task state as \(authorityState). The local execution cursor has been retired."
+        }
+
+        sessions[index].pendingApproval = nil
+        sessions[index].promptProposal = nil
+        sessions[index].messages.append(CAPTChatMessage(
+            role: .system,
+            text: message,
+            authorityState: authorityState
+        ))
+        sessions[index].updatedAt = Date()
+        currentFlow.approvalSuperseded(message: message)
+        flows[id] = currentFlow
+        return true
+    }
+
+    @discardableResult
     public mutating func failExecution(
         message: String,
         for id: UUID

@@ -18,24 +18,43 @@ struct InspectorView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                GroupBox("Next execution") {
+                GroupBox("Next execution · this chat") {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Provider").font(.caption).foregroundStyle(.secondary)
-                        TextField(
+                        Picker(
                             "Provider",
-                            text: Binding(
+                            selection: Binding(
                                 get: { store.provider },
                                 set: { store.setExecutionProvider($0) }
                             )
-                        )
+                        ) {
+                            ForEach(store.executionProviderIDs, id: \.self) { providerID in
+                                Text(store.executionProviderLabel(providerID)).tag(providerID)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+
                         Text("Model").font(.caption).foregroundStyle(.secondary)
-                        TextField(
+                        Picker(
                             "Model",
-                            text: Binding(
+                            selection: Binding(
                                 get: { store.model },
                                 set: { store.setExecutionModel($0) }
                             )
-                        )
+                        ) {
+                            ForEach(store.executionModelIDs, id: \.self) { modelID in
+                                Text(modelID).tag(modelID)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+
+                        Text("Session-scoped. Switching chats restores that chat’s provider/model. New chats use the Providers default.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
                         Text("Target root").font(.caption).foregroundStyle(.secondary)
                         TextField(
                             "Target root",

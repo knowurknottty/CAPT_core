@@ -381,4 +381,61 @@ extension CAPTNativeChatWorkspaceTests {
         XCTAssertEqual(workspace.activeFlow.phase, .requestingApproval)
         XCTAssertFalse(workspace.activeFlow.canCompose)
     }
+
+    func testChatsRetainIndependentExecutionModelsWhenSwitching() {
+        var workspace = CAPTNativeChatWorkspace()
+        _ = workspace.newChat(
+            id: oldID, provider: "openrouter", model: "z-ai/glm-5.3-flash", targetRoot: "/repo-a"
+        )
+        _ = workspace.newChat(
+            id: newID, provider: "openrouter", model: "tencent/hy3", targetRoot: "/repo-b"
+        )
+
+        XCTAssertTrue(workspace.activate(oldID))
+        XCTAssertEqual(workspace.activeSession?.model, "z-ai/glm-5.3-flash")
+        workspace.updateConfiguration(
+            for: oldID, provider: "openrouter", model: "xiaomi/mimo-v2.5", targetRoot: "/repo-a"
+        )
+
+        XCTAssertTrue(workspace.activate(newID))
+        XCTAssertEqual(workspace.activeSession?.model, "tencent/hy3")
+        XCTAssertEqual(workspace.activeSession?.targetRoot, "/repo-b")
+        XCTAssertTrue(workspace.activate(oldID))
+        XCTAssertEqual(workspace.activeSession?.model, "xiaomi/mimo-v2.5")
+        XCTAssertEqual(workspace.activeSession?.targetRoot, "/repo-a")
+    }
+
+
+    func testAuthoritativeSuspensionRetiresConsumedApprovalAndStopsExecutingFlow() {
+        let session = CAPTNativeSession(
+            id: oldID, missionID: "mission-1", title: "Old",
+            messages: [], provider: "openrouter", model: "z-ai/glm-5.3-flash",
+            targetRoot: "/repo", pendingApproval: pending()
+        )
+        var workspace = CAPTNativeChatWorkspace(sessions: [session], activeSessionID: oldID)
+        XCTAssertNotNil(workspace.beginExecution(for: oldID))
+        XCTAssertEqual(workspace.activeFlow.phase, .executing)
+
+        XCTAssertTrue(workspace.reconcileAuthoritativeExecutionState("suspended", for: oldID))
+
+        XCTAssertNil(workspace.activePendingApproval)
+        XCTAssertNil(workspace.activePromptProposal)
+        XCTAssertEqual(workspace.activeFlow.phase, .recoverableFailure)
+        XCTAssertEqual(workspace.activeSession?.messages.last?.authorityState, "reconciliation_required")
+        XCTAssertTrue(workspace.activeFlow.canCompose)
+    }
+
+    func testAuthoritativeRunningStateDoesNotMutateLocalExecutionCursor() {
+        let session = CAPTNativeSession(
+            id: oldID, title: "Old", messages: [], provider: "openrouter",
+            model: "z-ai/glm-5.3-flash", targetRoot: "/repo", pendingApproval: pending()
+        )
+        var workspace = CAPTNativeChatWorkspace(sessions: [session], activeSessionID: oldID)
+        XCTAssertNotNil(workspace.beginExecution(for: oldID))
+
+        XCTAssertFalse(workspace.reconcileAuthoritativeExecutionState("running", for: oldID))
+        XCTAssertNotNil(workspace.activePendingApproval)
+        XCTAssertEqual(workspace.activeFlow.phase, .executing)
+    }
+
 }

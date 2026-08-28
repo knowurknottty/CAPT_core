@@ -49,6 +49,7 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var labControlMessage = ""
 
     private let runtime: CAPTBackgroundRuntime
+    private let reconciliationRuntime: CAPTBackgroundRuntime
     private let sessionStore: CAPTEncryptedSessionStore
     private var providerWarmIdentity: String?
     private var cachedOperatorProvider = "ollama"
@@ -56,9 +57,11 @@ final class CAPTOperatorStore: ObservableObject {
 
     init(
         runtime: CAPTBackgroundRuntime = CAPTBackgroundRuntime(),
+        reconciliationRuntime: CAPTBackgroundRuntime = CAPTBackgroundRuntime(),
         sessionStore: CAPTEncryptedSessionStore = CAPTEncryptedSessionStore()
     ) {
         self.runtime = runtime
+        self.reconciliationRuntime = reconciliationRuntime
         self.sessionStore = sessionStore
         restoreSessionsAsync()
         refreshOperatorState()
@@ -100,16 +103,43 @@ final class CAPTOperatorStore: ObservableObject {
             activeChatFlow.canCompose
     }
 
-    func setExecutionProvider(_ value: String) {
-        persistConfiguration(
-            for: activeSessionID, provider: value, model: model, targetRoot: targetRoot
+    var executionProviderIDs: [String] {
+        CAPTExecutionSelectionResolver.providerIDs(
+            providers: providers, currentProvider: provider
         )
+    }
+
+    var executionModelIDs: [String] {
+        CAPTExecutionSelectionResolver.modelIDs(
+            providers: providers, providerID: provider, currentModel: model
+        )
+    }
+
+    func executionProviderLabel(_ providerID: String) -> String {
+        guard let snapshot = providers.first(where: { $0.id == providerID }) else {
+            return providerID
+        }
+        return snapshot.name == providerID ? providerID : "\(snapshot.name) · \(providerID)"
+    }
+
+    func setExecutionProvider(_ value: String) {
+        let nextModel = CAPTExecutionSelectionResolver.modelWhenSwitchingProvider(
+            providers: providers,
+            providerID: value,
+            currentModel: model,
+            operatorDefault: operatorPreferenceSelection
+        )
+        persistConfiguration(
+            for: activeSessionID, provider: value, model: nextModel, targetRoot: targetRoot
+        )
+        scheduleSelectedProviderPrewarmIfNeeded()
     }
 
     func setExecutionModel(_ value: String) {
         persistConfiguration(
             for: activeSessionID, provider: provider, model: value, targetRoot: targetRoot
         )
+        scheduleSelectedProviderPrewarmIfNeeded()
     }
 
     func setExecutionTargetRoot(_ value: String) {
@@ -191,6 +221,9 @@ final class CAPTOperatorStore: ObservableObject {
                 refreshMemory()
                 refreshCapabilities()
                 refreshLabs()
+                if let sessionID = activeSessionID {
+                    reconcileAuthoritativeExecution(for: sessionID, monitorWhileExecuting: false)
+                }
             } catch {
                 let message = error.localizedDescription
                 lastError = message
@@ -329,6 +362,7 @@ final class CAPTOperatorStore: ObservableObject {
 
         if activeSessionID == sessionID { taskState = "executing" }
         lastError = nil
+        reconcileAuthoritativeExecution(for: sessionID, monitorWhileExecuting: true)
 
         Task {
             do {
@@ -930,6 +964,48 @@ final class CAPTOperatorStore: ObservableObject {
             ? chatWorkspace.activeSession?.messages.last?.text
             : nil
         saveSessions()
+        scheduleSelectedProviderPrewarmIfNeeded()
+        reconcileAuthoritativeExecution(for: id, monitorWhileExecuting: false)
+    }
+
+    private func reconcileAuthoritativeExecution(
+        for sessionID: UUID,
+        monitorWhileExecuting: Bool
+    ) {
+        guard let taskID = chatWorkspace.session(sessionID)?.pendingApproval?.taskID else { return }
+        Task {
+            let attempts = monitorWhileExecuting ? 600 : 1
+            for attempt in 0..<attempts {
+                if attempt > 0 {
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                }
+                if monitorWhileExecuting {
+                    guard chatWorkspace.flow(for: sessionID).phase == .executing else { return }
+                } else {
+                    guard chatWorkspace.session(sessionID)?.pendingApproval?.taskID == taskID else { return }
+                }
+                do {
+                    let authoritativeState = try await reconciliationRuntime.authoritativeTaskState(
+                        taskID: taskID
+                    )
+                    let changed = mutateWorkspace {
+                        $0.reconcileAuthoritativeExecutionState(authoritativeState, for: sessionID)
+                    }
+                    if changed {
+                        if activeSessionID == sessionID {
+                            updateTaskStateFromActiveFlow()
+                            lastError = chatWorkspace.activeSession?.messages.last?.text
+                        }
+                        saveSessions()
+                        refreshHistory()
+                        return
+                    }
+                    if !monitorWhileExecuting { return }
+                } catch {
+                    if !monitorWhileExecuting { return }
+                }
+            }
+        }
     }
 
     private func syncSelectionFromActiveSession() {

@@ -46,6 +46,7 @@ struct CAPTNativeMacApp: App {
         )
         _store = StateObject(wrappedValue: CAPTOperatorStore(
             runtime: CAPTBackgroundRuntime(stateDirectory: stateRoot.path),
+            reconciliationRuntime: CAPTBackgroundRuntime(stateDirectory: stateRoot.path),
             sessionStore: sessionStore
         ))
     }

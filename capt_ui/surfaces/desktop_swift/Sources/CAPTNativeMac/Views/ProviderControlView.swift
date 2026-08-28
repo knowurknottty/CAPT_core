@@ -77,7 +77,7 @@ struct ProviderControlView: View {
 
     private var modelSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Default model").font(.headline)
+            Text("Default model for new chats").font(.headline)
             if let item = selectedProvider, !item.models.isEmpty {
                 Picker("Model", selection: Binding(
                     get: { store.operatorPreferenceSelection.modelID },
@@ -89,7 +89,7 @@ struct ProviderControlView: View {
                 }
                 .pickerStyle(.menu)
                 .disabled(store.isBusy)
-                Text("Default: \(store.operatorPreferenceSelection.modelID)")
+                Text("New chats: \(store.operatorPreferenceSelection.modelID)")
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 Text("No discovered models for the selected provider. Test the provider to refresh inventory.")

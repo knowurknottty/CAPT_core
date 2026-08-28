@@ -125,6 +125,48 @@ public enum CAPTOperatorPreferenceResolver {
 }
 
 
+public enum CAPTExecutionSelectionResolver {
+    public static func providerIDs(
+        providers: [CAPTProviderSnapshot],
+        currentProvider: String
+    ) -> [String] {
+        var values = providers.filter { $0.enabled }.map(\.id)
+        if !currentProvider.isEmpty, !values.contains(currentProvider) {
+            values.insert(currentProvider, at: 0)
+        }
+        return values
+    }
+
+    public static func modelIDs(
+        providers: [CAPTProviderSnapshot],
+        providerID: String,
+        currentModel: String
+    ) -> [String] {
+        var values = providers.first(where: { $0.id == providerID })?.models ?? []
+        if !currentModel.isEmpty, !values.contains(currentModel) {
+            values.insert(currentModel, at: 0)
+        }
+        return values
+    }
+
+    public static func modelWhenSwitchingProvider(
+        providers: [CAPTProviderSnapshot],
+        providerID: String,
+        currentModel: String,
+        operatorDefault: CAPTOperatorPreferenceSelection
+    ) -> String {
+        guard let provider = providers.first(where: { $0.id == providerID }) else {
+            return currentModel
+        }
+        if provider.models.contains(currentModel) { return currentModel }
+        if operatorDefault.providerID == providerID,
+           provider.models.contains(operatorDefault.modelID) {
+            return operatorDefault.modelID
+        }
+        return provider.models.first ?? currentModel
+    }
+}
+
 public struct CAPTNewChatDefaults: Equatable, Sendable {
     public let providerID: String
     public let modelID: String
