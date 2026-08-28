@@ -100,7 +100,23 @@ extension CAPTChatFlowTests {
         let flow = CAPTChatFlow(proposal: try proposal())
         XCTAssertEqual(flow.phase, .reviewingProposal)
         XCTAssertEqual(flow.proposalID, "pp-1")
+        XCTAssertTrue(flow.showsProposalControls)
         XCTAssertFalse(flow.canCompose)
+    }
+
+    func testPendingApprovalReplacesProposalControlsAfterEditedSelection() throws {
+        var flow = CAPTChatFlow(proposal: try proposal())
+        flow.beginApprovalRequest()
+        let approval = CAPTPendingApproval(
+            requestID: "approval-edited", missionID: "mission-1", taskID: "task-1",
+            driverRunID: "run-1", objective: "operator edited prompt", targetRoot: "/repo",
+            provider: "openrouter", model: "model-a", promptAssemblyDigest: "sha256:edited",
+            expiresAt: Date.distantFuture, proposalID: "pp-1", proposalRevision: 0,
+            selectedPromptKind: "edited"
+        )
+        flow.approvalPrepared(approval)
+        XCTAssertEqual(flow.phase, .awaitingApproval)
+        XCTAssertFalse(flow.showsProposalControls)
     }
 
     func testCompilationTransitionsToProposalReview() throws {
