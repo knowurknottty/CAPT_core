@@ -92,6 +92,10 @@ public struct CAPTChatFlow: Equatable, Sendable {
         phase == .compilingProposal || phase == .requestingApproval || phase == .executing
     }
 
+    public var showsProposalControls: Bool {
+        phase == .reviewingProposal
+    }
+
     public var canCompose: Bool {
         !isBusy && phase != .reviewingProposal && requestID == nil
     }

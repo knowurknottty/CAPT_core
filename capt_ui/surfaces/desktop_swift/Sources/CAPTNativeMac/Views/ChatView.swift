@@ -23,7 +23,8 @@ struct ChatView: View {
                             .id("chat-compiling-proposal")
                         }
 
-                        if let proposal = store.promptProposal {
+                        if let proposal = store.promptProposal,
+                           store.activeChatFlow.showsProposalControls {
                             PromptProposalCard(
                                 proposal: proposal,
                                 isBusy: store.isActiveChatBusy,
@@ -66,6 +67,12 @@ struct ChatView: View {
                 .onChange(of: store.messages.count) { _ in
                     if let id = store.messages.last?.id {
                         withAnimation { proxy.scrollTo(id, anchor: .bottom) }
+                    }
+                }
+                .onChange(of: store.pendingApproval?.requestID) { requestID in
+                    guard requestID != nil else { return }
+                    DispatchQueue.main.async {
+                        withAnimation { proxy.scrollTo("pending-approval", anchor: .center) }
                     }
                 }
             }
