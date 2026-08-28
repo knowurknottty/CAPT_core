@@ -26,6 +26,7 @@ final class CAPTAppDelegate: NSObject, NSApplicationDelegate {
 struct CAPTNativeMacApp: App {
     @NSApplicationDelegateAdaptor(CAPTAppDelegate.self) private var appDelegate
     @StateObject private var store: CAPTOperatorStore
+    @State private var selection: CAPTSidebarSection = .chat
 
     init() {
         let environment = ProcessInfo.processInfo.environment
@@ -51,7 +52,7 @@ struct CAPTNativeMacApp: App {
 
     var body: some Scene {
         Window("Inversion Labs CAPT", id: "capt-lab-main") {
-            ContentView(store: store)
+            ContentView(store: store, selection: $selection)
                 .frame(minWidth: 1120, minHeight: 720)
                 .onAppear { CAPTAppTelemetry.log.notice("ContentView appeared windows=\(NSApp.windows.count)") }
                 .task { store.connect() }
@@ -59,8 +60,11 @@ struct CAPTNativeMacApp: App {
         .defaultSize(width: 1280, height: 820)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("New Chat") { store.newChat() }
-                    .keyboardShortcut("n", modifiers: [.command])
+                Button("New Chat") {
+                    store.newChat()
+                    selection = .chat
+                }
+                .keyboardShortcut("n", modifiers: [.command])
             }
             CommandGroup(after: .appInfo) {
                 Button("Reconnect CAPT Runtime") { store.connect() }

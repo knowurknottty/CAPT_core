@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var store: CAPTOperatorStore
-    @State private var selection: CAPTSidebarSection = .chat
+    @Binding var selection: CAPTSidebarSection
 
     var body: some View {
         NavigationSplitView {

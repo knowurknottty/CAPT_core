@@ -101,7 +101,11 @@ class PromptCompiler:
             acceptance_criteria = result.success_criteria
             current_prompt = next_prompt
 
-        status = "clarification_required" if unresolved else "ready_for_approval"
+        # Model-generated ambiguities are advisory review notes, not approval vetoes.
+        # True clarification blockers are handled before model execution by
+        # _requires_clarification(route), where CAPT can prove the operator
+        # objective/scope is too underspecified to bind safely.
+        status = "ready_for_approval"
         return self._proposal(
             request,
             route,
