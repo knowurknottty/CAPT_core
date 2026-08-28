@@ -219,3 +219,29 @@ def test_forge_sigma_execute_with_bounded_repository_context(tmp_path):
     assert [p["stage"] for p in seen] == ["OMNI", "META", "FORGE", "SIGMA"]
     assert all(record.execution_enabled for record in proposal.stage_records)
     assert proposal.status == "ready_for_approval"
+
+
+def test_model_ambiguities_are_advisory_and_do_not_block_approval():
+    def transport(payload):
+        return {
+            "stage": payload["stage"],
+            "outcome": "bounded review",
+            "scope": "current request",
+            "inputs": ["operator prompt"],
+            "outputs": ["review"],
+            "constraints": ["preserve intent"],
+            "successCriteria": ["operator can approve"],
+            "ambiguities": ["Optional preference: exact presentation format is unspecified"],
+            "requestedCapabilities": [],
+        }
+
+    proposal = PromptCompiler(
+        runner=BoundedPromptCompilerRunner(transport),
+        provider=CompilerProvider("openrouter", "z-ai/glm-5.3-flash", "remote"),
+        remote_compilation_authorized=True,
+    ).compile(_request(requested_engine="OMNI"))
+
+    assert proposal.status == "ready_for_approval"
+    assert proposal.unresolved_questions == (
+        "Optional preference: exact presentation format is unspecified",
+    )

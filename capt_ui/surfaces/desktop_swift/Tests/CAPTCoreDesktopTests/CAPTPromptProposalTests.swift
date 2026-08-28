@@ -44,3 +44,25 @@ final class CAPTPromptProposalTests: XCTestCase {
         XCTAssertEqual(proposal.selectedPrompt(.edited, edited: "  custom prompt\n"), "custom prompt")
     }
 }
+
+
+extension CAPTPromptProposalTests {
+    func testLegacyModelGeneratedClarificationRemainsApprovalSelectable() throws {
+        var value = payload()
+        value["status"] = "clarification_required"
+        let proposal = try CAPTPromptProposal(dictionary: value)
+        XCTAssertTrue(proposal.isApprovalSelectable)
+    }
+
+    func testDeterministicClarificationWithoutExecutedStageRemainsBlocked() throws {
+        var value = payload()
+        value["status"] = "clarification_required"
+        value["stageRecords"] = [[
+            "stage": "OMNI", "executionEnabled": false,
+            "provider": "openrouter", "model": "z-ai/glm-5.3-flash",
+            "endpointClass": "remote", "rationale": "clarification required"
+        ]]
+        let proposal = try CAPTPromptProposal(dictionary: value)
+        XCTAssertFalse(proposal.isApprovalSelectable)
+    }
+}

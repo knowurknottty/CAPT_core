@@ -47,6 +47,13 @@ public struct CAPTPromptProposal: Codable, Equatable, Sendable {
     public let rationale: String
 
     public var isActive: Bool { state == "active" }
+    public var isApprovalSelectable: Bool {
+        if status == "ready_for_approval" { return true }
+        if status == "clarification_required" {
+            return stageRecords.contains(where: { $0.executionEnabled })
+        }
+        return false
+    }
     public var hasMaterialUpgrade: Bool {
         originalPromptDigest != proposedPromptDigest
     }
