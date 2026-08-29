@@ -115,8 +115,9 @@ public final class CAPTEncryptedSessionStore: @unchecked Sendable {
         if let override = env["CAPT_STATE_DIR"] ?? env["CAPT_SOLO_HOME"], !override.isEmpty {
             root = URL(fileURLWithPath: NSString(string: override).expandingTildeInPath)
         } else {
+            // Labs default: never fall back to the standard variant's state dir.
             root = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent(".capt", isDirectory: true)
+                .appendingPathComponent(".capt-inversion-labs", isDirectory: true)
         }
         return root.appendingPathComponent("ui", isDirectory: true)
             .appendingPathComponent("classic_native_sessions.enc")

@@ -46,8 +46,9 @@ public final class CAPTRuntimeClient: CAPTRuntimeCommanding {
         if let override = env["CAPT_STATE_DIR"], !override.isEmpty {
             stateDirectory = NSString(string: override).expandingTildeInPath
         } else {
+            // Labs default: never fall back to the standard variant's state dir.
             stateDirectory = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent(".capt", isDirectory: true).path
+                .appendingPathComponent(".capt-inversion-labs", isDirectory: true).path
         }
         self.init(
             socketPath: URL(fileURLWithPath: stateDirectory)
@@ -282,6 +283,24 @@ public final class CAPTRuntimeClient: CAPTRuntimeCommanding {
         }
     }
 
+    /// Seconds a send/recv may block before failing with a socket timeout.
+    /// Prevents a wedged runtime from hanging the operator UI indefinitely.
+    static let socketTimeoutSeconds: Int32 = 30
+
+    static func configureSocketTimeouts(fd: Int32) throws {
+        var tv = timeval(tv_sec: __darwin_time_t(socketTimeoutSeconds), tv_usec: 0)
+        let size = socklen_t(MemoryLayout<timeval>.size)
+        for (name, label) in [(SO_RCVTIMEO, "receive"), (SO_SNDTIMEO, "send")] {
+            var option = tv
+            let result = Darwin.setsockopt(fd, SOL_SOCKET, name, &option, size)
+            guard result == 0 else {
+                throw CAPTRuntimeClientError.socketFailure(
+                    "Unable to set CAPT socket \(label) timeout: \(String(cString: strerror(errno)))"
+                )
+            }
+        }
+    }
+
     private static func openUnixSocket(path: String) throws -> Int32 {
         var address = sockaddr_un()
         address.sun_family = sa_family_t(AF_UNIX)
@@ -306,6 +325,7 @@ public final class CAPTRuntimeClient: CAPTRuntimeCommanding {
         }
         do {
             try configureNoSigPipe(fd: fd)
+            try configureSocketTimeouts(fd: fd)
         } catch {
             Darwin.close(fd)
             throw error

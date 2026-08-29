@@ -28,8 +28,9 @@ public struct CAPTRuntimeBootstrapper {
         } else if let override = environment["CAPT_STATE_DIR"], !override.isEmpty {
             self.stateDirectory = NSString(string: override).expandingTildeInPath
         } else {
+            // Labs default: never fall back to the standard variant's state dir.
             self.stateDirectory = URL(fileURLWithPath: home)
-                .appendingPathComponent(".capt", isDirectory: true).path
+                .appendingPathComponent(".capt-inversion-labs", isDirectory: true).path
         }
         let stateCLI = URL(fileURLWithPath: self.stateDirectory)
             .appendingPathComponent("runtime-venv/bin/capt").path
