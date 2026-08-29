@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
+
+import pytest
 
 from capt_runtime import commands, contracts
 from capt_runtime.composition import create_runtime
+from capt_runtime.errors import CapabilityDenied
 from capt_runtime.tool_broker import tool_request_fingerprint
 from desktop.m1_command_service import RuntimeCommandService
 
@@ -109,6 +111,7 @@ def _seed_authority(runtime, root: Path, operation: str, *, suffix: str = "x", m
 def _tool_request(
     *, root: Path, tool_id: str, operation: str, arguments: list[dict],
     grant_id: str, lease_id: str, idem: str, consequential: bool,
+    target_identity: str | None = None,
 ) -> dict:
     request = {
         "schemaVersion": "1.0.0",
@@ -121,7 +124,7 @@ def _tool_request(
         "leaseId": lease_id,
         "reservationId": None,
         "backendId": "local",
-        "targetIdentity": str(root),
+        "targetIdentity": target_identity or str(root),
         "filesystemScope": str(root),
         "idempotencyKey": idem,
         "operationFingerprint": "sha256:" + "0" * 64,
@@ -264,5 +267,445 @@ def test_run_tool_fails_closed_when_broker_is_not_wired(tmp_path: Path) -> None:
         assert receipt["status"] == "rejected"
         assert receipt["classification"] == "internal"
         assert receipt["error"]["code"] == "TOOL_BROKER_UNAVAILABLE"
+    finally:
+        runtime.close()
+
+
+def test_world_receipt_crash_after_reservation_before_admission_is_reconciled(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "rt.db"))
+    try:
+        target = tmp_path / "state.txt"
+        target.write_text("before", encoding="utf-8")
+        grant, lease = _seed_authority(
+            runtime, tmp_path, "file.write", suffix="wr-reserve-gap", max_uses=1
+        )
+        request = _tool_request(
+            root=tmp_path,
+            tool_id="file.operations",
+            operation="file.write",
+            arguments=[
+                {"kind": "path", "name": "path", "value": str(target)},
+                {"kind": "string", "name": "content", "value": "after"},
+            ],
+            grant_id=grant,
+            lease_id=lease,
+            idem="wr-reserve-gap",
+            consequential=True,
+            target_identity=str(target),
+        )
+        original_transition = runtime.service.transition_tool_execution
+
+        def crash_before_admitted(execution_id, to_state, patch, metadata):
+            if to_state == "admitted":
+                raise SystemExit("simulated crash after reservation")
+            return original_transition(execution_id, to_state, patch, metadata)
+
+        runtime.service.transition_tool_execution = crash_before_admitted
+        with pytest.raises(SystemExit, match="after reservation"):
+            runtime.tool_broker.execute(
+                request, operator_id="operator-test", session_id="sess-test"
+            )
+        runtime.service.transition_tool_execution = original_transition
+
+        execution_id = runtime.tool_broker.execution_id(request["idempotencyKey"])
+        stranded = runtime.store.require_state("tool_execution-" + execution_id)
+        capability = runtime.store.require_state("capability-" + grant)
+        assert stranded["state"] == "prepared"
+        assert stranded["reservationId"] is None
+        assert len([r for r in capability["reservations"] if r["state"] == "open"]) == 1
+        assert target.read_text(encoding="utf-8") == "before"
+
+        recovered = runtime.tool_broker.reconcile_stranded()
+        recovered_state = next(x for x in recovered if x["toolExecutionId"] == execution_id)
+        capability = runtime.store.require_state("capability-" + grant)
+        assert recovered_state["state"] == "failed"
+        assert recovered_state["reservationId"] is not None
+        assert capability["usesConsumed"] == 0
+        assert not [r for r in capability["reservations"] if r["state"] == "open"]
+        assert target.read_text(encoding="utf-8") == "before"
+    finally:
+        runtime.close()
+
+
+def test_authenticated_file_write_uses_lease_bound_staged_world_receipt(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "rt.db"))
+    try:
+        target = tmp_path / "world.txt"
+        target.write_text("before", encoding="utf-8")
+        grant, lease = _seed_authority(
+            runtime, tmp_path, "file.write", suffix="world-write", max_uses=1
+        )
+        request = _tool_request(
+            root=tmp_path,
+            tool_id="file.operations",
+            operation="file.write",
+            arguments=[
+                {"kind": "path", "name": "path", "value": str(target)},
+                {"kind": "string", "name": "content", "value": "after"},
+            ],
+            grant_id=grant,
+            lease_id=lease,
+            idem="world-write",
+            consequential=True,
+            target_identity=str(target),
+        )
+        receipt = runtime.command_service("operator-test", "sess-test").execute(
+            _envelope(request, command_id="cmd-world-write")
+        )
+        assert receipt["status"] == "accepted"
+        execution = runtime.store.require_state(
+            "tool_execution-" + receipt["result"]["toolExecutionId"]
+        )
+        assert execution["state"] == "completed"
+        assert execution["effectIntent"]["expiresAt"] == "2030-01-01T00:00:00Z"
+        assert execution["effectIntent"]["coordinationMode"] == "staged"
+        assert execution["effectIntent"]["rollbackStrategy"] == "escrow"
+        assert execution["worldReceipt"]["commitState"] == "committed"
+        assert Path(execution["effectIntent"]["reversalHandle"]).read_text() == "before"
+        assert target.read_text() == "after"
+        capability = runtime.store.require_state("capability-" + grant)
+        assert capability["usesConsumed"] == 1
+    finally:
+        runtime.close()
+
+
+def test_expired_admitted_world_receipt_closes_reservation_without_dispatch(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "rt.db"))
+    try:
+        target = tmp_path / "expired-admitted.txt"
+        target.write_text("before", encoding="utf-8")
+        grant, lease = _seed_authority(
+            runtime, tmp_path, "file.write", suffix="wr-expired-admitted", max_uses=1
+        )
+        request = _tool_request(
+            root=tmp_path,
+            tool_id="file.operations",
+            operation="file.write",
+            arguments=[
+                {"kind": "path", "name": "path", "value": str(target)},
+                {"kind": "string", "name": "content", "value": "after"},
+            ],
+            grant_id=grant,
+            lease_id=lease,
+            idem="wr-expired-admitted",
+            consequential=True,
+            target_identity=str(target),
+        )
+        broker = runtime.tool_broker
+        execution = broker.build_execution(
+            request, operator_id="operator-test", session_id="sess-test"
+        )
+        runtime.service.prepare_tool_execution(
+            execution, broker.metadata(execution["toolExecutionId"], "prepared")
+        )
+        reservation = broker._reservation(request, execution["toolExecutionId"])
+        runtime.service.reserve_use(
+            grant, reservation,
+            broker.metadata(execution["toolExecutionId"], "reserve-capability"),
+        )
+        runtime.service.transition_tool_execution(
+            execution["toolExecutionId"], "admitted",
+            {"reservationId": reservation["reservationId"]},
+            broker.metadata(execution["toolExecutionId"], "admitted"),
+        )
+
+        original_now = broker._now
+        broker._now = lambda: "2030-01-01T00:00:00Z"
+        try:
+            result = broker.execute(
+                request, operator_id="operator-test", session_id="sess-test"
+            )
+        finally:
+            broker._now = original_now
+
+        assert result["status"] == "denied"
+        state = runtime.store.require_state(
+            "tool_execution-" + execution["toolExecutionId"]
+        )
+        capability = runtime.store.require_state("capability-" + grant)
+        assert state["state"] == "failed"
+        assert state["dispatchBoundary"] == "not_started"
+        assert state["reservationId"] == reservation["reservationId"]
+        assert capability["usesConsumed"] == 0
+        stored_reservation = next(
+            r for r in capability["reservations"]
+            if r["reservationId"] == reservation["reservationId"]
+        )
+        assert stored_reservation["state"] == "finalized"
+        assert target.read_text(encoding="utf-8") == "before"
+    finally:
+        runtime.close()
+
+
+def test_predispatch_settlement_atomically_finalizes_reservation_and_execution(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "rt.db"))
+    try:
+        target = tmp_path / "atomic-settle.txt"
+        target.write_text("before", encoding="utf-8")
+        grant, lease = _seed_authority(runtime, tmp_path, "file.write", suffix="wr-atomic", max_uses=1)
+        request = _tool_request(
+            root=tmp_path, tool_id="file.operations", operation="file.write",
+            arguments=[
+                {"kind": "path", "name": "path", "value": str(target)},
+                {"kind": "string", "name": "content", "value": "after"},
+            ],
+            grant_id=grant, lease_id=lease, idem="wr-atomic", consequential=True,
+            target_identity=str(target),
+        )
+        broker = runtime.tool_broker
+        execution = broker.build_execution(request, operator_id="operator-test", session_id="sess-test")
+        runtime.service.prepare_tool_execution(execution, broker.metadata(execution["toolExecutionId"], "prepared"))
+        reservation = broker._reservation(request, execution["toolExecutionId"])
+        runtime.service.reserve_use(grant, reservation, broker.metadata(execution["toolExecutionId"], "reserve-capability"))
+        runtime.service.transition_tool_execution(
+            execution["toolExecutionId"], "admitted", {"reservationId": reservation["reservationId"]},
+            broker.metadata(execution["toolExecutionId"], "admitted"),
+        )
+        denied = broker._denied_result(request, "WORLD_RECEIPT_EFFECT_INTENT_EXPIRED")
+        consumption = broker._consumption(
+            execution["toolExecutionId"], reservation["reservationId"], lease, "failed", None
+        )
+        settlement_meta = broker.metadata(execution["toolExecutionId"], "predispatch-settle")
+        runtime.service.settle_predispatch_tool_execution(
+            grant, consumption, execution["toolExecutionId"], denied, settlement_meta,
+        )
+        replayed = runtime.service.settle_predispatch_tool_execution(
+            grant, consumption, execution["toolExecutionId"], denied, settlement_meta,
+        )
+        assert replayed["status"] == "idempotent"
+        assert replayed["replayed"] is True
+
+        state = runtime.store.require_state("tool_execution-" + execution["toolExecutionId"])
+        capability = runtime.store.require_state("capability-" + grant)
+        stored = next(r for r in capability["reservations"] if r["reservationId"] == reservation["reservationId"])
+        assert state["state"] == "failed"
+        assert state["settlementStatus"] == "settled"
+        assert state["reservationId"] == reservation["reservationId"]
+        assert state["result"]["status"] == "denied"
+        assert stored["state"] == "finalized"
+        assert capability["usesConsumed"] == 0
+        assert target.read_text(encoding="utf-8") == "before"
+        events = runtime.store.read_events()
+        assert events[-2]["payload"]["eventType"] == "CapabilityUseFinalized"
+        assert events[-1]["payload"]["eventType"] == "ToolExecutionTerminated"
+        assert events[-1]["globalSequence"] == events[-2]["globalSequence"] + 1
+    finally:
+        runtime.close()
+
+
+def test_predispatch_denial_survives_postcommit_dispatch_fault_without_later_effect(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "rt.db"))
+    try:
+        target = tmp_path / "dispatch-fault.txt"
+        target.write_text("before", encoding="utf-8")
+        grant, lease = _seed_authority(runtime, tmp_path, "file.write", suffix="wr-dispatch-fault", max_uses=1)
+        request = _tool_request(
+            root=tmp_path, tool_id="file.operations", operation="file.write",
+            arguments=[
+                {"kind": "path", "name": "path", "value": str(target)},
+                {"kind": "string", "name": "content", "value": "after"},
+            ],
+            grant_id=grant, lease_id=lease, idem="wr-dispatch-fault", consequential=True,
+            target_identity=str(target),
+        )
+        broker = runtime.tool_broker
+        execution = broker.build_execution(request, operator_id="operator-test", session_id="sess-test")
+        runtime.service.prepare_tool_execution(execution, broker.metadata(execution["toolExecutionId"], "prepared"))
+        reservation = broker._reservation(request, execution["toolExecutionId"])
+        runtime.service.reserve_use(grant, reservation, broker.metadata(execution["toolExecutionId"], "reserve-capability"))
+        runtime.service.transition_tool_execution(
+            execution["toolExecutionId"], "admitted", {"reservationId": reservation["reservationId"]},
+            broker.metadata(execution["toolExecutionId"], "admitted"),
+        )
+        original_check = runtime.service.check_lease
+        checks = {"count": 0}
+
+        def deny_once(*args, **kwargs):
+            checks["count"] += 1
+            if checks["count"] == 1:
+                raise CapabilityDenied("transient pre-dispatch denial", lease)
+            return original_check(*args, **kwargs)
+
+        runtime.service.check_lease = deny_once
+        delivery = {"raised": False}
+
+        def fail_first_delivery(_event):
+            if not delivery["raised"]:
+                delivery["raised"] = True
+                raise RuntimeError("simulated crash after atomic commit")
+
+        runtime.store.subscribe(fail_first_delivery)
+        with pytest.raises(RuntimeError, match="after atomic commit"):
+            broker.execute(request, operator_id="operator-test", session_id="sess-test")
+
+        committed = runtime.store.require_state("tool_execution-" + execution["toolExecutionId"])
+        capability = runtime.store.require_state("capability-" + grant)
+        stored = next(r for r in capability["reservations"] if r["reservationId"] == reservation["reservationId"])
+        assert committed["state"] == "failed"
+        assert committed["reservationId"] == reservation["reservationId"]
+        assert stored["state"] == "finalized"
+        assert capability["usesConsumed"] == 0
+        assert target.read_text(encoding="utf-8") == "before"
+
+        replay = broker.execute(request, operator_id="operator-test", session_id="sess-test")
+        assert replay["replayed"] is True
+        assert replay["state"] == "failed"
+        assert target.read_text(encoding="utf-8") == "before"
+        assert checks["count"] == 1
+    finally:
+        runtime.close()
+
+
+def test_recovery_predispatch_settlement_survives_postcommit_dispatch_fault(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "rt.db"))
+    try:
+        target = tmp_path / "recover-dispatch-fault.txt"
+        target.write_text("before", encoding="utf-8")
+        grant, lease = _seed_authority(runtime, tmp_path, "file.write", suffix="wr-recover-fault", max_uses=1)
+        request = _tool_request(
+            root=tmp_path, tool_id="file.operations", operation="file.write",
+            arguments=[
+                {"kind": "path", "name": "path", "value": str(target)},
+                {"kind": "string", "name": "content", "value": "after"},
+            ],
+            grant_id=grant, lease_id=lease, idem="wr-recover-fault", consequential=True,
+            target_identity=str(target),
+        )
+        broker = runtime.tool_broker
+        execution = broker.build_execution(request, operator_id="operator-test", session_id="sess-test")
+        runtime.service.prepare_tool_execution(execution, broker.metadata(execution["toolExecutionId"], "prepared"))
+        reservation = broker._reservation(request, execution["toolExecutionId"])
+        runtime.service.reserve_use(grant, reservation, broker.metadata(execution["toolExecutionId"], "reserve-capability"))
+
+        delivery = {"raised": False}
+        def fail_first_delivery(_event):
+            if not delivery["raised"]:
+                delivery["raised"] = True
+                raise RuntimeError("simulated recovery crash after atomic commit")
+        runtime.store.subscribe(fail_first_delivery)
+        with pytest.raises(RuntimeError, match="recovery crash after atomic commit"):
+            broker.reconcile_stranded()
+
+        state = runtime.store.require_state("tool_execution-" + execution["toolExecutionId"])
+        capability = runtime.store.require_state("capability-" + grant)
+        stored = next(r for r in capability["reservations"] if r["reservationId"] == reservation["reservationId"])
+        assert state["state"] == "failed"
+        assert state["reservationId"] == reservation["reservationId"]
+        assert stored["state"] == "finalized"
+        assert capability["usesConsumed"] == 0
+        assert target.read_text(encoding="utf-8") == "before"
+
+        recovered = broker.reconcile_stranded()
+        assert recovered == []
+        assert target.read_text(encoding="utf-8") == "before"
+    finally:
+        runtime.close()
+
+
+def test_predispatch_atomic_settlement_rolls_back_when_commit_never_starts(tmp_path: Path, monkeypatch) -> None:
+    runtime = create_runtime(str(tmp_path / "rt.db"))
+    try:
+        target = tmp_path / "before-commit-fault.txt"
+        target.write_text("before", encoding="utf-8")
+        grant, lease = _seed_authority(runtime, tmp_path, "file.write", suffix="wr-before-commit", max_uses=1)
+        request = _tool_request(
+            root=tmp_path, tool_id="file.operations", operation="file.write",
+            arguments=[
+                {"kind": "path", "name": "path", "value": str(target)},
+                {"kind": "string", "name": "content", "value": "after"},
+            ],
+            grant_id=grant, lease_id=lease, idem="wr-before-commit", consequential=True,
+            target_identity=str(target),
+        )
+        broker = runtime.tool_broker
+        execution = broker.build_execution(request, operator_id="operator-test", session_id="sess-test")
+        runtime.service.prepare_tool_execution(execution, broker.metadata(execution["toolExecutionId"], "prepared"))
+        reservation = broker._reservation(request, execution["toolExecutionId"])
+        runtime.service.reserve_use(grant, reservation, broker.metadata(execution["toolExecutionId"], "reserve-capability"))
+        runtime.service.transition_tool_execution(
+            execution["toolExecutionId"], "admitted", {"reservationId": reservation["reservationId"]},
+            broker.metadata(execution["toolExecutionId"], "admitted"),
+        )
+        denied = broker._denied_result(request, "synthetic pre-commit denial")
+        consumption = broker._consumption(
+            execution["toolExecutionId"], reservation["reservationId"], lease, "failed", None
+        )
+        head_before = runtime.store.head_sequence()
+
+        def fail_commit(*_args, **_kwargs):
+            raise RuntimeError("simulated failure before commit")
+
+        monkeypatch.setattr(runtime.store, "commit_command", fail_commit)
+        with pytest.raises(RuntimeError, match="before commit"):
+            runtime.service.settle_predispatch_tool_execution(
+                grant, consumption, execution["toolExecutionId"], denied,
+                broker.metadata(execution["toolExecutionId"], "predispatch-before-commit"),
+            )
+
+        state = runtime.store.require_state("tool_execution-" + execution["toolExecutionId"])
+        capability = runtime.store.require_state("capability-" + grant)
+        stored = next(r for r in capability["reservations"] if r["reservationId"] == reservation["reservationId"])
+        assert state["state"] == "admitted"
+        assert stored["state"] == "open"
+        assert capability["usesConsumed"] == 0
+        assert runtime.store.head_sequence() == head_before
+        assert target.read_text(encoding="utf-8") == "before"
+    finally:
+        runtime.close()
+
+
+def test_predispatch_atomic_settlement_rolls_back_after_first_append_is_staged(tmp_path: Path, monkeypatch) -> None:
+    import capt_runtime.store as store_module
+
+    runtime = create_runtime(str(tmp_path / "rt.db"))
+    try:
+        target = tmp_path / "mid-transaction-fault.txt"
+        target.write_text("before", encoding="utf-8")
+        grant, lease = _seed_authority(runtime, tmp_path, "file.write", suffix="wr-mid-transaction", max_uses=1)
+        request = _tool_request(
+            root=tmp_path, tool_id="file.operations", operation="file.write",
+            arguments=[
+                {"kind": "path", "name": "path", "value": str(target)},
+                {"kind": "string", "name": "content", "value": "after"},
+            ],
+            grant_id=grant, lease_id=lease, idem="wr-mid-transaction", consequential=True,
+            target_identity=str(target),
+        )
+        broker = runtime.tool_broker
+        execution = broker.build_execution(request, operator_id="operator-test", session_id="sess-test")
+        runtime.service.prepare_tool_execution(execution, broker.metadata(execution["toolExecutionId"], "prepared"))
+        reservation = broker._reservation(request, execution["toolExecutionId"])
+        runtime.service.reserve_use(grant, reservation, broker.metadata(execution["toolExecutionId"], "reserve-capability"))
+        runtime.service.transition_tool_execution(
+            execution["toolExecutionId"], "admitted", {"reservationId": reservation["reservationId"]},
+            broker.metadata(execution["toolExecutionId"], "admitted"),
+        )
+        denied = broker._denied_result(request, "synthetic mid-transaction denial")
+        consumption = broker._consumption(
+            execution["toolExecutionId"], reservation["reservationId"], lease, "failed", None
+        )
+        head_before = runtime.store.head_sequence()
+        real_require = store_module.require
+
+        def fail_second_append(type_name, value):
+            if type_name == "EventEnvelope" and value.get("eventType") == "ToolExecutionTerminated":
+                raise RuntimeError("simulated failure after first append staged")
+            return real_require(type_name, value)
+
+        monkeypatch.setattr(store_module, "require", fail_second_append)
+        with pytest.raises(RuntimeError, match="after first append staged"):
+            runtime.service.settle_predispatch_tool_execution(
+                grant, consumption, execution["toolExecutionId"], denied,
+                broker.metadata(execution["toolExecutionId"], "predispatch-mid-transaction"),
+            )
+
+        state = runtime.store.require_state("tool_execution-" + execution["toolExecutionId"])
+        capability = runtime.store.require_state("capability-" + grant)
+        stored = next(r for r in capability["reservations"] if r["reservationId"] == reservation["reservationId"])
+        assert state["state"] == "admitted"
+        assert stored["state"] == "open"
+        assert capability["usesConsumed"] == 0
+        assert runtime.store.head_sequence() == head_before
+        assert target.read_text(encoding="utf-8") == "before"
     finally:
         runtime.close()

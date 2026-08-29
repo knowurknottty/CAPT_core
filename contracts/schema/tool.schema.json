@@ -480,6 +480,14 @@
             "type": "string",
             "maxLength": 128
           }
+        },
+        "worldReceiptOperations": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_.:]{1,63}$"
+          }
         }
       }
     },
@@ -671,6 +679,264 @@
         },
         "updatedAt": {
           "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "effectIntent": {
+          "oneOf": [
+            {
+              "$ref": "tool.schema.json#/$defs/EffectIntent"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "worldReceipt": {
+          "oneOf": [
+            {
+              "$ref": "tool.schema.json#/$defs/WorldReceipt"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "EffectReceiptSpec": {
+      "title": "EffectReceiptSpec",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receiptKind",
+        "targetLocal",
+        "locator",
+        "expectedPostStateDigest"
+      ],
+      "properties": {
+        "receiptKind": {
+          "type": "string",
+          "enum": [
+            "file_sidecar"
+          ]
+        },
+        "targetLocal": {
+          "type": "boolean",
+          "const": true
+        },
+        "locator": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "expectedPostStateDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        }
+      }
+    },
+    "EffectIntent": {
+      "title": "EffectIntent",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "effectIntentId",
+        "principalId",
+        "operation",
+        "payloadDigest",
+        "basisVersion",
+        "grantId",
+        "leaseId",
+        "approvalRefs",
+        "targetIdentity",
+        "expiresAt",
+        "idempotencyKey",
+        "atomicDomain",
+        "coordinationMode",
+        "rollbackStrategy",
+        "reconciliationStrategy",
+        "reversalHandle",
+        "receiptSpec",
+        "intentDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "effectIntentId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "principalId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "operation": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_.:]{1,63}$"
+        },
+        "payloadDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "basisVersion": {
+          "type": "string",
+          "pattern": "^(?:sha256:[0-9a-f]{64}|absent)$"
+        },
+        "grantId": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "leaseId": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "approvalRefs": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "$ref": "common.schema.json#/$defs/Identifier"
+          }
+        },
+        "targetIdentity": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "expiresAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "idempotencyKey": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "atomicDomain": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "coordinationMode": {
+          "type": "string",
+          "enum": [
+            "atomic",
+            "staged",
+            "compensating",
+            "escrow"
+          ]
+        },
+        "rollbackStrategy": {
+          "type": "string",
+          "enum": [
+            "none",
+            "atomic_replace",
+            "compensating_action",
+            "escrow"
+          ]
+        },
+        "reconciliationStrategy": {
+          "type": "string",
+          "enum": [
+            "target_receipt"
+          ]
+        },
+        "receiptSpec": {
+          "$ref": "tool.schema.json#/$defs/EffectReceiptSpec"
+        },
+        "intentDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "reversalHandle": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "WorldReceipt": {
+      "title": "WorldReceipt",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "receiptId",
+        "effectIntentId",
+        "intentDigest",
+        "targetIdentity",
+        "receiptKind",
+        "receiptLocator",
+        "observedStateDigest",
+        "verifiedAt",
+        "commitState",
+        "reversalHandle"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "receiptId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "effectIntentId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "intentDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "targetIdentity": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "receiptKind": {
+          "type": "string",
+          "enum": [
+            "file_sidecar"
+          ]
+        },
+        "receiptLocator": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "observedStateDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "verifiedAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "commitState": {
+          "type": "string",
+          "enum": [
+            "committed",
+            "reversed",
+            "not_committed"
+          ]
+        },
+        "reversalHandle": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     }

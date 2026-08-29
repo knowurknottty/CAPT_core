@@ -4,7 +4,11 @@ from copy import deepcopy
 
 import pytest
 
-from capt_runtime.errors import AuthorityViolation, CapabilityDenied, IdempotencyConflict
+from capt_runtime.errors import (
+    AuthorityViolation,
+    CapabilityDenied,
+    IdempotencyConflict,
+)
 from capt_runtime.services import RuntimeService
 from capt_runtime.store import EventStore
 from capt_runtime.tool_broker import ToolBroker, tool_request_fingerprint
@@ -280,5 +284,50 @@ def test_effect_identity_is_durable_before_adapter_returns_or_crashes(tmp_path) 
         assert state["sideEffectIdentity"] == '{"containerId":"ctr-test-1","imageId":"sha256:image-test-1"}'
         assert result["result"]["sideEffectIdentity"] == state["sideEffectIdentity"]
         assert runtime.finalizations[0]["sideEffectIdentity"] == state["sideEffectIdentity"]
+    finally:
+        store.close()
+
+
+def test_missing_tool_during_recovery_does_not_block_other_stranded_executions(tmp_path) -> None:
+    store, runtime, _registry, adapter, broker = _broker(tmp_path)
+    try:
+        missing_request = _request(idem="idem-missing-tool")
+        missing = broker.build_execution(
+            missing_request, operator_id="op", session_id="s"
+        )
+        missing["toolId"] = "missing.tool"
+        missing["adapterId"] = "adapter-missing-tool"
+        runtime.prepare_tool_execution(
+            missing, broker.metadata(missing["toolExecutionId"], "prepared")
+        )
+        runtime.transition_tool_execution(
+            missing["toolExecutionId"], "admitted", {},
+            broker.metadata(missing["toolExecutionId"], "admitted"),
+        )
+        runtime.transition_tool_execution(
+            missing["toolExecutionId"], "dispatching", {"dispatchBoundary": "started"},
+            broker.metadata(missing["toolExecutionId"], "dispatching"),
+        )
+
+        known_request = _request(idem="idem-known-tool")
+        known = broker.build_execution(known_request, operator_id="op", session_id="s")
+        runtime.prepare_tool_execution(
+            known, broker.metadata(known["toolExecutionId"], "prepared")
+        )
+        runtime.transition_tool_execution(
+            known["toolExecutionId"], "admitted", {},
+            broker.metadata(known["toolExecutionId"], "admitted"),
+        )
+        runtime.transition_tool_execution(
+            known["toolExecutionId"], "dispatching", {"dispatchBoundary": "started"},
+            broker.metadata(known["toolExecutionId"], "dispatching"),
+        )
+
+        recovered = broker.reconcile_stranded()
+        by_id = {state["toolExecutionId"]: state for state in recovered}
+        assert by_id[missing["toolExecutionId"]]["state"] == "indeterminate"
+        assert "not available for reconciliation" in by_id[missing["toolExecutionId"]]["reconciliationReason"]
+        assert by_id[known["toolExecutionId"]]["state"] == "indeterminate"
+        assert adapter.calls == 0
     finally:
         store.close()

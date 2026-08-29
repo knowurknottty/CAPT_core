@@ -27,7 +27,7 @@ TRANSITIONS = {
 
 _MUTABLE_FIELDS = frozenset({
     "reservationId", "dispatchBoundary", "result", "resultDigest", "sideEffectIdentity",
-    "settlementStatus", "reconciliationReason", "updatedAt",
+    "worldReceipt", "settlementStatus", "reconciliationReason", "updatedAt",
 })
 
 
@@ -45,6 +45,8 @@ class ToolExecutionAggregate:
         "tool_execution.result",
         "tool_execution.resultDigest",
         "tool_execution.sideEffectIdentity",
+        "tool_execution.effectIntent",
+        "tool_execution.worldReceipt",
         "tool_execution.settlementStatus",
         "tool_execution.reconciliationReason",
         "tool_execution.preparedAt",

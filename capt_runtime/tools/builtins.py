@@ -82,7 +82,8 @@ FILE_OPERATIONS_DESCRIPTOR = {
     "platforms": ["macos", "linux"],
     "supportsTimeout": False,
     "supportsCancellation": False,
-    "idempotencySupport": "broker_settled_replay",
+    "idempotencySupport": "reconcile_before_retry",
+    "worldReceiptOperations": ["file.write", "file.patch"],
     "artifactOutputs": ["file_digest", "byte_count", "search_matches", "replacement_count"],
 }
 
