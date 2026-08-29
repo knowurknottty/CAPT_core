@@ -33,6 +33,7 @@ capt-provenance = "desktop.provenance_lens:main"
 capt-cohort = "desktop.cohort_chamber:main"
 capt-cohort-tui = "capt_ui.surfaces.tui.cohort_chamber_app:main"
 capt-security-cockpit = "desktop.security_cockpit:main"
+capt-debt = "desktop.cognitive_debt:main"
 
 [project.optional-dependencies]
 ui = ["textual>=0.80"]
