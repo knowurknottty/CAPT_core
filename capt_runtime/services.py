@@ -25,9 +25,9 @@ from .aggregates import (
     ToolExecutionAggregate,
 )
 from .authority import require_authority
-from .contracts import require
-from .replay import ledger_identity_to_sequence, replay_to_sequence
+from .contracts import digest, require
 from .errors import AuthorityViolation, ConcurrencyError, IdempotencyConflict
+from .replay import ledger_identity_to_sequence, replay_to_sequence
 from .store import AppendRequest, EventStore
 
 
@@ -828,6 +828,93 @@ class RuntimeService(object):
         )
         return self._commit(
             [AppendRequest(stream, ToolExecutionAggregate.KIND, expected, event, state)],
+            metadata,
+        )
+
+    def settle_predispatch_tool_execution(
+        self,
+        grant_id: str,
+        consumption: Dict[str, Any],
+        tool_execution_id: str,
+        result: Dict[str, Any],
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Atomically close pre-dispatch capability authority and ToolExecution."""
+        require("CapabilityConsumptionRecord", consumption)
+        require("ToolResult", result)
+        require("CommandMetadata", metadata)
+        require_authority("finalize_use", metadata["actor"]["kind"])
+        require_authority("transition_tool_execution", metadata["actor"]["kind"])
+        if consumption["outcome"] != "failed" or consumption.get("sideEffectIdentity") is not None:
+            raise AuthorityViolation("PREDISPATCH_SETTLEMENT_MUST_BE_FAILED_WITHOUT_EFFECT")
+        if result["status"] not in {"denied", "failed"} or result.get("sideEffectIdentity") is not None:
+            raise AuthorityViolation("PREDISPATCH_RESULT_MUST_PROVE_NO_EFFECT")
+        if self.store.find_idempotent(metadata["idempotencyKey"]) is not None:
+            return self._commit([], metadata)
+
+        capability_stream = CapabilityAggregate.stream_id(grant_id)
+        tool_stream = ToolExecutionAggregate.stream_id(tool_execution_id)
+        capability_expected = self.store.aggregate_version(capability_stream)
+        tool_expected = self.store.aggregate_version(tool_stream)
+        capability_current = self.store.require_state(capability_stream)
+        tool_current = self.store.require_state(tool_stream)
+        if tool_current["state"] not in {"prepared", "admitted"} or tool_current["dispatchBoundary"] != "not_started":
+            raise AuthorityViolation("PREDISPATCH_SETTLEMENT_AFTER_DISPATCH_FORBIDDEN")
+        if tool_current.get("grantId") != grant_id or tool_current.get("leaseId") != consumption["leaseId"]:
+            raise AuthorityViolation("PREDISPATCH_SETTLEMENT_AUTHORITY_MISMATCH")
+        reservation_id = consumption["reservationId"]
+        if tool_current.get("reservationId") not in {None, reservation_id}:
+            raise AuthorityViolation("PREDISPATCH_SETTLEMENT_RESERVATION_MISMATCH")
+
+        capability_state = CapabilityAggregate.finalize(capability_current, consumption)
+        tool_state = ToolExecutionAggregate.transition(
+            tool_current,
+            "failed",
+            {
+                "reservationId": reservation_id,
+                "result": result,
+                "resultDigest": digest(result),
+                "sideEffectIdentity": None,
+                "worldReceipt": None,
+                "settlementStatus": "settled",
+                "reconciliationReason": None,
+                "dispatchBoundary": "not_started",
+                "updatedAt": metadata["issuedAt"],
+            },
+        )
+        capability_event = commands.envelope(
+            event_id=metadata["commandId"] + "-capability",
+            stream_id=capability_stream,
+            event_type="CapabilityUseFinalized",
+            payload={"eventType": "CapabilityUseFinalized", "consumption": consumption},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+        )
+        tool_event = commands.envelope(
+            event_id=metadata["commandId"] + "-tool",
+            stream_id=tool_stream,
+            event_type="ToolExecutionTerminated",
+            payload={"eventType": "ToolExecutionTerminated", "execution": tool_state},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+        )
+        return self._commit(
+            [
+                AppendRequest(
+                    capability_stream,
+                    CapabilityAggregate.KIND,
+                    capability_expected,
+                    capability_event,
+                    capability_state,
+                ),
+                AppendRequest(
+                    tool_stream,
+                    ToolExecutionAggregate.KIND,
+                    tool_expected,
+                    tool_event,
+                    tool_state,
+                ),
+            ],
             metadata,
         )
 

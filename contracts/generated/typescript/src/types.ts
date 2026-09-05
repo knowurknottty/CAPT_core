@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:319bd8343c1a1426d2ac45287501e373ba6a5fe6fe3fdf82635228ae1d9c05ae
+// source digest:  sha256:3e849bf1a3e281f76e85f92501c24eb5f41730f51d2e269514ca09e8d46b4eb4
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -1778,6 +1778,37 @@ export interface BooleanArgument {
   readonly value: boolean;
 }
 
+/** EffectIntent */
+export interface EffectIntent {
+  readonly approvalRefs: readonly Identifier[];
+  readonly atomicDomain: string;
+  readonly basisVersion: string;
+  readonly coordinationMode: string;
+  readonly effectIntentId: Identifier;
+  readonly expiresAt: Timestamp;
+  readonly grantId: Identifier | null;
+  readonly idempotencyKey: Identifier;
+  readonly intentDigest: Digest;
+  readonly leaseId: Identifier | null;
+  readonly operation: string;
+  readonly payloadDigest: Digest;
+  readonly principalId: Identifier;
+  readonly receiptSpec: EffectReceiptSpec;
+  readonly reconciliationStrategy: string;
+  readonly reversalHandle: string | null;
+  readonly rollbackStrategy: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly targetIdentity: string;
+}
+
+/** EffectReceiptSpec */
+export interface EffectReceiptSpec {
+  readonly expectedPostStateDigest: Digest;
+  readonly locator: string;
+  readonly receiptKind: string;
+  readonly targetLocal: boolean;
+}
+
 /** IntegerArgument */
 export interface IntegerArgument {
   readonly kind: "integer";
@@ -1830,6 +1861,7 @@ export interface ToolDescriptor {
   readonly supportsTimeout: boolean;
   readonly terminalBackends: readonly TerminalBackendId[];
   readonly toolId: Identifier;
+  readonly worldReceiptOperations?: readonly string[];
 }
 
 /** ToolDispatchBoundary */
@@ -1878,6 +1910,8 @@ export interface ToolExecution {
   readonly toolId: Identifier;
   readonly toolRequestId: Identifier;
   readonly updatedAt: Timestamp;
+  readonly effectIntent?: EffectIntent | null;
+  readonly worldReceipt?: WorldReceipt | null;
 }
 
 /** ToolExecutionState */
@@ -1969,6 +2003,21 @@ export const ToolSettlementStatusValues = [
   "settled",
   "reconciliation_required",
 ] as const;
+
+/** WorldReceipt */
+export interface WorldReceipt {
+  readonly commitState: string;
+  readonly effectIntentId: Identifier;
+  readonly intentDigest: Digest;
+  readonly observedStateDigest: Digest;
+  readonly receiptId: Identifier;
+  readonly receiptKind: string;
+  readonly receiptLocator: string;
+  readonly reversalHandle: string | null;
+  readonly schemaVersion: SchemaVersion;
+  readonly targetIdentity: string;
+  readonly verifiedAt: Timestamp;
+}
 
 /** Mechanical receipt from an already-authorized artifact adoption step; not authorization itself. */
 export interface ArtifactAdoptionReceipt {
