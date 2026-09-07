@@ -324,3 +324,50 @@ def test_execution_binding_rejects_proposal_snapshot_corruption(tmp_path):
             CorruptProposalStore(), approval["requestId"], proposal["proposedPrompt"]
         )
     store.close()
+
+
+def test_proposal_approval_forwards_explicit_managed_skill_selection(tmp_path):
+    from capt_runtime.managed_skills import import_managed_skill_pack
+
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "README.md").write_text("provider selection\n")
+    skill = tmp_path / "skill-source" / "skills" / "sentinel-reviewer"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text(
+        "---\n"
+        "name: sentinel-reviewer\n"
+        "description: Use only for the unrelated sentinel phrase.\n"
+        "version: 1.0.0\n"
+        "---\n"
+        "# Sentinel Reviewer\n\n"
+        "Inspect the sentinel evidence.\n"
+    )
+    import_managed_skill_pack(
+        tmp_path / "skill-source", tmp_path / "skills" / "ultimate"
+    )
+    store = EventStore(str(tmp_path / "ledger.db"))
+    relay = RuntimeCommandService(
+        store, "operator", "session", runtime_service=RuntimeService(store),
+        prompt_compiler=_compiler(),
+    )
+    try:
+        proposal = relay.execute(
+            _cmd("compile_prompt_proposal", _compile_payload(str(root)), "compile-managed")
+        )["result"]
+        approval = relay.execute(_cmd("request_prompt_proposal_approval", {
+            "proposalId": proposal["proposalId"],
+            "proposalRevision": proposal["revision"],
+            "selection": "upgrade",
+            "managedSkillNames": ["sentinel-reviewer"],
+            "autoSelectSkills": False,
+        }, "approve-managed"))
+
+        assert approval["status"] == "accepted"
+        assert approval["result"]["skillNames"] == ["sentinel-reviewer"]
+        state = store.require_state("human_approval-" + approval["result"]["requestId"])
+        authored = state["scope"]["approvalBinding"]["authoredSkills"]
+        assert authored["trust"] == "managed_local"
+        assert [item["name"] for item in authored["skills"]] == ["sentinel-reviewer"]
+    finally:
+        store.close()

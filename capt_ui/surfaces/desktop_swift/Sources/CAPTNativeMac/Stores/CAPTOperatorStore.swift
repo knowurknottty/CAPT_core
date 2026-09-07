@@ -37,6 +37,9 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var providerCredentialStatus: [String: String] = [:]
     @Published var providerWarmState = "not_required"
     @Published var providerWarmLatencyMs: Int?
+    @Published var managedSkills: CAPTManagedSkillSnapshot?
+    @Published var skillSelectionMode = "auto"
+    @Published var selectedSkillNames: Set<String> = []
     @Published private var chatWorkspace = CAPTNativeChatWorkspace()
 
     private let runtime: CAPTBackgroundRuntime
@@ -49,6 +52,10 @@ final class CAPTOperatorStore: ObservableObject {
     ) {
         self.runtime = runtime
         self.sessionStore = sessionStore
+        let defaults = UserDefaults.standard
+        let storedMode = defaults.string(forKey: "capt.skillSelectionMode") ?? "auto"
+        self.skillSelectionMode = ["auto", "manual", "off"].contains(storedMode) ? storedMode : "auto"
+        self.selectedSkillNames = Set(defaults.stringArray(forKey: "capt.selectedSkillNames") ?? [])
         restoreSessionsAsync()
     }
 
@@ -178,6 +185,7 @@ final class CAPTOperatorStore: ObservableObject {
                 refreshHistory()
                 refreshMemory()
                 refreshCapabilities()
+                refreshSkills()
             } catch {
                 let message = error.localizedDescription
                 lastError = message
@@ -253,12 +261,14 @@ final class CAPTOperatorStore: ObservableObject {
         taskState = "approval_preparing"
         lastError = nil
         let missionID = chatWorkspace.session(sessionID)?.missionID
+        let skillSelection = executionSkillSelection()
 
         Task {
             do {
                 let pending = try await runtime.requestApproval(
                     proposal: proposal, selection: selection, editedPrompt: editedPrompt,
-                    missionID: missionID
+                    missionID: missionID, managedSkillNames: skillSelection.names,
+                    autoSelectSkills: skillSelection.autoSelect
                 )
                 mutateWorkspace { $0.receiveApproval(pending, for: sessionID) }
                 if activeSessionID == sessionID { updateTaskStateFromActiveFlow() }
@@ -487,12 +497,68 @@ final class CAPTOperatorStore: ObservableObject {
         }
     }
 
+    func refreshSkills() {
+        guard connectionState == .connected else { return }
+        Task {
+            do {
+                let snapshot = try await runtime.managedSkillsSnapshot()
+                managedSkills = snapshot
+                let installed = Set(snapshot.skills.map(\.name))
+                let filtered = selectedSkillNames.intersection(installed)
+                if filtered != selectedSkillNames {
+                    selectedSkillNames = filtered
+                    persistSkillPreferences()
+                }
+            } catch {
+                lastError = error.localizedDescription
+            }
+        }
+    }
+
+    func setSkillSelectionMode(_ mode: String) {
+        guard ["auto", "manual", "off"].contains(mode) else { return }
+        skillSelectionMode = mode
+        persistSkillPreferences()
+    }
+
+    func toggleSkill(_ name: String) {
+        guard managedSkills?.skills.contains(where: { $0.name == name }) == true else { return }
+        if selectedSkillNames.contains(name) {
+            selectedSkillNames.remove(name)
+        } else {
+            selectedSkillNames.insert(name)
+        }
+        if skillSelectionMode == "auto" { skillSelectionMode = "manual" }
+        persistSkillPreferences()
+    }
+
+    private func executionSkillSelection() -> (names: [String]?, autoSelect: Bool) {
+        switch skillSelectionMode {
+        case "manual":
+            let installed = Set(managedSkills?.skills.map(\.name) ?? [])
+            let names = selectedSkillNames.intersection(installed).sorted()
+            if names.isEmpty { return (nil, false) }
+            return (names, false)
+        case "off":
+            return (nil, false)
+        default:
+            return (nil, true)
+        }
+    }
+
+    private func persistSkillPreferences() {
+        let defaults = UserDefaults.standard
+        defaults.set(skillSelectionMode, forKey: "capt.skillSelectionMode")
+        defaults.set(selectedSkillNames.sorted(), forKey: "capt.selectedSkillNames")
+    }
+
     func refreshAll() {
         refreshIdentity()
         refreshHistory()
         refreshOperatorState()
         refreshMemory()
         refreshCapabilities()
+        refreshSkills()
     }
 
     var pendingApprovals: [CAPTApprovalSummary] {

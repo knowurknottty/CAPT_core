@@ -65,6 +65,7 @@ from capt_runtime.verification_baseline import capture_verification_baseline
 from capt_runtime.authored_skills import (
     parse_authored_skill_request, prepare_runtime_skill_context, summarize_skill_context,
 )
+from capt_runtime.managed_skills import default_managed_skill_root, verify_managed_skill_pack
 from desktop.prompt_compiler_provider import build_prompt_compiler
 
 
@@ -472,6 +473,40 @@ class RuntimeQueryService:
             for (s, k, v) in self.store.all_aggregates()
         ]
 
+    def managed_skills(self) -> Dict[str, Any]:
+        root = default_managed_skill_root(Path(self.store.path).parent)
+        if not root.is_dir():
+            return {
+                "schemaVersion": CONTRACT_SCHEMA_VERSION,
+                "packRoot": str(root),
+                "installed": False,
+                "packName": "ultimate",
+                "packVersion": None,
+                "manifestDigest": None,
+                "trust": None,
+                "skills": [],
+            }
+        verified = verify_managed_skill_pack(root)
+        return {
+            "schemaVersion": CONTRACT_SCHEMA_VERSION,
+            "packRoot": str(root.resolve()),
+            "installed": True,
+            "packName": verified["packName"],
+            "packVersion": verified["packVersion"],
+            "manifestDigest": verified["manifestDigest"],
+            "trust": verified["trust"],
+            "skills": [
+                {
+                    "name": item["name"],
+                    "description": item.get("description", ""),
+                    "version": item.get("version") or "0.0.0",
+                    "contentDigest": item["contentDigest"],
+                    "triggers": list(item.get("triggers") or []),
+                }
+                for item in verified["skills"]
+            ],
+        }
+
     def get_state(self, stream_id: str) -> Optional[Dict[str, Any]]:
         return self.store.load_state(stream_id)
 
@@ -579,11 +614,13 @@ class RuntimeQueryService:
             if op == "capabilities":
                 return {"ok": True, "result": {
                     "schemaVersion": CONTRACT_SCHEMA_VERSION,
-                    "queryOperations": ["identity", "capabilities", "list_aggregates", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers"],
+                    "queryOperations": ["identity", "capabilities", "list_aggregates", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers", "managed_skills"],
                     "commandOperations": ["create_mission", "compile_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool"],
                     "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True, "toolRegistry": True, "toolBroker": True, "mcpClient": self.mcp_manager is not None, "promptCompiler": True},
                     "lifecycleOperations": {"checkpoint": True, "shutdown": True, "resume": True},
                 }}
+            if op == "managed_skills":
+                return {"ok": True, "result": self.managed_skills()}
             if op == "list_aggregates":
                 return {"ok": True, "result": self.list_aggregates()}
             if op == "get_state":

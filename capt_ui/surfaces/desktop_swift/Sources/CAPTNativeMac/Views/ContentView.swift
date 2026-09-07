@@ -43,6 +43,8 @@ struct ContentView: View {
             ApprovalQueueView(store: store)
         case .providers:
             ProviderControlView(store: store)
+        case .skills:
+            SkillsView(store: store)
         case .memory:
             MemoryContextView(store: store)
         case .evidence:

@@ -63,7 +63,9 @@ public final class CAPTChatCoordinator {
         proposal: CAPTPromptProposal,
         selection: CAPTPromptSelection,
         editedPrompt: String = "",
-        missionID: String? = nil
+        missionID: String? = nil,
+        managedSkillNames: [String]? = nil,
+        autoSelectSkills: Bool = true
     ) throws -> CAPTPendingApproval {
         let selected = proposal.selectedPrompt(selection, edited: editedPrompt)
         guard !selected.isEmpty else {
@@ -78,6 +80,11 @@ public final class CAPTChatCoordinator {
         ]
         if selection == .edited { payload["editedPrompt"] = selected }
         if let missionID, !missionID.isEmpty { payload["missionId"] = missionID }
+        if let managedSkillNames, !managedSkillNames.isEmpty {
+            payload["managedSkillNames"] = managedSkillNames
+        } else {
+            payload["autoSelectSkills"] = autoSelectSkills
+        }
         let response = try client.command(
             op: "request_prompt_proposal_approval",
             payload: payload,
@@ -216,11 +223,12 @@ public final class CAPTChatCoordinator {
         let driverRunID = try requireString("driverRunId", from: result)
         let digest = try requireString("promptAssemblyDigest", from: result)
         let expiresAt = (result["expiresAt"] as? String).flatMap(parseTimestamp)
+        let skillNames = result["skillNames"] as? [String] ?? []
         return CAPTPendingApproval(
             requestID: requestID, missionID: missionID, taskID: taskID,
             driverRunID: driverRunID, objective: objective, targetRoot: targetRoot,
             provider: provider, model: model, promptAssemblyDigest: digest,
-            expiresAt: expiresAt, proposalID: proposalID,
+            skillNames: skillNames, expiresAt: expiresAt, proposalID: proposalID,
             proposalRevision: proposalRevision, selectedPromptKind: selectedPromptKind
         )
     }

@@ -198,6 +198,48 @@ extension CAPTChatCoordinatorTests {
         XCTAssertEqual(payload["missionId"] as? String, "mission-1")
     }
 
+    func testProposalApprovalPropagatesManualManagedSkillSelection() throws {
+        let client = MockRuntimeClient()
+        client.responses["request_prompt_proposal_approval"] = approvalResponse()
+        let coordinator = CAPTChatCoordinator(client: client)
+        let proposal = try CAPTPromptProposal(
+            dictionary: promptProposalResponse()["result"] as! [String: Any]
+        )
+
+        _ = try coordinator.requestApproval(
+            proposal: proposal, selection: .upgrade, missionID: "mission-1",
+            managedSkillNames: ["impeccable", "inversion-capt-dogfood"],
+            autoSelectSkills: false
+        )
+
+        let payload = client.calls[0].1
+        XCTAssertEqual(
+            payload["managedSkillNames"] as? [String],
+            ["impeccable", "inversion-capt-dogfood"]
+        )
+        XCTAssertNil(payload["skillPackRoot"])
+        XCTAssertNil(payload["skillNames"])
+        XCTAssertNil(payload["autoSelectSkills"])
+    }
+
+    func testProposalApprovalCanExplicitlyDisableManagedSkills() throws {
+        let client = MockRuntimeClient()
+        client.responses["request_prompt_proposal_approval"] = approvalResponse()
+        let coordinator = CAPTChatCoordinator(client: client)
+        let proposal = try CAPTPromptProposal(
+            dictionary: promptProposalResponse()["result"] as! [String: Any]
+        )
+
+        _ = try coordinator.requestApproval(
+            proposal: proposal, selection: .upgrade,
+            autoSelectSkills: false
+        )
+
+        let payload = client.calls[0].1
+        XCTAssertEqual(payload["autoSelectSkills"] as? Bool, false)
+        XCTAssertNil(payload["skillNames"])
+    }
+
     func testCancelProposalUsesCanonicalCommand() throws {
         let client = MockRuntimeClient()
         client.responses["cancel_prompt_proposal"] = ["status": "accepted"]

@@ -48,6 +48,12 @@ actor CAPTBackgroundRuntime {
         return CAPTRuntimeControlProjection.capabilities(result)
     }
 
+    func managedSkillsSnapshot() throws -> CAPTManagedSkillSnapshot {
+        let response = try client.query(op: "managed_skills", payload: [:])
+        let result = response["result"] as? [String: Any] ?? response
+        return try CAPTManagedSkillSnapshot(dictionary: result)
+    }
+
     func historySnapshot() throws -> CAPTHistorySnapshot {
         let aggregateResponse = try client.query(op: "list_aggregates", payload: [:])
         let aggregates = aggregateResponse["result"] as? [[String: Any]] ?? []
@@ -244,10 +250,14 @@ actor CAPTBackgroundRuntime {
         proposal: CAPTPromptProposal,
         selection: CAPTPromptSelection,
         editedPrompt: String = "",
-        missionID: String? = nil
+        missionID: String? = nil,
+        managedSkillNames: [String]? = nil,
+        autoSelectSkills: Bool = true
     ) throws -> CAPTPendingApproval {
         try coordinator.requestApproval(
-            proposal: proposal, selection: selection, editedPrompt: editedPrompt, missionID: missionID
+            proposal: proposal, selection: selection, editedPrompt: editedPrompt,
+            missionID: missionID, managedSkillNames: managedSkillNames,
+            autoSelectSkills: autoSelectSkills
         )
     }
 

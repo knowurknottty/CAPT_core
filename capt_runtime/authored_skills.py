@@ -259,17 +259,38 @@ def prepare_runtime_skill_context(
     state_root: str | Path,
     lock: Mapping[str, Any] | None = None,
 ) -> tuple[Dict[str, Any] | None, List[str]]:
-    """Resolve explicit pinned skills or the state-local managed default pack.
+    """Resolve pinned authored skills or the state-local managed default pack.
 
-    Explicit `skillPackRoot`/`skillNames` remains highest authority. When no
-    explicit selection is present, a verified `<state>/skills/ultimate` pack is
-    contextually ranked unless `autoSelectSkills` is explicitly false.
+    `skillPackRoot`/`skillNames` selects the immutable authored CAPT_Skills
+    checkout. `managedSkillNames` selects exact names from the verified local
+    managed pack. The two sources are mutually exclusive. Without either
+    explicit selection, CAPT contextually ranks managed skills unless
+    `autoSelectSkills` is explicitly false.
     """
-    if payload.get("skillPackRoot") is not None or payload.get("skillNames") is not None:
+    authored_requested = (
+        payload.get("skillPackRoot") is not None or payload.get("skillNames") is not None
+    )
+    managed_names = payload.get("managedSkillNames")
+    if managed_names is not None and authored_requested:
+        raise AuthoredSkillRequestViolation("SKILL_SELECTION_CONFLICT")
+    if authored_requested:
         return prepare_authored_skill_context(payload, lock=lock)
+
+    root = default_managed_skill_root(state_root)
+    if managed_names is not None:
+        if not isinstance(managed_names, list) or len(managed_names) > 8:
+            raise AuthoredSkillRequestViolation(
+                "managedSkillNames must be a list of at most 8 names"
+            )
+        if not root.is_dir():
+            raise AuthoredSkillRequestViolation("managed skill pack is not installed")
+        objective = str(payload.get("objective", ""))
+        return prepare_managed_skill_context(
+            root, objective, explicit_names=[str(name) for name in managed_names]
+        )
+
     if payload.get("autoSelectSkills") is False:
         return None, []
-    root = default_managed_skill_root(state_root)
     if not root.is_dir():
         return None, []
     objective = str(payload.get("objective", ""))

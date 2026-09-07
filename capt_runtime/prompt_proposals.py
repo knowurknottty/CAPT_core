@@ -234,9 +234,13 @@ def request_prompt_proposal_approval(service: Any, intent: Dict[str, Any],
         "humanVerificationRequired": bool(intent.get("humanVerificationRequired", True)),
         "executable": str(intent.get("executable", "") or ""),
     }
-    for key in ("requestId", "missionId", "taskId", "driverRunId"):
+    for key in (
+        "requestId", "missionId", "taskId", "driverRunId",
+        "skillPackRoot", "skillNames", "managedSkillNames",
+        "autoSelectSkills", "skillLimit",
+    ):
         value = intent.get(key)
-        if value:
+        if value is not None:
             approval_intent[key] = value
     proposal_binding = {
         "proposalId": proposal_id,
