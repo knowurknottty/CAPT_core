@@ -1,11 +1,35 @@
 import Foundation
 
+public struct CAPTTaskSummary: Identifiable, Sendable, Equatable {
+    public let id: String
+    public let missionID: String
+    public let title: String
+    public let state: String
+    public let assignedDriverID: String?
+    public let attempt: Int
+    public let maxAttempts: Int
+    public let dependencies: [String]
+    public let consequential: Bool
+
+    public var isTerminal: Bool {
+        ["succeeded", "failed", "cancelled"].contains(state)
+    }
+}
+
 public struct CAPTMissionSummary: Identifiable, Sendable, Equatable {
     public let id: String
     public let title: String
     public let missionState: String
-    public let taskID: String?
-    public let taskState: String?
+    public let tasks: [CAPTTaskSummary]
+
+    public var taskID: String? { tasks.last?.id }
+    public var taskState: String? { tasks.last?.state }
+    public var taskCount: Int { tasks.count }
+    public var completedTaskCount: Int { tasks.filter(\.isTerminal).count }
+    public var isMultiTask: Bool { tasks.count > 1 }
+    public var hasActiveExecution: Bool {
+        tasks.contains { ["ready", "assigned", "running", "suspended"].contains($0.state) }
+    }
 }
 
 public struct CAPTEvidenceSummary: Identifiable, Sendable, Equatable {
@@ -76,14 +100,29 @@ public enum CAPTOperatorProjection {
     ) -> CAPTMissionSummary {
         let missionID = state["missionId"] as? String ?? "unknown-mission"
         let matching = tasks.filter { ($0["missionId"] as? String) == missionID }
-        let task = matching.last
-        let title = task?["title"] as? String ?? missionID
+        let projectedTasks = matching.compactMap(task)
+        let title = projectedTasks.first?.title ?? missionID
         return CAPTMissionSummary(
             id: missionID,
             title: title,
             missionState: state["state"] as? String ?? "unknown",
-            taskID: task?["taskId"] as? String,
-            taskState: task?["state"] as? String
+            tasks: projectedTasks
+        )
+    }
+
+    public static func task(_ raw: [String: Any]) -> CAPTTaskSummary? {
+        guard let taskID = raw["taskId"] as? String,
+              let missionID = raw["missionId"] as? String else { return nil }
+        return CAPTTaskSummary(
+            id: taskID,
+            missionID: missionID,
+            title: raw["title"] as? String ?? taskID,
+            state: raw["state"] as? String ?? "unknown",
+            assignedDriverID: stringOrNil(raw["assignedDriverId"]),
+            attempt: raw["attempt"] as? Int ?? 0,
+            maxAttempts: raw["maxAttempts"] as? Int ?? 1,
+            dependencies: raw["dependencies"] as? [String] ?? [],
+            consequential: raw["consequential"] as? Bool ?? false
         )
     }
 
