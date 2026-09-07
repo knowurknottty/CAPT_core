@@ -42,6 +42,7 @@ class ProviderDriver:
         task_resolver=None,
         dispatch_prompt: str = "",
         governor: Optional[TokenCostGovernor] = None,
+        tool_bridge=None,
     ):
         self.root = Path(staging_root)
         self.root.mkdir(parents=True, exist_ok=True)
@@ -52,6 +53,7 @@ class ProviderDriver:
         self.task_resolver = task_resolver
         self.dispatch_prompt = dispatch_prompt
         self.governor = governor or TokenCostGovernor()
+        self.tool_bridge = tool_bridge
         self.runs: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.RLock()
 
@@ -120,6 +122,214 @@ class ProviderDriver:
             "anomalies": [],
         }
 
+    def _post_json(self, rid: str, url: str, body: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
+        try:
+            req = urllib.request.Request(
+                url, data=json.dumps(body).encode(), headers=headers, method="POST"
+            )
+            with self._lock:
+                self.runs[rid]["dispatchBoundary"] = "request_started"
+            with urllib.request.urlopen(req, timeout=120) as response:
+                with self._lock:
+                    self.runs[rid]["dispatchBoundary"] = "response_started"
+                data = json.loads(response.read().decode())
+                with self._lock:
+                    self.runs[rid]["dispatchBoundary"] = "response_completed"
+            if not isinstance(data, dict):
+                raise ProviderDriverFailure("provider returned non-object JSON")
+            return data
+        except urllib.error.HTTPError as exc:
+            with self._lock:
+                self.runs[rid]["state"] = "failed"
+            raise ProviderDriverFailure("provider HTTP %s" % exc.code) from exc
+        except ProviderDriverFailure:
+            with self._lock:
+                self.runs[rid]["state"] = "failed"
+            raise
+        except Exception as exc:
+            with self._lock:
+                self.runs[rid]["state"] = "failed"
+            raise ProviderDriverFailure(
+                "provider unavailable: %s" % type(exc).__name__
+            ) from exc
+
+    @staticmethod
+    def _usage_from(data: dict[str, Any]) -> tuple[int | None, int | None, float]:
+        usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+        prompt_tokens = usage.get("prompt_tokens")
+        completion_tokens = usage.get("completion_tokens")
+        raw_cost = usage.get("cost", usage.get("cost_usd", 0.0))
+        return (
+            int(prompt_tokens) if isinstance(prompt_tokens, (int, float)) else None,
+            int(completion_tokens) if isinstance(completion_tokens, (int, float)) else None,
+            float(raw_cost) if isinstance(raw_cost, (int, float)) else 0.0,
+        )
+
+    def _openai_with_tools(
+        self,
+        rid: str,
+        prompt: str,
+        headers: dict[str, str],
+    ) -> tuple[str, int, int, float, int]:
+        """Run a bounded OpenAI-compatible function-calling loop through ToolBroker."""
+        messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
+        tools = self.tool_bridge.openai_tools()
+        tool_call_count = 0
+        prompt_tokens_total = 0
+        completion_tokens_total = 0
+        cost_total = 0.0
+        max_tool_rounds = 8
+        url = self.base_url + "/chat/completions"
+
+        for round_index in range(max_tool_rounds + 1):
+            body = {
+                "model": self.model,
+                "messages": messages,
+                "stream": False,
+                "max_tokens": self.governor.max_output_tokens_per_request,
+                "tools": tools,
+            }
+            data = self._post_json(rid, url, body, headers)
+            p_tokens, c_tokens, cost = self._usage_from(data)
+            prompt_tokens_total += p_tokens or 0
+            completion_tokens_total += c_tokens or 0
+            cost_total += cost
+
+            choices = data.get("choices") or []
+            message = choices[0].get("message", {}) if choices and isinstance(choices[0], dict) else {}
+            if not isinstance(message, dict):
+                raise ProviderDriverFailure("provider returned malformed assistant message")
+            tool_calls = message.get("tool_calls") or []
+            if not tool_calls:
+                text = message.get("content") or ""
+                if not isinstance(text, str) or not text:
+                    raise ProviderDriverFailure("provider returned no content")
+                return (
+                    text,
+                    prompt_tokens_total,
+                    completion_tokens_total,
+                    cost_total,
+                    tool_call_count,
+                )
+            if round_index >= max_tool_rounds:
+                raise ProviderDriverFailure("provider tool-call round limit exceeded")
+            if not isinstance(tool_calls, list):
+                raise ProviderDriverFailure("provider returned malformed tool_calls")
+
+            messages.append({
+                "role": "assistant",
+                "content": message.get("content"),
+                "tool_calls": tool_calls,
+            })
+            for index, call in enumerate(tool_calls):
+                if not isinstance(call, dict) or call.get("type") != "function":
+                    raise ProviderDriverFailure("provider returned unsupported tool call")
+                function = call.get("function")
+                if not isinstance(function, dict):
+                    raise ProviderDriverFailure("provider returned malformed function call")
+                call_id = call.get("id")
+                name = function.get("name")
+                if not isinstance(call_id, str) or not call_id:
+                    raise ProviderDriverFailure("provider tool call missing id")
+                if not isinstance(name, str) or not name:
+                    raise ProviderDriverFailure("provider tool call missing function name")
+                if tool_call_count >= self.tool_bridge.max_calls:
+                    raise ProviderDriverFailure("provider tool-call count limit exceeded")
+                tool_result = self.tool_bridge.execute_call(
+                    name,
+                    function.get("arguments", "{}"),
+                    call_id=call_id,
+                )
+                tool_call_count += 1
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "name": name,
+                    "content": json.dumps(tool_result, sort_keys=True, separators=(",", ":")),
+                })
+        raise ProviderDriverFailure("provider tool-call loop did not terminate")
+
+    def _ollama_with_tools(
+        self,
+        rid: str,
+        prompt: str,
+        headers: dict[str, str],
+    ) -> tuple[str, int, int, float, int]:
+        """Run a bounded Ollama /api/chat tool loop through the same ToolBroker bridge."""
+        messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
+        tools = self.tool_bridge.openai_tools()
+        tool_call_count = 0
+        prompt_tokens_total = 0
+        completion_tokens_total = 0
+        max_tool_rounds = 8
+        url = self.base_url.replace("/v1", "") + "/api/chat"
+
+        for round_index in range(max_tool_rounds + 1):
+            body = {
+                "model": self.model,
+                "messages": messages,
+                "tools": tools,
+                "stream": False,
+                "options": {"num_predict": self.governor.max_output_tokens_per_request},
+            }
+            data = self._post_json(rid, url, body, headers)
+            prompt_value = data.get("prompt_eval_count")
+            completion_value = data.get("eval_count")
+            if isinstance(prompt_value, (int, float)):
+                prompt_tokens_total += int(prompt_value)
+            if isinstance(completion_value, (int, float)):
+                completion_tokens_total += int(completion_value)
+
+            message = data.get("message")
+            if not isinstance(message, dict):
+                raise ProviderDriverFailure("ollama returned malformed assistant message")
+            tool_calls = message.get("tool_calls") or []
+            if not tool_calls:
+                text = message.get("content") or ""
+                if not isinstance(text, str) or not text:
+                    raise ProviderDriverFailure("provider returned no content")
+                return (
+                    text,
+                    prompt_tokens_total,
+                    completion_tokens_total,
+                    0.0,
+                    tool_call_count,
+                )
+            if round_index >= max_tool_rounds:
+                raise ProviderDriverFailure("provider tool-call round limit exceeded")
+            if not isinstance(tool_calls, list):
+                raise ProviderDriverFailure("ollama returned malformed tool_calls")
+
+            messages.append({
+                "role": "assistant",
+                "content": message.get("content", ""),
+                "tool_calls": tool_calls,
+            })
+            for index, call in enumerate(tool_calls):
+                if not isinstance(call, dict):
+                    raise ProviderDriverFailure("ollama returned malformed tool call")
+                function = call.get("function")
+                if not isinstance(function, dict):
+                    raise ProviderDriverFailure("ollama returned malformed function call")
+                name = function.get("name")
+                if not isinstance(name, str) or not name:
+                    raise ProviderDriverFailure("ollama tool call missing function name")
+                call_id = "ollama-call-%d-%d-%s" % (round_index, index, name)
+                if tool_call_count >= self.tool_bridge.max_calls:
+                    raise ProviderDriverFailure("provider tool-call count limit exceeded")
+                tool_result = self.tool_bridge.execute_call(
+                    name,
+                    function.get("arguments", {}),
+                    call_id=call_id,
+                )
+                tool_call_count += 1
+                messages.append({
+                    "role": "tool",
+                    "tool_name": name,
+                    "content": json.dumps(tool_result, sort_keys=True, separators=(",", ":")),
+                })
+        raise ProviderDriverFailure("provider tool-call loop did not terminate")
+
     def _execute(self, rid, wo):
         prompt = self.dispatch_prompt or (
             self.task_resolver.resolve_for_execution(
@@ -144,61 +354,56 @@ class ProviderDriver:
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
         if self.api_key:
             headers["Authorization"] = "Bearer " + self.api_key
-        if self.provider_id == "ollama":
-            url = self.base_url.replace("/v1", "") + "/api/generate"
-            body = {
-                "model": self.model, "prompt": prompt, "stream": False,
-                "options": {"num_predict": self.governor.max_output_tokens_per_request},
-            }
-        else:
-            url = self.base_url + "/chat/completions"
-            body = {
-                "model": self.model,
-                "messages": [{"role": "user", "content": prompt}],
-                "stream": False,
-                "max_tokens": self.governor.max_output_tokens_per_request,
-            }
-        try:
-            req = urllib.request.Request(
-                url, data=json.dumps(body).encode(), headers=headers, method="POST"
+
+        tool_call_count = 0
+        if self.provider_id == "ollama" and self.tool_bridge is not None:
+            text, prompt_tokens, completion_tokens, cost_usd, tool_call_count = self._ollama_with_tools(
+                rid, prompt, headers
             )
-            with self._lock:
-                self.runs[rid]["dispatchBoundary"] = "request_started"
-            with urllib.request.urlopen(req, timeout=120) as response:
+        elif self.tool_bridge is not None:
+            text, prompt_tokens, completion_tokens, cost_usd, tool_call_count = self._openai_with_tools(
+                rid, prompt, headers
+            )
+        else:
+            if self.provider_id == "ollama":
+                url = self.base_url.replace("/v1", "") + "/api/generate"
+                body = {
+                    "model": self.model, "prompt": prompt, "stream": False,
+                    "options": {"num_predict": self.governor.max_output_tokens_per_request},
+                }
+            else:
+                url = self.base_url + "/chat/completions"
+                body = {
+                    "model": self.model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "stream": False,
+                    "max_tokens": self.governor.max_output_tokens_per_request,
+                }
+            data = self._post_json(rid, url, body, headers)
+            text = (
+                data.get("response")
+                if self.provider_id == "ollama"
+                else ((data.get("choices") or [{}])[0].get("message", {}).get("content"))
+            ) or ""
+            if not text:
                 with self._lock:
-                    self.runs[rid]["dispatchBoundary"] = "response_started"
-                data = json.loads(response.read().decode())
-                with self._lock:
-                    self.runs[rid]["dispatchBoundary"] = "response_completed"
-        except urllib.error.HTTPError as exc:
-            with self._lock:
-                self.runs[rid]["state"] = "failed"
-            raise ProviderDriverFailure("provider HTTP %s" % exc.code) from exc
-        except Exception as exc:
-            with self._lock:
-                self.runs[rid]["state"] = "failed"
-            raise ProviderDriverFailure(
-                "provider unavailable: %s" % type(exc).__name__
-            ) from exc
-        text = (
-            data.get("response")
-            if self.provider_id == "ollama"
-            else ((data.get("choices") or [{}])[0].get("message", {}).get("content"))
-        ) or ""
-        if not text:
-            with self._lock:
-                self.runs[rid]["state"] = "failed"
-            raise ProviderDriverFailure("provider returned no content")
-        usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
-        prompt_tokens = usage.get("prompt_tokens")
-        completion_tokens = usage.get("completion_tokens")
-        if self.provider_id == "ollama":
-            prompt_tokens = data.get("prompt_eval_count", prompt_tokens)
-            completion_tokens = data.get("eval_count", completion_tokens)
-        prompt_tokens = int(prompt_tokens) if isinstance(prompt_tokens, (int, float)) else estimated_prompt_tokens
-        completion_tokens = int(completion_tokens) if isinstance(completion_tokens, (int, float)) else max(1, len(text) // 4)
-        raw_cost = usage.get("cost", usage.get("cost_usd", 0.0))
-        cost_usd = float(raw_cost) if isinstance(raw_cost, (int, float)) else 0.0
+                    self.runs[rid]["state"] = "failed"
+                raise ProviderDriverFailure("provider returned no content")
+            usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+            prompt_tokens = usage.get("prompt_tokens")
+            completion_tokens = usage.get("completion_tokens")
+            if self.provider_id == "ollama":
+                prompt_tokens = data.get("prompt_eval_count", prompt_tokens)
+                completion_tokens = data.get("eval_count", completion_tokens)
+            prompt_tokens = int(prompt_tokens) if isinstance(prompt_tokens, (int, float)) else estimated_prompt_tokens
+            completion_tokens = int(completion_tokens) if isinstance(completion_tokens, (int, float)) else max(1, len(text) // 4)
+            raw_cost = usage.get("cost", usage.get("cost_usd", 0.0))
+            cost_usd = float(raw_cost) if isinstance(raw_cost, (int, float)) else 0.0
+
+        if prompt_tokens <= 0:
+            prompt_tokens = estimated_prompt_tokens
+        if completion_tokens <= 0:
+            completion_tokens = max(1, len(text) // 4)
         resource_receipt = self.governor.record_usage(
             prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, cost_usd=cost_usd
         )
@@ -259,6 +464,7 @@ class ProviderDriver:
                 "responseDigest": response_digest,
                 "dispatchBoundary": dispatch_boundary,
                 "cancelRequested": cancel_requested,
+                "toolCallCount": tool_call_count,
                 "resourceUsage": resource_receipt,
             },
         }

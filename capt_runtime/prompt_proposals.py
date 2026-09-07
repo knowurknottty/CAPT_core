@@ -237,7 +237,7 @@ def request_prompt_proposal_approval(service: Any, intent: Dict[str, Any],
     for key in (
         "requestId", "missionId", "taskId", "driverRunId",
         "skillPackRoot", "skillNames", "managedSkillNames",
-        "autoSelectSkills", "skillLimit",
+        "autoSelectSkills", "skillLimit", "authorityProfile",
     ):
         value = intent.get(key)
         if value is not None:

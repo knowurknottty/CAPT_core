@@ -380,3 +380,83 @@ def test_authoritative_admission_binds_ids_and_consumes_once(tmp_path):
             )
     finally:
         store.close()
+
+
+def test_model_approval_binds_normalized_authority_profile_and_risk(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    profile = {
+        "filesystemScope": "project",
+        "filesystemRoot": str(root),
+        "fileMutationAllowed": True,
+        "shellAccessAllowed": True,
+        "providerNetworkPolicy": "remote_allowed",
+    }
+    store = EventStore(str(tmp_path / "authority-binding.db"))
+    try:
+        svc = RuntimeService(store)
+        result = request_model_prompt_approval(
+            svc,
+            approval_intent(
+                requestId="approval-authority-binding",
+                targetRoot=str(root),
+                authorityProfile=profile,
+            ),
+            meta("cmd-authority-binding", "human", "idem-authority-binding"),
+        )
+        state = store.require_state("human_approval-" + result["requestId"])
+        bound = state["scope"]["approvalBinding"]["authorityProfile"]
+        assert bound["filesystemRoot"] == str(root.resolve())
+        assert bound["toolOperations"] == [
+            "file.read", "file.search", "file.write", "file.patch", "terminal.exec"
+        ]
+        assert state["riskClassification"] == "consequential"
+        assert result["authorityProfile"] == bound
+    finally:
+        store.close()
+
+
+def test_model_approval_digest_changes_when_authority_changes(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    safe = {
+        "filesystemScope": "project",
+        "filesystemRoot": str(root),
+        "fileMutationAllowed": False,
+        "shellAccessAllowed": False,
+        "providerNetworkPolicy": "local_only",
+    }
+    wider = dict(safe)
+    wider["shellAccessAllowed"] = True
+    first = planner_result(
+        tmp_path,
+        "authority-safe",
+        approval_intent(targetRoot=str(root), authorityProfile=safe),
+    )
+    second = planner_result(
+        tmp_path,
+        "authority-shell",
+        approval_intent(targetRoot=str(root), authorityProfile=wider),
+    )
+    assert first["promptAssemblyDigest"] != second["promptAssemblyDigest"]
+
+
+def test_model_approval_defaults_to_safe_authority_for_legacy_client(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    store = EventStore(str(tmp_path / "authority-default.db"))
+    try:
+        svc = RuntimeService(store)
+        result = request_model_prompt_approval(
+            svc,
+            approval_intent(requestId="approval-authority-default", targetRoot=str(root)),
+            meta("cmd-authority-default", "human", "idem-authority-default"),
+        )
+        state = store.require_state("human_approval-" + result["requestId"])
+        bound = state["scope"]["approvalBinding"]["authorityProfile"]
+        assert bound["filesystemScope"] == "project"
+        assert bound["fileMutationAllowed"] is False
+        assert bound["shellAccessAllowed"] is False
+        assert bound["providerNetworkPolicy"] == "local_only"
+    finally:
+        store.close()

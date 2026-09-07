@@ -36,6 +36,7 @@ _KIND_TO_FIELD = {
     "artifact_promotion": "artifactPromotionVersions",
     "cohort": "cohortVersions",
     "replay_fork": "replayForkVersions",
+    "tool_execution": "toolExecutionVersions",
 }
 
 
@@ -133,6 +134,9 @@ def create_checkpoint(
         ),
         "replayForkVersions": sorted(
             versions["replayForkVersions"], key=lambda e: e["streamId"]
+        ),
+        "toolExecutionVersions": sorted(
+            versions["toolExecutionVersions"], key=lambda e: e["streamId"]
         ),
         "activeLeaseIds": sorted(active_lease_ids),
         "activeReservationIds": sorted(open_reservation_ids),

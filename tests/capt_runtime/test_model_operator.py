@@ -342,3 +342,22 @@ def test_hermes_prompt_retains_fixed_mode_without_resolver() -> None:
     )
     assert "OBSERVATION:" in prompt
     assert "inspect the target directory and describe its runtime architecture" in prompt
+
+
+def test_composition_provider_host_wires_model_tool_bridge(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "ledger-provider-tools.db"))
+    target = tmp_path / "target-provider-tools"
+    target.mkdir()
+    sentinel_bridge = object()
+    try:
+        host = runtime.provider_host(
+            target_repo=str(target),
+            staging_root=str(tmp_path / "staging-provider-tools"),
+            provider_id="mtplx",
+            model="tool-model",
+            base_url="http://127.0.0.1:9/v1",
+            tool_bridge=sentinel_bridge,
+        )
+        assert host._driver.tool_bridge is sentinel_bridge
+    finally:
+        runtime.close()

@@ -53,6 +53,14 @@ from capt_runtime.verification import (
 )
 from capt_runtime.composition import RuntimeComposition, create_runtime
 from capt_runtime.provider_endpoint import credential_required
+from capt_runtime.model_authority import (
+    assert_provider_network_allowed,
+    normalize_model_authority,
+    revalidate_normalized_model_authority,
+)
+from capt_runtime.model_tool_authority import (
+    issue_model_tool_authority, revoke_model_tool_authority,
+)
 from capt_runtime.operator_provenance import (
     build_cognitive_provenance, build_prompt_assembly, effective_context_budget,
 )
@@ -824,13 +832,9 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 provider_key = ""
                 if provider_id:
                     from capt_ui.operator.providers import ProviderManager
-                    from capt_ui.operator.secrets import resolve
                     provider = ProviderManager(Path(ledger_path).parent / "ui").get(str(provider_id))
                     if provider is None or not provider_model:
                         raise ValueError("PROVIDER_OR_MODEL_UNAVAILABLE")
-                    provider_key = resolve(provider.id, provider.key_ref)
-                    if credential_required(provider.id, provider.kind, provider.base_url) and not provider_key:
-                        raise ValueError("PROVIDER_CREDENTIAL_UNAVAILABLE")
                 skill_context, skill_names = prepare_runtime_skill_context(
                     payload, state_root=Path(ledger_path).parent
                 )
@@ -855,9 +859,28 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 approval_request_id = payload.get("approvalRequestId")
                 if not approval_request_id:
                     raise AuthorityViolation("MODEL_PROMPT_APPROVAL_RECEIPT_REQUIRED")
+                approval_state = store.require_state(
+                    "human_approval-" + str(approval_request_id)
+                )
+                approval_scope = approval_state.get("scope") or {}
+                approval_binding = approval_scope.get("approvalBinding") or {}
+                frozen_authority = approval_binding.get("authorityProfile")
+                authority_profile = (
+                    revalidate_normalized_model_authority(
+                        frozen_authority, target_root=str(target_root)
+                    )
+                    if frozen_authority is not None
+                    else normalize_model_authority(None, target_root=str(target_root))
+                )
                 proposal_binding = authoritative_proposal_binding_for_execution(
                     store, str(approval_request_id), str(objective)
                 )
+                if provider is not None:
+                    assert_provider_network_allowed(authority_profile, provider.base_url)
+                    from capt_ui.operator.secrets import resolve
+                    provider_key = resolve(provider.id, provider.key_ref)
+                    if credential_required(provider.id, provider.kind, provider.base_url) and not provider_key:
+                        raise ValueError("PROVIDER_CREDENTIAL_UNAVAILABLE")
                 prompt_assembly = build_prompt_assembly(
                     human_prompt=str(objective), response_mode=response_mode,
                     enhancement_engine=enhancement_engine,
@@ -882,6 +905,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     continuation_context=continuation["records"],
                     authored_skill_context=skill_context,
                     proposal_binding=proposal_binding,
+                    authority_profile=authority_profile,
                 )
                 # This read-only check catches a mismatched approval before the
                 # command service consumes the one-use receipt.
@@ -913,6 +937,8 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         "continuationContext": continuation["records"],
                         "authoredSkillContext": skill_context,
                         "skillNames": skill_names,
+                        "authorityProfile": authority_profile,
+                        "approvalExpiresAt": str(approval_state["expiresAt"]),
                     }),
                     context_pack_digest=context_pack_digest,
                 )
@@ -937,13 +963,9 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 provider_key = ""
                 if provider_id:
                     from capt_ui.operator.providers import ProviderManager
-                    from capt_ui.operator.secrets import resolve
                     provider = ProviderManager(Path(ledger_path).parent / "ui").get(provider_id)
                     if provider is None or not provider_model:
                         raise ValueError("PROVIDER_OR_MODEL_UNAVAILABLE")
-                    provider_key = resolve(provider.id, provider.key_ref)
-                    if credential_required(provider.id, provider.kind, provider.base_url) and not provider_key:
-                        raise ValueError("PROVIDER_CREDENTIAL_UNAVAILABLE")
                 requested_context_budget = prepared.data["requestedContextBudget"]
                 effective_budget = prepared.data["effectiveBudget"]
                 human_verification_required = prepared.data["humanVerificationRequired"]
@@ -954,6 +976,15 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     if prepared.data.get("authoredSkillContext") else None
                 )
                 skill_names = list(prepared.data.get("skillNames") or ())
+                authority_profile = revalidate_normalized_model_authority(
+                    dict(prepared.data["authorityProfile"]), target_root=str(target_root)
+                )
+                if provider is not None:
+                    assert_provider_network_allowed(authority_profile, provider.base_url)
+                    from capt_ui.operator.secrets import resolve
+                    provider_key = resolve(provider.id, provider.key_ref)
+                    if credential_required(provider.id, provider.kind, provider.base_url) and not provider_key:
+                        raise ValueError("PROVIDER_CREDENTIAL_UNAVAILABLE")
                 task_title = str(objective).strip()[:512] or "Model operator task"
                 cognitive_provenance = build_cognitive_provenance(
                     assembly=prompt_assembly, provider_id=provider.id if provider is not None else "hermes",
@@ -1024,25 +1055,30 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     return receipt
                 # 1. Authoritative mission/task state (objective persisted in
                 # the Task aggregate by RuntimeService planning).
+                approved_tool_root = str(authority_profile["filesystemRoot"])
                 intent = {
                     "schemaVersion": "1.0.0",
                     "missionId": mission_id,
                     "objective": task_title,
-                    "scope": {"kind": "filesystem", "rootPath": target_root, "recursive": True},
+                    "scope": {"kind": "filesystem", "rootPath": approved_tool_root, "recursive": True},
                     "requiresApproval": False,
                     "constraints": [{"kind": "resource_boundary", "constraintId": "con-model-1",
                                      "origin": "explicit_user",
-                                     "scope": {"kind": "filesystem", "rootPath": target_root, "recursive": True}}],
+                                     "scope": {"kind": "filesystem", "rootPath": approved_tool_root, "recursive": True}}],
                     "successCriteria": [{"criterionId": "sc-model-1",
                                          "statement": "Model task completed with evidence-backed observations.",
                                          "requiresVerification": True}],
                     "terminationCriteria": [{"criterionId": "tc-model-1",
                                              "statement": "Invariant violation terminates the mission.",
                                              "terminalState": "failed"}],
-                    "requestedCapability": "cap.fs.read",
+                    "requestedCapability": (
+                        "cap.model.tools"
+                        if authority_profile["riskClassification"] == "consequential"
+                        else "cap.fs.read"
+                    ),
                     "resource": target_root,
                     "operation": "ModelOperatorInspection",
-                    "riskClassification": "low",
+                    "riskClassification": authority_profile["riskClassification"],
                     "taskId": task_id,
                 }
                 existing_mission = store.load_state("mission-" + str(mission_id))
@@ -1123,6 +1159,28 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 svc.activate_lease(lease, gk_meta("activate_lease"))
                 dispatch_lease = dict(lease)
                 dispatch_lease["scope"] = {**lease["scope"], "allowedPaths": [target_root]}
+
+                # A provider model receives a distinct phase-scoped ToolBroker
+                # lease derived only from the already-approved authority profile.
+                # This is intentionally separate from the one-use driver lease
+                # governing the external model dispatch itself.
+                tool_authority = None
+                if provider is not None:
+                    tool_authority = issue_model_tool_authority(
+                        service=svc,
+                        broker=runtime.tool_broker,
+                        authority_profile=authority_profile,
+                        target_root=str(target_root),
+                        mission_id=str(mission_id),
+                        task_id=str(task_id),
+                        driver_run_id=str(run_id),
+                        operator_id=cmd_svc.operator_id,
+                        session_id=cmd_svc.session_id,
+                        issued_at=str(now),
+                        valid_until=str(prepared.data["approvalExpiresAt"]),
+                        metadata_factory=gk_meta,
+                        now=lambda: datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    )
                 # 3. DriverHost dispatch with the resolved authoritative task.
                 # Authored skill bytes were verified and frozen in `prepare`, before
                 # approval consumption. Binding them here does not re-read disk.
@@ -1136,6 +1194,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         base_url=provider.base_url, api_key=provider_key,
                         dispatch_prompt=str(dispatch_prompt),
                         governor=provider_governor,
+                        tool_bridge=tool_authority.bridge if tool_authority is not None else None,
                     )
                 else:
                     host = runtime.hermes_host(
@@ -1181,7 +1240,22 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 svc.reserve_use(grant_id, reservation, exec_meta("reserve"))
                 _test_fault("reservation")
                 try:
-                    out = host.dispatch(wo, ctx, {"state": "running"}, now=now, lease=dispatch_lease)
+                    try:
+                        out = host.dispatch(
+                            wo, ctx, {"state": "running"}, now=now, lease=dispatch_lease
+                        )
+                    finally:
+                        # Phase-Fenced Capability Consumption: whether provider
+                        # dispatch returns or raises, model tool authority closes
+                        # before any normal completion can be recorded.
+                        if tool_authority is not None:
+                            revoke_model_tool_authority(
+                                service=svc,
+                                grant_id=tool_authority.grant_id,
+                                issued_at=now,
+                                reason="provider tool phase closed",
+                                metadata=gk_meta("revoke_model_tools"),
+                            )
                 except Exception:
                     # Dispatch reached an external boundary after reservation. The
                     # absence of a result is not proof that no side effect occurred:
@@ -1192,10 +1266,9 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         "outcome": "indeterminate", "sideEffectIdentity": run_id, "finalizedAt": now,
                     }
                     svc.finalize_use(grant_id, consumption, exec_meta("finalize-indeterminate"))
-                    # A dispatch exception after the boundary is not evidence of
-                    # failure. Preserve the unknown as lost + suspended so the
-                    # existing governed cancellation/reconciliation path, not an
-                    # automatic retry, decides the terminal disposition.
+                    # A dispatch or phase-closure exception after the boundary is
+                    # not evidence of failure. Preserve the unknown as lost +
+                    # suspended so governed reconciliation, not retry, decides it.
                     svc.transition_driver_run(run_id, "lost", exec_meta("drlost"))
                     svc.transition_task(task_id, "suspended", "external dispatch outcome indeterminate; reconciliation required", exec_meta("tasksuspended"))
                     raise

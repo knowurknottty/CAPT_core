@@ -15,6 +15,7 @@ from .authored_skills import summarize_skill_context
 from .contracts import digest
 from .drivers.hermes import build_prompt as build_hermes_prompt
 from .operator_provenance import build_model_operator_prompt_assembly
+from .model_tool_bridge import model_tool_schema_digest
 
 MODEL_OPERATOR_OPERATIONS = [
     "RepositoryRead",
@@ -58,6 +59,7 @@ def build_bound_model_operator_approval(
     continuation_context: Optional[List[Dict[str, Any]]] = None,
     authored_skill_context: Optional[Dict[str, Any]] = None,
     proposal_binding: Optional[Dict[str, Any]] = None,
+    authority_profile: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Return the model-visible assembly plus its execution admission binding."""
     assembly = build_model_operator_prompt_assembly(
@@ -108,6 +110,9 @@ def build_bound_model_operator_approval(
     authored_summary = summarize_skill_context(authored_skill_context)
     if authored_summary is not None:
         binding["authoredSkills"] = authored_summary
+    if authority_profile is not None:
+        binding["authorityProfile"] = dict(authority_profile)
+        binding["modelToolSchemaDigest"] = model_tool_schema_digest(authority_profile)
     if proposal_binding:
         binding.update(dict(proposal_binding))
     approval_digest = digest(
