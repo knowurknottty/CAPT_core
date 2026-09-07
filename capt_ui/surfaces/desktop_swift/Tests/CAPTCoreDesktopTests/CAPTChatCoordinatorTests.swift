@@ -222,6 +222,34 @@ extension CAPTChatCoordinatorTests {
         XCTAssertNil(payload["autoSelectSkills"])
     }
 
+    func testProposalApprovalCarriesOperatorAuthorityIntent() throws {
+        let client = MockRuntimeClient()
+        client.responses["request_prompt_proposal_approval"] = approvalResponse()
+        let coordinator = CAPTChatCoordinator(client: client)
+        let proposal = try CAPTPromptProposal(
+            dictionary: promptProposalResponse()["result"] as! [String: Any]
+        )
+        let settings = CAPTExecutionAuthoritySettings(
+            filesystemScope: .custom,
+            customFilesystemRoot: "/workspace",
+            fileMutationAllowed: true,
+            shellAccessAllowed: false,
+            providerNetwork: .remoteAllowed,
+            remotePromptCompilationAllowed: true
+        )
+
+        _ = try coordinator.requestApproval(
+            proposal: proposal, selection: .upgrade, authoritySettings: settings
+        )
+
+        let profile = try XCTUnwrap(client.calls[0].1["authorityProfile"] as? [String: Any])
+        XCTAssertEqual(profile["filesystemScope"] as? String, "custom")
+        XCTAssertEqual(profile["filesystemRoot"] as? String, "/workspace")
+        XCTAssertEqual(profile["fileMutationAllowed"] as? Bool, true)
+        XCTAssertEqual(profile["shellAccessAllowed"] as? Bool, false)
+        XCTAssertEqual(profile["providerNetworkPolicy"] as? String, "remote_allowed")
+    }
+
     func testProposalApprovalCanExplicitlyDisableManagedSkills() throws {
         let client = MockRuntimeClient()
         client.responses["request_prompt_proposal_approval"] = approvalResponse()

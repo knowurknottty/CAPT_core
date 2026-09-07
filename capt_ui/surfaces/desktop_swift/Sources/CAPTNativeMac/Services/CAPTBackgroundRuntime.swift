@@ -252,12 +252,13 @@ actor CAPTBackgroundRuntime {
         editedPrompt: String = "",
         missionID: String? = nil,
         managedSkillNames: [String]? = nil,
-        autoSelectSkills: Bool = true
+        autoSelectSkills: Bool = true,
+        authoritySettings: CAPTExecutionAuthoritySettings = .default
     ) throws -> CAPTPendingApproval {
         try coordinator.requestApproval(
             proposal: proposal, selection: selection, editedPrompt: editedPrompt,
             missionID: missionID, managedSkillNames: managedSkillNames,
-            autoSelectSkills: autoSelectSkills
+            autoSelectSkills: autoSelectSkills, authoritySettings: authoritySettings
         )
     }
 

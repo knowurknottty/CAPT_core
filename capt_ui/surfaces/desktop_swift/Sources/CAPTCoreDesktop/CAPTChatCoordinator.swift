@@ -65,7 +65,8 @@ public final class CAPTChatCoordinator {
         editedPrompt: String = "",
         missionID: String? = nil,
         managedSkillNames: [String]? = nil,
-        autoSelectSkills: Bool = true
+        autoSelectSkills: Bool = true,
+        authoritySettings: CAPTExecutionAuthoritySettings = .default
     ) throws -> CAPTPendingApproval {
         let selected = proposal.selectedPrompt(selection, edited: editedPrompt)
         guard !selected.isEmpty else {
@@ -80,6 +81,20 @@ public final class CAPTChatCoordinator {
         ]
         if selection == .edited { payload["editedPrompt"] = selected }
         if let missionID, !missionID.isEmpty { payload["missionId"] = missionID }
+        guard let filesystemRoot = authoritySettings.effectiveFilesystemRoot(
+            projectRoot: proposal.targetRoot
+        ) else {
+            throw CAPTRuntimeClientError.malformedResponse(
+                "custom filesystem scope requires a selected root"
+            )
+        }
+        payload["authorityProfile"] = [
+            "filesystemScope": authoritySettings.filesystemScope.rawValue,
+            "filesystemRoot": filesystemRoot,
+            "fileMutationAllowed": authoritySettings.fileMutationAllowed,
+            "shellAccessAllowed": authoritySettings.shellAccessAllowed,
+            "providerNetworkPolicy": authoritySettings.providerNetwork.rawValue,
+        ]
         if let managedSkillNames, !managedSkillNames.isEmpty {
             payload["managedSkillNames"] = managedSkillNames
         } else {

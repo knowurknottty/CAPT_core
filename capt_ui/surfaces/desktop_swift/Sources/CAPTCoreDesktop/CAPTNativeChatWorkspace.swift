@@ -370,6 +370,31 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         reconcileApprovalValidity(for: id, now: now)
     }
 
+    public mutating func invalidateActiveAuthority(reason: String) {
+        guard let id = activeSessionID, let index = index(of: id) else { return }
+        let currentFlow = flow(for: id)
+        let hasBoundWork = sessions[index].pendingApproval != nil ||
+            sessions[index].promptProposal != nil ||
+            [.compilingProposal, .reviewingProposal, .requestingApproval].contains(currentFlow.phase)
+        guard hasBoundWork else { return }
+
+        sessions[index].pendingApproval = nil
+        sessions[index].promptProposal = nil
+        let message = reason.isEmpty
+            ? "Execution authority settings changed. Submit the prompt again to bind a fresh approval."
+            : reason + " Submit the prompt again to bind a fresh approval."
+        sessions[index].messages.append(CAPTChatMessage(
+            role: .system,
+            text: message,
+            authorityState: "authority_settings_superseded"
+        ))
+        sessions[index].updatedAt = Date()
+        var nextFlow = currentFlow
+        nextFlow.approvalSuperseded(message: message)
+        flows[id] = nextFlow
+    }
+
+
     private mutating func reconcileApprovalValidity(
         for id: UUID,
         now: Date

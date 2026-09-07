@@ -356,6 +356,30 @@ extension CAPTNativeChatWorkspaceTests {
         XCTAssertEqual(workspace.flow(for: oldID).phase, .reviewingProposal)
     }
 
+    func testAuthoritySettingsMutationInvalidatesProposalAndApprovalCursor() throws {
+        var workspace = CAPTNativeChatWorkspace()
+        let id = workspace.newChat(
+            provider: "openrouter", model: "model-a", targetRoot: "/repo"
+        )
+        _ = workspace.beginPrompt(
+            "first prompt", provider: "openrouter", model: "model-a", targetRoot: "/repo"
+        )
+        workspace.receiveProposal(try proposal(), for: id)
+        XCTAssertNotNil(workspace.activePromptProposal)
+
+        workspace.invalidateActiveAuthority(
+            reason: "Execution authority settings changed."
+        )
+
+        XCTAssertNil(workspace.activePromptProposal)
+        XCTAssertNil(workspace.activePendingApproval)
+        XCTAssertEqual(workspace.activeFlow.phase, .recoverableFailure)
+        XCTAssertEqual(
+            workspace.activeSession?.messages.last?.authorityState,
+            "authority_settings_superseded"
+        )
+    }
+
     func testConfigurationMutationInvalidatesProposal() throws {
         let session = CAPTNativeSession(
             id: oldID, title: "Old", provider: "openrouter", model: "model-a",

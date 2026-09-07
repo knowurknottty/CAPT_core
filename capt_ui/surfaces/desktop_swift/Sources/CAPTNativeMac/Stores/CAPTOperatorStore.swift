@@ -40,6 +40,7 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var managedSkills: CAPTManagedSkillSnapshot?
     @Published var skillSelectionMode = "auto"
     @Published var selectedSkillNames: Set<String> = []
+    @Published var authoritySettings = CAPTExecutionAuthoritySettings.default
     @Published private var chatWorkspace = CAPTNativeChatWorkspace()
 
     private let runtime: CAPTBackgroundRuntime
@@ -56,6 +57,10 @@ final class CAPTOperatorStore: ObservableObject {
         let storedMode = defaults.string(forKey: "capt.skillSelectionMode") ?? "auto"
         self.skillSelectionMode = ["auto", "manual", "off"].contains(storedMode) ? storedMode : "auto"
         self.selectedSkillNames = Set(defaults.stringArray(forKey: "capt.selectedSkillNames") ?? [])
+        if let data = defaults.data(forKey: "capt.executionAuthoritySettings"),
+           let decoded = try? JSONDecoder().decode(CAPTExecutionAuthoritySettings.self, from: data) {
+            self.authoritySettings = decoded
+        }
         restoreSessionsAsync()
     }
 
@@ -222,12 +227,15 @@ final class CAPTOperatorStore: ObservableObject {
         let selectedModel = model
         let root = targetRoot
         let intelligence = promptIntelligence
+        let remoteCompilationAuthorized = authoritySettings.remotePromptCompilationAllowed &&
+            authoritySettings.providerNetwork == .remoteAllowed
 
         Task {
             do {
                 let proposal = try await runtime.compileProposal(
                     original: trimmed, targetRoot: root, provider: selectedProvider,
-                    model: selectedModel, promptIntelligence: intelligence
+                    model: selectedModel, promptIntelligence: intelligence,
+                    remoteCompilationAuthorized: remoteCompilationAuthorized
                 )
                 mutateWorkspace { $0.receiveProposal(proposal, for: sessionID) }
                 if activeSessionID == sessionID {
@@ -268,7 +276,8 @@ final class CAPTOperatorStore: ObservableObject {
                 let pending = try await runtime.requestApproval(
                     proposal: proposal, selection: selection, editedPrompt: editedPrompt,
                     missionID: missionID, managedSkillNames: skillSelection.names,
-                    autoSelectSkills: skillSelection.autoSelect
+                    autoSelectSkills: skillSelection.autoSelect,
+                    authoritySettings: authoritySettings
                 )
                 mutateWorkspace { $0.receiveApproval(pending, for: sessionID) }
                 if activeSessionID == sessionID { updateTaskStateFromActiveFlow() }
@@ -550,6 +559,23 @@ final class CAPTOperatorStore: ObservableObject {
         let defaults = UserDefaults.standard
         defaults.set(skillSelectionMode, forKey: "capt.skillSelectionMode")
         defaults.set(selectedSkillNames.sorted(), forKey: "capt.selectedSkillNames")
+    }
+
+    func setAuthoritySettings(_ settings: CAPTExecutionAuthoritySettings) {
+        guard settings != authoritySettings else { return }
+        authoritySettings = settings
+        if let data = try? JSONEncoder().encode(settings) {
+            UserDefaults.standard.set(data, forKey: "capt.executionAuthoritySettings")
+        }
+        mutateWorkspace {
+            $0.invalidateActiveAuthority(reason: "Execution authority settings changed.")
+        }
+        updateTaskStateFromActiveFlow()
+        saveSessions()
+    }
+
+    var effectiveAuthorityFilesystemRoot: String? {
+        authoritySettings.effectiveFilesystemRoot(projectRoot: targetRoot)
     }
 
     func refreshAll() {
