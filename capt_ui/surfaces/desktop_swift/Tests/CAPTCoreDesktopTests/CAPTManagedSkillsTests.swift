@@ -27,4 +27,18 @@ final class CAPTManagedSkillsTests: XCTestCase {
     func testSnapshotRequiresPackIdentity() {
         XCTAssertThrowsError(try CAPTManagedSkillSnapshot(dictionary: ["installed": false]))
     }
+    func testMutationResultDecodesAuthoritativePackReceipt() throws {
+        let result = try CAPTManagedSkillMutationResult(dictionary: [
+            "installed": true,
+            "packRoot": "/state/skills/ultimate",
+            "packName": "ultimate",
+            "packVersion": "managed-1",
+            "manifestDigest": "sha256:manifest",
+            "skillNames": ["capt-ui-review", "reviewer"],
+        ])
+        XCTAssertTrue(result.installed)
+        XCTAssertEqual(result.packName, "ultimate")
+        XCTAssertEqual(result.skillNames, ["capt-ui-review", "reviewer"])
+    }
+
 }

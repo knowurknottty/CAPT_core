@@ -44,3 +44,31 @@ public struct CAPTManagedSkillSnapshot: Sendable, Equatable {
         }
     }
 }
+
+public struct CAPTManagedSkillMutationResult: Sendable, Equatable {
+    public let installed: Bool
+    public let packRoot: String
+    public let packName: String
+    public let packVersion: String
+    public let manifestDigest: String
+    public let skillNames: [String]
+
+    public init(dictionary: [String: Any]) throws {
+        guard let installed = dictionary["installed"] as? Bool,
+              let packRoot = dictionary["packRoot"] as? String,
+              let packName = dictionary["packName"] as? String,
+              let packVersion = dictionary["packVersion"] as? String,
+              let manifestDigest = dictionary["manifestDigest"] as? String,
+              let skillNames = dictionary["skillNames"] as? [String] else {
+            throw CAPTRuntimeClientError.malformedResponse(
+                "managed skill mutation receipt missing pack identity"
+            )
+        }
+        self.installed = installed
+        self.packRoot = packRoot
+        self.packName = packName
+        self.packVersion = packVersion
+        self.manifestDigest = manifestDigest
+        self.skillNames = skillNames
+    }
+}

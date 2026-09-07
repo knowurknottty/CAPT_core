@@ -40,6 +40,9 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var managedSkills: CAPTManagedSkillSnapshot?
     @Published var skillSelectionMode = "auto"
     @Published var selectedSkillNames: Set<String> = []
+    @Published var skillManagementBusy = false
+    @Published var skillManagementMessage = ""
+    @Published var composerSeed: String?
     @Published var authoritySettings = CAPTExecutionAuthoritySettings.default
     @Published private var chatWorkspace = CAPTNativeChatWorkspace()
 
@@ -510,18 +513,76 @@ final class CAPTOperatorStore: ObservableObject {
         guard connectionState == .connected else { return }
         Task {
             do {
-                let snapshot = try await runtime.managedSkillsSnapshot()
-                managedSkills = snapshot
-                let installed = Set(snapshot.skills.map(\.name))
-                let filtered = selectedSkillNames.intersection(installed)
-                if filtered != selectedSkillNames {
-                    selectedSkillNames = filtered
-                    persistSkillPreferences()
-                }
+                applyManagedSkillSnapshot(try await runtime.managedSkillsSnapshot())
             } catch {
                 lastError = error.localizedDescription
             }
         }
+    }
+
+    private func applyManagedSkillSnapshot(_ snapshot: CAPTManagedSkillSnapshot) {
+        managedSkills = snapshot
+        let installed = Set(snapshot.skills.map(\.name))
+        let filtered = selectedSkillNames.intersection(installed)
+        if filtered != selectedSkillNames {
+            selectedSkillNames = filtered
+            persistSkillPreferences()
+        }
+    }
+
+    func installManagedSkill(from sourcePath: String) {
+        guard connectionState == .connected, !skillManagementBusy else { return }
+        skillManagementBusy = true
+        skillManagementMessage = "Installing and verifying managed skill…"
+        lastError = nil
+        Task {
+            defer { skillManagementBusy = false }
+            do {
+                let result = try await runtime.installManagedSkill(sourcePath: sourcePath)
+                applyManagedSkillSnapshot(try await runtime.managedSkillsSnapshot())
+                skillManagementMessage =
+                    "Verified \(result.skillNames.count) managed skills · \(result.manifestDigest.prefix(20))…"
+            } catch {
+                skillManagementMessage = ""
+                lastError = error.localizedDescription
+            }
+        }
+    }
+
+    func createManagedSkill(
+        name: String, description: String, version: String, body: String
+    ) {
+        guard connectionState == .connected, !skillManagementBusy else { return }
+        skillManagementBusy = true
+        skillManagementMessage = "Creating and verifying managed skill…"
+        lastError = nil
+        Task {
+            defer { skillManagementBusy = false }
+            do {
+                let result = try await runtime.createManagedSkill(
+                    name: name, description: description, version: version, body: body
+                )
+                applyManagedSkillSnapshot(try await runtime.managedSkillsSnapshot())
+                skillManagementMessage =
+                    "Created \(name) · pack now contains \(result.skillNames.count) verified skills."
+            } catch {
+                skillManagementMessage = ""
+                lastError = error.localizedDescription
+            }
+        }
+    }
+
+    func beginGuidedSkillCreation() {
+        composerSeed = """
+        Guide me interactively in designing a new CAPT managed Agent Skill. Start by helping me sharpen the skill's mission, triggers, scope boundaries, failure modes, and verification criteria. Do not fabricate requirements I have not chosen. When the design is settled, produce a complete production-ready SKILL.md with valid frontmatter fields `name`, `description`, and `version`, followed by precise operational instructions. The final skill must be suitable for installation through CAPT's Skills tab.
+        """
+        newChat()
+    }
+
+    func takeComposerSeed() -> String? {
+        let seed = composerSeed
+        composerSeed = nil
+        return seed
     }
 
     func setSkillSelectionMode(_ mode: String) {

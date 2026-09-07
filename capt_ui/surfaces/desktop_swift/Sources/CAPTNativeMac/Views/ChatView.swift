@@ -89,6 +89,12 @@ struct ChatView: View {
             }
         }
         .navigationTitle(store.activeSessionTitle)
+        .onAppear {
+            seedComposerIfNeeded()
+        }
+        .onChange(of: store.composerSeed) { _ in
+            seedComposerIfNeeded()
+        }
         .task(id: store.pendingApproval?.requestID) {
             guard let expiresAt = store.pendingApproval?.expiresAt else { return }
             let delay = expiresAt.timeIntervalSinceNow
@@ -98,6 +104,12 @@ struct ChatView: View {
             guard !Task.isCancelled else { return }
             store.reconcileActiveApprovalValidity()
         }
+    }
+
+    private func seedComposerIfNeeded() {
+        guard draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let seed = store.takeComposerSeed() else { return }
+        draft = seed
     }
 }
 

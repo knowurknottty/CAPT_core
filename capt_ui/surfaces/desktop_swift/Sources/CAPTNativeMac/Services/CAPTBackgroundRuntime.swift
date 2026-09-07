@@ -54,6 +54,46 @@ actor CAPTBackgroundRuntime {
         return try CAPTManagedSkillSnapshot(dictionary: result)
     }
 
+    func installManagedSkill(sourcePath: String, packName: String = "ultimate") throws -> CAPTManagedSkillMutationResult {
+        let receipt = try client.command(
+            op: "install_managed_skill",
+            payload: ["sourcePath": sourcePath, "packName": packName],
+            idempotencyKey: "native-skill-install-" + UUID().uuidString.lowercased()
+        )
+        return try managedSkillMutationResult(receipt, operation: "install")
+    }
+
+    func createManagedSkill(
+        name: String, description: String, version: String, body: String,
+        packName: String = "ultimate"
+    ) throws -> CAPTManagedSkillMutationResult {
+        let receipt = try client.command(
+            op: "create_managed_skill",
+            payload: [
+                "name": name, "description": description, "version": version,
+                "body": body, "packName": packName,
+            ],
+            idempotencyKey: "native-skill-create-" + UUID().uuidString.lowercased()
+        )
+        return try managedSkillMutationResult(receipt, operation: "create")
+    }
+
+    private func managedSkillMutationResult(
+        _ receipt: [String: Any], operation: String
+    ) throws -> CAPTManagedSkillMutationResult {
+        let status = receipt["status"] as? String ?? ""
+        guard status == "accepted" || status == "idempotent" else {
+            let detail = receipt["detail"] as? String ?? "runtime rejected managed skill \(operation)"
+            throw CAPTRuntimeClientError.malformedResponse(detail)
+        }
+        guard let result = receipt["result"] as? [String: Any] else {
+            throw CAPTRuntimeClientError.malformedResponse(
+                "managed skill \(operation) receipt missing result"
+            )
+        }
+        return try CAPTManagedSkillMutationResult(dictionary: result)
+    }
+
     func historySnapshot() throws -> CAPTHistorySnapshot {
         let aggregateResponse = try client.query(op: "list_aggregates", payload: [:])
         let aggregates = aggregateResponse["result"] as? [[String: Any]] ?? []

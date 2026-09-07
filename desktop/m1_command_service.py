@@ -9,6 +9,7 @@ runtime modules/services.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from capt_runtime import commands
@@ -58,6 +59,8 @@ _VALID_OPS = (
     "shutdown",
     "resume_runtime",
     "run_tool",
+    "install_managed_skill",
+    "create_managed_skill",
 )
 
 
@@ -129,6 +132,54 @@ class RuntimeCommandService:
             replay_policy="never",
         )
 
+    def _managed_skill_mutation_result(self, verified: Dict[str, Any], root: Path) -> Dict[str, Any]:
+        return {
+            "installed": True,
+            "packRoot": str(root.resolve()),
+            "packName": str(verified.get("packName", "ultimate")),
+            "packVersion": str(verified.get("packVersion", "managed-1")),
+            "manifestDigest": str(verified["manifestDigest"]),
+            "skillNames": [str(item["name"]) for item in verified.get("skills", [])],
+        }
+
+    def _execute_managed_skill_mutation(self, cmd: Dict[str, Any], mutation) -> Dict[str, Any]:
+        """Durably claim one operator skill-pack mutation before swapping files."""
+        fingerprint = commands.fingerprint(cmd["op"], cmd["payload"])
+        claim = self.store.claim_command(
+            cmd["idempotencyKey"], fingerprint, cmd["commandId"]
+        )
+        if claim.get("replayed"):
+            if claim.get("status") == "in_progress":
+                return self._receipt(
+                    cmd, status="in_progress", classification="in_progress",
+                    result={"operation": cmd["op"]},
+                )
+            result = claim.get("result") if isinstance(claim.get("result"), dict) else {}
+            return self._receipt(
+                cmd, status="idempotent", classification="duplicate", result=result
+            )
+        try:
+            result = mutation()
+        except Exception as exc:
+            self.store.complete_claimed_command(
+                cmd["idempotencyKey"], fingerprint,
+                {
+                    "status": "failed",
+                    "operation": cmd["op"],
+                    "errorType": type(exc).__name__,
+                    "detail": str(exc)[:240],
+                    "result": {},
+                },
+            )
+            raise
+        self.store.complete_claimed_command(
+            cmd["idempotencyKey"], fingerprint,
+            {"status": "completed", "operation": cmd["op"], "result": result},
+        )
+        return self._receipt(
+            cmd, status="accepted", classification="accepted", result=result
+        )
+
     def execute(self, cmd: Dict[str, Any]) -> Dict[str, Any]:
         envelope_err = self._validate_envelope(cmd)
         if envelope_err:
@@ -143,6 +194,45 @@ class RuntimeCommandService:
         op = cmd["op"]
         meta = self._operator_metadata(cmd)
         try:
+            if op == "install_managed_skill":
+                from capt_runtime.managed_skills import (
+                    default_managed_skill_root, install_managed_skill_source,
+                )
+                payload = cmd["payload"]
+                source = payload.get("sourcePath")
+                pack_name = str(payload.get("packName") or "ultimate")
+                if not isinstance(source, str) or not source.strip():
+                    raise ValueError("MANAGED_SKILL_SOURCE_PATH_REQUIRED")
+                root = default_managed_skill_root(Path(self.store.path).parent, pack_name)
+                return self._execute_managed_skill_mutation(
+                    cmd,
+                    lambda: self._managed_skill_mutation_result(
+                        install_managed_skill_source(source, root, pack_name=pack_name), root
+                    ),
+                )
+
+            if op == "create_managed_skill":
+                from capt_runtime.managed_skills import (
+                    create_managed_skill, default_managed_skill_root,
+                )
+                payload = cmd["payload"]
+                pack_name = str(payload.get("packName") or "ultimate")
+                root = default_managed_skill_root(Path(self.store.path).parent, pack_name)
+                return self._execute_managed_skill_mutation(
+                    cmd,
+                    lambda: self._managed_skill_mutation_result(
+                        create_managed_skill(
+                            root,
+                            name=str(payload.get("name") or ""),
+                            description=str(payload.get("description") or ""),
+                            version=str(payload.get("version") or "1.0.0"),
+                            body=str(payload.get("body") or ""),
+                            pack_name=pack_name,
+                        ),
+                        root,
+                    ),
+                )
+
             if op == "run_tool":
                 if self.tool_broker is None:
                     return self._receipt(

@@ -44,7 +44,7 @@ struct ContentView: View {
         case .providers:
             ProviderControlView(store: store)
         case .skills:
-            SkillsView(store: store)
+            SkillsView(store: store, selection: $selection)
         case .memory:
             MemoryContextView(store: store)
         case .evidence:

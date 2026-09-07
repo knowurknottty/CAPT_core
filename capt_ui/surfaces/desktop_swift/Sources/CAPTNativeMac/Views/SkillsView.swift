@@ -3,7 +3,9 @@ import CAPTCoreDesktop
 
 struct SkillsView: View {
     @ObservedObject var store: CAPTOperatorStore
+    @Binding var selection: CAPTSidebarSection
     @State private var search = ""
+    @State private var showingCreateSheet = false
 
     private var filteredSkills: [CAPTManagedSkill] {
         guard let skills = store.managedSkills?.skills else { return [] }
@@ -31,6 +33,14 @@ struct SkillsView: View {
         }
         .navigationTitle("Skills")
         .onAppear { store.refreshSkills() }
+        .sheet(isPresented: $showingCreateSheet) {
+            SkillCreationSheet(isBusy: store.skillManagementBusy) { name, description, version, body in
+                store.createManagedSkill(
+                    name: name, description: description, version: version, body: body
+                )
+                showingCreateSheet = false
+            }
+        }
     }
 
     private var controlHeader: some View {
@@ -43,11 +53,29 @@ struct SkillsView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                Button(action: chooseInstallSource) {
+                    Label("Install…", systemImage: "square.and.arrow.down")
+                }
+                .disabled(!canMutatePack)
+                Button {
+                    showingCreateSheet = true
+                } label: {
+                    Label("Create…", systemImage: "plus.square")
+                }
+                .disabled(!canMutatePack)
+                Button {
+                    store.beginGuidedSkillCreation()
+                    selection = .chat
+                } label: {
+                    Label("Create with CAPT", systemImage: "bubble.left.and.text.bubble.right")
+                }
+                .disabled(store.connectionState != .connected)
                 Button {
                     store.refreshSkills()
                 } label: {
                     Label("Verify Pack", systemImage: "checkmark.shield")
                 }
+                .disabled(store.connectionState != .connected || store.skillManagementBusy)
             }
 
             Picker("Selection", selection: Binding(
@@ -65,14 +93,34 @@ struct SkillsView: View {
                 HStack(spacing: 12) {
                     Label("\(snapshot.skills.count) verified", systemImage: "checkmark.seal")
                     Text(snapshot.packName + (snapshot.packVersion.map { " · " + $0 } ?? ""))
-                    if let trust = snapshot.trust { Text(trust.replacingOccurrences(of: "_", with: " ")) }
+                    if let trust = snapshot.trust {
+                        Text(trust.replacingOccurrences(of: "_", with: " "))
+                    }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
             }
+
+            if store.skillManagementBusy {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text(store.skillManagementMessage)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            } else if !store.skillManagementMessage.isEmpty {
+                Label(store.skillManagementMessage, systemImage: "checkmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
         }
         .padding(20)
+    }
+
+    private var canMutatePack: Bool {
+        store.connectionState == .connected && !store.skillManagementBusy
     }
 
     private var modeDescription: String {
@@ -145,13 +193,85 @@ struct SkillsView: View {
                 .font(.system(size: 34))
                 .foregroundStyle(.secondary)
             Text("No verified managed skill pack").font(.headline)
-            Text("CAPT will not advertise or inject skills until the runtime verifies an installed pack.")
+            Text("Install an Agent Skill folder, create one here, or ask CAPT to guide the authoring process. CAPT will not inject a skill until the runtime verifies the resulting pack.")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 440)
-            Button("Verify Again") { store.refreshSkills() }
+                .frame(maxWidth: 500)
+            HStack {
+                Button("Install…", action: chooseInstallSource).disabled(!canMutatePack)
+                Button("Create…") { showingCreateSheet = true }.disabled(!canMutatePack)
+                Button("Create with CAPT") {
+                    store.beginGuidedSkillCreation()
+                    selection = .chat
+                }
+                .disabled(store.connectionState != .connected)
+            }
         }
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+
+    private func chooseInstallSource() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = false
+        panel.prompt = "Install Skills"
+        panel.message = "Choose a folder containing SKILL.md files or .skill bundles. CAPT will verify and atomically merge the discovered skills."
+        if panel.runModal() == .OK, let url = panel.url {
+            store.installManagedSkill(from: url.path)
+        }
+    }
+}
+
+private struct SkillCreationSheet: View {
+    let isBusy: Bool
+    let create: (String, String, String, String) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var description = ""
+    @State private var version = "1.0.0"
+    @State private var instructions = ""
+
+    private var canCreate: Bool {
+        !isBusy &&
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var bodyContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Create Managed Skill").font(.title2.bold())
+            Text("CAPT constructs a real SKILL.md, atomically merges it into the managed pack, and verifies the new manifest before it becomes selectable.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            TextField("name, e.g. capt-ui-review", text: $name)
+            TextField("description — when CAPT should use this skill", text: $description)
+            TextField("version", text: $version)
+                .frame(maxWidth: 180)
+            Text("Skill instructions").font(.headline)
+            TextEditor(text: $instructions)
+                .font(.body.monospaced())
+                .frame(minHeight: 260)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(.quaternary, lineWidth: 1)
+                }
+            HStack {
+                Button("Cancel") { dismiss() }
+                Spacer()
+                Button("Create & Verify") {
+                    create(name, description, version, instructions)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canCreate)
+            }
+        }
+        .padding(24)
+        .frame(minWidth: 640, minHeight: 520)
+    }
+
+    var body: some View { bodyContent }
 }
