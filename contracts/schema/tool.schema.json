@@ -302,7 +302,8 @@
       "enum": [
         "local",
         "ssh",
-        "docker"
+        "docker",
+        "cloudflare"
       ]
     },
     "ToolReadinessStatus": {

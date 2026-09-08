@@ -14,23 +14,40 @@ from typing import Any, Callable, Iterable, Optional
 from .driver_host import DriverHost
 from .drivers.openharness import DESCRIPTOR, OpenHarnessDriver
 from .drivers.registry import DriverRegistry
-from .steered_service import SteeredRuntimeService
-from .memory.engine import MemoryTriggerEngine
 from .mcp import MCPManager
+from .memory.engine import MemoryTriggerEngine
 from .memory.store import MemoryStore
 from .services import RuntimeService
+from .steered_service import SteeredRuntimeService
 from .store import EventStore
 from .task_resolver import TaskResolver
 from .tool_broker import ToolBroker
 from .tools.adapters import (
-    CodeExecutionAdapter, DockerTerminalToolAdapter, FileToolAdapter,
-    SSHTerminalToolAdapter, TerminalToolAdapter,
+    CloudflareTerminalToolAdapter,
+    CodeExecutionAdapter,
+    DockerTerminalToolAdapter,
+    FileToolAdapter,
+    SSHTerminalToolAdapter,
+    TerminalToolAdapter,
 )
-from .tools.backends.docker import DockerProcessBackend, DockerProfile, DockerProfileRegistry
+from .tools.backends.cloudflare import (
+    CloudflareSandboxBackend,
+    CloudflareSandboxProfile,
+    CloudflareSandboxProfileRegistry,
+)
+from .tools.backends.docker import (
+    DockerProcessBackend,
+    DockerProfile,
+    DockerProfileRegistry,
+)
 from .tools.backends.ssh import SSHProcessBackend, SSHProfile, SSHProfileRegistry
 from .tools.builtins import (
-    CODE_EXECUTION_DESCRIPTOR, FILE_OPERATIONS_DESCRIPTOR,
-    TERMINAL_DOCKER_DESCRIPTOR, TERMINAL_LOCAL_DESCRIPTOR, TERMINAL_SSH_DESCRIPTOR,
+    CODE_EXECUTION_DESCRIPTOR,
+    FILE_OPERATIONS_DESCRIPTOR,
+    TERMINAL_CLOUDFLARE_DESCRIPTOR,
+    TERMINAL_DOCKER_DESCRIPTOR,
+    TERMINAL_LOCAL_DESCRIPTOR,
+    TERMINAL_SSH_DESCRIPTOR,
 )
 from .tools.registry import ToolRegistry
 
@@ -48,6 +65,7 @@ class RuntimeComposition:
     tool_broker: ToolBroker
     ssh_profile_registry: SSHProfileRegistry
     docker_profile_registry: DockerProfileRegistry
+    cloudflare_profile_registry: CloudflareSandboxProfileRegistry
     mcp_manager: MCPManager | None
 
     def command_service(self, operator_id: str, session_id: str):
@@ -83,7 +101,8 @@ class RuntimeComposition:
         authored_skill_pack_root: Optional[str] = None,
         authored_skill_pack_lock: Optional[dict] = None,
     ) -> DriverHost:
-        from .drivers.hermes import DESCRIPTOR as HERMES_DESCRIPTOR, HermesDriver
+        from .drivers.hermes import DESCRIPTOR as HERMES_DESCRIPTOR
+        from .drivers.hermes import HermesDriver
         if not self.registry.is_registered(HERMES_DESCRIPTOR["driverId"]):
             self.registry.register(HERMES_DESCRIPTOR)
         host = DriverHost(
@@ -103,7 +122,8 @@ class RuntimeComposition:
         base_url: str, api_key: str = "", dispatch_prompt: str = "",
         governor=None,
     ) -> DriverHost:
-        from .drivers.provider import DESCRIPTOR as PROVIDER_DESCRIPTOR, ProviderDriver
+        from .drivers.provider import DESCRIPTOR as PROVIDER_DESCRIPTOR
+        from .drivers.provider import ProviderDriver
         if not self.registry.is_registered(PROVIDER_DESCRIPTOR["driverId"]):
             self.registry.register(PROVIDER_DESCRIPTOR)
         host = DriverHost(self.registry, staging_root, target_repo)
@@ -137,6 +157,7 @@ def create_runtime(
     model_safe_limit_steps: int = 8,
     ssh_profiles: Iterable[SSHProfile] = (),
     docker_profiles: Iterable[DockerProfile] = (),
+    cloudflare_profiles: Iterable[CloudflareSandboxProfile] = (),
     enable_mcp: bool = False,
     mcp_timeout: float = 3.0,
 ) -> RuntimeComposition:
@@ -171,10 +192,15 @@ def create_runtime(
     ssh_terminal = SSHTerminalToolAdapter(SSHProcessBackend(ssh_profile_registry))
     docker_profile_registry = DockerProfileRegistry(docker_profiles)
     docker_terminal = DockerTerminalToolAdapter(DockerProcessBackend(docker_profile_registry))
+    cloudflare_profile_registry = CloudflareSandboxProfileRegistry(cloudflare_profiles)
+    cloudflare_terminal = CloudflareTerminalToolAdapter(
+        CloudflareSandboxBackend(cloudflare_profile_registry)
+    )
     for descriptor, adapter in (
         (TERMINAL_LOCAL_DESCRIPTOR, terminal),
         (TERMINAL_SSH_DESCRIPTOR, ssh_terminal),
         (TERMINAL_DOCKER_DESCRIPTOR, docker_terminal),
+        (TERMINAL_CLOUDFLARE_DESCRIPTOR, cloudflare_terminal),
         (FILE_OPERATIONS_DESCRIPTOR, files),
         (CODE_EXECUTION_DESCRIPTOR, code),
     ):
@@ -205,5 +231,6 @@ def create_runtime(
         tool_broker=tool_broker,
         ssh_profile_registry=ssh_profile_registry,
         docker_profile_registry=docker_profile_registry,
+        cloudflare_profile_registry=cloudflare_profile_registry,
         mcp_manager=mcp_manager,
     )

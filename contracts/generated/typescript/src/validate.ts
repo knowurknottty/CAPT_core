@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:b45de332719ee45dae067e2143a985961b797ce4191e3953fc8f7dbede8a8650
+// source digest:  sha256:aa365514ce442221cf6df53c17ed3ffd7a776d66377f1a748290d43fc7193b97
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.

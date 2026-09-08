@@ -65,6 +65,26 @@ TERMINAL_DOCKER_DESCRIPTOR = {
     ],
 }
 
+TERMINAL_CLOUDFLARE_DESCRIPTOR = {
+    "schemaVersion": "1.0.0",
+    "toolId": "terminal.cloudflare",
+    "displayName": "Cloudflare Sandbox Terminal",
+    "family": "terminal",
+    "operations": ["terminal.exec"],
+    "requiredCapabilities": ["terminal.exec"],
+    "operationEffects": [
+        {"operation": "terminal.exec", "effectClass": "durable_remote"},
+    ],
+    "terminalBackends": ["cloudflare"],
+    "platforms": ["linux"],
+    "supportsTimeout": True,
+    "supportsCancellation": False,
+    "idempotencySupport": "broker_settled_replay",
+    "artifactOutputs": [
+        "stdout", "stderr", "exit_code", "sandbox_id", "profile_id", "remote_cwd", "cleanup_status"
+    ],
+}
+
 FILE_OPERATIONS_DESCRIPTOR = {
     "schemaVersion": "1.0.0",
     "toolId": "file.operations",
