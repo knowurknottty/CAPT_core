@@ -35,6 +35,9 @@ from .tools.backends.cloudflare import (
     CloudflareSandboxProfile,
     CloudflareSandboxProfileRegistry,
 )
+from .tools.backends.cloudflare_free_planner import CloudflareFreeExecutionPlanner
+from .tools.backends.cloudflare_free_router import CloudflareFreeTierRouter
+from .tools.backends.cloudflare_usage import CloudflareUsageLedger
 from .tools.backends.docker import (
     DockerProcessBackend,
     DockerProfile,
@@ -66,6 +69,8 @@ class RuntimeComposition:
     ssh_profile_registry: SSHProfileRegistry
     docker_profile_registry: DockerProfileRegistry
     cloudflare_profile_registry: CloudflareSandboxProfileRegistry
+    cloudflare_usage_ledger: CloudflareUsageLedger
+    cloudflare_free_planner: CloudflareFreeExecutionPlanner
     mcp_manager: MCPManager | None
 
     def command_service(self, operator_id: str, session_id: str):
@@ -145,6 +150,7 @@ class RuntimeComposition:
     def close(self) -> None:
         if self.mcp_manager is not None:
             self.mcp_manager.close()
+        self.cloudflare_usage_ledger.close()
         self.memory_engine.close()
         self.memory_store.close()
         self.store.close()
@@ -193,6 +199,13 @@ def create_runtime(
     docker_profile_registry = DockerProfileRegistry(docker_profiles)
     docker_terminal = DockerTerminalToolAdapter(DockerProcessBackend(docker_profile_registry))
     cloudflare_profile_registry = CloudflareSandboxProfileRegistry(cloudflare_profiles)
+    cloudflare_free_router = CloudflareFreeTierRouter.default()
+    cloudflare_usage_ledger = CloudflareUsageLedger(
+        ledger + ".cloudflare-usage", router=cloudflare_free_router
+    )
+    cloudflare_free_planner = CloudflareFreeExecutionPlanner(
+        cloudflare_usage_ledger, cloudflare_free_router
+    )
     cloudflare_terminal = CloudflareTerminalToolAdapter(
         CloudflareSandboxBackend(cloudflare_profile_registry)
     )
@@ -232,5 +245,7 @@ def create_runtime(
         ssh_profile_registry=ssh_profile_registry,
         docker_profile_registry=docker_profile_registry,
         cloudflare_profile_registry=cloudflare_profile_registry,
+        cloudflare_usage_ledger=cloudflare_usage_ledger,
+        cloudflare_free_planner=cloudflare_free_planner,
         mcp_manager=mcp_manager,
     )

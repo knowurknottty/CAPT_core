@@ -34,3 +34,13 @@ Provider ceilings verified on 2026-09-08 are Workers 100,000 requests/day, Queue
 Workers AI models requiring paid billing are denied under `free_only`, including current GLM-5.3/GLM-5.3-Flash, DeepSeek V4 Flash/Pro, Kimi K2.6/K2.7 Code, and GLM-5.2. Having credentials or prepaid credits does not create economic authority.
 
 Cloudflare Sandbox/Containers remain `free_tier_eligible=false` by default. Localhost bridge testing is admissible because it incurs no provider usage; remote Sandbox execution remains blocked until $0 eligibility is independently proven or explicit human paid authority exists.
+
+## Free-Native Execution Strategy
+
+CAPT routes free-admissible cloud work to typed native surfaces before considering arbitrary compute: coordination -> Workers, durable delegation -> Queues, shared bounded state -> D1, browser work -> Browser Run, and eligible inference -> Workers AI. `arbitrary_compute` has no free-native fallback and is denied rather than silently routed to Sandbox/Containers.
+
+`CloudflareFreeTierRouter` performs deterministic surface selection and per-surface budget checks. `CloudflareUsageLedger` persists operation-scoped reservations transactionally so concurrent Bots cannot oversubscribe the same daily free allocation. Reservation identity binds operation ID, work class, estimate, and date; the same operation with a different estimate is an integrity violation.
+
+Provider dispatch follows `reserve -> dispatch -> classify -> commit | release | indeterminate`. A reservation is released only when CAPT can prove dispatch never started. Proven provider completion commits usage. Lost/ambiguous responses keep the reservation locked for reconciliation; uncertainty never becomes permission to retry.
+
+Typed native executors currently exist for Workers coordination, Queue delegation, D1 read/write, Browser Run, and Workers AI. Provider-reported actual usage is evidence. If reported usage exceeds the CAPT-authorized estimate, the operation becomes a specific accounting indeterminacy rather than widening economic authority after the fact.
