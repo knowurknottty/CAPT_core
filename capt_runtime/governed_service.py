@@ -13,8 +13,9 @@ from .aggregates.bot import BotAggregate
 from .aggregates.claim_driver import ClaimAggregate
 from .aggregates.cognitive_candidate import CognitiveCandidateAggregate
 from .aggregates.cohort_state import CohortAggregate
+from .aggregates.delegate_assignment import DelegateAssignmentAggregate
 from .aggregates.lab_board import LabBoardAggregate
-from .aggregates.mission_task import MissionAggregate
+from .aggregates.mission_task import MissionAggregate, TaskAggregate
 from .aggregates.skill_candidate import SkillCandidateAggregate
 from .artifact_workspace import atomic_adopt_verified_artifact, file_digest
 from .authority import require_authority
@@ -230,6 +231,133 @@ class GovernedRuntimeService(RuntimeService):
             [AppendRequest(stream, LabBoardAggregate.KIND, expected, event, state)], metadata
         )
         return {**result, "item": state}
+
+    def _active_assignment_for_delegate(self, bot_id: str, mission_id: str, at: str):
+        matches = []
+        for sid, kind, _ver in self.store.all_aggregates():
+            if kind != DelegateAssignmentAggregate.KIND:
+                continue
+            state = self.store.load_state(sid)
+            if not state or state.get("state") != "active":
+                continue
+            if state.get("delegateBotId") != bot_id or state.get("missionId") != mission_id:
+                continue
+            if str(state.get("expiresAt")) <= at:
+                continue
+            matches.append(state)
+        if len(matches) > 1:
+            raise AuthorityViolation("DELEGATE_PARENT_ASSIGNMENT_AMBIGUOUS")
+        return matches[0] if matches else None
+
+    def _delegation_depth_limit(self, parent: Dict[str, Any], mission_id: str, at: str):
+        limits = [int(parent.get("collaboration", {}).get("maxSpawnDepth", 0))]
+        if parent.get("roleKind") == "crew":
+            return 1, min(limits)
+        seen = {str(parent["botId"])}
+        parent_assignment = self._active_assignment_for_delegate(str(parent["botId"]), mission_id, at)
+        if parent_assignment is None:
+            raise AuthorityViolation("DELEGATE_PARENT_ASSIGNMENT_NOT_ACTIVE")
+        expected_depth = int(parent_assignment["depth"]) + 1
+        ancestor_id = str(parent_assignment["parentBotId"])
+        while True:
+            if ancestor_id in seen:
+                raise AuthorityViolation("DELEGATE_PARENT_CHAIN_CYCLE")
+            seen.add(ancestor_id)
+            ancestor = self.store.load_state(BotAggregate.stream_id(ancestor_id))
+            if ancestor is None:
+                raise AuthorityViolation("DELEGATE_ANCESTOR_BOT_NOT_FOUND")
+            limits.append(int(ancestor.get("collaboration", {}).get("maxSpawnDepth", 0)))
+            if ancestor.get("roleKind") == "crew":
+                break
+            ancestor_assignment = self._active_assignment_for_delegate(ancestor_id, mission_id, at)
+            if ancestor_assignment is None:
+                raise AuthorityViolation("DELEGATE_PARENT_ASSIGNMENT_NOT_ACTIVE")
+            ancestor_id = str(ancestor_assignment["parentBotId"])
+        return expected_depth, min(limits)
+
+    def assign_delegate(self, assignment: Dict[str, Any], metadata: Dict[str, Any]) -> Dict[str, Any]:
+        require("DelegateAssignment", assignment)
+        require("CommandMetadata", metadata)
+        require_authority("assign_delegate", metadata["actor"]["kind"])
+        stream = DelegateAssignmentAggregate.stream_id(assignment["assignmentId"])
+        replay = self._idempotent_projection(stream, "assignment", metadata)
+        if replay is not None:
+            return replay
+        if self.store.aggregate_version(stream) != 0:
+            raise AuthorityViolation("DELEGATE_ASSIGNMENT_ID_ALREADY_EXISTS")
+        if assignment["createdAt"] != metadata["issuedAt"] or assignment["lastTransitionAt"] != metadata["issuedAt"]:
+            raise AuthorityViolation("DELEGATE_ASSIGNMENT_METADATA_MISMATCH")
+        if assignment.get("createdBy") != metadata.get("actor") or assignment.get("transitionReason") is not None:
+            raise AuthorityViolation("DELEGATE_ASSIGNMENT_METADATA_MISMATCH")
+        parent = self.store.load_state(BotAggregate.stream_id(str(assignment["parentBotId"])))
+        delegate = self.store.load_state(BotAggregate.stream_id(str(assignment["delegateBotId"])))
+        if parent is None:
+            raise AuthorityViolation("PARENT_BOT_NOT_FOUND")
+        if delegate is None:
+            raise AuthorityViolation("DELEGATE_BOT_NOT_FOUND")
+        if parent["botId"] == delegate["botId"]:
+            raise AuthorityViolation("DELEGATE_SELF_ASSIGNMENT_FORBIDDEN")
+        if delegate.get("roleKind") != "delegate":
+            raise AuthorityViolation("ASSIGNEE_MUST_BE_DELEGATE")
+        if not parent.get("collaboration", {}).get("mayDelegate", False):
+            raise AuthorityViolation("PARENT_DELEGATION_FORBIDDEN")
+        mission_id = str(assignment["missionId"])
+        if delegate.get("missionId") != mission_id:
+            raise AuthorityViolation("DELEGATE_ASSIGNMENT_MISSION_MISMATCH")
+        if self.store.load_state(MissionAggregate.stream_id(mission_id)) is None:
+            raise AuthorityViolation("DELEGATE_ASSIGNMENT_MISSION_NOT_FOUND")
+        existing_assignment = self._active_assignment_for_delegate(
+            str(delegate["botId"]), mission_id, str(assignment["createdAt"])
+        )
+        if existing_assignment is not None:
+            raise AuthorityViolation("DELEGATE_ALREADY_ACTIVE")
+        depth = int(assignment["depth"])
+        expected_depth, effective_max_depth = self._delegation_depth_limit(
+            parent, mission_id, str(assignment["createdAt"])
+        )
+        if depth != expected_depth or depth > effective_max_depth:
+            raise AuthorityViolation("DELEGATE_DEPTH_INVALID")
+        task_id = assignment.get("taskId")
+        if task_id is not None:
+            task = self.store.load_state(TaskAggregate.stream_id(str(task_id)))
+            if task is None or task.get("missionId") != mission_id:
+                raise AuthorityViolation("DELEGATE_TASK_BINDING_INVALID")
+        state = DelegateAssignmentAggregate.create(assignment)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type="DelegateAssigned",
+            payload={"eventType": "DelegateAssigned", "assignment": assignment},
+            metadata=metadata, occurred_at=metadata["issuedAt"], mission_id=mission_id,
+            task_id=task_id,
+        )
+        result = self._commit([AppendRequest(stream, DelegateAssignmentAggregate.KIND, 0, event, state)], metadata)
+        return {**result, "assignment": state}
+
+    def transition_delegate_assignment(self, assignment_id: str, to_state: str, reason: Optional[str], metadata: Dict[str, Any]) -> Dict[str, Any]:
+        require("CommandMetadata", metadata)
+        require_authority("transition_delegate_assignment", metadata["actor"]["kind"])
+        stream = DelegateAssignmentAggregate.stream_id(assignment_id)
+        replay = self._idempotent_projection(stream, "assignment", metadata)
+        if replay is not None:
+            return replay
+        expected = self.store.aggregate_version(stream)
+        current = self.store.require_state(stream)
+        if metadata["issuedAt"] >= current["expiresAt"] and to_state != "expired":
+            raise AuthorityViolation("DELEGATE_ASSIGNMENT_EXPIRED")
+        if to_state == "expired" and metadata["issuedAt"] < current["expiresAt"]:
+            raise AuthorityViolation("DELEGATE_ASSIGNMENT_NOT_YET_EXPIRED")
+        state = DelegateAssignmentAggregate.transition(current, to_state, metadata["actor"], reason, metadata["issuedAt"])
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type="DelegateAssignmentTransitioned",
+            payload={"eventType": "DelegateAssignmentTransitioned", "assignmentId": assignment_id,
+                     "fromState": current["state"], "toState": to_state, "actor": metadata["actor"],
+                     "reason": reason, "transitionedAt": metadata["issuedAt"]},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+            mission_id=current["missionId"], task_id=current.get("taskId"),
+        )
+        result = self._commit([AppendRequest(stream, DelegateAssignmentAggregate.KIND, expected, event, state)], metadata)
+        return {**result, "assignment": state}
 
     def _event_by_identity(
         self, event_type: str, identity_key: str, identity_value: str

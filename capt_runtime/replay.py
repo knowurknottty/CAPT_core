@@ -19,6 +19,7 @@ from .aggregates import (
     ClaimAggregate,
     CognitiveCandidateAggregate,
     CohortAggregate,
+    DelegateAssignmentAggregate,
     DriverRunAggregate,
     HumanApprovalAggregate,
     LabBoardAggregate,
@@ -92,6 +93,7 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         "ArtifactPromotionPrepared",
         "BotRegistered",
         "CognitiveCandidateProposed",
+        "DelegateAssigned",
         "SkillCandidateCreated",
         "LabBoardItemCreated",
         "CohortCreated",
@@ -185,6 +187,13 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         nxt = BotAggregate.create(payload["bot"])
     elif event_type == "CognitiveCandidateProposed":
         nxt = CognitiveCandidateAggregate.create(payload["candidate"])
+    elif event_type == "DelegateAssigned":
+        nxt = DelegateAssignmentAggregate.create(payload["assignment"])
+    elif event_type == "DelegateAssignmentTransitioned":
+        nxt = DelegateAssignmentAggregate.transition(
+            existing(), payload["toState"], payload["actor"], payload.get("reason"),
+            payload["transitionedAt"],
+        )
     elif event_type == "CognitiveCandidateDecided":
         nxt = CognitiveCandidateAggregate.decide(
             existing(), payload["decision"], payload["decidedBy"],

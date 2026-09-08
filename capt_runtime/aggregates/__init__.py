@@ -5,6 +5,7 @@ from .bot import BotAggregate
 from .capability import CapabilityAggregate, scope_contains
 from .claim_driver import ClaimAggregate, DriverRunAggregate
 from .cognitive_candidate import CognitiveCandidateAggregate
+from .delegate_assignment import DelegateAssignmentAggregate
 from .cohort_state import CohortAggregate
 from .lab_board import LabBoardAggregate
 from .skill_candidate import SkillCandidateAggregate
@@ -21,6 +22,7 @@ ALL_AGGREGATES = (
     ClaimAggregate,
     BotAggregate,
     CognitiveCandidateAggregate,
+    DelegateAssignmentAggregate,
     SkillCandidateAggregate,
     LabBoardAggregate,
     CohortAggregate,
@@ -37,6 +39,7 @@ __all__ = [
     "CapabilityAggregate",
     "ClaimAggregate",
     "CognitiveCandidateAggregate",
+    "DelegateAssignmentAggregate",
     "CohortAggregate",
     "LabBoardAggregate",
     "ReplayForkAggregate",

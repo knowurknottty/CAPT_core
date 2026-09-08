@@ -62,6 +62,8 @@ _PERMITTED: Dict[str, FrozenSet[str]] = {
     "transition_skill_candidate": frozenset({COGNITION, HUMAN, GOVERNANCE, SYSTEM}),
     "create_lab_board_item": frozenset({COGNITION, EXECUTION, HUMAN, SYSTEM}),
     "transition_lab_board_item": frozenset({COGNITION, EXECUTION, HUMAN, GOVERNANCE, SYSTEM}),
+    "assign_delegate": frozenset({COGNITION, HUMAN, SYSTEM}),
+    "transition_delegate_assignment": frozenset({COGNITION, HUMAN, GOVERNANCE, SYSTEM}),
 }
 
 

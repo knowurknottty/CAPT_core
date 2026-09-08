@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:7ae75c09a57bbf17a53d7fb769a2b666781ff899f9327a4aab05488370875842
+# source digest:  sha256:b45de332719ee45dae067e2143a985961b797ce4191e3953fc8f7dbede8a8650
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -127,6 +127,34 @@ class CognitiveKind(str, Enum):
     PROCEDURE = "procedure"
     SKILL = "skill"
     RELATIONSHIP = "relationship"
+
+
+@dataclass(frozen=True)
+class DelegateAssignment(object):
+    """Durable coordination binding for a transient delegate. Grants no capability authority."""
+
+    assignmentId: Identifier
+    createdAt: Timestamp
+    createdBy: ActorRef
+    delegateBotId: Identifier
+    depth: int
+    expiresAt: Timestamp
+    lastTransitionAt: Timestamp
+    missionId: Identifier
+    parentBotId: Identifier
+    schemaVersion: SchemaVersion
+    state: DelegateAssignmentState
+    taskId: Optional[Identifier] = None
+    transitionReason: Optional[str] = None
+
+
+class DelegateAssignmentState(str, Enum):
+    """DelegateAssignmentState"""
+
+    ACTIVE = "active"
+    COMPLETED = "completed"
+    REVOKED = "revoked"
+    EXPIRED = "expired"
 
 
 @dataclass(frozen=True)
@@ -1674,6 +1702,27 @@ class CohortSteeredPayload(object):
 
 
 @dataclass(frozen=True)
+class DelegateAssignedPayload(object):
+    """DelegateAssignedPayload"""
+
+    assignment: DelegateAssignment
+    eventType: Literal["DelegateAssigned"]
+
+
+@dataclass(frozen=True)
+class DelegateAssignmentTransitionedPayload(object):
+    """DelegateAssignmentTransitionedPayload"""
+
+    actor: ActorRef
+    assignmentId: Identifier
+    eventType: Literal["DelegateAssignmentTransitioned"]
+    fromState: DelegateAssignmentState
+    toState: DelegateAssignmentState
+    transitionedAt: Timestamp
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class DriverRunCreatedPayload(object):
     """DriverRunCreatedPayload"""
 
@@ -1906,7 +1955,7 @@ class ToolExecutionTerminatedPayload(object):
 
 
 # discriminated on 'eventType'
-EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload, BotRegisteredPayload, CognitiveCandidateProposedPayload, CognitiveCandidateDecidedPayload, SkillCandidateCreatedPayload, SkillCandidateTransitionedPayload, LabBoardItemCreatedPayload, LabBoardItemTransitionedPayload]
+EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload, BotRegisteredPayload, CognitiveCandidateProposedPayload, CognitiveCandidateDecidedPayload, SkillCandidateCreatedPayload, SkillCandidateTransitionedPayload, LabBoardItemCreatedPayload, LabBoardItemTransitionedPayload, DelegateAssignedPayload, DelegateAssignmentTransitionedPayload]
 
 
 class EventType(str, Enum):
@@ -1956,6 +2005,8 @@ class EventType(str, Enum):
     SKILLCANDIDATETRANSITIONED = "SkillCandidateTransitioned"
     LABBOARDITEMCREATED = "LabBoardItemCreated"
     LABBOARDITEMTRANSITIONED = "LabBoardItemTransitioned"
+    DELEGATEASSIGNED = "DelegateAssigned"
+    DELEGATEASSIGNMENTTRANSITIONED = "DelegateAssignmentTransitioned"
 
 
 @dataclass(frozen=True)

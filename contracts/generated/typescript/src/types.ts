@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:7ae75c09a57bbf17a53d7fb769a2b666781ff899f9327a4aab05488370875842
+// source digest:  sha256:b45de332719ee45dae067e2143a985961b797ce4191e3953fc8f7dbede8a8650
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -103,6 +103,32 @@ export const CognitiveKindValues = [
   "procedure",
   "skill",
   "relationship",
+] as const;
+
+/** Durable coordination binding for a transient delegate. Grants no capability authority. */
+export interface DelegateAssignment {
+  readonly assignmentId: Identifier;
+  readonly createdAt: Timestamp;
+  readonly createdBy: ActorRef;
+  readonly delegateBotId: Identifier;
+  readonly depth: number;
+  readonly expiresAt: Timestamp;
+  readonly lastTransitionAt: Timestamp;
+  readonly missionId: Identifier;
+  readonly parentBotId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly state: DelegateAssignmentState;
+  readonly taskId?: Identifier | null;
+  readonly transitionReason?: string | null;
+}
+
+/** DelegateAssignmentState */
+export type DelegateAssignmentState = "active" | "completed" | "revoked" | "expired";
+export const DelegateAssignmentStateValues = [
+  "active",
+  "completed",
+  "revoked",
+  "expired",
 ] as const;
 
 /** LabBoardItem */
@@ -1433,6 +1459,23 @@ export interface CohortSteeredPayload {
   readonly steer: CohortSteer;
 }
 
+/** DelegateAssignedPayload */
+export interface DelegateAssignedPayload {
+  readonly assignment: DelegateAssignment;
+  readonly eventType: "DelegateAssigned";
+}
+
+/** DelegateAssignmentTransitionedPayload */
+export interface DelegateAssignmentTransitionedPayload {
+  readonly actor: ActorRef;
+  readonly assignmentId: Identifier;
+  readonly eventType: "DelegateAssignmentTransitioned";
+  readonly fromState: DelegateAssignmentState;
+  readonly toState: DelegateAssignmentState;
+  readonly transitionedAt: Timestamp;
+  readonly reason?: string | null;
+}
+
 /** DriverRunCreatedPayload */
 export interface DriverRunCreatedPayload {
   readonly driverRun: DriverRun;
@@ -1513,10 +1556,12 @@ export type EventPayload =
   | SkillCandidateCreatedPayload
   | SkillCandidateTransitionedPayload
   | LabBoardItemCreatedPayload
-  | LabBoardItemTransitionedPayload;
+  | LabBoardItemTransitionedPayload
+  | DelegateAssignedPayload
+  | DelegateAssignmentTransitionedPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated" | "BotRegistered" | "CognitiveCandidateProposed" | "CognitiveCandidateDecided" | "SkillCandidateCreated" | "SkillCandidateTransitioned" | "LabBoardItemCreated" | "LabBoardItemTransitioned";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated" | "BotRegistered" | "CognitiveCandidateProposed" | "CognitiveCandidateDecided" | "SkillCandidateCreated" | "SkillCandidateTransitioned" | "LabBoardItemCreated" | "LabBoardItemTransitioned" | "DelegateAssigned" | "DelegateAssignmentTransitioned";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -1562,6 +1607,8 @@ export const EventTypeValues = [
   "SkillCandidateTransitioned",
   "LabBoardItemCreated",
   "LabBoardItemTransitioned",
+  "DelegateAssigned",
+  "DelegateAssignmentTransitioned",
 ] as const;
 
 /** EvidenceRecordedPayload */

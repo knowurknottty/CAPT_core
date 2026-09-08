@@ -506,6 +506,89 @@
           "$ref": "common.schema.json#/$defs/Timestamp"
         }
       }
+    },
+    "DelegateAssignmentState": {
+      "title": "DelegateAssignmentState",
+      "type": "string",
+      "enum": [
+        "active",
+        "completed",
+        "revoked",
+        "expired"
+      ]
+    },
+    "DelegateAssignment": {
+      "title": "DelegateAssignment",
+      "description": "Durable coordination binding for a transient delegate. Grants no capability authority.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "assignmentId",
+        "parentBotId",
+        "delegateBotId",
+        "missionId",
+        "depth",
+        "state",
+        "createdAt",
+        "expiresAt",
+        "createdBy",
+        "lastTransitionAt"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "assignmentId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "parentBotId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "delegateBotId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "missionId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "taskId": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "depth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "state": {
+          "$ref": "bot.schema.json#/$defs/DelegateAssignmentState"
+        },
+        "createdAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "expiresAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "createdBy": {
+          "$ref": "common.schema.json#/$defs/ActorRef"
+        },
+        "lastTransitionAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "transitionReason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2048
+        }
+      }
     }
   }
 }

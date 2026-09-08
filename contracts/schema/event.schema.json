@@ -52,7 +52,9 @@
         "SkillCandidateCreated",
         "SkillCandidateTransitioned",
         "LabBoardItemCreated",
-        "LabBoardItemTransitioned"
+        "LabBoardItemTransitioned",
+        "DelegateAssigned",
+        "DelegateAssignmentTransitioned"
       ]
     },
     "EventPayload": {
@@ -1004,6 +1006,65 @@
                 "null"
               ],
               "maxLength": 2048
+            }
+          }
+        },
+        {
+          "title": "DelegateAssignedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "assignment"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "DelegateAssigned"
+            },
+            "assignment": {
+              "$ref": "bot.schema.json#/$defs/DelegateAssignment"
+            }
+          }
+        },
+        {
+          "title": "DelegateAssignmentTransitionedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "assignmentId",
+            "fromState",
+            "toState",
+            "actor",
+            "transitionedAt"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "DelegateAssignmentTransitioned"
+            },
+            "assignmentId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "fromState": {
+              "$ref": "bot.schema.json#/$defs/DelegateAssignmentState"
+            },
+            "toState": {
+              "$ref": "bot.schema.json#/$defs/DelegateAssignmentState"
+            },
+            "actor": {
+              "$ref": "common.schema.json#/$defs/ActorRef"
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 2048
+            },
+            "transitionedAt": {
+              "$ref": "common.schema.json#/$defs/Timestamp"
             }
           }
         }
