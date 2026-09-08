@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:3e849bf1a3e281f76e85f92501c24eb5f41730f51d2e269514ca09e8d46b4eb4
+# source digest:  sha256:7ae75c09a57bbf17a53d7fb769a2b666781ff899f9327a4aab05488370875842
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -22,6 +22,186 @@ except ImportError:  # pragma: no cover
 
 CONTRACT_SCHEMA_VERSION = "1.0.0"
 RUNTIME_VERSION = "0.1.0"
+
+
+@dataclass(frozen=True)
+class BotCognitionPolicy(object):
+    """BotCognitionPolicy"""
+
+    promotionMode: PromotionMode
+
+
+@dataclass(frozen=True)
+class BotCollaborationPolicy(object):
+    """BotCollaborationPolicy"""
+
+    maxSpawnDepth: int
+    mayDelegate: bool
+
+
+@dataclass(frozen=True)
+class BotLocalityPolicy(object):
+    """BotLocalityPolicy"""
+
+    defaultRuntime: str
+    privateData: str
+
+
+@dataclass(frozen=True)
+class BotManifest(object):
+    """Persistent Bot identity and policy composition. Live credentials and capability leases are intentionally absent."""
+
+    botId: Identifier
+    cognitionPolicy: BotCognitionPolicy
+    collaboration: BotCollaborationPolicy
+    createdAt: Timestamp
+    createdBy: ActorRef
+    displayName: str
+    localityPolicy: BotLocalityPolicy
+    modelStrategy: BotModelStrategy
+    role: str
+    roleKind: BotRoleKind
+    schemaVersion: SchemaVersion
+    authorityTemplateRef: Optional[Identifier] = None
+    missionId: Optional[Identifier] = None
+
+
+@dataclass(frozen=True)
+class BotModelStrategy(object):
+    """BotModelStrategy"""
+
+    fallbacks: List[str]
+    primary: Optional[str]
+
+
+class BotRoleKind(str, Enum):
+    """BotRoleKind"""
+
+    CREW = "crew"
+    DELEGATE = "delegate"
+
+
+@dataclass(frozen=True)
+class CognitiveCandidate(object):
+    """CognitiveCandidate"""
+
+    botId: Identifier
+    candidateId: Identifier
+    confidence: float
+    content: str
+    kind: CognitiveKind
+    promotionMode: PromotionMode
+    proposedAt: Timestamp
+    proposedBy: ActorRef
+    provenance: str
+    schemaVersion: SchemaVersion
+    sensitivity: str
+    sourceRefs: List[str]
+    state: CognitiveCandidateState
+    decidedAt: Optional[Timestamp] = None
+    decidedBy: Optional[ActorRef] = None
+    decisionReason: Optional[str] = None
+
+
+class CognitiveCandidateState(str, Enum):
+    """CognitiveCandidateState"""
+
+    PROPOSED = "proposed"
+    PROMOTED = "promoted"
+    REJECTED = "rejected"
+    REVOKED = "revoked"
+
+
+class CognitiveKind(str, Enum):
+    """CognitiveKind"""
+
+    OBSERVATION = "observation"
+    USER_FACT = "user_fact"
+    DERIVED_FACT = "derived_fact"
+    PREFERENCE = "preference"
+    DECISION = "decision"
+    HYPOTHESIS = "hypothesis"
+    BELIEF = "belief"
+    CONTRADICTION = "contradiction"
+    OPEN_QUESTION = "open_question"
+    PROCEDURE = "procedure"
+    SKILL = "skill"
+    RELATIONSHIP = "relationship"
+
+
+@dataclass(frozen=True)
+class LabBoardItem(object):
+    """LabBoardItem"""
+
+    createdAt: Timestamp
+    createdBy: ActorRef
+    evidenceRefs: List[str]
+    itemId: Identifier
+    schemaVersion: SchemaVersion
+    state: LabBoardState
+    title: str
+    updatedAt: Timestamp
+    blockerReason: Optional[str] = None
+    humanRequest: Optional[str] = None
+    missionId: Optional[Identifier] = None
+    ownerRef: Optional[str] = None
+
+
+class LabBoardState(str, Enum):
+    """LabBoardState"""
+
+    INBOX = "inbox"
+    READY = "ready"
+    ACTIVE = "active"
+    VERIFYING = "verifying"
+    WAITING_AGENT = "waiting_agent"
+    WAITING_HUMAN = "waiting_human"
+    HUMAN_TASK = "human_task"
+    BLOCKED_HUMAN = "blocked_human"
+    DONE = "done"
+
+
+class PromotionMode(str, Enum):
+    """PromotionMode"""
+
+    LOCKED = "locked"
+    GOVERNED = "governed"
+    AUTONOMOUS = "autonomous"
+
+
+@dataclass(frozen=True)
+class SkillCandidate(object):
+    """SkillCandidate"""
+
+    botId: Identifier
+    createdAt: Timestamp
+    createdBy: ActorRef
+    lifecycleState: SkillLifecycleState
+    name: str
+    provenanceRefs: List[str]
+    requiredAuthority: List[str]
+    revision: int
+    schemaVersion: SchemaVersion
+    skillId: Identifier
+    sourceKind: str
+    decisionReason: Optional[str] = None
+
+
+class SkillLifecycleState(str, Enum):
+    """SkillLifecycleState"""
+
+    IDEA = "idea"
+    DRAFT = "draft"
+    REVIEW = "review"
+    SANDBOX = "sandbox"
+    TEST = "test"
+    RED_TEAM = "red_team"
+    SHADOW = "shadow"
+    APPROVED = "approved"
+    ACTIVE = "active"
+    REJECTED = "rejected"
+    REVOKED = "revoked"
+    SUPERSEDED = "superseded"
 
 
 @dataclass(frozen=True)
@@ -1360,6 +1540,14 @@ class ArtifactPromotionPreparedPayload(object):
 
 
 @dataclass(frozen=True)
+class BotRegisteredPayload(object):
+    """BotRegisteredPayload"""
+
+    bot: BotManifest
+    eventType: Literal["BotRegistered"]
+
+
+@dataclass(frozen=True)
 class CapabilityGrantRevokedPayload(object):
     """CapabilityGrantRevokedPayload"""
 
@@ -1438,6 +1626,26 @@ class ClaimVerifiedPayload(object):
 
     eventType: Literal["ClaimVerified"]
     verification: VerificationResult
+
+
+@dataclass(frozen=True)
+class CognitiveCandidateDecidedPayload(object):
+    """CognitiveCandidateDecidedPayload"""
+
+    candidateId: Identifier
+    decidedAt: Timestamp
+    decidedBy: ActorRef
+    decision: str
+    eventType: Literal["CognitiveCandidateDecided"]
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class CognitiveCandidateProposedPayload(object):
+    """CognitiveCandidateProposedPayload"""
+
+    candidate: CognitiveCandidate
+    eventType: Literal["CognitiveCandidateProposed"]
 
 
 @dataclass(frozen=True)
@@ -1538,6 +1746,26 @@ class HumanApprovalRequestedPayload(object):
 
 
 @dataclass(frozen=True)
+class LabBoardItemCreatedPayload(object):
+    """LabBoardItemCreatedPayload"""
+
+    eventType: Literal["LabBoardItemCreated"]
+    item: LabBoardItem
+
+
+@dataclass(frozen=True)
+class LabBoardItemTransitionedPayload(object):
+    """LabBoardItemTransitionedPayload"""
+
+    actor: ActorRef
+    eventType: Literal["LabBoardItemTransitioned"]
+    fromState: LabBoardState
+    itemId: Identifier
+    toState: LabBoardState
+    reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class MissionCreatedPayload(object):
     """MissionCreatedPayload"""
 
@@ -1578,6 +1806,26 @@ class ReplayForkCreatedPayload(object):
 
     eventType: Literal["ReplayForkCreated"]
     fork: ReplayForkState
+
+
+@dataclass(frozen=True)
+class SkillCandidateCreatedPayload(object):
+    """SkillCandidateCreatedPayload"""
+
+    candidate: SkillCandidate
+    eventType: Literal["SkillCandidateCreated"]
+
+
+@dataclass(frozen=True)
+class SkillCandidateTransitionedPayload(object):
+    """SkillCandidateTransitionedPayload"""
+
+    actor: ActorRef
+    eventType: Literal["SkillCandidateTransitioned"]
+    fromState: SkillLifecycleState
+    skillId: Identifier
+    toState: SkillLifecycleState
+    reason: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -1658,7 +1906,7 @@ class ToolExecutionTerminatedPayload(object):
 
 
 # discriminated on 'eventType'
-EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload]
+EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload, BotRegisteredPayload, CognitiveCandidateProposedPayload, CognitiveCandidateDecidedPayload, SkillCandidateCreatedPayload, SkillCandidateTransitionedPayload, LabBoardItemCreatedPayload, LabBoardItemTransitionedPayload]
 
 
 class EventType(str, Enum):
@@ -1701,6 +1949,13 @@ class EventType(str, Enum):
     TOOLEXECUTIONEFFECTOBSERVED = "ToolExecutionEffectObserved"
     TOOLEXECUTIONSETTLING = "ToolExecutionSettling"
     TOOLEXECUTIONTERMINATED = "ToolExecutionTerminated"
+    BOTREGISTERED = "BotRegistered"
+    COGNITIVECANDIDATEPROPOSED = "CognitiveCandidateProposed"
+    COGNITIVECANDIDATEDECIDED = "CognitiveCandidateDecided"
+    SKILLCANDIDATECREATED = "SkillCandidateCreated"
+    SKILLCANDIDATETRANSITIONED = "SkillCandidateTransitioned"
+    LABBOARDITEMCREATED = "LabBoardItemCreated"
+    LABBOARDITEMTRANSITIONED = "LabBoardItemTransitioned"
 
 
 @dataclass(frozen=True)

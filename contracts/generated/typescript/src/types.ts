@@ -4,13 +4,177 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:3e849bf1a3e281f76e85f92501c24eb5f41730f51d2e269514ca09e8d46b4eb4
+// source digest:  sha256:7ae75c09a57bbf17a53d7fb769a2b666781ff899f9327a4aab05488370875842
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
 
 export const CONTRACT_SCHEMA_VERSION = "1.0.0" as const;
 export const RUNTIME_VERSION = "0.1.0" as const;
+
+/** BotCognitionPolicy */
+export interface BotCognitionPolicy {
+  readonly promotionMode: PromotionMode;
+}
+
+/** BotCollaborationPolicy */
+export interface BotCollaborationPolicy {
+  readonly maxSpawnDepth: number;
+  readonly mayDelegate: boolean;
+}
+
+/** BotLocalityPolicy */
+export interface BotLocalityPolicy {
+  readonly defaultRuntime: string;
+  readonly privateData: string;
+}
+
+/** Persistent Bot identity and policy composition. Live credentials and capability leases are intentionally absent. */
+export interface BotManifest {
+  readonly botId: Identifier;
+  readonly cognitionPolicy: BotCognitionPolicy;
+  readonly collaboration: BotCollaborationPolicy;
+  readonly createdAt: Timestamp;
+  readonly createdBy: ActorRef;
+  readonly displayName: string;
+  readonly localityPolicy: BotLocalityPolicy;
+  readonly modelStrategy: BotModelStrategy;
+  readonly role: string;
+  readonly roleKind: BotRoleKind;
+  readonly schemaVersion: SchemaVersion;
+  readonly authorityTemplateRef?: Identifier | null;
+  readonly missionId?: Identifier | null;
+}
+
+/** BotModelStrategy */
+export interface BotModelStrategy {
+  readonly fallbacks: readonly string[];
+  readonly primary: string | null;
+}
+
+/** BotRoleKind */
+export type BotRoleKind = "crew" | "delegate";
+export const BotRoleKindValues = [
+  "crew",
+  "delegate",
+] as const;
+
+/** CognitiveCandidate */
+export interface CognitiveCandidate {
+  readonly botId: Identifier;
+  readonly candidateId: Identifier;
+  readonly confidence: number;
+  readonly content: string;
+  readonly kind: CognitiveKind;
+  readonly promotionMode: PromotionMode;
+  readonly proposedAt: Timestamp;
+  readonly proposedBy: ActorRef;
+  readonly provenance: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly sensitivity: string;
+  readonly sourceRefs: readonly string[];
+  readonly state: CognitiveCandidateState;
+  readonly decidedAt?: Timestamp | null;
+  readonly decidedBy?: ActorRef | null;
+  readonly decisionReason?: string | null;
+}
+
+/** CognitiveCandidateState */
+export type CognitiveCandidateState = "proposed" | "promoted" | "rejected" | "revoked";
+export const CognitiveCandidateStateValues = [
+  "proposed",
+  "promoted",
+  "rejected",
+  "revoked",
+] as const;
+
+/** CognitiveKind */
+export type CognitiveKind = "observation" | "user_fact" | "derived_fact" | "preference" | "decision" | "hypothesis" | "belief" | "contradiction" | "open_question" | "procedure" | "skill" | "relationship";
+export const CognitiveKindValues = [
+  "observation",
+  "user_fact",
+  "derived_fact",
+  "preference",
+  "decision",
+  "hypothesis",
+  "belief",
+  "contradiction",
+  "open_question",
+  "procedure",
+  "skill",
+  "relationship",
+] as const;
+
+/** LabBoardItem */
+export interface LabBoardItem {
+  readonly createdAt: Timestamp;
+  readonly createdBy: ActorRef;
+  readonly evidenceRefs: readonly string[];
+  readonly itemId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly state: LabBoardState;
+  readonly title: string;
+  readonly updatedAt: Timestamp;
+  readonly blockerReason?: string | null;
+  readonly humanRequest?: string | null;
+  readonly missionId?: Identifier | null;
+  readonly ownerRef?: string | null;
+}
+
+/** LabBoardState */
+export type LabBoardState = "inbox" | "ready" | "active" | "verifying" | "waiting_agent" | "waiting_human" | "human_task" | "blocked_human" | "done";
+export const LabBoardStateValues = [
+  "inbox",
+  "ready",
+  "active",
+  "verifying",
+  "waiting_agent",
+  "waiting_human",
+  "human_task",
+  "blocked_human",
+  "done",
+] as const;
+
+/** PromotionMode */
+export type PromotionMode = "locked" | "governed" | "autonomous";
+export const PromotionModeValues = [
+  "locked",
+  "governed",
+  "autonomous",
+] as const;
+
+/** SkillCandidate */
+export interface SkillCandidate {
+  readonly botId: Identifier;
+  readonly createdAt: Timestamp;
+  readonly createdBy: ActorRef;
+  readonly lifecycleState: SkillLifecycleState;
+  readonly name: string;
+  readonly provenanceRefs: readonly string[];
+  readonly requiredAuthority: readonly string[];
+  readonly revision: number;
+  readonly schemaVersion: SchemaVersion;
+  readonly skillId: Identifier;
+  readonly sourceKind: string;
+  readonly decisionReason?: string | null;
+}
+
+/** SkillLifecycleState */
+export type SkillLifecycleState = "idea" | "draft" | "review" | "sandbox" | "test" | "red_team" | "shadow" | "approved" | "active" | "rejected" | "revoked" | "superseded";
+export const SkillLifecycleStateValues = [
+  "idea",
+  "draft",
+  "review",
+  "sandbox",
+  "test",
+  "red_team",
+  "shadow",
+  "approved",
+  "active",
+  "rejected",
+  "revoked",
+  "superseded",
+] as const;
 
 /** Definition of what an operation permits. */
 export interface Capability {
@@ -1167,6 +1331,12 @@ export interface ArtifactPromotionPreparedPayload {
   readonly promotion: ArtifactPromotionState;
 }
 
+/** BotRegisteredPayload */
+export interface BotRegisteredPayload {
+  readonly bot: BotManifest;
+  readonly eventType: "BotRegistered";
+}
+
 /** CapabilityGrantRevokedPayload */
 export interface CapabilityGrantRevokedPayload {
   readonly eventType: "CapabilityGrantRevoked";
@@ -1226,6 +1396,22 @@ export interface ClaimGuardDecidedPayload {
 export interface ClaimVerifiedPayload {
   readonly eventType: "ClaimVerified";
   readonly verification: VerificationResult;
+}
+
+/** CognitiveCandidateDecidedPayload */
+export interface CognitiveCandidateDecidedPayload {
+  readonly candidateId: Identifier;
+  readonly decidedAt: Timestamp;
+  readonly decidedBy: ActorRef;
+  readonly decision: string;
+  readonly eventType: "CognitiveCandidateDecided";
+  readonly reason?: string | null;
+}
+
+/** CognitiveCandidateProposedPayload */
+export interface CognitiveCandidateProposedPayload {
+  readonly candidate: CognitiveCandidate;
+  readonly eventType: "CognitiveCandidateProposed";
 }
 
 /** CohortCreatedPayload */
@@ -1320,10 +1506,17 @@ export type EventPayload =
   | ToolExecutionDispatchingPayload
   | ToolExecutionEffectObservedPayload
   | ToolExecutionSettlingPayload
-  | ToolExecutionTerminatedPayload;
+  | ToolExecutionTerminatedPayload
+  | BotRegisteredPayload
+  | CognitiveCandidateProposedPayload
+  | CognitiveCandidateDecidedPayload
+  | SkillCandidateCreatedPayload
+  | SkillCandidateTransitionedPayload
+  | LabBoardItemCreatedPayload
+  | LabBoardItemTransitionedPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated" | "BotRegistered" | "CognitiveCandidateProposed" | "CognitiveCandidateDecided" | "SkillCandidateCreated" | "SkillCandidateTransitioned" | "LabBoardItemCreated" | "LabBoardItemTransitioned";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -1362,6 +1555,13 @@ export const EventTypeValues = [
   "ToolExecutionEffectObserved",
   "ToolExecutionSettling",
   "ToolExecutionTerminated",
+  "BotRegistered",
+  "CognitiveCandidateProposed",
+  "CognitiveCandidateDecided",
+  "SkillCandidateCreated",
+  "SkillCandidateTransitioned",
+  "LabBoardItemCreated",
+  "LabBoardItemTransitioned",
 ] as const;
 
 /** EvidenceRecordedPayload */
@@ -1386,6 +1586,22 @@ export interface HumanApprovalDecidedPayload {
 export interface HumanApprovalRequestedPayload {
   readonly eventType: "HumanApprovalRequested";
   readonly request: HumanApprovalRequest;
+}
+
+/** LabBoardItemCreatedPayload */
+export interface LabBoardItemCreatedPayload {
+  readonly eventType: "LabBoardItemCreated";
+  readonly item: LabBoardItem;
+}
+
+/** LabBoardItemTransitionedPayload */
+export interface LabBoardItemTransitionedPayload {
+  readonly actor: ActorRef;
+  readonly eventType: "LabBoardItemTransitioned";
+  readonly fromState: LabBoardState;
+  readonly itemId: Identifier;
+  readonly toState: LabBoardState;
+  readonly reason?: string | null;
 }
 
 /** MissionCreatedPayload */
@@ -1419,6 +1635,22 @@ export interface PolicyEvaluatedPayload {
 export interface ReplayForkCreatedPayload {
   readonly eventType: "ReplayForkCreated";
   readonly fork: ReplayForkState;
+}
+
+/** SkillCandidateCreatedPayload */
+export interface SkillCandidateCreatedPayload {
+  readonly candidate: SkillCandidate;
+  readonly eventType: "SkillCandidateCreated";
+}
+
+/** SkillCandidateTransitionedPayload */
+export interface SkillCandidateTransitionedPayload {
+  readonly actor: ActorRef;
+  readonly eventType: "SkillCandidateTransitioned";
+  readonly fromState: SkillLifecycleState;
+  readonly skillId: Identifier;
+  readonly toState: SkillLifecycleState;
+  readonly reason?: string | null;
 }
 
 /** TaskCreatedPayload */

@@ -10,23 +10,27 @@ a duplicate event is a no-op rather than a double-count.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict
 
 from .aggregates import (
     ArtifactPromotionAggregate,
+    BotAggregate,
     CapabilityAggregate,
     ClaimAggregate,
+    CognitiveCandidateAggregate,
     CohortAggregate,
     DriverRunAggregate,
     HumanApprovalAggregate,
+    LabBoardAggregate,
     MissionAggregate,
     ReplayForkAggregate,
+    SkillCandidateAggregate,
     TaskAggregate,
 )
 from .checkpoint import verify_checkpoint
 from .contracts import digest
 from .errors import IntegrityViolation
-from .store import EventStore, GENESIS_CHAIN, chain_next
+from .store import GENESIS_CHAIN, EventStore, chain_next
 
 
 class ReplayState(object):
@@ -86,6 +90,10 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         "ClaimCreated",
         "HumanApprovalRequested",
         "ArtifactPromotionPrepared",
+        "BotRegistered",
+        "CognitiveCandidateProposed",
+        "SkillCandidateCreated",
+        "LabBoardItemCreated",
         "CohortCreated",
         "ReplayForkCreated",
     )
@@ -172,6 +180,28 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
     elif event_type == "ArtifactPromotionDiscarded":
         nxt = ArtifactPromotionAggregate.discard(
             existing(), payload["reason"], payload["discardedAt"]
+        )
+    elif event_type == "BotRegistered":
+        nxt = BotAggregate.create(payload["bot"])
+    elif event_type == "CognitiveCandidateProposed":
+        nxt = CognitiveCandidateAggregate.create(payload["candidate"])
+    elif event_type == "CognitiveCandidateDecided":
+        nxt = CognitiveCandidateAggregate.decide(
+            existing(), payload["decision"], payload["decidedBy"],
+            payload["decidedAt"], payload.get("reason"),
+        )
+    elif event_type == "SkillCandidateCreated":
+        nxt = SkillCandidateAggregate.create(payload["candidate"])
+    elif event_type == "SkillCandidateTransitioned":
+        nxt = SkillCandidateAggregate.transition(
+            existing(), payload["toState"], payload["actor"], payload.get("reason")
+        )
+    elif event_type == "LabBoardItemCreated":
+        nxt = LabBoardAggregate.create(payload["item"])
+    elif event_type == "LabBoardItemTransitioned":
+        nxt = LabBoardAggregate.transition(
+            existing(), payload["toState"], payload["actor"], payload.get("reason"),
+            envelope["occurredAt"],
         )
     elif event_type == "CohortCreated":
         nxt = CohortAggregate.replay_create(payload["snapshot"])

@@ -1,9 +1,13 @@
 """CAPT runtime aggregates with exclusive state ownership (ADR-0103)."""
 
 from .artifact_promotion import ArtifactPromotionAggregate
+from .bot import BotAggregate
 from .capability import CapabilityAggregate, scope_contains
 from .claim_driver import ClaimAggregate, DriverRunAggregate
+from .cognitive_candidate import CognitiveCandidateAggregate
 from .cohort_state import CohortAggregate
+from .lab_board import LabBoardAggregate
+from .skill_candidate import SkillCandidateAggregate
 from .replay_fork import ReplayForkAggregate
 from .human_approval import HumanApprovalAggregate
 from .mission_task import MissionAggregate, TaskAggregate
@@ -15,6 +19,10 @@ ALL_AGGREGATES = (
     CapabilityAggregate,
     DriverRunAggregate,
     ClaimAggregate,
+    BotAggregate,
+    CognitiveCandidateAggregate,
+    SkillCandidateAggregate,
+    LabBoardAggregate,
     CohortAggregate,
     ReplayForkAggregate,
     HumanApprovalAggregate,
@@ -25,10 +33,14 @@ ALL_AGGREGATES = (
 __all__ = [
     "ALL_AGGREGATES",
     "ArtifactPromotionAggregate",
+    "BotAggregate",
     "CapabilityAggregate",
     "ClaimAggregate",
+    "CognitiveCandidateAggregate",
     "CohortAggregate",
+    "LabBoardAggregate",
     "ReplayForkAggregate",
+    "SkillCandidateAggregate",
     "DriverRunAggregate",
     "HumanApprovalAggregate",
     "MissionAggregate",

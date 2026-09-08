@@ -55,6 +55,13 @@ _PERMITTED: Dict[str, FrozenSet[str]] = {
     "persist_cohort": frozenset({COGNITION, SYSTEM}),
     "steer_cohort": frozenset({HUMAN}),
     "create_replay_fork": frozenset({HUMAN}),
+    "register_bot": frozenset({HUMAN, SYSTEM}),
+    "propose_cognitive_candidate": frozenset({COGNITION, SYSTEM}),
+    "decide_cognitive_candidate": frozenset({HUMAN, GOVERNANCE}),
+    "create_skill_candidate": frozenset({COGNITION, HUMAN, SYSTEM}),
+    "transition_skill_candidate": frozenset({COGNITION, HUMAN, GOVERNANCE, SYSTEM}),
+    "create_lab_board_item": frozenset({COGNITION, EXECUTION, HUMAN, SYSTEM}),
+    "transition_lab_board_item": frozenset({COGNITION, EXECUTION, HUMAN, GOVERNANCE, SYSTEM}),
 }
 
 

@@ -9,8 +9,13 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 
 from . import commands
 from .aggregates.artifact_promotion import ArtifactPromotionAggregate
+from .aggregates.bot import BotAggregate
 from .aggregates.claim_driver import ClaimAggregate
+from .aggregates.cognitive_candidate import CognitiveCandidateAggregate
 from .aggregates.cohort_state import CohortAggregate
+from .aggregates.lab_board import LabBoardAggregate
+from .aggregates.mission_task import MissionAggregate
+from .aggregates.skill_candidate import SkillCandidateAggregate
 from .artifact_workspace import atomic_adopt_verified_artifact, file_digest
 from .authority import require_authority
 from .contracts import digest, require
@@ -21,6 +26,210 @@ from .store import AppendRequest
 
 class GovernedRuntimeService(RuntimeService):
     """RuntimeService plus explicitly governed Sol-Reconciliation transactions."""
+
+    def _idempotent_projection(
+        self, stream: str, label: str, metadata: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        if self.store.find_idempotent(metadata["idempotencyKey"]) is None:
+            return None
+        result = dict(self._commit([], metadata))
+        result[label] = self.store.load_state(stream)
+        return result
+
+    # -- CAPT Bot foundation ---------------------------------------------
+
+    def register_bot(
+        self, manifest: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        require("BotManifest", manifest)
+        require("CommandMetadata", metadata)
+        require_authority("register_bot", metadata["actor"]["kind"])
+        stream = BotAggregate.stream_id(manifest["botId"])
+        replay = self._idempotent_projection(stream, "bot", metadata)
+        if replay is not None:
+            return replay
+        if self.store.aggregate_version(stream) != 0:
+            raise AuthorityViolation("BOT_ID_ALREADY_EXISTS")
+        if manifest.get("roleKind") == "delegate":
+            mission_id = str(manifest.get("missionId") or "")
+            if self.store.load_state(MissionAggregate.stream_id(mission_id)) is None:
+                raise AuthorityViolation("DELEGATE_MISSION_NOT_FOUND")
+        state = BotAggregate.create(manifest)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type="BotRegistered",
+            payload={"eventType": "BotRegistered", "bot": manifest},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+            mission_id=manifest.get("missionId"),
+        )
+        result = self._commit([AppendRequest(stream, BotAggregate.KIND, 0, event, state)], metadata)
+        return {**result, "bot": state}
+
+    def propose_cognitive_candidate(
+        self, candidate: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        require("CognitiveCandidate", candidate)
+        require("CommandMetadata", metadata)
+        require_authority("propose_cognitive_candidate", metadata["actor"]["kind"])
+        stream = CognitiveCandidateAggregate.stream_id(candidate["candidateId"])
+        replay = self._idempotent_projection(stream, "candidate", metadata)
+        if replay is not None:
+            return replay
+        if self.store.aggregate_version(stream) != 0:
+            raise AuthorityViolation("COGNITIVE_CANDIDATE_ID_ALREADY_EXISTS")
+        bot = self.store.load_state(BotAggregate.stream_id(str(candidate["botId"])))
+        if bot is None:
+            raise AuthorityViolation("COGNITIVE_CANDIDATE_BOT_NOT_FOUND")
+        if candidate["promotionMode"] != bot["cognitionPolicy"].get("promotionMode"):
+            raise AuthorityViolation("COGNITIVE_PROMOTION_MODE_MISMATCH")
+        state = CognitiveCandidateAggregate.create(candidate)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type="CognitiveCandidateProposed",
+            payload={"eventType": "CognitiveCandidateProposed", "candidate": candidate},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+        )
+        result = self._commit(
+            [AppendRequest(stream, CognitiveCandidateAggregate.KIND, 0, event, state)], metadata
+        )
+        return {**result, "candidate": state}
+
+    def decide_cognitive_candidate(
+        self, candidate_id: str, decision: str, reason: Optional[str],
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        require("CommandMetadata", metadata)
+        require_authority("decide_cognitive_candidate", metadata["actor"]["kind"])
+        stream = CognitiveCandidateAggregate.stream_id(candidate_id)
+        replay = self._idempotent_projection(stream, "candidate", metadata)
+        if replay is not None:
+            return replay
+        expected = self.store.aggregate_version(stream)
+        current = self.store.require_state(stream)
+        state = CognitiveCandidateAggregate.decide(
+            current, decision, metadata["actor"], metadata["issuedAt"], reason
+        )
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type="CognitiveCandidateDecided",
+            payload={"eventType": "CognitiveCandidateDecided", "candidateId": candidate_id,
+                     "decision": decision, "decidedBy": metadata["actor"],
+                     "decidedAt": metadata["issuedAt"], "reason": reason},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+        )
+        result = self._commit(
+            [AppendRequest(stream, CognitiveCandidateAggregate.KIND, expected, event, state)], metadata
+        )
+        return {**result, "candidate": state}
+
+    def create_skill_candidate(
+        self, candidate: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        require("SkillCandidate", candidate)
+        require("CommandMetadata", metadata)
+        require_authority("create_skill_candidate", metadata["actor"]["kind"])
+        stream = SkillCandidateAggregate.stream_id(candidate["skillId"])
+        replay = self._idempotent_projection(stream, "candidate", metadata)
+        if replay is not None:
+            return replay
+        if self.store.aggregate_version(stream) != 0:
+            raise AuthorityViolation("SKILL_CANDIDATE_ID_ALREADY_EXISTS")
+        if self.store.load_state(BotAggregate.stream_id(str(candidate["botId"]))) is None:
+            raise AuthorityViolation("SKILL_CANDIDATE_BOT_NOT_FOUND")
+        state = SkillCandidateAggregate.create(candidate)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type="SkillCandidateCreated",
+            payload={"eventType": "SkillCandidateCreated", "candidate": candidate},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+        )
+        result = self._commit(
+            [AppendRequest(stream, SkillCandidateAggregate.KIND, 0, event, state)], metadata
+        )
+        return {**result, "candidate": state}
+
+    def transition_skill_candidate(
+        self, skill_id: str, to_state: str, reason: Optional[str],
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        require("CommandMetadata", metadata)
+        require_authority("transition_skill_candidate", metadata["actor"]["kind"])
+        stream = SkillCandidateAggregate.stream_id(skill_id)
+        replay = self._idempotent_projection(stream, "candidate", metadata)
+        if replay is not None:
+            return replay
+        expected = self.store.aggregate_version(stream)
+        current = self.store.require_state(stream)
+        state = SkillCandidateAggregate.transition(current, to_state, metadata["actor"], reason)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type="SkillCandidateTransitioned",
+            payload={"eventType": "SkillCandidateTransitioned", "skillId": skill_id,
+                     "fromState": current["lifecycleState"], "toState": to_state,
+                     "actor": metadata["actor"], "reason": reason},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+        )
+        result = self._commit(
+            [AppendRequest(stream, SkillCandidateAggregate.KIND, expected, event, state)], metadata
+        )
+        return {**result, "candidate": state}
+
+    def create_lab_board_item(
+        self, item: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        require("LabBoardItem", item)
+        require("CommandMetadata", metadata)
+        require_authority("create_lab_board_item", metadata["actor"]["kind"])
+        stream = LabBoardAggregate.stream_id(item["itemId"])
+        replay = self._idempotent_projection(stream, "item", metadata)
+        if replay is not None:
+            return replay
+        if self.store.aggregate_version(stream) != 0:
+            raise AuthorityViolation("LAB_BOARD_ITEM_ID_ALREADY_EXISTS")
+        mission_id = item.get("missionId")
+        if mission_id is not None and self.store.load_state(MissionAggregate.stream_id(str(mission_id))) is None:
+            raise AuthorityViolation("LAB_BOARD_MISSION_NOT_FOUND")
+        state = LabBoardAggregate.create(item)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type="LabBoardItemCreated",
+            payload={"eventType": "LabBoardItemCreated", "item": item},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+            mission_id=item.get("missionId"),
+        )
+        result = self._commit(
+            [AppendRequest(stream, LabBoardAggregate.KIND, 0, event, state)], metadata
+        )
+        return {**result, "item": state}
+
+    def transition_lab_board_item(
+        self, item_id: str, to_state: str, reason: Optional[str],
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        require("CommandMetadata", metadata)
+        require_authority("transition_lab_board_item", metadata["actor"]["kind"])
+        stream = LabBoardAggregate.stream_id(item_id)
+        replay = self._idempotent_projection(stream, "item", metadata)
+        if replay is not None:
+            return replay
+        expected = self.store.aggregate_version(stream)
+        current = self.store.require_state(stream)
+        state = LabBoardAggregate.transition(
+            current, to_state, metadata["actor"], reason, metadata["issuedAt"]
+        )
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type="LabBoardItemTransitioned",
+            payload={"eventType": "LabBoardItemTransitioned", "itemId": item_id,
+                     "fromState": current["state"], "toState": to_state,
+                     "actor": metadata["actor"], "reason": reason},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+            mission_id=current.get("missionId"),
+        )
+        result = self._commit(
+            [AppendRequest(stream, LabBoardAggregate.KIND, expected, event, state)], metadata
+        )
+        return {**result, "item": state}
 
     def _event_by_identity(
         self, event_type: str, identity_key: str, identity_value: str

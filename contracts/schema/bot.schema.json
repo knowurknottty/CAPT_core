@@ -1,0 +1,511 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.capt.dev/bot.schema.json",
+  "title": "CAPT Bot foundation contracts",
+  "x-domain": "bot",
+  "$defs": {
+    "BotRoleKind": {
+      "title": "BotRoleKind",
+      "type": "string",
+      "enum": [
+        "crew",
+        "delegate"
+      ]
+    },
+    "PromotionMode": {
+      "title": "PromotionMode",
+      "type": "string",
+      "enum": [
+        "locked",
+        "governed",
+        "autonomous"
+      ]
+    },
+    "BotModelStrategy": {
+      "title": "BotModelStrategy",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "primary",
+        "fallbacks"
+      ],
+      "properties": {
+        "primary": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "fallbacks": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "maxLength": 256
+          }
+        }
+      }
+    },
+    "BotCognitionPolicy": {
+      "title": "BotCognitionPolicy",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "promotionMode"
+      ],
+      "properties": {
+        "promotionMode": {
+          "$ref": "bot.schema.json#/$defs/PromotionMode"
+        }
+      }
+    },
+    "BotLocalityPolicy": {
+      "title": "BotLocalityPolicy",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "defaultRuntime",
+        "privateData"
+      ],
+      "properties": {
+        "defaultRuntime": {
+          "type": "string",
+          "enum": [
+            "local",
+            "cloud",
+            "either"
+          ]
+        },
+        "privateData": {
+          "type": "string",
+          "enum": [
+            "local_only",
+            "cloud_allowed"
+          ]
+        }
+      }
+    },
+    "BotCollaborationPolicy": {
+      "title": "BotCollaborationPolicy",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mayDelegate",
+        "maxSpawnDepth"
+      ],
+      "properties": {
+        "mayDelegate": {
+          "type": "boolean"
+        },
+        "maxSpawnDepth": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8
+        }
+      }
+    },
+    "BotManifest": {
+      "title": "BotManifest",
+      "description": "Persistent Bot identity and policy composition. Live credentials and capability leases are intentionally absent.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "botId",
+        "displayName",
+        "roleKind",
+        "role",
+        "modelStrategy",
+        "cognitionPolicy",
+        "localityPolicy",
+        "collaboration",
+        "createdBy",
+        "createdAt"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "botId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "roleKind": {
+          "$ref": "bot.schema.json#/$defs/BotRoleKind"
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "missionId": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "modelStrategy": {
+          "$ref": "bot.schema.json#/$defs/BotModelStrategy"
+        },
+        "cognitionPolicy": {
+          "$ref": "bot.schema.json#/$defs/BotCognitionPolicy"
+        },
+        "localityPolicy": {
+          "$ref": "bot.schema.json#/$defs/BotLocalityPolicy"
+        },
+        "collaboration": {
+          "$ref": "bot.schema.json#/$defs/BotCollaborationPolicy"
+        },
+        "authorityTemplateRef": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "createdBy": {
+          "$ref": "common.schema.json#/$defs/ActorRef"
+        },
+        "createdAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        }
+      }
+    },
+    "CognitiveKind": {
+      "title": "CognitiveKind",
+      "type": "string",
+      "enum": [
+        "observation",
+        "user_fact",
+        "derived_fact",
+        "preference",
+        "decision",
+        "hypothesis",
+        "belief",
+        "contradiction",
+        "open_question",
+        "procedure",
+        "skill",
+        "relationship"
+      ]
+    },
+    "CognitiveCandidateState": {
+      "title": "CognitiveCandidateState",
+      "type": "string",
+      "enum": [
+        "proposed",
+        "promoted",
+        "rejected",
+        "revoked"
+      ]
+    },
+    "CognitiveCandidate": {
+      "title": "CognitiveCandidate",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "candidateId",
+        "botId",
+        "kind",
+        "content",
+        "sourceRefs",
+        "provenance",
+        "sensitivity",
+        "confidence",
+        "promotionMode",
+        "state",
+        "proposedBy",
+        "proposedAt"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "candidateId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "botId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "kind": {
+          "$ref": "bot.schema.json#/$defs/CognitiveKind"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32768
+        },
+        "sourceRefs": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "provenance": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "sensitivity": {
+          "type": "string",
+          "enum": [
+            "public",
+            "project",
+            "user",
+            "secret"
+          ]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "promotionMode": {
+          "$ref": "bot.schema.json#/$defs/PromotionMode"
+        },
+        "state": {
+          "$ref": "bot.schema.json#/$defs/CognitiveCandidateState"
+        },
+        "proposedBy": {
+          "$ref": "common.schema.json#/$defs/ActorRef"
+        },
+        "proposedAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "decidedBy": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/ActorRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "decidedAt": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "decisionReason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2048
+        }
+      }
+    },
+    "SkillLifecycleState": {
+      "title": "SkillLifecycleState",
+      "type": "string",
+      "enum": [
+        "idea",
+        "draft",
+        "review",
+        "sandbox",
+        "test",
+        "red_team",
+        "shadow",
+        "approved",
+        "active",
+        "rejected",
+        "revoked",
+        "superseded"
+      ]
+    },
+    "SkillCandidate": {
+      "title": "SkillCandidate",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "skillId",
+        "botId",
+        "name",
+        "sourceKind",
+        "lifecycleState",
+        "requiredAuthority",
+        "provenanceRefs",
+        "revision",
+        "createdBy",
+        "createdAt"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "skillId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "botId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "sourceKind": {
+          "type": "string",
+          "enum": [
+            "human",
+            "demonstration",
+            "experience",
+            "imported"
+          ]
+        },
+        "lifecycleState": {
+          "$ref": "bot.schema.json#/$defs/SkillLifecycleState"
+        },
+        "requiredAuthority": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "maxLength": 256
+          }
+        },
+        "provenanceRefs": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "createdBy": {
+          "$ref": "common.schema.json#/$defs/ActorRef"
+        },
+        "createdAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "decisionReason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2048
+        }
+      }
+    },
+    "LabBoardState": {
+      "title": "LabBoardState",
+      "type": "string",
+      "enum": [
+        "inbox",
+        "ready",
+        "active",
+        "verifying",
+        "waiting_agent",
+        "waiting_human",
+        "human_task",
+        "blocked_human",
+        "done"
+      ]
+    },
+    "LabBoardItem": {
+      "title": "LabBoardItem",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "itemId",
+        "title",
+        "state",
+        "evidenceRefs",
+        "createdBy",
+        "createdAt",
+        "updatedAt"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "itemId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "missionId": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "state": {
+          "$ref": "bot.schema.json#/$defs/LabBoardState"
+        },
+        "ownerRef": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "blockerReason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2048
+        },
+        "humanRequest": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2048
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "maxLength": 512
+          }
+        },
+        "createdBy": {
+          "$ref": "common.schema.json#/$defs/ActorRef"
+        },
+        "createdAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "updatedAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        }
+      }
+    }
+  }
+}
