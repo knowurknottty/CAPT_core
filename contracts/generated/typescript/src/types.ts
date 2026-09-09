@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:26e3ac1625862ed2d37a6a9c9b5a4e0c328b04e89341175068142c8d0c3389c5
+// source digest:  sha256:58d31a4d2a15f6684f81976d8c23fa8f0ded13c4fc57574cf300da22d92d4451
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -1616,10 +1616,12 @@ export type EventPayload =
   | DelegateAssignedPayload
   | DelegateAssignmentTransitionedPayload
   | CloudflareResourceAdoptionApprovalConsumedPayload
-  | CloudflareResourceBindingCreatedPayload;
+  | CloudflareResourceBindingCreatedPayload
+  | SandboxLeaseReservedPayload
+  | SandboxLeaseTransitionedPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated" | "BotRegistered" | "CognitiveCandidateProposed" | "CognitiveCandidateDecided" | "SkillCandidateCreated" | "SkillCandidateTransitioned" | "LabBoardItemCreated" | "LabBoardItemTransitioned" | "DelegateAssigned" | "DelegateAssignmentTransitioned" | "CloudflareResourceAdoptionApprovalConsumed" | "CloudflareResourceBindingCreated";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated" | "BotRegistered" | "CognitiveCandidateProposed" | "CognitiveCandidateDecided" | "SkillCandidateCreated" | "SkillCandidateTransitioned" | "LabBoardItemCreated" | "LabBoardItemTransitioned" | "DelegateAssigned" | "DelegateAssignmentTransitioned" | "CloudflareResourceAdoptionApprovalConsumed" | "CloudflareResourceBindingCreated" | "SandboxLeaseReserved" | "SandboxLeaseTransitioned";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -1669,6 +1671,8 @@ export const EventTypeValues = [
   "DelegateAssignmentTransitioned",
   "CloudflareResourceAdoptionApprovalConsumed",
   "CloudflareResourceBindingCreated",
+  "SandboxLeaseReserved",
+  "SandboxLeaseTransitioned",
 ] as const;
 
 /** EvidenceRecordedPayload */
@@ -1742,6 +1746,21 @@ export interface PolicyEvaluatedPayload {
 export interface ReplayForkCreatedPayload {
   readonly eventType: "ReplayForkCreated";
   readonly fork: ReplayForkState;
+}
+
+/** SandboxLeaseReservedPayload */
+export interface SandboxLeaseReservedPayload {
+  readonly eventType: "SandboxLeaseReserved";
+  readonly lease: SandboxLease;
+}
+
+/** SandboxLeaseTransitionedPayload */
+export interface SandboxLeaseTransitionedPayload {
+  readonly eventType: "SandboxLeaseTransitioned";
+  readonly fromState: SandboxLeaseState;
+  readonly lease: SandboxLease;
+  readonly sandboxLeaseId: Identifier;
+  readonly toState: SandboxLeaseState;
 }
 
 /** SkillCandidateCreatedPayload */

@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:26e3ac1625862ed2d37a6a9c9b5a4e0c328b04e89341175068142c8d0c3389c5
+# source digest:  sha256:58d31a4d2a15f6684f81976d8c23fa8f0ded13c4fc57574cf300da22d92d4451
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -1922,6 +1922,25 @@ class ReplayForkCreatedPayload(object):
 
 
 @dataclass(frozen=True)
+class SandboxLeaseReservedPayload(object):
+    """SandboxLeaseReservedPayload"""
+
+    eventType: Literal["SandboxLeaseReserved"]
+    lease: SandboxLease
+
+
+@dataclass(frozen=True)
+class SandboxLeaseTransitionedPayload(object):
+    """SandboxLeaseTransitionedPayload"""
+
+    eventType: Literal["SandboxLeaseTransitioned"]
+    fromState: SandboxLeaseState
+    lease: SandboxLease
+    sandboxLeaseId: Identifier
+    toState: SandboxLeaseState
+
+
+@dataclass(frozen=True)
 class SkillCandidateCreatedPayload(object):
     """SkillCandidateCreatedPayload"""
 
@@ -2019,7 +2038,7 @@ class ToolExecutionTerminatedPayload(object):
 
 
 # discriminated on 'eventType'
-EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload, BotRegisteredPayload, CognitiveCandidateProposedPayload, CognitiveCandidateDecidedPayload, SkillCandidateCreatedPayload, SkillCandidateTransitionedPayload, LabBoardItemCreatedPayload, LabBoardItemTransitionedPayload, DelegateAssignedPayload, DelegateAssignmentTransitionedPayload, CloudflareResourceAdoptionApprovalConsumedPayload, CloudflareResourceBindingCreatedPayload]
+EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload, BotRegisteredPayload, CognitiveCandidateProposedPayload, CognitiveCandidateDecidedPayload, SkillCandidateCreatedPayload, SkillCandidateTransitionedPayload, LabBoardItemCreatedPayload, LabBoardItemTransitionedPayload, DelegateAssignedPayload, DelegateAssignmentTransitionedPayload, CloudflareResourceAdoptionApprovalConsumedPayload, CloudflareResourceBindingCreatedPayload, SandboxLeaseReservedPayload, SandboxLeaseTransitionedPayload]
 
 
 class EventType(str, Enum):
@@ -2073,6 +2092,8 @@ class EventType(str, Enum):
     DELEGATEASSIGNMENTTRANSITIONED = "DelegateAssignmentTransitioned"
     CLOUDFLARERESOURCEADOPTIONAPPROVALCONSUMED = "CloudflareResourceAdoptionApprovalConsumed"
     CLOUDFLARERESOURCEBINDINGCREATED = "CloudflareResourceBindingCreated"
+    SANDBOXLEASERESERVED = "SandboxLeaseReserved"
+    SANDBOXLEASETRANSITIONED = "SandboxLeaseTransitioned"
 
 
 @dataclass(frozen=True)

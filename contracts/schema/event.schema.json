@@ -56,7 +56,9 @@
         "DelegateAssigned",
         "DelegateAssignmentTransitioned",
         "CloudflareResourceAdoptionApprovalConsumed",
-        "CloudflareResourceBindingCreated"
+        "CloudflareResourceBindingCreated",
+        "SandboxLeaseReserved",
+        "SandboxLeaseTransitioned"
       ]
     },
     "EventPayload": {
@@ -1103,6 +1105,54 @@
             },
             "binding": {
               "$ref": "common.schema.json#/$defs/CloudflareResourceBinding"
+            }
+          }
+        },
+        {
+          "title": "SandboxLeaseReservedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "lease"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "SandboxLeaseReserved"
+            },
+            "lease": {
+              "$ref": "sandbox.schema.json#/$defs/SandboxLease"
+            }
+          }
+        },
+        {
+          "title": "SandboxLeaseTransitionedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "sandboxLeaseId",
+            "fromState",
+            "toState",
+            "lease"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "SandboxLeaseTransitioned"
+            },
+            "sandboxLeaseId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "fromState": {
+              "$ref": "sandbox.schema.json#/$defs/SandboxLeaseState"
+            },
+            "toState": {
+              "$ref": "sandbox.schema.json#/$defs/SandboxLeaseState"
+            },
+            "lease": {
+              "$ref": "sandbox.schema.json#/$defs/SandboxLease"
             }
           }
         }

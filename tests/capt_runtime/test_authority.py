@@ -46,3 +46,16 @@ def test_claimguard_cannot_fabricate_verification():
 def test_unknown_actor_denied():
     with pytest.raises(AuthorityViolation):
         authority.require_authority("issue_grant", "rogue_plane")
+
+
+@pytest.mark.parametrize("actor", ["cognitive_plane", "human", "external_driver", "verification_plane", "claim_authority"])
+def test_sandbox_lifecycle_mutation_rejects_wrong_authority(actor):
+    for act in ("reserve_sandbox_lease", "transition_sandbox_lease"):
+        with pytest.raises(AuthorityViolation):
+            authority.require_authority(act, actor)
+
+
+def test_sandbox_lifecycle_authority_is_execution_or_system_only():
+    for act in ("reserve_sandbox_lease", "transition_sandbox_lease"):
+        authority.require_authority(act, "execution_plane")
+        authority.require_authority(act, "system")
