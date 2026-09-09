@@ -1,15 +1,20 @@
 """CAPT-native hardened local sandbox profiles and applied-state attestation."""
 from __future__ import annotations
 
+import base64
 import hashlib
+import inspect
 import ipaddress
 import json
 import re
-from dataclasses import dataclass, field
+import secrets
+import time
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Iterable
 
 from capt_runtime.errors import AuthorityViolation
+from capt_runtime.tools.backends import inversion_guardian
 from capt_runtime.tools.backends.docker import (
     DockerMount,
     DockerNetworkPolicy,
@@ -126,8 +131,8 @@ class InversionSandboxProfile:
                 raise AuthorityViolation(f"InversionSandbox requires non-root numeric {name}")
         if self.network_policy.mode == "unrestricted" and not self.allow_unrestricted_egress:
             raise AuthorityViolation("InversionSandbox unrestricted egress requires operator profile opt-in")
-        if self.network_policy.mode == "allowlist" and self.guardian_image_ref is not None and not self.guardian_image_ref:
-            raise ValueError("guardian_image_ref must be non-empty when provided")
+        if self.network_policy.mode == "allowlist" and not self.guardian_image_ref:
+            raise AuthorityViolation("InversionSandbox allowlist requires an explicit guardian image")
         self.docker_profile()
 
     def docker_profile(self) -> DockerProfile:
@@ -136,6 +141,13 @@ class InversionSandboxProfile:
             if self.network_policy.mode == "unrestricted"
             else DockerNetworkPolicy(mode="none")
         )
+        environment = list(self.environment_overrides)
+        if self.network_policy.mode == "allowlist":
+            protected = {"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"}
+            if protected.intersection(key for key, _value in environment):
+                raise AuthorityViolation("InversionSandbox guardian proxy environment is profile-owned")
+            proxy = "http://capt-guardian:18080"
+            environment.extend((key, proxy) for key in sorted(protected))
         return DockerProfile(
             profile_id=self.profile_id,
             context_name=self.context_name,
@@ -144,7 +156,7 @@ class InversionSandboxProfile:
             mounts=self.mounts,
             allowed_container_roots=self.allowed_container_roots,
             working_dir=self.working_dir,
-            environment_overrides=self.environment_overrides,
+            environment_overrides=tuple(environment),
             cpus=self.cpus,
             memory_bytes=self.memory_bytes,
             pids_limit=self.pids_limit,
@@ -347,6 +359,15 @@ class InversionSandboxProcessResult:
     side_effect_identity: str | None
 
 
+@dataclass(frozen=True)
+class _AllowlistRuntime:
+    network_name: str
+    network_id: str
+    guardian_id: str
+    guardian_image_id: str
+    guardian_source_digest: str
+
+
 class InversionSandboxProcessBackend:
     backend_id = "inversion_sandbox"
     adapter_id = "backend-inversion-sandbox-process"
@@ -415,22 +436,162 @@ class InversionSandboxProcessBackend:
         container_id: str,
         cwd: str,
         attestation: InversionSandboxAttestation,
+        *,
+        allowlist_runtime: _AllowlistRuntime | None = None,
     ) -> str:
-        return _canonical_json(
-            {
-                "backend": self.backend_id,
-                "profileId": profile.profile_id,
-                "contextEndpoint": prepared.context_endpoint,
-                "containerId": container_id,
-                "imageId": prepared.image_id,
-                "repoDigest": prepared.repo_digest,
-                "containerCwd": cwd,
-                "securityProfileDigest": attestation.security_profile_digest,
-                "networkPolicyDigest": attestation.network_policy_digest,
-                "filesystemScopeDigest": attestation.filesystem_scope_digest,
-                "attestationDigest": attestation.digest,
-            }
+        identity: dict[str, object] = {
+            "backend": self.backend_id,
+            "profileId": profile.profile_id,
+            "contextEndpoint": prepared.context_endpoint,
+            "containerId": container_id,
+            "imageId": prepared.image_id,
+            "repoDigest": prepared.repo_digest,
+            "containerCwd": cwd,
+            "securityProfileDigest": attestation.security_profile_digest,
+            "networkPolicyDigest": attestation.network_policy_digest,
+            "filesystemScopeDigest": attestation.filesystem_scope_digest,
+            "attestationDigest": attestation.digest,
+        }
+        if allowlist_runtime is not None:
+            identity.update({
+                "internalNetwork": allowlist_runtime.network_name,
+                "guardianContainerId": allowlist_runtime.guardian_id,
+                "guardianImageId": allowlist_runtime.guardian_image_id,
+                "guardianSourceDigest": allowlist_runtime.guardian_source_digest,
+            })
+        return _canonical_json(identity)
+
+    def _guardian_source(self) -> str:
+        return inspect.getsource(inversion_guardian)
+
+    def _prepare_allowlist_runtime(
+        self, profile: InversionSandboxProfile, endpoint: str
+    ) -> _AllowlistRuntime:
+        if not profile.guardian_image_ref:
+            raise AuthorityViolation("InversionSandbox allowlist requires guardian image")
+        inspected = self.docker_backend._run_endpoint(
+            endpoint, ("image", "inspect", profile.guardian_image_ref),
+            timeout_seconds=10.0, stdout_limit_bytes=4 * 1024 * 1024, stderr_limit_bytes=64 * 1024,
         )
+        if inspected.exit_code != 0 or inspected.timed_out:
+            raise AuthorityViolation("InversionSandbox guardian image is unavailable locally; implicit pull is disabled")
+        try:
+            guardian_image_id = json.loads(inspected.stdout)[0]["Id"]
+        except (json.JSONDecodeError, IndexError, KeyError, TypeError) as exc:
+            raise RuntimeError("InversionSandbox guardian image inspect returned invalid identity") from exc
+        if not isinstance(guardian_image_id, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", guardian_image_id):
+            raise RuntimeError("InversionSandbox guardian image identity is not immutable")
+
+        network_name = "capt_inv_" + secrets.token_hex(6)
+        network = self.docker_backend._run_endpoint(
+            endpoint, ("network", "create", "--internal", "--driver", "bridge", network_name),
+            timeout_seconds=10.0, stdout_limit_bytes=4096, stderr_limit_bytes=16 * 1024,
+        )
+        if network.exit_code != 0 or network.timed_out:
+            raise RuntimeError("InversionSandbox internal network creation failed")
+        network_id = network.stdout.strip()
+        if not re.fullmatch(r"[0-9a-f]{12,64}", network_id):
+            self.docker_backend._run_endpoint(endpoint, ("network", "rm", network_name), timeout_seconds=5.0)
+            raise RuntimeError("InversionSandbox internal network identity is invalid")
+
+        source = self._guardian_source()
+        source_digest = hashlib.sha256(source.encode("utf-8")).hexdigest()
+        policy_json = _canonical_json(profile.network_policy.canonical()).encode("utf-8")
+        policy_b64 = base64.b64encode(policy_json).decode("ascii")
+        guardian_name = "capt_guard_" + network_name.removeprefix("capt_inv_")
+        args = [
+            "create", "--pull", "never", "--name", guardian_name, "--network", "bridge",
+            "--read-only", "--user", f"{profile.uid}:{profile.gid}",
+            "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
+            "--cpus", "0.25", "--memory", str(128 * 1024 * 1024), "--pids-limit", "64",
+            "--tmpfs", "/tmp:rw,nosuid,nodev,noexec,size=16777216",
+            "--tmpfs", "/run:rw,nosuid,nodev,noexec,size=16777216",
+            "--env", f"CAPT_GUARDIAN_POLICY_B64={policy_b64}",
+            "--env", f"CAPT_GUARDIAN_POLICY_DIGEST={profile.network_policy.digest()}",
+            guardian_image_id, profile.guardian_python, "-c", source,
+        ]
+        created = self.docker_backend._run_endpoint(
+            endpoint, tuple(args), timeout_seconds=15.0, stdout_limit_bytes=4096, stderr_limit_bytes=64 * 1024,
+        )
+        if created.exit_code != 0 or created.timed_out:
+            self.docker_backend._run_endpoint(endpoint, ("network", "rm", network_name), timeout_seconds=5.0)
+            raise RuntimeError("InversionSandbox guardian create failed")
+        guardian_id = created.stdout.strip()
+        if not re.fullmatch(r"[0-9a-f]{12,64}", guardian_id):
+            self.docker_backend._run_endpoint(endpoint, ("network", "rm", network_name), timeout_seconds=5.0)
+            raise RuntimeError("InversionSandbox guardian identity is invalid")
+        connected = self.docker_backend._run_endpoint(
+            endpoint, ("network", "connect", "--alias", "capt-guardian", network_name, guardian_id),
+            timeout_seconds=10.0, stdout_limit_bytes=4096, stderr_limit_bytes=16 * 1024,
+        )
+        if connected.exit_code != 0 or connected.timed_out:
+            self.docker_backend._cleanup(endpoint, guardian_id)
+            self.docker_backend._run_endpoint(endpoint, ("network", "rm", network_name), timeout_seconds=5.0)
+            raise RuntimeError("InversionSandbox guardian internal-network attachment failed")
+        self._attest_guardian(profile, endpoint, guardian_id, guardian_image_id)
+        return _AllowlistRuntime(network_name, network_id, guardian_id, guardian_image_id, source_digest)
+
+    def _attest_guardian(
+        self, profile: InversionSandboxProfile, endpoint: str, guardian_id: str, image_id: str
+    ) -> None:
+        inspected = self.docker_backend._run_endpoint(
+            endpoint, ("inspect", guardian_id), timeout_seconds=5.0,
+            stdout_limit_bytes=4 * 1024 * 1024, stderr_limit_bytes=16 * 1024,
+        )
+        if inspected.exit_code != 0 or inspected.timed_out:
+            raise AuthorityViolation("InversionSandbox guardian inspect failed")
+        try:
+            record = json.loads(inspected.stdout)[0]
+        except (json.JSONDecodeError, IndexError, TypeError) as exc:
+            raise AuthorityViolation("InversionSandbox guardian inspect evidence is invalid") from exc
+        host = record.get("HostConfig") or {}
+        config = record.get("Config") or {}
+        if record.get("Id") != guardian_id or record.get("Image") != image_id or (record.get("State") or {}).get("Status") != "created":
+            raise AuthorityViolation("InversionSandbox guardian identity/state drifted")
+        if config.get("User") != f"{profile.uid}:{profile.gid}":
+            raise AuthorityViolation("InversionSandbox guardian user drifted")
+        if host.get("ReadonlyRootfs") is not True or host.get("Privileged") is not False:
+            raise AuthorityViolation("InversionSandbox guardian isolation drifted")
+        if "ALL" not in {str(v).upper() for v in (host.get("CapDrop") or [])}:
+            raise AuthorityViolation("InversionSandbox guardian capability drop drifted")
+        if "no-new-privileges:true" not in (host.get("SecurityOpt") or []):
+            raise AuthorityViolation("InversionSandbox guardian no-new-privileges drifted")
+        if host.get("Devices") not in (None, []):
+            raise AuthorityViolation("InversionSandbox guardian device passthrough is forbidden")
+
+    def _start_guardian(self, profile: InversionSandboxProfile, endpoint: str, runtime: _AllowlistRuntime) -> None:
+        started = self.docker_backend._run_endpoint(
+            endpoint, ("start", runtime.guardian_id), timeout_seconds=10.0,
+            stdout_limit_bytes=4096, stderr_limit_bytes=16 * 1024,
+        )
+        if started.exit_code != 0 or started.timed_out:
+            raise RuntimeError("InversionSandbox guardian start failed")
+        expected = f"CAPT_GUARDIAN_READY {profile.network_policy.digest()}"
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            logs = self.docker_backend._run_endpoint(
+                endpoint, ("logs", runtime.guardian_id), timeout_seconds=2.0,
+                stdout_limit_bytes=64 * 1024, stderr_limit_bytes=64 * 1024,
+            )
+            if logs.exit_code == 0 and not logs.timed_out and expected in logs.stdout.splitlines():
+                return
+            if "CAPT_GUARDIAN_FATAL" in (logs.stderr + logs.stdout):
+                break
+            time.sleep(0.05)
+        raise RuntimeError("InversionSandbox guardian readiness was not proven")
+
+    def _cleanup_allowlist_runtime(self, endpoint: str, runtime: _AllowlistRuntime) -> tuple[bool, str]:
+        errors: list[str] = []
+        cleaned, cleanup_error = self.docker_backend._cleanup(endpoint, runtime.guardian_id)
+        if not cleaned:
+            errors.append("guardian: " + cleanup_error)
+        network = self.docker_backend._run_endpoint(
+            endpoint, ("network", "rm", runtime.network_name), timeout_seconds=10.0,
+            stdout_limit_bytes=4096, stderr_limit_bytes=16 * 1024,
+        )
+        if network.exit_code != 0 or network.timed_out:
+            errors.append("network: " + (network.stderr or network.stdout or "remove failed")[:1024])
+        return not errors, "; ".join(errors)
 
     def execute(
         self,
@@ -441,50 +602,60 @@ class InversionSandboxProcessBackend:
     ) -> InversionSandboxProcessResult:
         target = prepared or self.preflight(request)
         profile = target.profile
-        if profile.network_policy.mode == "allowlist":
-            raise AuthorityViolation(
-                "InversionSandbox allowlist mode is not available until guardian orchestration is configured"
-            )
         attestation: InversionSandboxAttestation | None = None
         enriched_identity: str | None = None
+        allowlist_runtime: _AllowlistRuntime | None = None
+        endpoint = target.docker.context_endpoint
+        cleanup_ok = True
+        cleanup_error = ""
+        try:
+            if profile.network_policy.mode == "allowlist":
+                allowlist_runtime = self._prepare_allowlist_runtime(profile, endpoint)
 
-        def observe(base_identity: str) -> None:
-            nonlocal attestation, enriched_identity
-            base = json.loads(base_identity)
-            container_id = base["containerId"]
-            inspected = self.docker_backend._run_endpoint(
-                target.docker.context_endpoint,
-                ("inspect", container_id),
-                timeout_seconds=5.0,
-                stdout_limit_bytes=4 * 1024 * 1024,
-                stderr_limit_bytes=16 * 1024,
+            def observe(base_identity: str) -> None:
+                nonlocal attestation, enriched_identity
+                base = json.loads(base_identity)
+                container_id = base["containerId"]
+                try:
+                    inspected = self.docker_backend._run_endpoint(
+                        endpoint, ("inspect", container_id), timeout_seconds=5.0,
+                        stdout_limit_bytes=4 * 1024 * 1024, stderr_limit_bytes=16 * 1024,
+                    )
+                    if inspected.exit_code != 0 or inspected.timed_out:
+                        raise AuthorityViolation("InversionSandbox could not re-inspect created container")
+                    record = json.loads(inspected.stdout)[0]
+                    attestation = attest_created_container(
+                        profile, target.docker, record,
+                        expected_network_name=(allowlist_runtime.network_name if allowlist_runtime else None),
+                    )
+                    enriched_identity = self.effect_identity(
+                        target.docker, profile, container_id, base["containerCwd"], attestation,
+                        allowlist_runtime=allowlist_runtime,
+                    )
+                    if observe_effect is not None:
+                        observe_effect(enriched_identity)
+                    if allowlist_runtime is not None:
+                        self._start_guardian(profile, endpoint, allowlist_runtime)
+                except Exception:
+                    self.docker_backend._cleanup(endpoint, container_id)
+                    raise
+
+            docker_result = self.docker_backend.execute(
+                request, prepared=target.docker, observe_effect=observe,
+                network_mode_override=(allowlist_runtime.network_name if allowlist_runtime else None),
             )
-            if inspected.exit_code != 0 or inspected.timed_out:
-                self.docker_backend._cleanup(target.docker.context_endpoint, container_id)
-                raise AuthorityViolation("InversionSandbox could not re-inspect created container")
-            try:
-                record = json.loads(inspected.stdout)[0]
-                attestation = attest_created_container(profile, target.docker, record)
-                enriched_identity = self.effect_identity(
-                    target.docker,
-                    profile,
-                    container_id,
-                    base["containerCwd"],
-                    attestation,
-                )
-                if observe_effect is not None:
-                    observe_effect(enriched_identity)
-            except Exception:
-                self.docker_backend._cleanup(target.docker.context_endpoint, container_id)
-                raise
+        finally:
+            if allowlist_runtime is not None:
+                cleanup_ok, cleanup_error = self._cleanup_allowlist_runtime(endpoint, allowlist_runtime)
 
-        docker_result = self.docker_backend.execute(
-            request,
-            prepared=target.docker,
-            observe_effect=observe,
-        )
+        if not cleanup_ok:
+            prior = docker_result.control_error
+            message = "InversionSandbox allowlist cleanup failed: " + cleanup_error
+            docker_result = replace(
+                docker_result, cleanup_succeeded=False,
+                cleanup_error=(docker_result.cleanup_error + "; " + cleanup_error).strip("; "),
+                control_error=(prior + "; " + message).strip("; "),
+            )
         return InversionSandboxProcessResult(
-            docker=docker_result,
-            attestation=attestation,
-            side_effect_identity=enriched_identity,
+            docker=docker_result, attestation=attestation, side_effect_identity=enriched_identity
         )

@@ -36,6 +36,7 @@ _CONTEXT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _ENV_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 _CONTAINER_ID_RE = re.compile(r"^[0-9a-f]{12,64}$")
 _IMAGE_ID_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+_INTERNAL_NETWORK_RE = re.compile(r"^capt_inv_[0-9a-f]{12}$")
 _USER_RE = re.compile(r"^[0-9]{1,10}:[0-9]{1,10}$")
 _CAP_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 
@@ -391,10 +392,22 @@ def _validate_process_request(
 
 
 def _docker_create_args(
-    profile: DockerProfile, prepared: DockerPreparedTarget, cwd: str, argv: tuple[str, ...]
+    profile: DockerProfile,
+    prepared: DockerPreparedTarget,
+    cwd: str,
+    argv: tuple[str, ...],
+    *,
+    network_mode_override: str | None = None,
 ) -> list[str]:
+    network_mode = profile.network_policy.mode
+    if network_mode_override is not None:
+        if not _INTERNAL_NETWORK_RE.fullmatch(network_mode_override):
+            raise AuthorityViolation("Docker internal network override must be a CAPT-owned capt_inv_<12hex> name")
+        if profile.network_policy.mode != "none":
+            raise AuthorityViolation("Docker internal network override requires a no-network profile")
+        network_mode = network_mode_override
     args: list[str] = [
-        "create", "--pull", "never", "--network", profile.network_policy.mode,
+        "create", "--pull", "never", "--network", network_mode,
         "--cpus", str(float(profile.cpus)), "--memory", str(profile.memory_bytes),
         "--pids-limit", str(profile.pids_limit), "--log-driver", "json-file",
         "--log-opt", f"max-size={profile.log_max_bytes}", "--log-opt", "max-file=1",
@@ -582,6 +595,7 @@ class DockerProcessBackend:
         *,
         prepared: DockerPreparedTarget | None = None,
         observe_effect: Callable[[str], None] | None = None,
+        network_mode_override: str | None = None,
     ) -> DockerProcessResult:
         prepared = prepared or self.preflight(request)
         profile = prepared.profile
@@ -592,7 +606,9 @@ class DockerProcessBackend:
         if current_endpoint != prepared.context_endpoint:
             raise RuntimeError("Docker context endpoint changed after preflight")
 
-        create_args = _docker_create_args(profile, prepared, cwd, request.argv)
+        create_args = _docker_create_args(
+            profile, prepared, cwd, request.argv, network_mode_override=network_mode_override
+        )
 
         created = self._run_endpoint(
             prepared.context_endpoint,
