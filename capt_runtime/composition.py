@@ -20,6 +20,7 @@ from .mcp import MCPManager
 from .memory.engine import MemoryTriggerEngine
 from .memory.store import MemoryStore
 from .services import RuntimeService
+from .sandbox_reconciliation import SandboxLeaseReconciler
 from .steered_service import SteeredRuntimeService
 from .store import EventStore
 from .task_resolver import TaskResolver
@@ -91,6 +92,8 @@ class RuntimeComposition:
     memory_engine: MemoryTriggerEngine
     tool_registry: ToolRegistry
     tool_broker: ToolBroker
+    sandbox_reconciler: SandboxLeaseReconciler
+    sandbox_reconciliation_report: list[dict[str, Any]]
     ssh_profile_registry: SSHProfileRegistry
     docker_profile_registry: DockerProfileRegistry
     inversion_sandbox_profile_registry: InversionSandboxProfileRegistry
@@ -174,6 +177,11 @@ class RuntimeComposition:
     def reconcile_stranded_tools(self) -> list[dict[str, Any]]:
         """Reconcile durable ToolExecutions without redispatching adapters."""
         return self.tool_broker.reconcile_stranded()
+
+    def reconcile_sandbox_leases(self) -> list[dict[str, Any]]:
+        """Reconcile persistent sandbox leases without creating/adopting resources."""
+        self.sandbox_reconciliation_report = self.sandbox_reconciler.reconcile_all()
+        return list(self.sandbox_reconciliation_report)
 
     def close(self) -> None:
         if self.mcp_manager is not None:
@@ -296,6 +304,14 @@ def create_runtime(
             )
     now = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     tool_broker = ToolBroker(service, tool_registry, now=now)
+    sandbox_reconciler = SandboxLeaseReconciler(service, inversion_sandbox_backend, now=now)
+    try:
+        sandbox_reconciliation_report = sandbox_reconciler.reconcile_all()
+    except Exception as exc:
+        sandbox_reconciliation_report = [{
+            "status": "unproven",
+            "reason": f"startup sandbox reconciliation failed: {type(exc).__name__}: {exc}"[:1024],
+        }]
     return RuntimeComposition(
         store=store,
         service=service,
@@ -304,6 +320,8 @@ def create_runtime(
         memory_engine=memory_engine,
         tool_registry=tool_registry,
         tool_broker=tool_broker,
+        sandbox_reconciler=sandbox_reconciler,
+        sandbox_reconciliation_report=sandbox_reconciliation_report,
         ssh_profile_registry=ssh_profile_registry,
         docker_profile_registry=docker_profile_registry,
         inversion_sandbox_profile_registry=inversion_sandbox_profile_registry,

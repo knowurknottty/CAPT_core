@@ -1515,6 +1515,22 @@ class RuntimeService(object):
             [AppendRequest(stream, SandboxLeaseAggregate.KIND, expected, event, state)], metadata
         )
 
+    def recover_reserved_sandbox_created(
+        self, sandbox_lease_id: str, patch: dict[str, Any], metadata: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Record positively rediscovered stopped resources after a create crash."""
+        return self._transition_sandbox_lease(
+            sandbox_lease_id, SandboxLeaseAggregate.record_created, patch, metadata
+        )
+
+    def record_sandbox_running(
+        self, sandbox_lease_id: str, patch: dict[str, Any], metadata: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Record positive keeper-running evidence without recreating resources."""
+        return self._transition_sandbox_lease(
+            sandbox_lease_id, SandboxLeaseAggregate.record_running, patch, metadata
+        )
+
     def begin_sandbox_close(
         self, sandbox_lease_id: str, patch: Dict[str, Any], metadata: Dict[str, Any]
     ) -> Dict[str, Any]:
