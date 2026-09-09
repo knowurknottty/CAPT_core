@@ -64,6 +64,9 @@ public struct CAPTPendingApproval: Codable, Equatable, Sendable {
     public let promptAssemblyDigest: String
     public let skillNames: [String]
     public let expiresAt: Date?
+    public let proposalID: String?
+    public let proposalRevision: Int?
+    public let selectedPromptKind: String?
 
     public init(
         requestID: String,
@@ -76,7 +79,10 @@ public struct CAPTPendingApproval: Codable, Equatable, Sendable {
         model: String,
         promptAssemblyDigest: String,
         skillNames: [String] = [],
-        expiresAt: Date? = nil
+        expiresAt: Date? = nil,
+        proposalID: String? = nil,
+        proposalRevision: Int? = nil,
+        selectedPromptKind: String? = nil
     ) {
         self.requestID = requestID
         self.missionID = missionID
@@ -89,11 +95,15 @@ public struct CAPTPendingApproval: Codable, Equatable, Sendable {
         self.promptAssemblyDigest = promptAssemblyDigest
         self.skillNames = skillNames
         self.expiresAt = expiresAt
+        self.proposalID = proposalID
+        self.proposalRevision = proposalRevision
+        self.selectedPromptKind = selectedPromptKind
     }
 
     private enum CodingKeys: String, CodingKey {
         case requestID, missionID, taskID, driverRunID, objective, targetRoot
         case provider, model, promptAssemblyDigest, skillNames, expiresAt
+        case proposalID, proposalRevision, selectedPromptKind
     }
 
     public init(from decoder: Decoder) throws {
@@ -109,6 +119,9 @@ public struct CAPTPendingApproval: Codable, Equatable, Sendable {
         promptAssemblyDigest = try c.decode(String.self, forKey: .promptAssemblyDigest)
         skillNames = try c.decodeIfPresent([String].self, forKey: .skillNames) ?? []
         expiresAt = try c.decodeIfPresent(Date.self, forKey: .expiresAt)
+        proposalID = try c.decodeIfPresent(String.self, forKey: .proposalID)
+        proposalRevision = try c.decodeIfPresent(Int.self, forKey: .proposalRevision)
+        selectedPromptKind = try c.decodeIfPresent(String.self, forKey: .selectedPromptKind)
     }
 
     public func validity(at date: Date = Date()) -> CAPTApprovalValidity {

@@ -395,8 +395,32 @@ def test_model_operator_records_baseline_and_result_evidence(tmp_path: Path) -> 
         claim = _state(client, "cl", suffix)
         evidence = project_evidence(client, "m-ouro-" + suffix)
         attached = [item for item in evidence if item["evidenceId"] in claim["evidenceIds"]]
+        claim_events = client.get_stream_events("claim-cl-ouro-" + suffix)
+        created = next(event for event in claim_events if event["eventType"] == "ClaimCreated")
+        created_ids = created["payload"]["claim"]["evidenceIds"]
         assert receipt["status"] == "accepted"
+        assert created_ids == [
+            receipt["result"]["verificationBaselineEvidenceId"],
+            receipt["result"]["resultEvidenceId"],
+        ]
+        assert created["payload"]["claim"]["statement"] == (
+            "Provider response and immutable artifact recorded for independent verification."
+        )
         assert len(attached) == 2
+        timeline = client.event_timeline(0)
+        relevant = [
+            event for event in timeline
+            if event.get("missionId") == "m-ouro-" + suffix
+        ]
+        claim_evidence_events = [
+            event for event in relevant
+            if event["eventType"] in {"ClaimCreated", "EvidenceRecorded"}
+        ]
+        assert [event["eventType"] for event in claim_evidence_events] == [
+            "ClaimCreated", "EvidenceRecorded", "EvidenceRecorded"
+        ]
+        sequences = [event["globalSequence"] for event in claim_evidence_events]
+        assert sequences == list(range(sequences[0], sequences[0] + 3))
         baseline = [
             item for item in attached
             if Path(item["evidence"]["artifactPath"]).name == "verification-baseline.json"

@@ -16,6 +16,46 @@ final class CAPTOperatorProjectionTests: XCTestCase {
         XCTAssertEqual(summary.id, "m-1")
         XCTAssertEqual(summary.title, "Inspect CAPT")
         XCTAssertEqual(summary.taskState, "awaiting_verification")
+        XCTAssertEqual(summary.taskCount, 1)
+        XCTAssertEqual(summary.tasks.first?.id, "t-1")
+        XCTAssertFalse(summary.isMultiTask)
+    }
+
+    func testMissionProjectionPreservesEveryTaskAndProgress() {
+        let mission: [String: Any] = ["missionId": "m-2", "state": "executing"]
+        let tasks: [[String: Any]] = [
+            ["taskId": "t-1", "missionId": "m-2", "title": "Inspect", "state": "succeeded"],
+            ["taskId": "t-2", "missionId": "m-2", "title": "Repair", "state": "running",
+             "assignedDriverId": "provider", "attempt": 1, "maxAttempts": 2,
+             "dependencies": ["t-1"], "consequential": true],
+        ]
+        let summary = CAPTOperatorProjection.mission(mission, tasks: tasks)
+        XCTAssertEqual(summary.taskCount, 2)
+        XCTAssertEqual(summary.completedTaskCount, 1)
+        XCTAssertTrue(summary.isMultiTask)
+        XCTAssertTrue(summary.hasActiveExecution)
+        XCTAssertEqual(summary.tasks.map(\.id), ["t-1", "t-2"])
+        XCTAssertEqual(summary.tasks.last?.assignedDriverID, "provider")
+        XCTAssertEqual(summary.tasks.last?.dependencies, ["t-1"])
+        XCTAssertTrue(summary.tasks.last?.consequential == true)
+    }
+
+    func testMissionCountersDistinguishSuccessFromTerminality() {
+        let mission: [String: Any] = ["missionId": "m-counts", "state": "executing"]
+        let tasks: [[String: Any]] = [
+            ["taskId": "t-success", "missionId": "m-counts", "state": "succeeded"],
+            ["taskId": "t-failed", "missionId": "m-counts", "state": "failed"],
+            ["taskId": "t-cancelled", "missionId": "m-counts", "state": "cancelled"],
+            ["taskId": "t-running", "missionId": "m-counts", "state": "running"],
+        ]
+
+        let summary = CAPTOperatorProjection.mission(mission, tasks: tasks)
+
+        XCTAssertEqual(summary.succeededTaskCount, 1)
+        XCTAssertEqual(summary.failedTaskCount, 1)
+        XCTAssertEqual(summary.cancelledTaskCount, 1)
+        XCTAssertEqual(summary.terminalTaskCount, 3)
+        XCTAssertEqual(summary.completedTaskCount, 1)
     }
 
     func testEvidenceProjectionPreservesEpistemicState() {

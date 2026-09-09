@@ -244,3 +244,177 @@ def test_openai_compatible_loopback_driver_reports_local_endpoint(tmp_path: Path
     finally:
         server.shutdown()
         server.server_close()
+
+
+class _ToolLoopServer(BaseHTTPRequestHandler):
+    calls = []
+
+    def do_POST(self):  # noqa: N802
+        raw = self.rfile.read(int(self.headers["Content-Length"]))
+        body = json.loads(raw)
+        self.__class__.calls.append({"path": self.path, "body": body})
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        if len(self.__class__.calls) == 1:
+            payload = {
+                "choices": [{"message": {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [{
+                        "id": "call-read-1",
+                        "type": "function",
+                        "function": {
+                            "name": "capt_file_read",
+                            "arguments": json.dumps({"path": "hello.txt"}),
+                        },
+                    }],
+                }}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 4},
+            }
+        else:
+            payload = {
+                "choices": [{"message": {
+                    "role": "assistant",
+                    "content": "The file says CAPT_TOOL_LOOP_OK",
+                }}],
+                "usage": {"prompt_tokens": 20, "completion_tokens": 8},
+            }
+        self.wfile.write(json.dumps(payload).encode())
+
+    def log_message(self, format, *args):  # noqa: N802,A002
+        return
+
+
+def test_openai_provider_tool_loop_executes_real_capt_toolbridge(tmp_path: Path):
+    from capt_runtime.composition import create_runtime
+    from capt_runtime.model_authority import normalize_model_authority
+    from tests.capt_runtime.test_model_tool_bridge import _bridge
+
+    (tmp_path / "hello.txt").write_text("CAPT_TOOL_LOOP_OK")
+    runtime = create_runtime(str(tmp_path / "rt.db"))
+    profile = normalize_model_authority(None, target_root=str(tmp_path))
+    bridge = _bridge(runtime, tmp_path, profile, profile["toolOperations"])
+    _ToolLoopServer.calls = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _ToolLoopServer)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        driver = ProviderDriver(
+            str(tmp_path / "staging"),
+            provider_id="mtplx",
+            model="tool-model",
+            base_url=f"http://127.0.0.1:{server.server_port}/v1",
+            task_resolver=_resolver(),
+            tool_bridge=bridge,
+        )
+        out = asyncio.run(driver.submit({
+            "driverRunId": "dr-provider-tool-loop",
+            "missionId": "m-model-tools",
+            "taskId": "t-model-tools",
+            "contextSlice": {},
+            "submittedAt": "2026-09-07T06:00:00Z",
+        }))
+        assert out["state"] == "completed"
+        assert out["observations"][0]["summary"] == "The file says CAPT_TOOL_LOOP_OK"
+        assert len(_ToolLoopServer.calls) == 2
+        first = _ToolLoopServer.calls[0]["body"]
+        assert [item["function"]["name"] for item in first["tools"]] == [
+            "capt_file_read", "capt_file_search"
+        ]
+        second_messages = _ToolLoopServer.calls[1]["body"]["messages"]
+        tool_message = next(item for item in second_messages if item["role"] == "tool")
+        assert "CAPT_TOOL_LOOP_OK" in tool_message["content"]
+        assert out["diagnostics"]["toolCallCount"] == 1
+    finally:
+        server.shutdown()
+        server.server_close()
+        runtime.close()
+
+
+class _OllamaToolLoopServer(BaseHTTPRequestHandler):
+    calls = []
+
+    def do_POST(self):  # noqa: N802
+        raw = self.rfile.read(int(self.headers["Content-Length"]))
+        body = json.loads(raw)
+        self.__class__.calls.append({"path": self.path, "body": body})
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        if len(self.__class__.calls) == 1:
+            payload = {
+                "message": {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [{
+                        "function": {
+                            "name": "capt_file_read",
+                            "arguments": {"path": "hello.txt"},
+                        }
+                    }],
+                },
+                "prompt_eval_count": 11,
+                "eval_count": 3,
+            }
+        else:
+            payload = {
+                "message": {
+                    "role": "assistant",
+                    "content": "Ollama saw CAPT_OLLAMA_TOOL_OK",
+                },
+                "prompt_eval_count": 19,
+                "eval_count": 7,
+            }
+        self.wfile.write(json.dumps(payload).encode())
+
+    def log_message(self, format, *args):  # noqa: N802,A002
+        return
+
+
+def test_ollama_provider_tool_loop_uses_chat_and_real_capt_toolbridge(tmp_path: Path):
+    from capt_runtime.composition import create_runtime
+    from capt_runtime.model_authority import normalize_model_authority
+    from tests.capt_runtime.test_model_tool_bridge import _bridge
+
+    (tmp_path / "hello.txt").write_text("CAPT_OLLAMA_TOOL_OK")
+    runtime = create_runtime(str(tmp_path / "rt.db"))
+    profile = normalize_model_authority(None, target_root=str(tmp_path))
+    bridge = _bridge(runtime, tmp_path, profile, profile["toolOperations"])
+    _OllamaToolLoopServer.calls = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _OllamaToolLoopServer)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        driver = ProviderDriver(
+            str(tmp_path / "staging"),
+            provider_id="ollama",
+            model="tool-model",
+            base_url=f"http://127.0.0.1:{server.server_port}/v1",
+            task_resolver=_resolver(),
+            tool_bridge=bridge,
+        )
+        out = asyncio.run(driver.submit({
+            "driverRunId": "dr-ollama-tool-loop",
+            "missionId": "m-model-tools",
+            "taskId": "t-model-tools",
+            "contextSlice": {},
+            "submittedAt": "2026-09-07T06:00:00Z",
+        }))
+        assert out["state"] == "completed"
+        assert out["observations"][0]["summary"] == "Ollama saw CAPT_OLLAMA_TOOL_OK"
+        assert len(_OllamaToolLoopServer.calls) == 2
+        first = _OllamaToolLoopServer.calls[0]
+        assert first["path"] == "/api/chat"
+        assert [item["function"]["name"] for item in first["body"]["tools"]] == [
+            "capt_file_read", "capt_file_search"
+        ]
+        second_messages = _OllamaToolLoopServer.calls[1]["body"]["messages"]
+        tool_message = next(item for item in second_messages if item["role"] == "tool")
+        assert tool_message["tool_name"] == "capt_file_read"
+        assert "CAPT_OLLAMA_TOOL_OK" in tool_message["content"]
+        assert out["diagnostics"]["toolCallCount"] == 1
+    finally:
+        server.shutdown()
+        server.server_close()
+        runtime.close()

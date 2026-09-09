@@ -181,3 +181,106 @@ def test_verified_claim_still_qualifiable():
         _meta("cg", "claim_authority", "4"),
     )
     assert svc.store.require_state("claim-c5")["promotionState"] == "qualified"
+
+
+def test_claim_and_evidence_can_be_persisted_as_one_atomic_command():
+    svc = _svc()
+    claim = _claim("c-atomic", "completion", ["e1", "e2"])
+    claim_meta = _meta("exec", "execution_plane", "atomic")
+    records = [
+        (_evidence("e1", claim_id="c-atomic"), _meta("exec", "execution_plane", "atomic-e1")),
+        (_evidence("e2", claim_id="c-atomic"), _meta("exec", "execution_plane", "atomic-e2")),
+    ]
+
+    result = svc.propose_claim_with_evidence(claim, records, claim_meta)
+
+    assert len(result["eventIds"]) == 3
+    events = svc.store.read_stream("claim-c-atomic")
+    assert [event["eventType"] for event in events] == [
+        "ClaimCreated", "EvidenceRecorded", "EvidenceRecorded"
+    ]
+    assert svc.store.require_state("claim-c-atomic")["evidenceIds"] == ["e1", "e2"]
+
+
+def _awaiting_task(svc, task_id="t-human-review"):
+    node = {
+        "taskId": task_id, "missionId": "m1", "title": "review provider result",
+        "state": "pending", "consequential": True, "capabilityRequirements": [],
+        "assignedDriverId": None, "attempt": 0, "maxAttempts": 1,
+        "recoveryState": "none",
+    }
+    svc.create_task(node, _meta("cog", "cognitive_plane", task_id + "-create"))
+    svc.transition_task(task_id, "ready", "planned", _meta("exec", "execution_plane", task_id + "-ready"))
+    svc.transition_task(task_id, "assigned", "assigned", _meta("exec", "execution_plane", task_id + "-assigned"))
+    svc.transition_task(task_id, "running", "running", _meta("exec", "execution_plane", task_id + "-running"))
+    svc.transition_task(task_id, "awaiting_verification", "result recorded", _meta("exec", "execution_plane", task_id + "-await"))
+
+
+def _review_claim(svc, claim_id="c-human-review", task_id="t-human-review"):
+    claim = _claim(claim_id, "completion", ["e-result"], statement="Provider response and immutable artifact recorded for independent verification.")
+    claim["taskId"] = task_id
+    evidence = _evidence("e-result", claim_id=claim_id)
+    evidence["taskId"] = task_id
+    svc.propose_claim_with_evidence(
+        claim,
+        [(evidence, _meta("exec", "execution_plane", claim_id + "-evidence"))],
+        _meta("exec", "execution_plane", claim_id + "-claim"),
+    )
+
+
+def test_human_review_accept_atomically_promotes_claim_and_succeeds_task():
+    svc = _svc()
+    _awaiting_task(svc)
+    _review_claim(svc)
+
+    result = svc.review_claim_with_human_attestation(
+        claim_id="c-human-review",
+        disposition="accept",
+        operator_id="captain",
+        note="I verified the provider result matches the requested smoke-test token.",
+        metadata=_meta("captain", "human", "human-review-accept"),
+    )
+
+    claim = svc.store.require_state("claim-c-human-review")
+    task = svc.store.require_state("task-t-human-review")
+    events = svc.store.read_stream("claim-c-human-review")
+    assert [e["eventType"] for e in events[-3:]] == [
+        "EvidenceRecorded", "ClaimVerified", "ClaimGuardDecided"
+    ]
+    attestation = events[-3]["payload"]["evidence"]
+    verification = events[-2]["payload"]["verification"]
+    decision = events[-1]["payload"]["decision"]
+    assert attestation["evidence"]["kind"] == "human_attestation"
+    assert attestation["evidence"]["attestedBy"] == {"actorId": "captain", "kind": "human"}
+    assert verification["strategy"] == "human_review"
+    assert verification["status"] == {"kind": "verified", "supportingEvidenceIds": [attestation["evidenceId"]]}
+    assert decision["verdict"] == "accept"
+    assert decision["verificationId"] == verification["verificationId"]
+    assert claim["promotionState"] == "accepted"
+    assert task["state"] == "succeeded"
+    assert result["claimId"] == "c-human-review"
+    assert result["taskState"] == "succeeded"
+
+
+def test_human_review_reject_rejects_claim_and_fails_task():
+    svc = _svc()
+    _awaiting_task(svc, "t-human-reject")
+    _review_claim(svc, "c-human-reject", "t-human-reject")
+
+    result = svc.review_claim_with_human_attestation(
+        claim_id="c-human-reject",
+        disposition="reject",
+        operator_id="captain",
+        note="The provider result does not satisfy the requested acceptance criterion.",
+        metadata=_meta("captain", "human", "human-review-reject"),
+    )
+
+    claim = svc.store.require_state("claim-c-human-reject")
+    task = svc.store.require_state("task-t-human-reject")
+    verification = svc.store.read_stream("claim-c-human-reject")[-2]["payload"]["verification"]
+    assert verification["strategy"] == "human_review"
+    assert verification["status"]["kind"] == "observed_unverified"
+    assert claim["promotionState"] == "rejected"
+    assert claim["guardVerdict"] == "reject"
+    assert task["state"] == "failed"
+    assert result["taskState"] == "failed"

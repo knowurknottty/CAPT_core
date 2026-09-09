@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:3e849bf1a3e281f76e85f92501c24eb5f41730f51d2e269514ca09e8d46b4eb4
+# source digest:  sha256:c489bcc9bda1e9186cd0c72e7ce328e6294d7cedf730d9074424834f8f720493
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -278,7 +278,9 @@ class CheckpointManifest(object):
     artifactPromotionVersions: List[StreamVersionEntry] = field(default_factory=list)
     cohortVersions: List[StreamVersionEntry] = field(default_factory=list)
     humanApprovalVersions: List[StreamVersionEntry] = field(default_factory=list)
+    promptProposalVersions: List[StreamVersionEntry] = field(default_factory=list)
     replayForkVersions: List[StreamVersionEntry] = field(default_factory=list)
+    toolExecutionVersions: List[StreamVersionEntry] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -1573,6 +1575,30 @@ class PolicyEvaluatedPayload(object):
 
 
 @dataclass(frozen=True)
+class PromptProposalCancelledPayload(object):
+    """PromptProposalCancelledPayload"""
+
+    cancellation: PromptProposalCancellation
+    eventType: Literal["PromptProposalCancelled"]
+
+
+@dataclass(frozen=True)
+class PromptProposalCreatedPayload(object):
+    """PromptProposalCreatedPayload"""
+
+    eventType: Literal["PromptProposalCreated"]
+    proposal: PromptProposalSnapshot
+
+
+@dataclass(frozen=True)
+class PromptProposalRevisedPayload(object):
+    """PromptProposalRevisedPayload"""
+
+    eventType: Literal["PromptProposalRevised"]
+    revision: PromptProposalRevision
+
+
+@dataclass(frozen=True)
 class ReplayForkCreatedPayload(object):
     """ReplayForkCreatedPayload"""
 
@@ -1658,7 +1684,7 @@ class ToolExecutionTerminatedPayload(object):
 
 
 # discriminated on 'eventType'
-EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload]
+EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload, PromptProposalCreatedPayload, PromptProposalRevisedPayload, PromptProposalCancelledPayload]
 
 
 class EventType(str, Enum):
@@ -1687,6 +1713,9 @@ class EventType(str, Enum):
     HUMANAPPROVALREQUESTED = "HumanApprovalRequested"
     HUMANAPPROVALDECIDED = "HumanApprovalDecided"
     HUMANAPPROVALCONSUMED = "HumanApprovalConsumed"
+    PROMPTPROPOSALCREATED = "PromptProposalCreated"
+    PROMPTPROPOSALREVISED = "PromptProposalRevised"
+    PROMPTPROPOSALCANCELLED = "PromptProposalCancelled"
     ARTIFACTPROMOTIONPREPARED = "ArtifactPromotionPrepared"
     ARTIFACTPROMOTIONAUTHORIZED = "ArtifactPromotionAuthorized"
     ARTIFACTPROMOTIONADOPTED = "ArtifactPromotionAdopted"
@@ -1929,6 +1958,128 @@ class PolicyEffect(str, Enum):
     DENY = "deny"
     ALLOW_WITH_CONDITIONS = "allow_with_conditions"
     ESCALATE = "escalate"
+
+
+@dataclass(frozen=True)
+class PromptCapabilityRequest(object):
+    """A proposed capability envelope. RuntimeService and human approval remain the sole admission authorities."""
+
+    capability: str
+    rationale: str
+    resource: str
+
+
+class PromptCompilationStatus(str, Enum):
+    """PromptCompilationStatus"""
+
+    READY_FOR_APPROVAL = "ready_for_approval"
+    CLARIFICATION_REQUIRED = "clarification_required"
+    COMPILER_UNAVAILABLE = "compiler_unavailable"
+
+
+class PromptMode(str, Enum):
+    """PromptMode"""
+
+    NORMAL = "normal"
+    SOFTWARE_DEVELOPMENT = "software-development"
+
+
+@dataclass(frozen=True)
+class PromptProposalCancellation(object):
+    """PromptProposalCancellation"""
+
+    proposalId: Identifier
+    reason: str
+
+
+@dataclass(frozen=True)
+class PromptProposalRevision(object):
+    """PromptProposalRevision"""
+
+    capabilityRequests: List[PromptCapabilityRequest]
+    proposedPrompt: str
+    stageChain: List[PromptStageName]
+    stageRecords: List[PromptStageRecord]
+    verificationContract: PromptVerificationContract
+    effectiveContextBudget: Optional[int] = None
+    model: Optional[str] = None
+    provider: Optional[str] = None
+    requestedContextBudget: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class PromptProposalSnapshot(object):
+    """Durable prompt proposal state. It is distinct from, and cannot authorize, a HumanApproval stream."""
+
+    capabilityRequests: List[PromptCapabilityRequest]
+    effectiveContextBudget: int
+    mode: PromptMode
+    model: Optional[str]
+    originalPrompt: str
+    originalPromptDigest: Digest
+    proposalId: Identifier
+    proposedPrompt: str
+    proposedPromptDigest: Digest
+    provider: Optional[str]
+    requestedContextBudget: int
+    revision: int
+    stageChain: List[PromptStageName]
+    stageRecords: List[PromptStageRecord]
+    state: PromptProposalState
+    targetRoot: str
+    verificationContract: PromptVerificationContract
+    cancelReason: Optional[str] = None
+    compilationStatus: Optional[PromptCompilationStatus] = None
+    rationale: Optional[str] = None
+    unresolvedQuestions: List[str] = field(default_factory=list)
+
+
+class PromptProposalState(str, Enum):
+    """PromptProposalState"""
+
+    ACTIVE = "active"
+    CANCELLED = "cancelled"
+
+
+class PromptStageName(str, Enum):
+    """PromptStageName"""
+
+    OMNI = "OMNI"
+    META = "META"
+    FORGE = "FORGE"
+    SIGMA = "SIGMA"
+
+
+@dataclass(frozen=True)
+class PromptStageRecord(object):
+    """Advisory output from one bounded prompt-compilation stage; it has no execution or approval authority."""
+
+    acceptanceCriteriaAdded: List[str]
+    assumptions: List[str]
+    confidence: float
+    constraintsAdded: List[str]
+    limitations: List[str]
+    proposedPromptDigest: Digest
+    provenanceDigest: Digest
+    rationale: str
+    stage: PromptStageName
+    unresolvedQuestions: List[str]
+    version: str
+    endpointClass: Optional[str] = None
+    executionEnabled: Optional[bool] = None
+    inputDigest: Optional[Digest] = None
+    model: Optional[str] = None
+    provider: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class PromptVerificationContract(object):
+    """PromptVerificationContract"""
+
+    acceptanceCriteria: List[str]
+    buildCommands: List[str] = field(default_factory=list)
+    runCommands: List[str] = field(default_factory=list)
+    testCommands: List[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

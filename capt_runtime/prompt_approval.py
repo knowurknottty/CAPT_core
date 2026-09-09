@@ -16,6 +16,7 @@ from . import commands
 from .authored_skills import prepare_runtime_skill_context, summarize_skill_context
 from .contracts import require
 from .errors import AuthorityViolation
+from .model_authority import normalize_model_authority
 from .model_approval_binding import (
     build_bound_model_operator_approval,
     staging_root_for_ledger,
@@ -71,6 +72,9 @@ def request_model_prompt_approval(
     requested_context_budget = int(intent.get("requestedContextBudget", 32_000))
     human_verification_required = bool(intent.get("humanVerificationRequired", True))
     executable = str(intent.get("executable", "") or "")
+    authority_profile = normalize_model_authority(
+        intent.get("authorityProfile"), target_root=target_root
+    )
     # Explicit authored-skill selection is verified before approval state exists.
     # The resulting exact bytes are included in the approved model-visible prompt.
     skill_context, skill_names = prepare_runtime_skill_context(
@@ -102,6 +106,13 @@ def request_model_prompt_approval(
         context_pack_digest=continuation["contextPackDigest"],
         continuation_context=continuation["records"],
         authored_skill_context=skill_context,
+        authority_profile=authority_profile,
+        proposal_binding={
+            key: intent[key] for key in (
+                "proposalId", "proposalRevision", "proposalSnapshotDigest",
+                "originalHumanPromptDigest", "selectedPromptKind", "selectedPromptDigest",
+            ) if key in intent
+        } or None,
     )
     expires_at = str(intent.get("expiresAt") or _expiry_from(operator_metadata["issuedAt"]))
     request = {
@@ -109,19 +120,24 @@ def request_model_prompt_approval(
         "requestId": request_id,
         "missionId": mission_id,
         "taskId": task_id,
-        "requestedCapability": "cap.fs.read",
+        "requestedCapability": (
+            "cap.model.tools"
+            if authority_profile["riskClassification"] == "consequential"
+            else "cap.fs.read"
+        ),
         "resource": target_root,
         "operation": "ModelOperatorInspection",
         "scope": {
             "kind": "filesystem",
-            "rootPath": target_root,
+            "rootPath": authority_profile["filesystemRoot"],
             "recursive": True,
             "approvalBinding": assembly["executionBinding"],
         },
-        "riskClassification": "low",
+        "riskClassification": authority_profile["riskClassification"],
         "policyReason": (
-            "Approve one concrete %s/%s read-only model execution bound to exact dispatch text."
-            % (provider or "hermes", model or "hermes")
+            "Approve one concrete %s/%s model execution with exact tool authority %s "
+            "bound to exact dispatch text."
+            % (provider or "hermes", model or "hermes", ",".join(authority_profile["toolOperations"]))
         ),
         "requestedBy": {"actorId": "exec-1", "kind": "execution_plane"},
         "expiresAt": expires_at,
@@ -161,5 +177,6 @@ def request_model_prompt_approval(
         "modelVisiblePromptDigest": assembly["modelVisiblePromptDigest"],
         "authoredSkills": summarize_skill_context(skill_context),
         "skillNames": skill_names,
+        "authorityProfile": authority_profile,
         "expiresAt": authoritative["expiresAt"],
     }

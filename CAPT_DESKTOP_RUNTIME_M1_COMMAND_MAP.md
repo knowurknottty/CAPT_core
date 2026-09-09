@@ -9,7 +9,7 @@ submits an `OperatorMissionIntent` and the runtime owns all planning.
 
 | Field | Source | Notes |
 |---|---|---|
-| commandId | desktop (hash of op+payload) | unique per command |
+| commandId | desktop (hash of op+payload, plus explicit idempotencyKey when supplied) | unique per distinct command attempt; stable for same explicit replay key |
 | operatorId | bound session (`operator-<localuser>`) | NOT taken from payload |
 | sessionId | bound per-connection random | NOT taken from payload |
 | schemaVersion | fixed `1.0.0` | mismatch → malformed |

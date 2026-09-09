@@ -76,10 +76,62 @@ final class CAPTChatFlowTests: XCTestCase {
         XCTAssertTrue(flow.canCompose)
     }
 
+    func testIndeterminateExecutionHasDistinctTruthfulPhase() {
+        var flow = CAPTChatFlow()
+        flow.executionCompleted(taskState: "indeterminate")
+        XCTAssertEqual(flow.phase, .executionIndeterminate)
+        XCTAssertNil(flow.requestID)
+        XCTAssertTrue(flow.canCompose)
+    }
+
     func testExecutionCompletionAllowsContinuationWhileAwaitingVerification() {
         var flow = CAPTChatFlow()
         flow.executionCompleted(taskState: "awaiting_verification")
         XCTAssertEqual(flow.phase, .awaitingVerification)
         XCTAssertTrue(flow.canCompose)
+    }
+}
+
+extension CAPTChatFlowTests {
+    private func proposal() throws -> CAPTPromptProposal {
+        try CAPTPromptProposal(dictionary: [
+            "proposalId": "pp-1", "revision": 0, "state": "active",
+            "status": "ready_for_approval", "originalPrompt": "fix",
+            "proposedPrompt": "compiled fix", "originalPromptDigest": "sha256:o",
+            "proposedPromptDigest": "sha256:p", "stageChain": ["OMNI", "META"],
+            "stageRecords": [], "verificationContract": ["acceptanceCriteria": []],
+            "unresolvedQuestions": [], "targetRoot": "/repo", "rationale": "route"
+        ])
+    }
+
+    func testProposalStartsInReviewAndBlocksComposition() throws {
+        let flow = CAPTChatFlow(proposal: try proposal())
+        XCTAssertEqual(flow.phase, .reviewingProposal)
+        XCTAssertEqual(flow.proposalID, "pp-1")
+        XCTAssertTrue(flow.showsProposalControls)
+        XCTAssertFalse(flow.canCompose)
+    }
+
+    func testPendingApprovalReplacesProposalControlsAfterEditedSelection() throws {
+        var flow = CAPTChatFlow(proposal: try proposal())
+        flow.beginApprovalRequest()
+        let approval = CAPTPendingApproval(
+            requestID: "approval-edited", missionID: "mission-1", taskID: "task-1",
+            driverRunID: "run-1", objective: "operator edited prompt", targetRoot: "/repo",
+            provider: "openrouter", model: "model-a", promptAssemblyDigest: "sha256:edited",
+            expiresAt: Date.distantFuture, proposalID: "pp-1", proposalRevision: 0,
+            selectedPromptKind: "edited"
+        )
+        flow.approvalPrepared(approval)
+        XCTAssertEqual(flow.phase, .awaitingApproval)
+        XCTAssertFalse(flow.showsProposalControls)
+    }
+
+    func testCompilationTransitionsToProposalReview() throws {
+        var flow = CAPTChatFlow()
+        flow.beginCompilation()
+        XCTAssertEqual(flow.phase, .compilingProposal)
+        flow.proposalPrepared(try proposal())
+        XCTAssertEqual(flow.phase, .reviewingProposal)
     }
 }

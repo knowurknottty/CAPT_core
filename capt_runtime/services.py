@@ -1270,6 +1270,73 @@ class RuntimeService(object):
             [AppendRequest(stream, ClaimAggregate.KIND, expected, event, state)], metadata
         )
 
+    def propose_claim_with_evidence(
+        self,
+        claim: Dict[str, Any],
+        evidence_records: List[tuple[Dict[str, Any], Dict[str, Any]]],
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Persist a new claim and its cited evidence in one ledger transaction.
+
+        ClaimCreated must be the first event in the claim aggregate so replay can
+        construct state. EvidenceRecorded events follow in the same atomic
+        commit, eliminating a durable claim-without-evidence crash window.
+        """
+        require("ClaimRecord", claim)
+        require("CommandMetadata", metadata)
+        require_authority("propose_claim", metadata["actor"]["kind"])
+        if claim["promotionState"] != "proposed":
+            raise AuthorityViolation(
+                "a new claim must enter as 'proposed', got %r" % claim["promotionState"]
+            )
+
+        evidence_ids = [evidence["evidenceId"] for evidence, _ in evidence_records]
+        if list(claim.get("evidenceIds", [])) != evidence_ids:
+            raise AuthorityViolation(
+                "atomic claim evidenceIds must exactly match persisted evidence records"
+            )
+
+        stream = ClaimAggregate.stream_id(claim["claimId"])
+        expected = self.store.aggregate_version(stream)
+        state = ClaimAggregate.propose(claim)
+        claim_event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1",
+            stream_id=stream,
+            event_type="ClaimCreated",
+            payload={"eventType": "ClaimCreated", "claim": claim},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+            mission_id=claim["missionId"],
+            claim_id=claim["claimId"],
+        )
+        appends = [AppendRequest(stream, ClaimAggregate.KIND, expected, claim_event, state)]
+
+        version = expected + 1
+        for evidence, evidence_metadata in evidence_records:
+            require("EvidenceRecord", evidence)
+            require("CommandMetadata", evidence_metadata)
+            require_authority("record_evidence", evidence_metadata["actor"]["kind"])
+            if evidence["missionId"] != claim["missionId"]:
+                raise AuthorityViolation("evidence references a different mission")
+            state = ClaimAggregate.attach_evidence(state, evidence["evidenceId"])
+            evidence_event = commands.envelope(
+                event_id=evidence_metadata["commandId"] + "-ev1",
+                stream_id=stream,
+                event_type="EvidenceRecorded",
+                payload={"eventType": "EvidenceRecorded", "evidence": evidence},
+                metadata=evidence_metadata,
+                occurred_at=evidence_metadata["issuedAt"],
+                mission_id=evidence["missionId"],
+                task_id=evidence.get("taskId"),
+                claim_id=claim["claimId"],
+            )
+            appends.append(
+                AppendRequest(stream, ClaimAggregate.KIND, version, evidence_event, state)
+            )
+            version += 1
+
+        return self._commit(appends, metadata)
+
     def record_evidence(
         self, claim_id: str, evidence: Dict[str, Any], metadata: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -1375,6 +1442,201 @@ class RuntimeService(object):
         return self._commit(
             [AppendRequest(stream, ClaimAggregate.KIND, expected, event, state)], metadata
         )
+
+    def review_claim_with_human_attestation(
+        self,
+        claim_id: str,
+        disposition: str,
+        operator_id: str,
+        note: Optional[str],
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Atomically close an awaiting-verification claim from human review.
+
+        The human supplies only the attestation/disposition.  CAPT's verification
+        plane records the EvidenceRecord + VerificationResult, ClaimGuard owns
+        promotion, and system authority owns the task transition.  All four
+        events commit as one command so a crash cannot strand a half-reviewed
+        completion claim.
+        """
+        require("CommandMetadata", metadata)
+        require_authority("submit_human_claim_review", metadata["actor"]["kind"])
+        if metadata["actor"]["actorId"] != operator_id:
+            raise AuthorityViolation("human claim review operator identity mismatch")
+        if disposition not in {"accept", "reject"}:
+            raise AuthorityViolation("human claim review disposition must be accept or reject")
+
+        claim_stream = ClaimAggregate.stream_id(claim_id)
+        claim_expected = self.store.aggregate_version(claim_stream)
+        claim_state = self.store.require_state(claim_stream)
+        if claim_state.get("kind") != "completion":
+            raise AuthorityViolation("human claim review requires a completion claim")
+        if claim_state.get("promotionState") != "proposed":
+            raise AuthorityViolation("human claim review requires a proposed claim")
+        task_id = claim_state.get("taskId")
+        if not task_id:
+            raise AuthorityViolation("human claim review requires a task-bound claim")
+        task_stream = TaskAggregate.stream_id(task_id)
+        task_expected = self.store.aggregate_version(task_stream)
+        task_state = self.store.require_state(task_stream)
+        if task_state.get("missionId") != claim_state.get("missionId"):
+            raise AuthorityViolation("claim and task mission identity mismatch")
+        if task_state.get("state") != "awaiting_verification":
+            raise AuthorityViolation("human claim review requires task awaiting_verification")
+
+        issued_at = metadata["issuedAt"]
+        correlation_id = metadata["correlationId"]
+        base_command = metadata["commandId"]
+        base_key = metadata["idempotencyKey"]
+        statement = (note or "").strip() or (
+            "Operator confirmed the provider result satisfies the requested acceptance criteria."
+            if disposition == "accept"
+            else "Operator rejected the provider result against the requested acceptance criteria."
+        )
+        evidence_id = "ev-human-" + digest({
+            "claimId": claim_id, "operatorId": operator_id,
+            "disposition": disposition, "statement": statement,
+        })
+        evidence = {
+            "schemaVersion": "1.0.0",
+            "evidenceId": evidence_id,
+            "missionId": claim_state["missionId"],
+            "taskId": task_id,
+            "evidence": {
+                "kind": "human_attestation",
+                "attestedBy": {"actorId": operator_id, "kind": "human"},
+                "statement": statement,
+            },
+            "collectedBy": {"actorId": "verification_pipeline", "kind": "verification_plane"},
+            "collectedAt": issued_at,
+            "trust": "capt_authoritative",
+        }
+        require("EvidenceRecord", evidence)
+
+        verification_id = "vr-human-" + digest({
+            "claimId": claim_id, "evidenceId": evidence_id,
+            "disposition": disposition,
+        })
+        verification_status = (
+            {"kind": "verified", "supportingEvidenceIds": [evidence_id]}
+            if disposition == "accept"
+            else {"kind": "observed_unverified", "reason": statement}
+        )
+        verification = {
+            "schemaVersion": "1.0.0",
+            "verificationId": verification_id,
+            "claimId": claim_id,
+            "strategy": "human_review",
+            "status": verification_status,
+            "verifiedBy": {"actorId": "verification_pipeline", "kind": "verification_plane"},
+            "verifiedAt": issued_at,
+        }
+        require("VerificationResult", verification)
+        verdict = "accept" if disposition == "accept" else "reject"
+        decision = {
+            "schemaVersion": "1.0.0",
+            "decisionId": "dec-human-" + digest({
+                "claimId": claim_id, "verificationId": verification_id,
+                "verdict": verdict,
+            }),
+            "claimId": claim_id,
+            "verdict": verdict,
+            "qualification": None,
+            "rationale": "Human review disposition %s; attestation evidence %s." % (
+                disposition, evidence_id
+            ),
+            "verificationId": verification_id,
+            "decidedBy": {"actorId": "claim_guard", "kind": "claim_authority"},
+            "decidedAt": issued_at,
+        }
+        require("ClaimGuardDecision", decision)
+
+        def phase_meta(suffix: str, actor_id: str, actor_kind: str, operation: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+            return commands.command(
+                command_id=base_command + ":" + suffix,
+                idempotency_key=base_key + ":" + suffix,
+                operation_fingerprint=commands.fingerprint(operation, payload),
+                correlation_id=correlation_id,
+                actor_id=actor_id,
+                actor_kind=actor_kind,
+                issued_at=issued_at,
+                replay_policy="never",
+            )
+
+        evidence_meta = phase_meta("evidence", "verification_pipeline", "verification_plane", "record_evidence", {"evidenceId": evidence_id})
+        verification_meta = phase_meta("verification", "verification_pipeline", "verification_plane", "produce_verification", {"verificationId": verification_id})
+        decision_meta = phase_meta("claim-guard", "claim_guard", "claim_authority", "decide_claim", {"decisionId": decision["decisionId"]})
+        task_meta = phase_meta("task", "runtime", "system", "transition_task", {"taskId": task_id, "disposition": disposition})
+        require_authority("record_evidence", evidence_meta["actor"]["kind"])
+        require_authority("produce_verification", verification_meta["actor"]["kind"])
+        require_authority("decide_claim", decision_meta["actor"]["kind"])
+        require_authority("transition_task", task_meta["actor"]["kind"])
+
+        state = ClaimAggregate.attach_evidence(claim_state, evidence_id)
+        evidence_event = commands.envelope(
+            event_id=evidence_meta["commandId"] + "-ev1",
+            stream_id=claim_stream,
+            event_type="EvidenceRecorded",
+            payload={"eventType": "EvidenceRecorded", "evidence": evidence},
+            metadata=evidence_meta,
+            occurred_at=issued_at,
+            mission_id=claim_state["missionId"],
+            task_id=task_id,
+            claim_id=claim_id,
+        )
+        state = ClaimAggregate.record_verification(state, verification)
+        verification_event = commands.envelope(
+            event_id=verification_meta["commandId"] + "-ev1",
+            stream_id=claim_stream,
+            event_type="ClaimVerified",
+            payload={"eventType": "ClaimVerified", "verification": verification},
+            metadata=verification_meta,
+            occurred_at=issued_at,
+            claim_id=claim_id,
+        )
+        state = ClaimAggregate.decide(state, decision)
+        decision_event = commands.envelope(
+            event_id=decision_meta["commandId"] + "-ev1",
+            stream_id=claim_stream,
+            event_type="ClaimGuardDecided",
+            payload={"eventType": "ClaimGuardDecided", "decision": decision},
+            metadata=decision_meta,
+            occurred_at=issued_at,
+            claim_id=claim_id,
+        )
+        to_state = "succeeded" if disposition == "accept" else "failed"
+        final_task = TaskAggregate.transition(task_state, to_state)
+        task_event = commands.envelope(
+            event_id=task_meta["commandId"] + "-ev1",
+            stream_id=task_stream,
+            event_type="TaskTransitioned",
+            payload={
+                "eventType": "TaskTransitioned", "taskId": task_id,
+                "fromState": task_state["state"], "toState": to_state,
+                "reason": "human review %s after independent ClaimGuard evaluation" % disposition,
+            },
+            metadata=task_meta,
+            occurred_at=issued_at,
+            mission_id=claim_state["missionId"],
+            task_id=task_id,
+        )
+        appends = [
+            AppendRequest(claim_stream, ClaimAggregate.KIND, claim_expected, evidence_event, ClaimAggregate.attach_evidence(claim_state, evidence_id)),
+            AppendRequest(claim_stream, ClaimAggregate.KIND, claim_expected + 1, verification_event, ClaimAggregate.record_verification(ClaimAggregate.attach_evidence(claim_state, evidence_id), verification)),
+            AppendRequest(claim_stream, ClaimAggregate.KIND, claim_expected + 2, decision_event, state),
+            AppendRequest(task_stream, TaskAggregate.KIND, task_expected, task_event, final_task),
+        ]
+        commit = self._commit(appends, metadata)
+        return {
+            "claimId": claim_id,
+            "taskId": task_id,
+            "evidenceId": evidence_id,
+            "verificationId": verification_id,
+            "verdict": verdict,
+            "claimState": state["promotionState"],
+            "taskState": to_state,
+            "eventIds": commit.get("eventIds", []),
+        }
 
     # -- work packet abstraction (session continuity) ---------------------
 

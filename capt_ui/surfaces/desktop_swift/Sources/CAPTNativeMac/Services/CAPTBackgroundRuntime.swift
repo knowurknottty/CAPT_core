@@ -48,6 +48,52 @@ actor CAPTBackgroundRuntime {
         return CAPTRuntimeControlProjection.capabilities(result)
     }
 
+    func managedSkillsSnapshot() throws -> CAPTManagedSkillSnapshot {
+        let response = try client.query(op: "managed_skills", payload: [:])
+        let result = response["result"] as? [String: Any] ?? response
+        return try CAPTManagedSkillSnapshot(dictionary: result)
+    }
+
+    func installManagedSkill(sourcePath: String, packName: String = "ultimate") throws -> CAPTManagedSkillMutationResult {
+        let receipt = try client.command(
+            op: "install_managed_skill",
+            payload: ["sourcePath": sourcePath, "packName": packName],
+            idempotencyKey: "native-skill-install-" + UUID().uuidString.lowercased()
+        )
+        return try managedSkillMutationResult(receipt, operation: "install")
+    }
+
+    func createManagedSkill(
+        name: String, description: String, version: String, body: String,
+        packName: String = "ultimate"
+    ) throws -> CAPTManagedSkillMutationResult {
+        let receipt = try client.command(
+            op: "create_managed_skill",
+            payload: [
+                "name": name, "description": description, "version": version,
+                "body": body, "packName": packName,
+            ],
+            idempotencyKey: "native-skill-create-" + UUID().uuidString.lowercased()
+        )
+        return try managedSkillMutationResult(receipt, operation: "create")
+    }
+
+    private func managedSkillMutationResult(
+        _ receipt: [String: Any], operation: String
+    ) throws -> CAPTManagedSkillMutationResult {
+        let status = receipt["status"] as? String ?? ""
+        guard status == "accepted" || status == "idempotent" else {
+            let detail = receipt["detail"] as? String ?? "runtime rejected managed skill \(operation)"
+            throw CAPTRuntimeClientError.malformedResponse(detail)
+        }
+        guard let result = receipt["result"] as? [String: Any] else {
+            throw CAPTRuntimeClientError.malformedResponse(
+                "managed skill \(operation) receipt missing result"
+            )
+        }
+        return try CAPTManagedSkillMutationResult(dictionary: result)
+    }
+
     func historySnapshot() throws -> CAPTHistorySnapshot {
         let aggregateResponse = try client.query(op: "list_aggregates", payload: [:])
         let aggregates = aggregateResponse["result"] as? [[String: Any]] ?? []
@@ -164,6 +210,27 @@ actor CAPTBackgroundRuntime {
         client.disconnect()
     }
 
+    func reviewProviderResult(
+        driverRunID: String, disposition: String, note: String
+    ) throws -> [String: Any] {
+        let receipt = try client.command(
+            op: "submit_provider_result_review",
+            payload: [
+                "driverRunId": driverRunID,
+                "disposition": disposition,
+                "note": note,
+            ],
+            idempotencyKey: "native-provider-review-" + disposition + "-" + driverRunID
+        )
+        if let status = receipt["status"] as? String,
+           ["rejected", "failed", "denied"].contains(status.lowercased()) {
+            throw CAPTRuntimeClientError.malformedResponse(
+                (receipt["detail"] as? String) ?? "provider result review rejected"
+            )
+        }
+        return receipt["result"] as? [String: Any] ?? [:]
+    }
+
     func cancelTask(_ taskID: String) throws {
         _ = try client.command(
             op: "cancel_task",
@@ -225,19 +292,56 @@ actor CAPTBackgroundRuntime {
         )
     }
 
+    func compileProposal(
+        original: String,
+        targetRoot: String,
+        provider: String,
+        model: String,
+        promptIntelligence: String,
+        remoteCompilationAuthorized: Bool = false
+    ) throws -> CAPTPromptProposal {
+        try coordinator.compileProposal(
+            original: original, targetRoot: targetRoot, provider: provider, model: model,
+            promptIntelligence: promptIntelligence,
+            remoteCompilationAuthorized: remoteCompilationAuthorized
+        )
+    }
+
+    func requestApproval(
+        proposal: CAPTPromptProposal,
+        selection: CAPTPromptSelection,
+        editedPrompt: String = "",
+        missionID: String? = nil,
+        managedSkillNames: [String]? = nil,
+        autoSelectSkills: Bool = true,
+        authoritySettings: CAPTExecutionAuthoritySettings = .default
+    ) throws -> CAPTPendingApproval {
+        try coordinator.requestApproval(
+            proposal: proposal, selection: selection, editedPrompt: editedPrompt,
+            missionID: missionID, managedSkillNames: managedSkillNames,
+            autoSelectSkills: autoSelectSkills, authoritySettings: authoritySettings
+        )
+    }
+
+    func cancelProposal(_ proposal: CAPTPromptProposal) throws {
+        try coordinator.cancelProposal(proposal)
+    }
+
     func requestApproval(
         objective: String,
         targetRoot: String,
         provider: String,
         model: String,
-        missionID: String? = nil
+        missionID: String? = nil,
+        authoritySettings: CAPTExecutionAuthoritySettings = .default
     ) throws -> CAPTPendingApproval {
         try coordinator.requestApproval(
             objective: objective,
             targetRoot: targetRoot,
             provider: provider,
             model: model,
-            missionID: missionID
+            missionID: missionID,
+            authoritySettings: authoritySettings
         )
     }
 

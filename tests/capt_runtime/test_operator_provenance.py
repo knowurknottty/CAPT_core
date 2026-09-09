@@ -1,5 +1,6 @@
 import pytest
 
+from capt_runtime.contracts import digest
 from capt_runtime.operator_provenance import (
     build_cognitive_provenance,
     build_prompt_assembly,
@@ -88,3 +89,27 @@ def test_prompt_assembly_rejects_noncanonical_engine():
             context_pack_digest="sha256:" + "a" * 64,
             tool_schema_digest="sha256:" + "b" * 64,
         )
+
+
+def test_cognitive_provenance_original_prompt_digest_matches_raw_human_prompt():
+    prompt = "Exact human prompt identity must survive approval and execution."
+    assembly = build_prompt_assembly(
+        human_prompt=prompt,
+        response_mode="SPOCK",
+        enhancement_engine="OFF",
+        context_pack_digest="sha256:" + "a" * 64,
+        tool_schema_digest="sha256:" + "b" * 64,
+    )
+    env = build_cognitive_provenance(
+        assembly=assembly,
+        provider_id="openrouter",
+        model="deepseek/deepseek-v4-flash-0731",
+        requested_context_budget=32_000,
+        effective_context_budget_value=32_000,
+        human_verification_required=False,
+        correlation={"driverRunId": "dr-parity"},
+    )
+
+    assert env["originalHumanPromptDigest"] == digest(prompt)
+    human_section = next(s for s in assembly["sections"] if s["identity"] == "human-task")
+    assert human_section["digest"] != env["originalHumanPromptDigest"]

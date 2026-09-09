@@ -85,10 +85,12 @@ jobs:
           python -m pytest -q 2>&1 | tee pytest-${{ matrix.python-version }}.log
       - name: Upload pytest diagnostics
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: pytest-${{ matrix.python-version }}
           path: pytest-${{ matrix.python-version }}.log
+          retention-days: 7
       - name: Enforce test suite
         if: steps.tests.outcome != 'success'
         run: exit 1
@@ -135,13 +137,18 @@ jobs:
             --source-sha "$SOURCE_SHA" \
             --output billing-assurance.json
       - name: Upload billing assurance receipt
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: capt-billing-assurance
           path: billing-assurance.json
+          retention-days: 7
 
   secrets:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -151,6 +158,7 @@ jobs:
       - uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
 
   checklist-gate:
     name: CAPT checklist security gate
@@ -195,6 +203,7 @@ jobs:
             --output security-evidence.json
       - name: Download live billing assurance receipt
         if: needs.billing-assurance.result == 'success'
+        continue-on-error: true
         uses: actions/download-artifact@v4
         with:
           name: capt-billing-assurance
@@ -212,6 +221,7 @@ jobs:
             --output security-gate-result.json
       - name: Upload security evidence and gate result
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: capt-security-gate
@@ -219,6 +229,7 @@ jobs:
             security-evidence.json
             security-gate-result.json
             billing-assurance/
+          retention-days: 7
       - name: Enforce fail-closed checklist gate
         if: steps.checklist.outcome != 'success'
         run: |

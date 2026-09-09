@@ -3,10 +3,12 @@ import Foundation
 public struct CAPTExecutionResult: Equatable, Sendable {
     public let text: String
     public let taskState: String
+    public let driverRunID: String
 
-    public init(text: String, taskState: String) {
+    public init(text: String, taskState: String, driverRunID: String) {
         self.text = text
         self.taskState = taskState
+        self.driverRunID = driverRunID
     }
 }
 
@@ -17,12 +19,113 @@ public final class CAPTChatCoordinator {
         self.client = client
     }
 
+    public func compileProposal(
+        original: String,
+        targetRoot: String,
+        provider: String,
+        model: String,
+        promptIntelligence: String = "AUTO",
+        remoteCompilationAuthorized: Bool = false
+    ) throws -> CAPTPromptProposal {
+        let response = try client.command(
+            op: "compile_prompt_proposal",
+            payload: [
+                "originalPrompt": original,
+                "targetRoot": targetRoot,
+                "promptIntelligence": promptIntelligence,
+                "mode": "normal",
+                "provider": provider,
+                "model": model,
+                "requestedContextBudget": 32_000,
+                "requestedCapabilities": [],
+                "remoteCompilationAuthorized": remoteCompilationAuthorized,
+            ],
+            idempotencyKey: "native-proposal-" + UUID().uuidString.lowercased()
+        )
+        try Self.ensureAcceptedOrApplied(response)
+        guard let result = response["result"] as? [String: Any] else {
+            throw CAPTRuntimeClientError.malformedResponse("prompt proposal result missing")
+        }
+        return try CAPTPromptProposal(dictionary: result)
+    }
+
+    public func cancelProposal(_ proposal: CAPTPromptProposal) throws {
+        let response = try client.command(
+            op: "cancel_prompt_proposal",
+            payload: [
+                "proposalId": proposal.proposalID,
+                "reason": "Cancelled from CAPT native macOS surface",
+            ],
+            idempotencyKey: "native-cancel-proposal-" + proposal.proposalID + "-r" + String(proposal.revision)
+        )
+        try Self.ensureAcceptedOrApplied(response)
+    }
+
+    public func requestApproval(
+        proposal: CAPTPromptProposal,
+        selection: CAPTPromptSelection,
+        editedPrompt: String = "",
+        missionID: String? = nil,
+        managedSkillNames: [String]? = nil,
+        autoSelectSkills: Bool = true,
+        authoritySettings: CAPTExecutionAuthoritySettings = .default
+    ) throws -> CAPTPendingApproval {
+        let selected = proposal.selectedPrompt(selection, edited: editedPrompt)
+        guard !selected.isEmpty else {
+            throw CAPTRuntimeClientError.malformedResponse("selected prompt is empty")
+        }
+        var payload: [String: Any] = [
+            "proposalId": proposal.proposalID,
+            "proposalRevision": proposal.revision,
+            "selection": selection.rawValue,
+            "responseMode": "SPOCK",
+            "humanVerificationRequired": true,
+        ]
+        if selection == .edited { payload["editedPrompt"] = selected }
+        if let missionID, !missionID.isEmpty { payload["missionId"] = missionID }
+        guard let filesystemRoot = authoritySettings.effectiveFilesystemRoot(
+            projectRoot: proposal.targetRoot
+        ) else {
+            throw CAPTRuntimeClientError.malformedResponse(
+                "custom filesystem scope requires a selected root"
+            )
+        }
+        payload["authorityProfile"] = [
+            "filesystemScope": authoritySettings.filesystemScope.rawValue,
+            "filesystemRoot": filesystemRoot,
+            "fileMutationAllowed": authoritySettings.fileMutationAllowed,
+            "shellAccessAllowed": authoritySettings.shellAccessAllowed,
+            "providerNetworkPolicy": authoritySettings.providerNetwork.rawValue,
+        ]
+        if let managedSkillNames, !managedSkillNames.isEmpty {
+            payload["managedSkillNames"] = managedSkillNames
+        } else {
+            payload["autoSelectSkills"] = autoSelectSkills
+        }
+        let response = try client.command(
+            op: "request_prompt_proposal_approval",
+            payload: payload,
+            idempotencyKey: "native-proposal-approval-" + UUID().uuidString.lowercased()
+        )
+        try Self.ensureAcceptedOrApplied(response)
+        guard let result = response["result"] as? [String: Any] else {
+            throw CAPTRuntimeClientError.malformedResponse("proposal approval result missing")
+        }
+        return try Self.pendingApproval(
+            from: result, objective: selected, targetRoot: proposal.targetRoot,
+            provider: proposal.provider ?? "", model: proposal.model ?? "",
+            proposalID: proposal.proposalID, proposalRevision: proposal.revision,
+            selectedPromptKind: selection.rawValue
+        )
+    }
+
     public func requestApproval(
         objective: String,
         targetRoot: String,
         provider: String,
         model: String,
-        missionID: String? = nil
+        missionID: String? = nil,
+        authoritySettings: CAPTExecutionAuthoritySettings = .default
     ) throws -> CAPTPendingApproval {
         var payload: [String: Any] = [
             "objective": objective,
@@ -35,6 +138,18 @@ public final class CAPTChatCoordinator {
             "humanVerificationRequired": true,
         ]
         if let missionID, !missionID.isEmpty { payload["missionId"] = missionID }
+        guard let filesystemRoot = authoritySettings.effectiveFilesystemRoot(projectRoot: targetRoot) else {
+            throw CAPTRuntimeClientError.malformedResponse(
+                "custom filesystem scope requires a selected root"
+            )
+        }
+        payload["authorityProfile"] = [
+            "filesystemScope": authoritySettings.filesystemScope.rawValue,
+            "filesystemRoot": filesystemRoot,
+            "fileMutationAllowed": authoritySettings.fileMutationAllowed,
+            "shellAccessAllowed": authoritySettings.shellAccessAllowed,
+            "providerNetworkPolicy": authoritySettings.providerNetwork.rawValue,
+        ]
         let response = try client.command(
             op: "request_model_prompt_approval",
             payload: payload,
@@ -111,14 +226,49 @@ public final class CAPTChatCoordinator {
         )
         try Self.ensureAcceptedOrApplied(run)
 
-        let taskResponse = try client.query(
-            op: "get_state",
-            payload: ["streamId": "task-" + pending.taskID]
-        )
-        let taskState = Self.extractTaskState(taskResponse)
-        return CAPTExecutionResult(
-            text: Self.extractAssistantText(run),
-            taskState: taskState
+        let text = Self.extractAssistantText(run)
+        do {
+            let taskResponse = try client.query(
+                op: "get_state",
+                payload: ["streamId": "task-" + pending.taskID]
+            )
+            return CAPTExecutionResult(
+                text: text,
+                taskState: Self.extractTaskState(taskResponse),
+                driverRunID: pending.driverRunID
+            )
+        } catch {
+            return CAPTExecutionResult(
+                text: text,
+                taskState: "indeterminate",
+                driverRunID: pending.driverRunID
+            )
+        }
+    }
+
+    private static func pendingApproval(
+        from result: [String: Any],
+        objective: String,
+        targetRoot: String,
+        provider: String,
+        model: String,
+        proposalID: String? = nil,
+        proposalRevision: Int? = nil,
+        selectedPromptKind: String? = nil
+    ) throws -> CAPTPendingApproval {
+        let requestID = try requireString("requestId", from: result)
+        let missionID = try requireString("missionId", from: result)
+        let taskID = try requireString("taskId", from: result)
+        let driverRunID = try requireString("driverRunId", from: result)
+        let digest = try requireString("promptAssemblyDigest", from: result)
+        let expiresAt = (result["expiresAt"] as? String).flatMap(parseTimestamp)
+        let skillNames = result["skillNames"] as? [String] ?? []
+        return CAPTPendingApproval(
+            requestID: requestID, missionID: missionID, taskID: taskID,
+            driverRunID: driverRunID, objective: objective, targetRoot: targetRoot,
+            provider: provider, model: model, promptAssemblyDigest: digest,
+            skillNames: skillNames, expiresAt: expiresAt, proposalID: proposalID,
+            proposalRevision: proposalRevision, selectedPromptKind: selectedPromptKind
         )
     }
 

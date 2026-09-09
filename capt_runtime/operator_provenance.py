@@ -198,8 +198,8 @@ def build_cognitive_provenance(
     return {
         "schemaVersion": "1.0.0",
         "kind": "CognitiveProvenanceEnvelope",
-        "originalHumanPromptDigest": next(
-            section["digest"] for section in sections if section["identity"] == "human-task"
+        "originalHumanPromptDigest": digest(
+            next(section["text"] for section in sections if section["identity"] == "human-task")
         ),
         "promptEnhancement": assembly["enhancementEngine"],
         "promptAssemblyDigest": assembly["assemblyDigest"],

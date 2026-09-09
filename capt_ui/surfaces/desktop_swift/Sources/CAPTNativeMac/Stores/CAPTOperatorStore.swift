@@ -15,6 +15,7 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var model = "qwen3.5-defiant-fable:latest"
     @Published var targetRoot = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("CAPT_core", isDirectory: true).path
+    @Published var promptIntelligence = "AUTO"
     @Published var runtimeIdentity = "Not connected"
     @Published var taskState = "—"
     @Published var isBusy = false
@@ -36,6 +37,13 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var providerCredentialStatus: [String: String] = [:]
     @Published var providerWarmState = "not_required"
     @Published var providerWarmLatencyMs: Int?
+    @Published var managedSkills: CAPTManagedSkillSnapshot?
+    @Published var skillSelectionMode = "auto"
+    @Published var selectedSkillNames: Set<String> = []
+    @Published var skillManagementBusy = false
+    @Published var skillManagementMessage = ""
+    @Published var composerSeed: String?
+    @Published var authoritySettings = CAPTExecutionAuthoritySettings.default
     @Published private var chatWorkspace = CAPTNativeChatWorkspace()
 
     private let runtime: CAPTBackgroundRuntime
@@ -48,6 +56,14 @@ final class CAPTOperatorStore: ObservableObject {
     ) {
         self.runtime = runtime
         self.sessionStore = sessionStore
+        let defaults = UserDefaults.standard
+        let storedMode = defaults.string(forKey: "capt.skillSelectionMode") ?? "auto"
+        self.skillSelectionMode = ["auto", "manual", "off"].contains(storedMode) ? storedMode : "auto"
+        self.selectedSkillNames = Set(defaults.stringArray(forKey: "capt.selectedSkillNames") ?? [])
+        if let data = defaults.data(forKey: "capt.executionAuthoritySettings"),
+           let decoded = try? JSONDecoder().decode(CAPTExecutionAuthoritySettings.self, from: data) {
+            self.authoritySettings = decoded
+        }
         restoreSessionsAsync()
     }
 
@@ -67,6 +83,14 @@ final class CAPTOperatorStore: ObservableObject {
         chatWorkspace.activePendingApproval
     }
 
+    var promptProposal: CAPTPromptProposal? {
+        chatWorkspace.activePromptProposal
+    }
+
+    var verificationDriverRunID: String? {
+        chatWorkspace.activeSession?.verificationDriverRunID
+    }
+
     var activeChatFlow: CAPTChatFlow {
         chatWorkspace.activeFlow
     }
@@ -79,6 +103,7 @@ final class CAPTOperatorStore: ObservableObject {
         connectionState == .connected &&
             providerWarmState != "warming" &&
             pendingApproval == nil &&
+            promptProposal == nil &&
             activeChatFlow.canCompose
     }
 
@@ -172,6 +197,7 @@ final class CAPTOperatorStore: ObservableObject {
                 refreshHistory()
                 refreshMemory()
                 refreshCapabilities()
+                refreshSkills()
             } catch {
                 let message = error.localizedDescription
                 lastError = message
@@ -195,50 +221,99 @@ final class CAPTOperatorStore: ObservableObject {
             }
         }
 
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let sessionID = mutateWorkspace({
-            $0.beginPrompt(
-                text,
-                provider: provider,
-                model: model,
-                targetRoot: targetRoot
-            )
+            $0.beginPrompt(trimmed, provider: provider, model: model, targetRoot: targetRoot)
         }) else { return }
 
         saveSessions()
         lastError = nil
-        if activeSessionID == sessionID { taskState = "approval_preparing" }
+        if activeSessionID == sessionID { taskState = "proposal_compiling" }
 
         let selectedProvider = provider
         let selectedModel = model
         let root = targetRoot
-        let missionID = chatWorkspace.session(sessionID)?.missionID
+        let intelligence = promptIntelligence
+        let remoteCompilationAuthorized = authoritySettings.remotePromptCompilationAllowed &&
+            authoritySettings.providerNetwork == .remoteAllowed
 
         Task {
             do {
-                let pending = try await runtime.requestApproval(
-                    objective: text.trimmingCharacters(in: .whitespacesAndNewlines),
-                    targetRoot: root,
-                    provider: selectedProvider,
-                    model: selectedModel,
-                    missionID: missionID
+                let proposal = try await runtime.compileProposal(
+                    original: trimmed, targetRoot: root, provider: selectedProvider,
+                    model: selectedModel, promptIntelligence: intelligence,
+                    remoteCompilationAuthorized: remoteCompilationAuthorized
                 )
-                mutateWorkspace { $0.receiveApproval(pending, for: sessionID) }
+                mutateWorkspace { $0.receiveProposal(proposal, for: sessionID) }
                 if activeSessionID == sessionID {
                     updateTaskStateFromActiveFlow()
-                    if activeChatFlow.phase == .recoverableFailure {
-                        lastError = chatWorkspace.activeSession?.messages.last?.text
+                    if proposal.status != "ready_for_approval" {
+                        lastError = proposal.unresolvedQuestions.first
                     }
                 }
                 saveSessions()
                 refreshHistory()
             } catch {
                 let message = error.localizedDescription
-                mutateWorkspace { $0.failApprovalRequest(message: message, for: sessionID) }
+                mutateWorkspace { $0.failProposalRequest(message: message, for: sessionID) }
                 if activeSessionID == sessionID {
-                    taskState = "recoverable_failure"
+                    taskState = "proposal_error"
                     lastError = message
                 }
                 saveSessions()
+            }
+        }
+    }
+
+    func selectPromptProposal(
+        _ selection: CAPTPromptSelection,
+        editedPrompt: String = ""
+    ) {
+        guard let sessionID = activeSessionID, promptProposal != nil else { return }
+        guard let proposal = mutateWorkspace({
+            $0.beginProposalApproval(for: sessionID)
+        }) else { return }
+        taskState = "approval_preparing"
+        lastError = nil
+        let missionID = chatWorkspace.session(sessionID)?.missionID
+        let skillSelection = executionSkillSelection()
+
+        Task {
+            do {
+                let pending = try await runtime.requestApproval(
+                    proposal: proposal, selection: selection, editedPrompt: editedPrompt,
+                    missionID: missionID, managedSkillNames: skillSelection.names,
+                    autoSelectSkills: skillSelection.autoSelect,
+                    authoritySettings: authoritySettings
+                )
+                mutateWorkspace { $0.receiveApproval(pending, for: sessionID) }
+                if activeSessionID == sessionID { updateTaskStateFromActiveFlow() }
+                saveSessions()
+                refreshHistory()
+            } catch {
+                let message = error.localizedDescription
+                mutateWorkspace { $0.failApprovalRequest(message: message, for: sessionID) }
+                if activeSessionID == sessionID {
+                    updateTaskStateFromActiveFlow()
+                    lastError = message
+                }
+                saveSessions()
+            }
+        }
+    }
+
+    func cancelPromptProposal() {
+        guard let sessionID = activeSessionID, let proposal = promptProposal else { return }
+        lastError = nil
+        Task {
+            do {
+                try await runtime.cancelProposal(proposal)
+                mutateWorkspace { $0.completeProposalCancellation(for: sessionID) }
+                if activeSessionID == sessionID { updateTaskStateFromActiveFlow() }
+                saveSessions()
+                refreshHistory()
+            } catch {
+                if activeSessionID == sessionID { lastError = error.localizedDescription }
             }
         }
     }
@@ -268,6 +343,7 @@ final class CAPTOperatorStore: ObservableObject {
                     $0.completeExecution(
                         text: result.text,
                         taskState: result.taskState,
+                        driverRunID: result.driverRunID,
                         for: sessionID
                     )
                 }
@@ -284,6 +360,31 @@ final class CAPTOperatorStore: ObservableObject {
                 }
                 saveSessions()
                 refreshHistory()
+            }
+        }
+    }
+
+    func reviewProviderResult(disposition: String, note: String) {
+        guard let sessionID = activeSessionID,
+              let driverRunID = verificationDriverRunID,
+              ["accept", "reject"].contains(disposition) else { return }
+        isBusy = true
+        lastError = nil
+        Task {
+            defer { isBusy = false }
+            do {
+                let result = try await runtime.reviewProviderResult(
+                    driverRunID: driverRunID, disposition: disposition, note: note
+                )
+                let accepted = disposition == "accept"
+                mutateWorkspace { $0.completeVerification(accepted: accepted, for: sessionID) }
+                if activeSessionID == sessionID {
+                    taskState = (result["taskState"] as? String) ?? (accepted ? "succeeded" : "failed")
+                }
+                saveSessions()
+                refreshHistory()
+            } catch {
+                if activeSessionID == sessionID { lastError = error.localizedDescription }
             }
         }
     }
@@ -438,12 +539,169 @@ final class CAPTOperatorStore: ObservableObject {
         }
     }
 
+    func refreshSkills() {
+        guard connectionState == .connected else { return }
+        Task {
+            do {
+                applyManagedSkillSnapshot(try await runtime.managedSkillsSnapshot())
+            } catch {
+                lastError = error.localizedDescription
+            }
+        }
+    }
+
+    private func applyManagedSkillSnapshot(_ snapshot: CAPTManagedSkillSnapshot) {
+        managedSkills = snapshot
+        let installed = Set(snapshot.skills.map(\.name))
+        let filtered = selectedSkillNames.intersection(installed)
+        if filtered != selectedSkillNames {
+            selectedSkillNames = filtered
+            persistSkillPreferences()
+        }
+    }
+
+    func installManagedSkill(from sourcePath: String) {
+        guard connectionState == .connected, !skillManagementBusy else { return }
+        skillManagementBusy = true
+        skillManagementMessage = "Installing and verifying managed skill…"
+        lastError = nil
+        Task {
+            defer { skillManagementBusy = false }
+            do {
+                let result = try await runtime.installManagedSkill(sourcePath: sourcePath)
+                applyManagedSkillSnapshot(try await runtime.managedSkillsSnapshot())
+                skillManagementMessage =
+                    "Verified \(result.skillNames.count) managed skills · \(result.manifestDigest.prefix(20))…"
+            } catch {
+                skillManagementMessage = ""
+                lastError = error.localizedDescription
+            }
+        }
+    }
+
+    func createManagedSkill(
+        name: String, description: String, version: String, body: String
+    ) {
+        guard connectionState == .connected, !skillManagementBusy else { return }
+        skillManagementBusy = true
+        skillManagementMessage = "Creating and verifying managed skill…"
+        lastError = nil
+        Task {
+            defer { skillManagementBusy = false }
+            do {
+                let result = try await runtime.createManagedSkill(
+                    name: name, description: description, version: version, body: body
+                )
+                applyManagedSkillSnapshot(try await runtime.managedSkillsSnapshot())
+                skillManagementMessage =
+                    "Created \(name) · pack now contains \(result.skillNames.count) verified skills."
+            } catch {
+                skillManagementMessage = ""
+                lastError = error.localizedDescription
+            }
+        }
+    }
+
+    func beginGuidedSkillCreation() {
+        composerSeed = """
+        Guide me interactively in designing a new CAPT managed Agent Skill. Start by helping me sharpen the skill's mission, triggers, scope boundaries, failure modes, and verification criteria. Do not fabricate requirements I have not chosen. When the design is settled, produce a complete production-ready SKILL.md with valid frontmatter fields `name`, `description`, and `version`, followed by precise operational instructions. The final skill must be suitable for installation through CAPT's Skills tab.
+        """
+        newChat()
+    }
+
+    func takeComposerSeed() -> String? {
+        let seed = composerSeed
+        composerSeed = nil
+        return seed
+    }
+
+    func setSkillSelectionMode(_ mode: String) {
+        guard ["auto", "manual", "off"].contains(mode) else { return }
+        skillSelectionMode = mode
+        persistSkillPreferences()
+    }
+
+    func toggleSkill(_ name: String) {
+        guard managedSkills?.skills.contains(where: { $0.name == name }) == true else { return }
+        if selectedSkillNames.contains(name) {
+            selectedSkillNames.remove(name)
+        } else {
+            selectedSkillNames.insert(name)
+        }
+        if skillSelectionMode == "auto" { skillSelectionMode = "manual" }
+        persistSkillPreferences()
+    }
+
+    private func executionSkillSelection() -> (names: [String]?, autoSelect: Bool) {
+        switch skillSelectionMode {
+        case "manual":
+            let installed = Set(managedSkills?.skills.map(\.name) ?? [])
+            let names = selectedSkillNames.intersection(installed).sorted()
+            if names.isEmpty { return (nil, false) }
+            return (names, false)
+        case "off":
+            return (nil, false)
+        default:
+            return (nil, true)
+        }
+    }
+
+    private func persistSkillPreferences() {
+        let defaults = UserDefaults.standard
+        defaults.set(skillSelectionMode, forKey: "capt.skillSelectionMode")
+        defaults.set(selectedSkillNames.sorted(), forKey: "capt.selectedSkillNames")
+    }
+
+    func setAuthoritySettings(_ settings: CAPTExecutionAuthoritySettings) {
+        guard settings != authoritySettings else { return }
+        authoritySettings = settings
+        if let data = try? JSONEncoder().encode(settings) {
+            UserDefaults.standard.set(data, forKey: "capt.executionAuthoritySettings")
+        }
+        mutateWorkspace {
+            $0.invalidateActiveAuthority(reason: "Execution authority settings changed.")
+        }
+        updateTaskStateFromActiveFlow()
+        saveSessions()
+    }
+
+    var effectiveAuthorityFilesystemRoot: String? {
+        authoritySettings.effectiveFilesystemRoot(projectRoot: targetRoot)
+    }
+
+    var selectedProviderRequiresRemoteNetwork: Bool {
+        guard let snapshot = providers.first(where: { $0.id == provider }) else { return false }
+        return snapshot.kind.lowercased() != "local"
+    }
+
+    var selectedProviderBlockedByNetworkAuthority: Bool {
+        authoritySettings.providerNetwork == .localOnly && selectedProviderRequiresRemoteNetwork
+    }
+
+    var runtimeCompatibilityIssue: String? {
+        guard connectionState == .connected, let capabilities = runtimeCapabilities else { return nil }
+        let requiredQueries = ["managed_skills"]
+        let requiredCommands = [
+            "compile_prompt_proposal",
+            "request_prompt_proposal_approval",
+            "run_approved_hermes_inspection",
+            "install_managed_skill",
+            "create_managed_skill",
+        ]
+        let missingQueries = requiredQueries.filter { !capabilities.supportsQuery($0) }
+        let missingCommands = requiredCommands.filter { !capabilities.supportsCommand($0) }
+        let missing = missingQueries + missingCommands
+        guard !missing.isEmpty else { return nil }
+        return "Runtime API is older than this GUI · missing " + missing.joined(separator: ", ")
+    }
+
     func refreshAll() {
         refreshIdentity()
         refreshHistory()
         refreshOperatorState()
         refreshMemory()
         refreshCapabilities()
+        refreshSkills()
     }
 
     var pendingApprovals: [CAPTApprovalSummary] {
@@ -789,10 +1047,13 @@ final class CAPTOperatorStore: ObservableObject {
         }
         switch activeChatFlow.phase {
         case .idle: taskState = "—"
+        case .compilingProposal: taskState = "proposal_compiling"
+        case .reviewingProposal: taskState = "proposal_review"
         case .requestingApproval: taskState = "approval_preparing"
         case .awaitingApproval: taskState = "approval_required"
         case .executing: taskState = "executing"
         case .awaitingVerification: taskState = "awaiting_verification"
+        case .executionIndeterminate: taskState = "indeterminate"
         case .recoverableFailure:
             taskState = chatWorkspace.activeSession?.messages.last?.authorityState
                 ?? "recoverable_failure"

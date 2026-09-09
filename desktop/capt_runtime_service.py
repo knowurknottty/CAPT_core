@@ -53,6 +53,14 @@ from capt_runtime.verification import (
 )
 from capt_runtime.composition import RuntimeComposition, create_runtime
 from capt_runtime.provider_endpoint import credential_required
+from capt_runtime.model_authority import (
+    assert_provider_network_allowed,
+    normalize_model_authority,
+    revalidate_normalized_model_authority,
+)
+from capt_runtime.model_tool_authority import (
+    issue_model_tool_authority, revoke_model_tool_authority,
+)
 from capt_runtime.operator_provenance import (
     build_cognitive_provenance, build_prompt_assembly, effective_context_budget,
 )
@@ -60,10 +68,13 @@ from capt_runtime.model_approval_binding import (
     build_bound_model_operator_approval, staging_root_for_ledger,
 )
 from capt_runtime.prepared_execution import PreparedApprovedModelExecution, freeze
+from capt_runtime.prompt_proposals import authoritative_proposal_binding_for_execution
 from capt_runtime.verification_baseline import capture_verification_baseline
 from capt_runtime.authored_skills import (
     parse_authored_skill_request, prepare_runtime_skill_context, summarize_skill_context,
 )
+from capt_runtime.managed_skills import default_managed_skill_root, verify_managed_skill_pack
+from desktop.prompt_compiler_provider import build_prompt_compiler
 
 
 RUNTIME_VERSION = getattr(capt_runtime, "RUNTIME_VERSION", "0.1.0")
@@ -470,6 +481,40 @@ class RuntimeQueryService:
             for (s, k, v) in self.store.all_aggregates()
         ]
 
+    def managed_skills(self) -> Dict[str, Any]:
+        root = default_managed_skill_root(Path(self.store.path).parent)
+        if not root.is_dir():
+            return {
+                "schemaVersion": CONTRACT_SCHEMA_VERSION,
+                "packRoot": str(root),
+                "installed": False,
+                "packName": "ultimate",
+                "packVersion": None,
+                "manifestDigest": None,
+                "trust": None,
+                "skills": [],
+            }
+        verified = verify_managed_skill_pack(root)
+        return {
+            "schemaVersion": CONTRACT_SCHEMA_VERSION,
+            "packRoot": str(root.resolve()),
+            "installed": True,
+            "packName": verified["packName"],
+            "packVersion": verified["packVersion"],
+            "manifestDigest": verified["manifestDigest"],
+            "trust": verified["trust"],
+            "skills": [
+                {
+                    "name": item["name"],
+                    "description": item.get("description", ""),
+                    "version": item.get("version") or "0.0.0",
+                    "contentDigest": item["contentDigest"],
+                    "triggers": list(item.get("triggers") or []),
+                }
+                for item in verified["skills"]
+            ],
+        }
+
     def get_state(self, stream_id: str) -> Optional[Dict[str, Any]]:
         return self.store.load_state(stream_id)
 
@@ -577,11 +622,13 @@ class RuntimeQueryService:
             if op == "capabilities":
                 return {"ok": True, "result": {
                     "schemaVersion": CONTRACT_SCHEMA_VERSION,
-                    "queryOperations": ["identity", "capabilities", "list_aggregates", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers"],
-                    "commandOperations": ["create_mission", "request_model_prompt_approval", "submit_approval_decision", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool"],
-                    "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True, "toolRegistry": True, "toolBroker": True, "mcpClient": self.mcp_manager is not None},
+                    "queryOperations": ["identity", "capabilities", "list_aggregates", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers", "managed_skills"],
+                    "commandOperations": ["create_mission", "compile_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "submit_provider_result_review", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool", "install_managed_skill", "create_managed_skill"],
+                    "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True, "toolRegistry": True, "toolBroker": True, "mcpClient": self.mcp_manager is not None, "promptCompiler": True},
                     "lifecycleOperations": {"checkpoint": True, "shutdown": True, "resume": True},
                 }}
+            if op == "managed_skills":
+                return {"ok": True, "result": self.managed_skills()}
             if op == "list_aggregates":
                 return {"ok": True, "result": self.list_aggregates()}
             if op == "get_state":
@@ -683,6 +730,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             probe.close()
 
     runtime = create_runtime(str(ledger_path), enable_mcp=True)
+    prompt_compiler = build_prompt_compiler(Path(ledger_path).parent / "ui")
     _reconcile_stranded_driver_runs(runtime, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     runtime.reconcile_stranded_tools()
     store = runtime.store
@@ -738,7 +786,9 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             # reusing a stale session's authority (Phase 3).
             operator_id = "operator-" + (getpass.getuser() or "local")
             session_id = "sess-" + secrets.token_hex(8)
-            cmd_svc = runtime.command_service(operator_id, session_id)
+            cmd_svc = runtime.command_service(
+                operator_id, session_id, prompt_compiler=prompt_compiler
+            )
             provider_governor = _build_provider_governor(store)
             # Fixed v0.5 OpenHarness inspection: service-owned runner uses the
             # already-created canonical RuntimeComposition; no duplicate runtime.
@@ -782,13 +832,9 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 provider_key = ""
                 if provider_id:
                     from capt_ui.operator.providers import ProviderManager
-                    from capt_ui.operator.secrets import resolve
                     provider = ProviderManager(Path(ledger_path).parent / "ui").get(str(provider_id))
                     if provider is None or not provider_model:
                         raise ValueError("PROVIDER_OR_MODEL_UNAVAILABLE")
-                    provider_key = resolve(provider.id, provider.key_ref)
-                    if credential_required(provider.id, provider.kind, provider.base_url) and not provider_key:
-                        raise ValueError("PROVIDER_CREDENTIAL_UNAVAILABLE")
                 skill_context, skill_names = prepare_runtime_skill_context(
                     payload, state_root=Path(ledger_path).parent
                 )
@@ -809,6 +855,32 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     exclude_run_id=str(run_id), ledger_dir=ledger_dir,
                 )
                 context_pack_digest = continuation["contextPackDigest"]
+                # Recover proposal identity only from authoritative approval state.
+                approval_request_id = payload.get("approvalRequestId")
+                if not approval_request_id:
+                    raise AuthorityViolation("MODEL_PROMPT_APPROVAL_RECEIPT_REQUIRED")
+                approval_state = store.require_state(
+                    "human_approval-" + str(approval_request_id)
+                )
+                approval_scope = approval_state.get("scope") or {}
+                approval_binding = approval_scope.get("approvalBinding") or {}
+                frozen_authority = approval_binding.get("authorityProfile")
+                authority_profile = (
+                    revalidate_normalized_model_authority(
+                        frozen_authority, target_root=str(target_root)
+                    )
+                    if frozen_authority is not None
+                    else normalize_model_authority(None, target_root=str(target_root))
+                )
+                proposal_binding = authoritative_proposal_binding_for_execution(
+                    store, str(approval_request_id), str(objective)
+                )
+                if provider is not None:
+                    assert_provider_network_allowed(authority_profile, provider.base_url)
+                    from capt_ui.operator.secrets import resolve
+                    provider_key = resolve(provider.id, provider.key_ref)
+                    if credential_required(provider.id, provider.kind, provider.base_url) and not provider_key:
+                        raise ValueError("PROVIDER_CREDENTIAL_UNAVAILABLE")
                 prompt_assembly = build_prompt_assembly(
                     human_prompt=str(objective), response_mode=response_mode,
                     enhancement_engine=enhancement_engine,
@@ -820,9 +892,6 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 # Runtime authority binds human approval to the exact
                 # model-visible assembly. Client booleans are provenance only;
                 # no client can use OFF/no-transform as a governance bypass.
-                approval_request_id = payload.get("approvalRequestId")
-                if not approval_request_id:
-                    raise AuthorityViolation("MODEL_PROMPT_APPROVAL_RECEIPT_REQUIRED")
                 bound_assembly = build_bound_model_operator_approval(
                     human_prompt=str(objective), response_mode=response_mode,
                     enhancement_engine=enhancement_engine, mission_id=str(mission_id),
@@ -835,6 +904,8 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     context_pack_digest=context_pack_digest,
                     continuation_context=continuation["records"],
                     authored_skill_context=skill_context,
+                    proposal_binding=proposal_binding,
+                    authority_profile=authority_profile,
                 )
                 # This read-only check catches a mismatched approval before the
                 # command service consumes the one-use receipt.
@@ -866,6 +937,8 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         "continuationContext": continuation["records"],
                         "authoredSkillContext": skill_context,
                         "skillNames": skill_names,
+                        "authorityProfile": authority_profile,
+                        "approvalExpiresAt": str(approval_state["expiresAt"]),
                     }),
                     context_pack_digest=context_pack_digest,
                 )
@@ -890,13 +963,9 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 provider_key = ""
                 if provider_id:
                     from capt_ui.operator.providers import ProviderManager
-                    from capt_ui.operator.secrets import resolve
                     provider = ProviderManager(Path(ledger_path).parent / "ui").get(provider_id)
                     if provider is None or not provider_model:
                         raise ValueError("PROVIDER_OR_MODEL_UNAVAILABLE")
-                    provider_key = resolve(provider.id, provider.key_ref)
-                    if credential_required(provider.id, provider.kind, provider.base_url) and not provider_key:
-                        raise ValueError("PROVIDER_CREDENTIAL_UNAVAILABLE")
                 requested_context_budget = prepared.data["requestedContextBudget"]
                 effective_budget = prepared.data["effectiveBudget"]
                 human_verification_required = prepared.data["humanVerificationRequired"]
@@ -907,6 +976,15 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     if prepared.data.get("authoredSkillContext") else None
                 )
                 skill_names = list(prepared.data.get("skillNames") or ())
+                authority_profile = revalidate_normalized_model_authority(
+                    dict(prepared.data["authorityProfile"]), target_root=str(target_root)
+                )
+                if provider is not None:
+                    assert_provider_network_allowed(authority_profile, provider.base_url)
+                    from capt_ui.operator.secrets import resolve
+                    provider_key = resolve(provider.id, provider.key_ref)
+                    if credential_required(provider.id, provider.kind, provider.base_url) and not provider_key:
+                        raise ValueError("PROVIDER_CREDENTIAL_UNAVAILABLE")
                 task_title = str(objective).strip()[:512] or "Model operator task"
                 cognitive_provenance = build_cognitive_provenance(
                     assembly=prompt_assembly, provider_id=provider.id if provider is not None else "hermes",
@@ -977,25 +1055,30 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     return receipt
                 # 1. Authoritative mission/task state (objective persisted in
                 # the Task aggregate by RuntimeService planning).
+                approved_tool_root = str(authority_profile["filesystemRoot"])
                 intent = {
                     "schemaVersion": "1.0.0",
                     "missionId": mission_id,
                     "objective": task_title,
-                    "scope": {"kind": "filesystem", "rootPath": target_root, "recursive": True},
+                    "scope": {"kind": "filesystem", "rootPath": approved_tool_root, "recursive": True},
                     "requiresApproval": False,
                     "constraints": [{"kind": "resource_boundary", "constraintId": "con-model-1",
                                      "origin": "explicit_user",
-                                     "scope": {"kind": "filesystem", "rootPath": target_root, "recursive": True}}],
+                                     "scope": {"kind": "filesystem", "rootPath": approved_tool_root, "recursive": True}}],
                     "successCriteria": [{"criterionId": "sc-model-1",
                                          "statement": "Model task completed with evidence-backed observations.",
                                          "requiresVerification": True}],
                     "terminationCriteria": [{"criterionId": "tc-model-1",
                                              "statement": "Invariant violation terminates the mission.",
                                              "terminalState": "failed"}],
-                    "requestedCapability": "cap.fs.read",
+                    "requestedCapability": (
+                        "cap.model.tools"
+                        if authority_profile["riskClassification"] == "consequential"
+                        else "cap.fs.read"
+                    ),
                     "resource": target_root,
                     "operation": "ModelOperatorInspection",
-                    "riskClassification": "low",
+                    "riskClassification": authority_profile["riskClassification"],
                     "taskId": task_id,
                 }
                 existing_mission = store.load_state("mission-" + str(mission_id))
@@ -1076,6 +1159,28 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 svc.activate_lease(lease, gk_meta("activate_lease"))
                 dispatch_lease = dict(lease)
                 dispatch_lease["scope"] = {**lease["scope"], "allowedPaths": [target_root]}
+
+                # A provider model receives a distinct phase-scoped ToolBroker
+                # lease derived only from the already-approved authority profile.
+                # This is intentionally separate from the one-use driver lease
+                # governing the external model dispatch itself.
+                tool_authority = None
+                if provider is not None:
+                    tool_authority = issue_model_tool_authority(
+                        service=svc,
+                        broker=runtime.tool_broker,
+                        authority_profile=authority_profile,
+                        target_root=str(target_root),
+                        mission_id=str(mission_id),
+                        task_id=str(task_id),
+                        driver_run_id=str(run_id),
+                        operator_id=cmd_svc.operator_id,
+                        session_id=cmd_svc.session_id,
+                        issued_at=str(now),
+                        valid_until=str(prepared.data["approvalExpiresAt"]),
+                        metadata_factory=gk_meta,
+                        now=lambda: datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    )
                 # 3. DriverHost dispatch with the resolved authoritative task.
                 # Authored skill bytes were verified and frozen in `prepare`, before
                 # approval consumption. Binding them here does not re-read disk.
@@ -1089,6 +1194,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         base_url=provider.base_url, api_key=provider_key,
                         dispatch_prompt=str(dispatch_prompt),
                         governor=provider_governor,
+                        tool_bridge=tool_authority.bridge if tool_authority is not None else None,
                     )
                 else:
                     host = runtime.hermes_host(
@@ -1134,7 +1240,22 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 svc.reserve_use(grant_id, reservation, exec_meta("reserve"))
                 _test_fault("reservation")
                 try:
-                    out = host.dispatch(wo, ctx, {"state": "running"}, now=now, lease=dispatch_lease)
+                    try:
+                        out = host.dispatch(
+                            wo, ctx, {"state": "running"}, now=now, lease=dispatch_lease
+                        )
+                    finally:
+                        # Phase-Fenced Capability Consumption: whether provider
+                        # dispatch returns or raises, model tool authority closes
+                        # before any normal completion can be recorded.
+                        if tool_authority is not None:
+                            revoke_model_tool_authority(
+                                service=svc,
+                                grant_id=tool_authority.grant_id,
+                                issued_at=now,
+                                reason="provider tool phase closed",
+                                metadata=gk_meta("revoke_model_tools"),
+                            )
                 except Exception:
                     # Dispatch reached an external boundary after reservation. The
                     # absence of a result is not proof that no side effect occurred:
@@ -1145,10 +1266,9 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         "outcome": "indeterminate", "sideEffectIdentity": run_id, "finalizedAt": now,
                     }
                     svc.finalize_use(grant_id, consumption, exec_meta("finalize-indeterminate"))
-                    # A dispatch exception after the boundary is not evidence of
-                    # failure. Preserve the unknown as lost + suspended so the
-                    # existing governed cancellation/reconciliation path, not an
-                    # automatic retry, decides the terminal disposition.
+                    # A dispatch or phase-closure exception after the boundary is
+                    # not evidence of failure. Preserve the unknown as lost +
+                    # suspended so governed reconciliation, not retry, decides it.
                     svc.transition_driver_run(run_id, "lost", exec_meta("drlost"))
                     svc.transition_task(task_id, "suspended", "external dispatch outcome indeterminate; reconciliation required", exec_meta("tasksuspended"))
                     raise
@@ -1169,19 +1289,6 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 # 4. Verification + ClaimGuard (CAPT-authored).
                 artifact_path = out["artifactCandidate"]["artifactPath"]
                 artifact_digest = out["artifactCandidate"]["artifactDigest"]
-                accepted = guard_claim("Repository inspected in read-only mode.")
-                svc.propose_claim(
-                    {"schemaVersion": "1.0.0", "claimId": claim_id, "missionId": mission_id,
-                     "taskId": task_id, "kind": "completion", "statement": accepted,
-                     "evidenceIds": [], "promotionState": "proposed",
-                     "proposedBy": {"actorId": "cog-1", "kind": "cognitive_plane"},
-                     "proposedAt": now, "sourceProposalId": None},
-                    commands.command(command_id=command_id + ":claim", idempotency_key=key + ":claim",
-                                     operation_fingerprint=commands.fingerprint("propose_claim", {"claimId": claim_id}),
-                                     correlation_id=correlation_id,
-                                     actor_id="cog-1", actor_kind="cognitive_plane",
-                                     issued_at=now, replay_policy="never"),
-                )
                 baseline_ev_id = "ev-" + commands.fingerprint(
                     "artifact_hash", {"artifact": baseline["artifactDigest"], "role": "verification_baseline"}
                 )
@@ -1207,11 +1314,30 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         actor_id="verification_pipeline", actor_kind="verification_plane",
                         issued_at=now, replay_policy="never",
                     )
-                svc.record_evidence(
-                    claim_id, baseline_evidence, evidence_meta("evidence-baseline", baseline_ev_id)
+                accepted = guard_claim(
+                    "Provider response and immutable artifact recorded for independent verification."
                 )
-                svc.record_evidence(
-                    claim_id, result_evidence, evidence_meta("evidence-result", result_ev_id)
+                claim_record = {
+                    "schemaVersion": "1.0.0", "claimId": claim_id, "missionId": mission_id,
+                    "taskId": task_id, "kind": "completion", "statement": accepted,
+                    "evidenceIds": [baseline_ev_id, result_ev_id], "promotionState": "proposed",
+                    "proposedBy": {"actorId": "cog-1", "kind": "cognitive_plane"},
+                    "proposedAt": now, "sourceProposalId": None,
+                }
+                claim_meta = commands.command(
+                    command_id=command_id + ":claim", idempotency_key=key + ":claim",
+                    operation_fingerprint=commands.fingerprint("propose_claim", {"claimId": claim_id}),
+                    correlation_id=correlation_id,
+                    actor_id="cog-1", actor_kind="cognitive_plane",
+                    issued_at=now, replay_policy="never",
+                )
+                svc.propose_claim_with_evidence(
+                    claim_record,
+                    [
+                        (baseline_evidence, evidence_meta("evidence-baseline", baseline_ev_id)),
+                        (result_evidence, evidence_meta("evidence-result", result_ev_id)),
+                    ],
+                    claim_meta,
                 )
                 _test_fault("evidence_recorded")
                 # A provider response and its immutable artifact are evidence, not

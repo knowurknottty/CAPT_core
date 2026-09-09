@@ -290,6 +290,67 @@ def _manifest_digest(manifest: Mapping[str, Any]) -> str:
     return "sha256:" + _sha256(data)
 
 
+def _materialize_managed_skill_pack(
+    canonical: Sequence[tuple[_Candidate, List[str]]],
+    destination_path: Path,
+    *,
+    pack_name: str,
+    source_roots: Sequence[str],
+    scratch: Path,
+    source_origins: Mapping[str, Sequence[str]] | None = None,
+) -> Dict[str, Any]:
+    """Build and atomically swap one canonical managed pack."""
+    build_root = scratch / "pack"
+    build_root.mkdir()
+    manifest_skills: List[Dict[str, Any]] = []
+    for candidate, discovered_origins in canonical:
+        skill_root = build_root / "skills" / candidate.name
+        _copy_skill(candidate, skill_root)
+        skill_path = skill_root / "SKILL.md"
+        content = skill_path.read_text(encoding="utf-8")
+        encoded = content.encode("utf-8")
+        origins = list(
+            source_origins.get(candidate.name, discovered_origins)
+            if source_origins is not None else discovered_origins
+        )
+        manifest_skills.append({
+            "name": candidate.name,
+            "description": candidate.description,
+            "version": candidate.version,
+            "path": f"skills/{candidate.name}/SKILL.md",
+            "contentDigest": "sha256:" + _sha256(encoded),
+            "treeDigest": "sha256:" + _tree_digest(skill_root),
+            "contentBytes": len(encoded),
+            "inlineable": len(content) <= _INLINE_CONTENT_LIMIT,
+            "triggers": list(candidate.triggers),
+            "sourceOrigins": sorted(set(origins)),
+        })
+    manifest = {
+        "schemaVersion": _SCHEMA_VERSION,
+        "packName": pack_name,
+        "packVersion": "managed-1",
+        "sourceRoots": list(dict.fromkeys(str(root) for root in source_roots)),
+        "skills": manifest_skills,
+    }
+    (build_root / "manifest.json").write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    backup = destination_path.with_name(destination_path.name + ".previous")
+    if backup.exists():
+        shutil.rmtree(backup)
+    if destination_path.exists():
+        os.replace(destination_path, backup)
+    try:
+        os.replace(build_root, destination_path)
+    except Exception:
+        if backup.exists() and not destination_path.exists():
+            os.replace(backup, destination_path)
+        raise
+    if backup.exists():
+        shutil.rmtree(backup)
+    return verify_managed_skill_pack(destination_path)
+
+
 def import_managed_skill_pack(
     source: str | Path, destination: str | Path, *, pack_name: str = "ultimate"
 ) -> Dict[str, Any]:
@@ -300,53 +361,143 @@ def import_managed_skill_pack(
         raise ManagedSkillPackViolation(f"invalid pack name: {pack_name!r}")
     destination_path.parent.mkdir(parents=True, exist_ok=True)
     scratch = Path(tempfile.mkdtemp(prefix="capt-skill-import-", dir=destination_path.parent))
-    build_root = scratch / "pack"; build_root.mkdir()
     try:
         candidates = _discover_candidates(source_path, scratch / "bundles")
         canonical = _canonicalize_candidates(candidates)
-        manifest_skills: List[Dict[str, Any]] = []
-        for candidate, origins in canonical:
-            skill_root = build_root / "skills" / candidate.name
-            _copy_skill(candidate, skill_root)
-            skill_path = skill_root / "SKILL.md"
-            content = skill_path.read_text(encoding="utf-8")
-            encoded = content.encode("utf-8")
-            manifest_skills.append({
-                "name": candidate.name,
-                "description": candidate.description,
-                "version": candidate.version,
-                "path": f"skills/{candidate.name}/SKILL.md",
-                "contentDigest": "sha256:" + _sha256(encoded),
-                "treeDigest": "sha256:" + _tree_digest(skill_root),
-                "contentBytes": len(encoded),
-                "inlineable": len(content) <= _INLINE_CONTENT_LIMIT,
-                "triggers": list(candidate.triggers),
-                "sourceOrigins": origins,
-            })
-        manifest = {
-            "schemaVersion": _SCHEMA_VERSION,
-            "packName": pack_name,
-            "packVersion": "managed-1",
-            "sourceRoots": [str(source_path)],
-            "skills": manifest_skills,
-        }
-        (build_root / "manifest.json").write_text(
-            json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        return _materialize_managed_skill_pack(
+            canonical,
+            destination_path,
+            pack_name=pack_name,
+            source_roots=[str(source_path)],
+            scratch=scratch,
         )
-        backup = destination_path.with_name(destination_path.name + ".previous")
-        if backup.exists():
-            shutil.rmtree(backup)
-        if destination_path.exists():
-            os.replace(destination_path, backup)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def install_managed_skill_source(
+    source: str | Path, destination: str | Path, *, pack_name: str = "ultimate",
+    source_label: str | None = None,
+) -> Dict[str, Any]:
+    """Atomically merge one local skill source into an installed managed pack.
+
+    Existing verified skills are retained. Conflicting duplicate names fail before
+    the destination is swapped, so a bad install cannot partially damage the pack.
+    """
+    source_path = Path(source).expanduser().resolve()
+    destination_path = Path(destination).expanduser()
+    if not destination_path.exists():
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        scratch = Path(tempfile.mkdtemp(prefix="capt-skill-merge-", dir=destination_path.parent))
         try:
-            os.replace(build_root, destination_path)
-        except Exception:
-            if backup.exists() and not destination_path.exists():
-                os.replace(backup, destination_path)
-            raise
-        if backup.exists():
-            shutil.rmtree(backup)
-        return verify_managed_skill_pack(destination_path)
+            incoming_candidates = _discover_candidates(source_path, scratch / "bundles")
+            canonical = _canonicalize_candidates(incoming_candidates)
+            origin_map: Dict[str, List[str]] | None = None
+            if source_label:
+                source_prefix = str(source_path)
+                origin_map = {}
+                for candidate in incoming_candidates:
+                    origin = candidate.source_origin
+                    if origin.startswith(source_prefix):
+                        origin = source_label + origin[len(source_prefix):]
+                    origin_map.setdefault(candidate.name, []).append(origin)
+            return _materialize_managed_skill_pack(
+                canonical,
+                destination_path,
+                pack_name=pack_name,
+                source_roots=[source_label or str(source_path)],
+                scratch=scratch,
+                source_origins=origin_map,
+            )
+        finally:
+            shutil.rmtree(scratch, ignore_errors=True)
+    existing = verify_managed_skill_pack(destination_path)
+    if existing["packName"] != pack_name:
+        raise ManagedSkillPackViolation(
+            f"managed pack name mismatch: {existing['packName']!r} != {pack_name!r}"
+        )
+    scratch = Path(tempfile.mkdtemp(prefix="capt-skill-merge-", dir=destination_path.parent))
+    try:
+        existing_candidates = _discover_in_tree(
+            destination_path / "skills",
+            source_kind="managed_existing",
+            origin_prefix=f"managed:{destination_path.resolve()}",
+        )
+        incoming_candidates = _discover_candidates(source_path, scratch / "bundles")
+        canonical = _canonicalize_candidates(existing_candidates + incoming_candidates)
+
+        incoming_origins: Dict[str, List[str]] = {}
+        source_prefix = str(source_path)
+        for candidate in incoming_candidates:
+            origin = candidate.source_origin
+            if source_label and origin.startswith(source_prefix):
+                origin = source_label + origin[len(source_prefix):]
+            incoming_origins.setdefault(candidate.name, []).append(origin)
+        existing_origins = {
+            str(item["name"]): list(item.get("sourceOrigins") or [])
+            for item in existing["skills"]
+        }
+        origin_map: Dict[str, List[str]] = {}
+        for candidate, discovered in canonical:
+            name = candidate.name
+            merged = list(existing_origins.get(name, [])) + list(incoming_origins.get(name, []))
+            origin_map[name] = sorted(set(merged or discovered))
+        roots = list(existing.get("sourceRoots") or []) + [source_label or str(source_path)]
+        return _materialize_managed_skill_pack(
+            canonical,
+            destination_path,
+            pack_name=pack_name,
+            source_roots=roots,
+            scratch=scratch,
+            source_origins=origin_map,
+        )
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def create_managed_skill(
+    destination: str | Path,
+    *,
+    name: str,
+    description: str,
+    body: str,
+    version: str = "1.0.0",
+    pack_name: str = "ultimate",
+) -> Dict[str, Any]:
+    """Create one real SKILL.md and atomically merge it into the managed pack."""
+    normalized_name = str(name).strip().lower()
+    description = str(description).strip()
+    version = str(version).strip()
+    body = str(body).strip()
+    if not _SKILL_NAME.fullmatch(normalized_name):
+        raise ManagedSkillPackViolation(f"invalid skill name: {normalized_name!r}")
+    if not description or "\n" in description or "\r" in description or len(description) > 1024:
+        raise ManagedSkillPackViolation("skill description must be one non-empty line <= 1024 characters")
+    if not re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z._+-]{0,63}", version):
+        raise ManagedSkillPackViolation(f"invalid skill version: {version!r}")
+    if not body or len(body.encode("utf-8")) > 262144:
+        raise ManagedSkillPackViolation("skill body must be 1..262144 UTF-8 bytes")
+
+    destination_path = Path(destination).expanduser()
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    scratch = Path(tempfile.mkdtemp(prefix="capt-skill-create-", dir=destination_path.parent))
+    try:
+        source = scratch / "source"
+        skill_root = source / normalized_name
+        skill_root.mkdir(parents=True)
+        document = (
+            "---\n"
+            f"name: {normalized_name}\n"
+            f"description: {description}\n"
+            f"version: {version}\n"
+            "---\n\n"
+            + body + "\n"
+        )
+        (skill_root / "SKILL.md").write_text(document, encoding="utf-8")
+        return install_managed_skill_source(
+            source, destination_path, pack_name=pack_name,
+            source_label=f"created://local/{normalized_name}",
+        )
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
 

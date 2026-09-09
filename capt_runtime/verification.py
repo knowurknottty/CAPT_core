@@ -30,6 +30,7 @@ _ALLOWED_CLAIM_STATEMENTS = frozenset(
     {
         "Repository inspected in read-only mode.",
         "Analysis artifact produced at the recorded artifact location.",
+        "Provider response and immutable artifact recorded for independent verification.",
         "No repository modification was detected by the specified verification checks.",
         "The reported observation is supported by the cited source and verification result.",
     }

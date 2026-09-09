@@ -9,12 +9,20 @@ runtime modules/services.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from capt_runtime import commands
 from capt_runtime.errors import AuthorityViolation, CaptRuntimeError, IdempotencyConflict
 from capt_runtime.approval_dispatch import register_expected_prompt_digest
 from capt_runtime.prompt_approval import request_model_prompt_approval
+from capt_runtime.prompt_compiler import PromptCompiler
+from capt_runtime.prompt_proposals import (
+    cancel_prompt_proposal,
+    compile_prompt_proposal,
+    request_prompt_proposal_approval,
+    revise_prompt_proposal,
+)
 from capt_runtime.services import RuntimeService
 from capt_runtime.store import EventStore
 from capt_runtime.tool_broker import ToolBrokerError, ToolUnavailable
@@ -36,8 +44,13 @@ _REQUIRED_ENVELOPE = (
 
 _VALID_OPS = (
     "create_mission",
+    "compile_prompt_proposal",
+    "revise_prompt_proposal",
+    "cancel_prompt_proposal",
+    "request_prompt_proposal_approval",
     "request_model_prompt_approval",
     "submit_approval_decision",
+    "submit_provider_result_review",
     "cancel_task",
     "cancel_driver_run",
     "update_memory_trigger_policy",
@@ -47,6 +60,8 @@ _VALID_OPS = (
     "shutdown",
     "resume_runtime",
     "run_tool",
+    "install_managed_skill",
+    "create_managed_skill",
 )
 
 
@@ -67,6 +82,7 @@ class RuntimeCommandService:
         memory_engine: Any = None,
         runtime_service: Optional[RuntimeService] = None,
         tool_broker: Any = None,
+        prompt_compiler: Optional[PromptCompiler] = None,
     ) -> None:
         self.store = store
         self.svc = runtime_service or RuntimeService(store)
@@ -74,6 +90,7 @@ class RuntimeCommandService:
         self.session_id = session_id
         self.memory_engine = memory_engine
         self.tool_broker = tool_broker
+        self.prompt_compiler = prompt_compiler or PromptCompiler()
         self.fixed_openharness_runner = None
         self.approved_hermes_runner: Any = None
         self.runtime_checkpoint_runner = None
@@ -116,6 +133,54 @@ class RuntimeCommandService:
             replay_policy="never",
         )
 
+    def _managed_skill_mutation_result(self, verified: Dict[str, Any], root: Path) -> Dict[str, Any]:
+        return {
+            "installed": True,
+            "packRoot": str(root.resolve()),
+            "packName": str(verified.get("packName", "ultimate")),
+            "packVersion": str(verified.get("packVersion", "managed-1")),
+            "manifestDigest": str(verified["manifestDigest"]),
+            "skillNames": [str(item["name"]) for item in verified.get("skills", [])],
+        }
+
+    def _execute_managed_skill_mutation(self, cmd: Dict[str, Any], mutation) -> Dict[str, Any]:
+        """Durably claim one operator skill-pack mutation before swapping files."""
+        fingerprint = commands.fingerprint(cmd["op"], cmd["payload"])
+        claim = self.store.claim_command(
+            cmd["idempotencyKey"], fingerprint, cmd["commandId"]
+        )
+        if claim.get("replayed"):
+            if claim.get("status") == "in_progress":
+                return self._receipt(
+                    cmd, status="in_progress", classification="in_progress",
+                    result={"operation": cmd["op"]},
+                )
+            result = claim.get("result") if isinstance(claim.get("result"), dict) else {}
+            return self._receipt(
+                cmd, status="idempotent", classification="duplicate", result=result
+            )
+        try:
+            result = mutation()
+        except Exception as exc:
+            self.store.complete_claimed_command(
+                cmd["idempotencyKey"], fingerprint,
+                {
+                    "status": "failed",
+                    "operation": cmd["op"],
+                    "errorType": type(exc).__name__,
+                    "detail": str(exc)[:240],
+                    "result": {},
+                },
+            )
+            raise
+        self.store.complete_claimed_command(
+            cmd["idempotencyKey"], fingerprint,
+            {"status": "completed", "operation": cmd["op"], "result": result},
+        )
+        return self._receipt(
+            cmd, status="accepted", classification="accepted", result=result
+        )
+
     def execute(self, cmd: Dict[str, Any]) -> Dict[str, Any]:
         envelope_err = self._validate_envelope(cmd)
         if envelope_err:
@@ -130,6 +195,45 @@ class RuntimeCommandService:
         op = cmd["op"]
         meta = self._operator_metadata(cmd)
         try:
+            if op == "install_managed_skill":
+                from capt_runtime.managed_skills import (
+                    default_managed_skill_root, install_managed_skill_source,
+                )
+                payload = cmd["payload"]
+                source = payload.get("sourcePath")
+                pack_name = str(payload.get("packName") or "ultimate")
+                if not isinstance(source, str) or not source.strip():
+                    raise ValueError("MANAGED_SKILL_SOURCE_PATH_REQUIRED")
+                root = default_managed_skill_root(Path(self.store.path).parent, pack_name)
+                return self._execute_managed_skill_mutation(
+                    cmd,
+                    lambda: self._managed_skill_mutation_result(
+                        install_managed_skill_source(source, root, pack_name=pack_name), root
+                    ),
+                )
+
+            if op == "create_managed_skill":
+                from capt_runtime.managed_skills import (
+                    create_managed_skill, default_managed_skill_root,
+                )
+                payload = cmd["payload"]
+                pack_name = str(payload.get("packName") or "ultimate")
+                root = default_managed_skill_root(Path(self.store.path).parent, pack_name)
+                return self._execute_managed_skill_mutation(
+                    cmd,
+                    lambda: self._managed_skill_mutation_result(
+                        create_managed_skill(
+                            root,
+                            name=str(payload.get("name") or ""),
+                            description=str(payload.get("description") or ""),
+                            version=str(payload.get("version") or "1.0.0"),
+                            body=str(payload.get("body") or ""),
+                            pack_name=pack_name,
+                        ),
+                        root,
+                    ),
+                )
+
             if op == "run_tool":
                 if self.tool_broker is None:
                     return self._receipt(
@@ -168,7 +272,49 @@ class RuntimeCommandService:
                     stream_id="tool_execution-" + str(result["toolExecutionId"]),
                 )
 
-            if op == "create_mission":
+            if op == "compile_prompt_proposal":
+                result = compile_prompt_proposal(
+                    self.svc, self.prompt_compiler, cmd["payload"], meta
+                )
+                status = "idempotent" if result.get("status") == "idempotent" else "accepted"
+                return self._receipt(
+                    cmd, status=status,
+                    classification="duplicate" if status == "idempotent" else "accepted",
+                    result=result,
+                    stream_id="prompt_proposal-" + str(result.get("proposalId", "")),
+                )
+
+            elif op == "revise_prompt_proposal":
+                result = revise_prompt_proposal(self.svc, cmd["payload"], meta)
+                status = "idempotent" if result.get("status") == "idempotent" else "accepted"
+                return self._receipt(
+                    cmd, status=status,
+                    classification="duplicate" if status == "idempotent" else "accepted",
+                    result=result,
+                    stream_id="prompt_proposal-" + str(result.get("proposalId", "")),
+                )
+
+            elif op == "cancel_prompt_proposal":
+                result = cancel_prompt_proposal(self.svc, cmd["payload"], meta)
+                status = "idempotent" if result.get("status") == "idempotent" else "accepted"
+                return self._receipt(
+                    cmd, status=status,
+                    classification="duplicate" if status == "idempotent" else "accepted",
+                    result=result,
+                    stream_id="prompt_proposal-" + str(result.get("proposalId", "")),
+                )
+
+            elif op == "request_prompt_proposal_approval":
+                result = request_prompt_proposal_approval(self.svc, cmd["payload"], meta)
+                status = "idempotent" if result.get("status") == "idempotent" else "accepted"
+                return self._receipt(
+                    cmd, status=status,
+                    classification="duplicate" if status == "idempotent" else "accepted",
+                    result=result,
+                    stream_id="human_approval-" + str(result.get("requestId", "")),
+                )
+
+            elif op == "create_mission":
                 if self.memory_engine is not None:
                     mid = cmd["payload"].get("missionId", "")
                     usage = self._mission_context_usage(cmd["payload"])
@@ -200,6 +346,54 @@ class RuntimeCommandService:
                     "sessionId": self.session_id,
                 }
                 result = self.svc.submit_human_approval_decision(decision, meta)
+
+            elif op == "submit_provider_result_review":
+                p = cmd["payload"]
+                run_id = p.get("driverRunId")
+                disposition = p.get("disposition")
+                if not isinstance(run_id, str) or not run_id.strip():
+                    raise ValueError("PROVIDER_RESULT_REVIEW_DRIVER_RUN_REQUIRED")
+                if disposition not in {"accept", "reject"}:
+                    raise ValueError("PROVIDER_RESULT_REVIEW_DISPOSITION_INVALID")
+                run = self.store.require_state("driverrun-" + run_id)
+                if run.get("driverId") != "provider":
+                    raise AuthorityViolation("provider result review requires a provider DriverRun")
+                if run.get("state") != "completed":
+                    raise AuthorityViolation("provider result review requires a completed DriverRun")
+                if run.get("reconciliationStatus") != "not_required":
+                    raise AuthorityViolation("provider result review requires reconciliationStatus=not_required")
+                task_id = run.get("taskId")
+                candidates = []
+                for stream_id, kind, _version in self.store.all_aggregates():
+                    if kind != "claim":
+                        continue
+                    state = self.store.load_state(stream_id)
+                    if (
+                        state
+                        and state.get("taskId") == task_id
+                        and state.get("kind") == "completion"
+                        and state.get("promotionState") == "proposed"
+                    ):
+                        candidates.append(state)
+                if len(candidates) != 1:
+                    raise AuthorityViolation(
+                        "provider result review requires exactly one proposed completion claim for task %s; found %d"
+                        % (task_id, len(candidates))
+                    )
+                result = self.svc.review_claim_with_human_attestation(
+                    claim_id=candidates[0]["claimId"],
+                    disposition=disposition,
+                    operator_id=self.operator_id,
+                    note=p.get("note"),
+                    metadata=meta,
+                )
+                return self._receipt(
+                    cmd,
+                    status="accepted",
+                    classification="accepted",
+                    result={**result, "driverRunId": run_id},
+                    stream_id="claim-" + str(result["claimId"]),
+                )
 
             elif op == "cancel_task":
                 result = self.svc.cancel_task(

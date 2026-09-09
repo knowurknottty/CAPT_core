@@ -166,7 +166,7 @@
       "type": "EventEnvelope",
       "expectValid": false,
       "expectedErrors": [
-        "streamId: does not match pattern ^(mission|task|capability|driverrun|claim|human_approval|artifact_promotion|cohort|replay_fork|tool_execution)-[A-Za-z0-9_.-]{1,96}$"
+        "streamId: does not match pattern ^(mission|task|capability|driverrun|claim|human_approval|artifact_promotion|cohort|replay_fork|tool_execution|prompt_proposal)-[A-Za-z0-9_.-]{1,96}$"
       ],
       "value": {
         "schemaVersion": "1.0.0",

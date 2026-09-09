@@ -12,13 +12,16 @@ public struct CAPTNativeSession: Identifiable, Codable, Equatable, Sendable {
     public var provider: String
     public var model: String
     public var targetRoot: String
+    public var promptProposal: CAPTPromptProposal?
     public var pendingApproval: CAPTPendingApproval?
+    public var verificationDriverRunID: String?
 
     public init(
         id: UUID = UUID(), missionID: String? = nil, title: String,
         createdAt: Date = Date(), updatedAt: Date = Date(),
         messages: [CAPTChatMessage] = [], provider: String,
-        model: String, targetRoot: String, pendingApproval: CAPTPendingApproval? = nil
+        model: String, targetRoot: String, promptProposal: CAPTPromptProposal? = nil,
+        pendingApproval: CAPTPendingApproval? = nil, verificationDriverRunID: String? = nil
     ) {
         self.id = id
         self.missionID = missionID
@@ -29,7 +32,9 @@ public struct CAPTNativeSession: Identifiable, Codable, Equatable, Sendable {
         self.provider = provider
         self.model = model
         self.targetRoot = targetRoot
+        self.promptProposal = promptProposal
         self.pendingApproval = pendingApproval
+        self.verificationDriverRunID = verificationDriverRunID
     }
 }
 
@@ -124,7 +129,10 @@ public final class CAPTEncryptedSessionStore: @unchecked Sendable {
 
     public func load() throws -> [CAPTNativeSession] {
         if FileManager.default.fileExists(atPath: fileURL.path) {
-            return try decodeSessions(at: fileURL)
+            let decoded = try decodeSessions(at: fileURL)
+            let (migrated, changed) = Self.migrateLegacyRuntimeReceiptMessages(decoded)
+            if changed { try save(migrated) }
+            return migrated
         }
         guard fileURL.lastPathComponent == "classic_native_sessions.enc" else { return [] }
 
@@ -144,8 +152,48 @@ public final class CAPTEncryptedSessionStore: @unchecked Sendable {
                 migrated[index].updatedAt = now
             }
         }
+        migrated = Self.migrateLegacyRuntimeReceiptMessages(migrated).sessions
         try save(migrated)
         return migrated
+    }
+
+    private static func migrateLegacyRuntimeReceiptMessages(
+        _ sessions: [CAPTNativeSession]
+    ) -> (sessions: [CAPTNativeSession], changed: Bool) {
+        var migrated = sessions
+        var changed = false
+        for sessionIndex in migrated.indices {
+            for messageIndex in migrated[sessionIndex].messages.indices {
+                let message = migrated[sessionIndex].messages[messageIndex]
+                guard message.role == .assistant,
+                      let summary = legacyRuntimeObservationSummary(message.text) else { continue }
+                migrated[sessionIndex].messages[messageIndex] = CAPTChatMessage(
+                    id: message.id,
+                    role: message.role,
+                    text: summary,
+                    timestamp: message.timestamp,
+                    authorityState: message.authorityState
+                )
+                changed = true
+            }
+        }
+        return (migrated, changed)
+    }
+
+    private static func legacyRuntimeObservationSummary(_ text: String) -> String? {
+        guard let data = text.data(using: .utf8),
+              let receipt = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let status = receipt["status"] as? String,
+              ["accepted", "idempotent"].contains(status.lowercased()),
+              receipt["classification"] is String,
+              let commandID = receipt["commandId"] as? String, commandID.hasPrefix("cmd-"),
+              let sessionID = receipt["sessionId"] as? String, sessionID.hasPrefix("sess-"),
+              let result = receipt["result"] as? [String: Any],
+              let driverRunID = result["driverRunId"] as? String, !driverRunID.isEmpty,
+              let observations = result["observations"] as? [[String: Any]],
+              let summary = observations.first?["summary"] as? String else { return nil }
+        let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func decodeSessions(at url: URL) throws -> [CAPTNativeSession] {
