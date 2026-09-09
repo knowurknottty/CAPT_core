@@ -684,6 +684,25 @@ class InversionSandboxProcessBackend:
         copy = json.loads(json.dumps(record))
         copy.setdefault("State", {})["Status"] = "created"
         expected_network = identity.internal_network_name
+        if profile.network_policy.mode == "none":
+            networks = (copy.get("NetworkSettings") or {}).get("Networks") or {}
+            none_record = networks.get("none") if set(networks) == {"none"} else None
+            if isinstance(none_record, dict):
+                routed = any(
+                    none_record.get(key) not in (None, "", 0)
+                    for key in (
+                        "Gateway", "IPAddress", "IPPrefixLen", "IPv6Gateway",
+                        "GlobalIPv6Address", "GlobalIPv6PrefixLen",
+                    )
+                )
+                if routed:
+                    raise AuthorityViolation("InversionSandbox persistent no-network route drifted")
+                # Docker Desktop assigns opaque bookkeeping IDs to the synthetic
+                # `none` attachment after start. They do not represent a routable
+                # network; normalize only those two fields for created-state
+                # attestation while preserving the exact sole-network/IP checks.
+                none_record["NetworkID"] = ""
+                none_record["EndpointID"] = ""
         attest_created_container(
             profile,
             prepared,

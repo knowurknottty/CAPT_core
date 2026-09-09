@@ -5,12 +5,19 @@ from copy import deepcopy
 import pytest
 
 from capt_runtime import commands
-from capt_runtime.aggregates import CapabilityAggregate, SandboxLeaseAggregate, ToolExecutionAggregate
+from capt_runtime.aggregates import (
+    CapabilityAggregate,
+    SandboxLeaseAggregate,
+    ToolExecutionAggregate,
+)
 from capt_runtime.contracts import digest
 from capt_runtime.errors import AuthorityViolation
 from capt_runtime.services import RuntimeService
 from capt_runtime.store import AppendRequest, EventStore
-from tests.capt_runtime.test_sandbox_lease_aggregate import identity_patch, sandbox_lease_fixture
+from tests.capt_runtime.test_sandbox_lease_aggregate import (
+    identity_patch,
+    sandbox_lease_fixture,
+)
 
 NOW = "2026-09-09T12:00:00Z"
 

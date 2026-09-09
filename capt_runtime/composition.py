@@ -19,8 +19,8 @@ from .drivers.registry import DriverRegistry
 from .mcp import MCPManager
 from .memory.engine import MemoryTriggerEngine
 from .memory.store import MemoryStore
-from .services import RuntimeService
 from .sandbox_reconciliation import SandboxLeaseReconciler
+from .services import RuntimeService
 from .steered_service import SteeredRuntimeService
 from .store import EventStore
 from .task_resolver import TaskResolver
@@ -307,7 +307,7 @@ def create_runtime(
     sandbox_reconciler = SandboxLeaseReconciler(service, inversion_sandbox_backend, now=now)
     try:
         sandbox_reconciliation_report = sandbox_reconciler.reconcile_all()
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - startup reconciliation is non-fatal and fail-closed
         sandbox_reconciliation_report = [{
             "status": "unproven",
             "reason": f"startup sandbox reconciliation failed: {type(exc).__name__}: {exc}"[:1024],

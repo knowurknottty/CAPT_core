@@ -6,7 +6,7 @@ persistence belong to the runtime; this aggregate never performs Docker I/O.
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict
+from typing import Any
 
 from ..contracts import require
 from ..errors import IllegalTransition
@@ -52,14 +52,14 @@ class SandboxLeaseAggregate:
         return stream
 
     @staticmethod
-    def reserve(record: Dict[str, Any]) -> Dict[str, Any]:
+    def reserve(record: dict[str, Any]) -> dict[str, Any]:
         require("SandboxLease", record)
         if record["state"] != "reserved":
             raise IllegalTransition("sandbox lease " + record["sandboxLeaseId"], record["state"], "reserved")
         return deepcopy(record)
 
     @staticmethod
-    def _transition(state: Dict[str, Any], target: str, patch: Dict[str, Any], *, reconciliation: bool = False) -> Dict[str, Any]:
+    def _transition(state: dict[str, Any], target: str, patch: dict[str, Any], *, reconciliation: bool = False) -> dict[str, Any]:
         require("SandboxLease", state)
         current = state["state"]
         label = "sandbox lease " + state["sandboxLeaseId"]
@@ -87,25 +87,25 @@ class SandboxLeaseAggregate:
         return nxt
 
     @staticmethod
-    def record_created(state: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
+    def record_created(state: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
         return SandboxLeaseAggregate._transition(state, "created", patch)
 
     @staticmethod
-    def record_running(state: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
+    def record_running(state: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
         return SandboxLeaseAggregate._transition(state, "running", patch)
 
     @staticmethod
-    def begin_close(state: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
+    def begin_close(state: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
         return SandboxLeaseAggregate._transition(state, "closing", patch)
 
     @staticmethod
-    def record_closed(state: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
+    def record_closed(state: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
         return SandboxLeaseAggregate._transition(state, "closed", patch)
 
     @staticmethod
-    def mark_indeterminate(state: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
+    def mark_indeterminate(state: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
         return SandboxLeaseAggregate._transition(state, "indeterminate", patch)
 
     @staticmethod
-    def reconcile(state: Dict[str, Any], target_state: str, patch: Dict[str, Any]) -> Dict[str, Any]:
+    def reconcile(state: dict[str, Any], target_state: str, patch: dict[str, Any]) -> dict[str, Any]:
         return SandboxLeaseAggregate._transition(state, target_state, patch, reconciliation=True)

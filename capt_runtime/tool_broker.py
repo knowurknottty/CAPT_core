@@ -155,7 +155,7 @@ class ToolBroker:
             raise CapabilityDenied("WORLD_RECEIPT_EFFECT_LEASE_EXPIRY_REQUIRED", lease_id)
         return str(expires_at)
 
-    def _capability_boundary(self, request: Dict[str, Any]) -> CapabilityLeaseBoundary:
+    def _capability_boundary(self, request: dict[str, Any]) -> CapabilityLeaseBoundary:
         grant_id = request.get("grantId")
         lease_id = request.get("leaseId")
         if not grant_id or not lease_id:

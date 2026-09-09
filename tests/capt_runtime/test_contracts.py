@@ -115,7 +115,9 @@ def test_version_visible_in_both_languages():
 from capt_runtime.contracts import require
 from capt_runtime.errors import ContractViolation
 from tests.capt_runtime.test_sandbox_lease_aggregate import (
-    sandbox_lease_fixture, DIGEST_FIELDS, OBJECT_FIELDS,
+    DIGEST_FIELDS,
+    OBJECT_FIELDS,
+    sandbox_lease_fixture,
 )
 
 

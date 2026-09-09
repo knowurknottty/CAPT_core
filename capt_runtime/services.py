@@ -923,11 +923,11 @@ class RuntimeService(object):
 
     def _sandbox_transition_event(
         self,
-        current: Dict[str, Any],
-        state: Dict[str, Any],
-        metadata: Dict[str, Any],
+        current: dict[str, Any],
+        state: dict[str, Any],
+        metadata: dict[str, Any],
         suffix: str = "sandbox",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         return commands.envelope(
             event_id=metadata["commandId"] + "-" + suffix,
             stream_id=SandboxLeaseAggregate.stream_id(state["sandboxLeaseId"]),
@@ -944,8 +944,8 @@ class RuntimeService(object):
         )
 
     def reserve_sandbox_lease(
-        self, lease: Dict[str, Any], metadata: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, lease: dict[str, Any], metadata: dict[str, Any]
+    ) -> dict[str, Any]:
         require("SandboxLease", lease)
         require("CommandMetadata", metadata)
         require_authority("reserve_sandbox_lease", metadata["actor"]["kind"])
@@ -973,9 +973,9 @@ class RuntimeService(object):
         tool_execution_id: str,
         sandbox_lease_id: str,
         side_effect_identity: str,
-        created_patch: Dict[str, Any],
-        metadata: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        created_patch: dict[str, Any],
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
         require("CommandMetadata", metadata)
         require_authority("transition_tool_execution", metadata["actor"]["kind"])
         require_authority("transition_sandbox_lease", metadata["actor"]["kind"])
@@ -1044,13 +1044,13 @@ class RuntimeService(object):
     def settle_sandbox_create(
         self,
         grant_id: str,
-        consumption: Dict[str, Any],
+        consumption: dict[str, Any],
         tool_execution_id: str,
         sandbox_lease_id: str,
-        result: Dict[str, Any],
-        running_patch: Dict[str, Any],
-        metadata: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        result: dict[str, Any],
+        running_patch: dict[str, Any],
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
         require("CapabilityConsumptionRecord", consumption)
         require("ToolResult", result)
         require("CommandMetadata", metadata)
@@ -1337,13 +1337,13 @@ class RuntimeService(object):
     def settle_sandbox_close(
         self,
         grant_id: str,
-        consumption: Dict[str, Any],
+        consumption: dict[str, Any],
         tool_execution_id: str,
         sandbox_lease_id: str,
-        result: Dict[str, Any],
-        terminal_patch: Dict[str, Any],
-        metadata: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        result: dict[str, Any],
+        terminal_patch: dict[str, Any],
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
         """Atomically settle capability + ToolExecution + persistent sandbox close truth."""
         require("CapabilityConsumptionRecord", consumption)
         require("ToolResult", result)
@@ -1497,9 +1497,9 @@ class RuntimeService(object):
         self,
         sandbox_lease_id: str,
         transition,
-        patch: Dict[str, Any],
-        metadata: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        patch: dict[str, Any],
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
         require("CommandMetadata", metadata)
         require_authority("transition_sandbox_lease", metadata["actor"]["kind"])
         if self.store.find_idempotent(metadata["idempotencyKey"]) is not None:
@@ -1532,9 +1532,9 @@ class RuntimeService(object):
         )
 
     def begin_sandbox_close(
-        self, sandbox_lease_id: str, patch: Dict[str, Any], metadata: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        def begin_or_reconcile(current: Dict[str, Any], effective: Dict[str, Any]) -> Dict[str, Any]:
+        self, sandbox_lease_id: str, patch: dict[str, Any], metadata: dict[str, Any]
+    ) -> dict[str, Any]:
+        def begin_or_reconcile(current: dict[str, Any], effective: dict[str, Any]) -> dict[str, Any]:
             if current["state"] == "indeterminate":
                 return SandboxLeaseAggregate.reconcile(current, "closing", effective)
             return SandboxLeaseAggregate.begin_close(current, effective)
@@ -1544,15 +1544,15 @@ class RuntimeService(object):
         )
 
     def record_sandbox_closed(
-        self, sandbox_lease_id: str, patch: Dict[str, Any], metadata: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, sandbox_lease_id: str, patch: dict[str, Any], metadata: dict[str, Any]
+    ) -> dict[str, Any]:
         return self._transition_sandbox_lease(
             sandbox_lease_id, SandboxLeaseAggregate.record_closed, patch, metadata
         )
 
     def mark_sandbox_indeterminate(
-        self, sandbox_lease_id: str, patch: Dict[str, Any], metadata: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, sandbox_lease_id: str, patch: dict[str, Any], metadata: dict[str, Any]
+    ) -> dict[str, Any]:
         return self._transition_sandbox_lease(
             sandbox_lease_id, SandboxLeaseAggregate.mark_indeterminate, patch, metadata
         )
@@ -1561,9 +1561,9 @@ class RuntimeService(object):
         self,
         sandbox_lease_id: str,
         target_state: str,
-        patch: Dict[str, Any],
-        metadata: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        patch: dict[str, Any],
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
         return self._transition_sandbox_lease(
             sandbox_lease_id,
             lambda current, effective: SandboxLeaseAggregate.reconcile(

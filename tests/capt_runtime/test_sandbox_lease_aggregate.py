@@ -1,6 +1,6 @@
 """Persistent resource lifetime facts never confer capability authority."""
-from copy import deepcopy
 import importlib
+from copy import deepcopy
 
 import pytest
 

@@ -15,6 +15,7 @@ from capt_runtime.tools.backends.inversion_sandbox import (
     InversionSandboxProcessBackend,
     InversionSandboxProfile,
     InversionSandboxProfileRegistry,
+    SandboxRuntimeIdentity,
 )
 
 IMAGE = "sha256:" + "a" * 64
@@ -261,3 +262,28 @@ def test_persistent_close_removes_only_exact_identity_after_reinspection(monkeyp
     assert receipt.cleanup_succeeded is True
     assert receipt.closure_receipt_digest.startswith("sha256:")
     assert any(args[0] == "rm" and args[-1] == CONTAINER for args in calls)
+
+
+def test_running_none_network_bookkeeping_ids_are_not_treated_as_egress(monkeypatch) -> None:
+    profile = _profile()
+    backend = InversionSandboxProcessBackend(InversionSandboxProfileRegistry((profile,)))
+    prepared = _prepared(profile)
+    labels = backend.persistent_labels("sandbox-1", profile, prepared)
+    record = _created_record(profile, labels=labels, running=True)
+    none = record["NetworkSettings"]["Networks"]["none"]
+    none["NetworkID"] = "a" * 64
+    none["EndpointID"] = "b" * 64
+    monkeypatch.setattr(backend, "_daemon_identity_digest", lambda _endpoint: "sha256:" + "d" * 64)
+    monkeypatch.setattr(backend.docker_backend, "_inspect_exact", lambda *_args: record)
+    identity = SandboxRuntimeIdentity(
+        sandbox_lease_id="sandbox-1", profile_id=profile.profile_id,
+        profile_digest=profile.profile_digest(), context_endpoint=prepared.docker.context_endpoint,
+        daemon_identity_digest="sha256:" + "d" * 64, workload_container_id=CONTAINER,
+        workload_image_id=IMAGE, security_profile_digest="sha256:" + profile.security_profile_digest(),
+        network_policy_digest="sha256:" + profile.network_policy.digest(),
+        filesystem_scope_digest="sha256:" + profile.filesystem_scope_digest(),
+        persistent_entrypoint_digest=profile.persistent_entrypoint_digest(),
+        creation_attestation_digest="sha256:" + "e" * 64,
+    )
+    observed = backend.inspect_persistent(identity)
+    assert observed["workloadRunning"] is True
