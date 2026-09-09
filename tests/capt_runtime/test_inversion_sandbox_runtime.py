@@ -86,3 +86,60 @@ def test_adapter_never_accepts_docker_tool_id(tmp_path: Path) -> None:
     adapter = adapter_mod.InversionSandboxTerminalToolAdapter(backend)
     with pytest.raises(AuthorityViolation, match="terminal.inversion_sandbox"):
         adapter._process_request({"toolId": "terminal.docker"})
+
+
+def _control_result(stdout: str = "", stderr: str = "", exit_code: int = 0, timed_out: bool = False):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        stdout=stdout, stderr=stderr, exit_code=exit_code, timed_out=timed_out,
+        stdout_total_bytes=len(stdout.encode()), stderr_total_bytes=len(stderr.encode()),
+        stdout_truncated=False, stderr_truncated=False,
+    )
+
+
+def test_preflight_fails_closed_when_seccomp_is_not_proved(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from capt_runtime.tools.backends.docker import DockerProcessRequest
+
+    mod = _sandbox_module()
+    profile = _profile(tmp_path)
+    backend = mod.InversionSandboxProcessBackend(mod.InversionSandboxProfileRegistry((profile,)))
+    prepared = DockerPreparedTarget(profile.docker_profile(), "unix:///tmp/docker.sock", "sha256:" + "9" * 64, None)
+    monkeypatch.setattr(backend.docker_backend, "preflight", lambda _request: prepared)
+    monkeypatch.setattr(
+        backend.docker_backend,
+        "_run_endpoint",
+        lambda *_args, **_kwargs: _control_result('["name=cgroupns"]'),
+    )
+    request = DockerProcessRequest(profile.profile_id, ("/bin/true",), "/workspace", "/workspace")
+    with pytest.raises(AuthorityViolation, match="seccomp"):
+        backend.preflight(request)
+
+
+def test_allowlist_preflight_requires_local_guardian_image(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from capt_runtime.tools.backends.docker import DockerProcessRequest
+
+    mod = _sandbox_module()
+    work = tmp_path / "allow-preflight"
+    work.mkdir()
+    profile = mod.InversionSandboxProfile(
+        profile_id="inv-allow-preflight", context_name="desktop-linux",
+        image_ref="example.invalid/workload:test", guardian_image_ref="example.invalid/guardian:test",
+        allowed_host_roots=(work,),
+        network_policy=mod.InversionSandboxNetworkPolicy(mode="allowlist", allow=("example.com",)),
+    )
+    backend = mod.InversionSandboxProcessBackend(mod.InversionSandboxProfileRegistry((profile,)))
+    prepared = DockerPreparedTarget(profile.docker_profile(), "unix:///tmp/docker.sock", "sha256:" + "8" * 64, None)
+    monkeypatch.setattr(backend.docker_backend, "preflight", lambda _request: prepared)
+
+    def run_endpoint(_endpoint, args, **_kwargs):
+        if tuple(args)[:2] == ("info", "--format"):
+            return _control_result('["name=seccomp,profile=builtin"]')
+        if tuple(args)[:2] == ("image", "inspect"):
+            return _control_result(stderr="missing", exit_code=1)
+        raise AssertionError(args)
+
+    monkeypatch.setattr(backend.docker_backend, "_run_endpoint", run_endpoint)
+    request = DockerProcessRequest(profile.profile_id, ("/bin/true",), "/workspace", "/workspace")
+    with pytest.raises(AuthorityViolation, match="guardian image"):
+        backend.preflight(request)

@@ -27,8 +27,8 @@ from .tools.adapters import (
     CloudflareTerminalToolAdapter,
     CodeExecutionAdapter,
     DockerTerminalToolAdapter,
-    InversionSandboxTerminalToolAdapter,
     FileToolAdapter,
+    InversionSandboxTerminalToolAdapter,
     SSHTerminalToolAdapter,
     TerminalToolAdapter,
 )

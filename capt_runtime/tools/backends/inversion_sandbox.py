@@ -221,6 +221,23 @@ def _tmpfs_options(value: object) -> set[str]:
     return {item.strip() for item in value.split(",") if item.strip()}
 
 
+def _none_network_isolated(networks: dict[str, object]) -> bool:
+    if not networks:
+        return True
+    if set(networks) != {"none"}:
+        return False
+    record = networks.get("none")
+    if not isinstance(record, dict):
+        return False
+    for key in ("NetworkID", "EndpointID", "Gateway", "IPAddress", "GlobalIPv6Address"):
+        if record.get(key) not in (None, ""):
+            return False
+    for key in ("IPPrefixLen", "GlobalIPv6PrefixLen"):
+        if record.get(key) not in (None, 0):
+            return False
+    return True
+
+
 def _attest_mounts(profile: InversionSandboxProfile, record: dict[str, Any]) -> list[dict[str, object]]:
     raw = record.get("Mounts")
     if not isinstance(raw, list):
@@ -306,7 +323,7 @@ def attest_created_container(
         if network_mode not in {"bridge", "default"}:
             raise AuthorityViolation("InversionSandbox unrestricted network mode drifted")
     else:
-        if network_mode != "none" or networks:
+        if network_mode != "none" or not _none_network_isolated(networks):
             raise AuthorityViolation("InversionSandbox no-network mode drifted")
 
     security_digest = profile.security_profile_digest()
@@ -422,11 +439,45 @@ class InversionSandboxProcessBackend:
             "reason": "no InversionSandbox profile proved local image, daemon, and seccomp readiness",
         }
 
+    def _require_seccomp(self, endpoint: str) -> None:
+        info = self.docker_backend._run_endpoint(
+            endpoint, ("info", "--format", "{{json .SecurityOptions}}"),
+            timeout_seconds=3.0, stdout_limit_bytes=8192, stderr_limit_bytes=8192,
+        )
+        if info.exit_code != 0 or info.timed_out:
+            raise AuthorityViolation("InversionSandbox could not prove Docker seccomp readiness")
+        try:
+            options = json.loads(info.stdout)
+        except json.JSONDecodeError as exc:
+            raise AuthorityViolation("InversionSandbox Docker security options are invalid") from exc
+        if not docker_security_options_have_seccomp(options):
+            raise AuthorityViolation("InversionSandbox requires Docker seccomp")
+
+    def _require_local_guardian_image(self, profile: InversionSandboxProfile, endpoint: str) -> None:
+        if profile.network_policy.mode != "allowlist":
+            return
+        if not profile.guardian_image_ref:
+            raise AuthorityViolation("InversionSandbox allowlist requires guardian image")
+        inspected = self.docker_backend._run_endpoint(
+            endpoint, ("image", "inspect", profile.guardian_image_ref),
+            timeout_seconds=10.0, stdout_limit_bytes=4 * 1024 * 1024, stderr_limit_bytes=64 * 1024,
+        )
+        if inspected.exit_code != 0 or inspected.timed_out:
+            raise AuthorityViolation("InversionSandbox guardian image is unavailable locally; implicit pull is disabled")
+        try:
+            image_id = json.loads(inspected.stdout)[0]["Id"]
+        except (json.JSONDecodeError, IndexError, KeyError, TypeError) as exc:
+            raise AuthorityViolation("InversionSandbox guardian image identity is invalid") from exc
+        if not isinstance(image_id, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", image_id):
+            raise AuthorityViolation("InversionSandbox guardian image identity is not immutable")
+
     def preflight(self, request: DockerProcessRequest) -> InversionSandboxPreparedTarget:
         profile = self.profiles.require(request.profile_id)
         docker = self.docker_backend.preflight(request)
         if docker.profile.profile_id != profile.profile_id:
             raise AuthorityViolation("InversionSandbox prepared Docker profile identity drifted")
+        self._require_seccomp(docker.context_endpoint)
+        self._require_local_guardian_image(profile, docker.context_endpoint)
         return InversionSandboxPreparedTarget(profile=profile, docker=docker)
 
     def effect_identity(

@@ -122,3 +122,20 @@ def test_attestation_rejects_identity_and_privilege_drift(tmp_path: Path) -> Non
     record["HostConfig"]["Privileged"] = True
     with pytest.raises(AuthorityViolation, match="privileged"):
         mod.attest_created_container(profile, prepared, record)
+
+
+def test_attestation_accepts_docker_canonical_none_network_and_rejects_attached_none(tmp_path: Path) -> None:
+    mod = _mod()
+    profile = _profile(tmp_path)
+    prepared = DockerPreparedTarget(profile.docker_profile(), "unix:///tmp/docker.sock", "sha256:" + "1" * 64, None)
+    record = _created_record(profile, prepared.image_id, "2" * 64)
+    record["NetworkSettings"]["Networks"] = {
+        "none": {
+            "NetworkID": "", "EndpointID": "", "Gateway": "", "IPAddress": "",
+            "GlobalIPv6Address": "", "IPPrefixLen": 0, "GlobalIPv6PrefixLen": 0,
+        }
+    }
+    assert len(mod.attest_created_container(profile, prepared, record).digest) == 64
+    record["NetworkSettings"]["Networks"]["none"]["IPAddress"] = "172.18.0.2"
+    with pytest.raises(AuthorityViolation, match="no-network mode"):
+        mod.attest_created_container(profile, prepared, record)
