@@ -21,6 +21,7 @@ class CloudflareSurface(str, Enum):
     D1 = "d1"
     BROWSER_RUN = "browser_run"
     WORKERS_AI = "workers_ai"
+    WORKFLOWS = "workflows"
 
 
 class CloudflareWorkClass(str, Enum):
@@ -29,6 +30,7 @@ class CloudflareWorkClass(str, Enum):
     SHARED_STATE = "shared_state"
     BROWSER = "browser"
     INFERENCE = "inference"
+    DURABLE_ORCHESTRATION = "durable_orchestration"
     ARBITRARY_COMPUTE = "arbitrary_compute"
 
 
@@ -42,6 +44,7 @@ class CloudflareFreeEstimate:
     ai_neurons: int = 0
     d1_rows_read: int = 0
     d1_rows_written: int = 0
+    workflow_steps: int = 0
 
 
 @dataclass(frozen=True)
@@ -101,6 +104,13 @@ class CloudflareFreeTierRouter:
             )
             return CloudflareRouteDecision(
                 CloudflareSurface.BROWSER_RUN, "free_native_browser_admitted"
+            )
+        if work_class is CloudflareWorkClass.DURABLE_ORCHESTRATION:
+            self.envelope.require_workflow(
+                steps=estimate.workflow_steps, usage=usage
+            )
+            return CloudflareRouteDecision(
+                CloudflareSurface.WORKFLOWS, "free_native_workflows_admitted"
             )
         if work_class is CloudflareWorkClass.INFERENCE:
             if not estimate.ai_model:

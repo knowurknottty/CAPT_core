@@ -19,6 +19,7 @@ class CloudflareFreeTierLimits:
     workers_ai_neurons_per_day: int = 10_000
     d1_rows_read_per_day: int = 5_000_000
     d1_rows_written_per_day: int = 100_000
+    workflow_steps_per_day: int = 3_000
 
 
 CLOUDFLARE_FREE_TIER = CloudflareFreeTierLimits()
@@ -32,6 +33,7 @@ class CloudflareUsageSnapshot:
     workers_ai_neurons: int = 0
     d1_rows_read: int = 0
     d1_rows_written: int = 0
+    workflow_steps: int = 0
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,7 @@ class CloudflareFreeTierEnvelope:
     workers_ai_neurons_per_day: int
     d1_rows_read_per_day: int
     d1_rows_written_per_day: int
+    workflow_steps_per_day: int
 
     @classmethod
     def default(cls) -> "CloudflareFreeTierEnvelope":
@@ -52,6 +55,7 @@ class CloudflareFreeTierEnvelope:
             workers_ai_neurons_per_day=9_000,
             d1_rows_read_per_day=4_500_000,
             d1_rows_written_per_day=90_000,
+            workflow_steps_per_day=2_700,
         )
 
     @staticmethod
@@ -104,6 +108,14 @@ class CloudflareFreeTierEnvelope:
         self._nonnegative(seconds, "browser_seconds_invalid")
         if usage.browser_seconds + seconds > self.browser_seconds_per_day:
             raise AuthorityViolation("CLOUDFLARE_BROWSER_DAILY_BUDGET_EXHAUSTED")
+
+    def require_workflow(
+        self, *, steps: int, usage: CloudflareUsageSnapshot | None = None
+    ) -> None:
+        usage = usage or CloudflareUsageSnapshot()
+        self._nonnegative(steps, "workflow_steps_invalid")
+        if usage.workflow_steps + steps > self.workflow_steps_per_day:
+            raise AuthorityViolation("CLOUDFLARE_WORKFLOW_DAILY_BUDGET_EXHAUSTED")
 
     def require_d1(
         self,

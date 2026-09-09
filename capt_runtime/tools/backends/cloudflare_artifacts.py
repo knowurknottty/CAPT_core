@@ -86,6 +86,35 @@ class CloudflareBinaryArtifactSpool:
             "action": action.value,
         }
 
+    def capture_workflow_step(
+        self, *, operation_id: str, data: bytes, media_type: str = "application/octet-stream"
+    ) -> dict[str, Any]:
+        if not operation_id:
+            raise ValueError("cloudflare_artifact_operation_id_required")
+        if media_type != "application/octet-stream":
+            raise ValueError("cloudflare_workflow_step_media_type_invalid")
+        if not isinstance(data, bytes) or not data:
+            raise ValueError("cloudflare_artifact_data_invalid")
+        if len(data) > self.max_bytes:
+            raise RuntimeError("cloudflare_workflow_step_artifact_too_large")
+        action = "workflow_step_evidence"
+        digest = _sha256(data)
+        token = _token(operation_id, action, digest)
+        data_path, meta_path = self._paths(token)
+        data_path.write_bytes(data)
+        meta = {
+            "operationId": operation_id, "action": action, "mediaType": media_type,
+            "bytes": len(data), "sha256": digest,
+        }
+        meta_path.write_text(json.dumps(meta, sort_keys=True), encoding="utf-8")
+        for path in (data_path, meta_path):
+            try:
+                os.chmod(path, 0o600)
+            except OSError:
+                pass
+        return {"ref": _REF_PREFIX + token, "sha256": digest, "bytes": len(data),
+                "mediaType": media_type, "action": action}
+
     def read(
         self,
         *,

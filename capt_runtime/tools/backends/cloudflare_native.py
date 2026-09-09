@@ -10,6 +10,7 @@ from typing import Any
 from .cloudflare_ai_catalog import CloudflareAIModelCatalogSnapshot
 from .cloudflare_free_planner import CloudflareFreeExecutionPlanner
 from .cloudflare_free_router import CloudflareFreeEstimate, CloudflareWorkClass
+from .cloudflare_workflows import require_provider_status
 
 
 class CloudflareBrowserAction(str, Enum):
@@ -397,6 +398,263 @@ class CloudflareWorkersAIInferencer:
         )
 
 
+class CloudflareWorkflowIndeterminate(CloudflareNativeIndeterminate):
+    def __init__(
+        self,
+        code: str,
+        *,
+        operation_id: str,
+        instance_id: str | None,
+        estimate: CloudflareFreeEstimate | None = None,
+    ) -> None:
+        self.code = code
+        self.operation_id = operation_id
+        self.instance_id = instance_id
+        self.estimate = estimate
+        super().__init__(code)
+
+
+@dataclass(frozen=True)
+class CloudflareWorkflowStartResult:
+    operation_id: str
+    workflow: str
+    instance_id: str
+    provider_status: str
+    estimate: CloudflareFreeEstimate
+    effect: str = "workflow_instance_start_acknowledged"
+
+
+@dataclass(frozen=True)
+class CloudflareWorkflowStatusResult:
+    workflow: str
+    instance_id: str
+    provider_status: str
+    evidence: Any
+    estimate: CloudflareFreeEstimate | None = None
+    effect: str = "workflow_provider_status_observed"
+
+
+@dataclass(frozen=True)
+class CloudflareWorkflowEventResult:
+    operation_id: str
+    workflow: str
+    instance_id: str
+    event_type: str
+    timestamp: str
+    effect: str = "workflow_event_acknowledged"
+
+
+@dataclass(frozen=True)
+class CloudflareWorkflowStepEvidenceResult:
+    operation_id: str
+    workflow: str
+    instance_id: str
+    evidence: dict[str, Any]
+    effect: str = "workflow_step_evidence_observed"
+
+
+class CloudflareWorkflowOrchestrator:
+    def __init__(self, planner: CloudflareFreeExecutionPlanner, bridge: Any) -> None:
+        self.planner = planner
+        self.bridge = bridge
+
+    def start(
+        self,
+        *,
+        operation_id: str,
+        workflow: str,
+        params: dict[str, Any],
+        max_steps: int,
+        day: date,
+    ) -> CloudflareWorkflowStartResult:
+        instance_id = self.bridge.workflow_expected_instance_id(
+            operation_id=operation_id, workflow=workflow
+        )
+        estimate = CloudflareFreeEstimate(workflow_steps=max_steps)
+        self.planner.reserve(
+            operation_id=operation_id,
+            work_class=CloudflareWorkClass.DURABLE_ORCHESTRATION,
+            estimate=estimate,
+            day=day,
+        )
+        try:
+            response = self.bridge.workflow_instance_start(
+                operation_id=operation_id, workflow=workflow, params=params
+            )
+        except CloudflareDispatchNotStarted:
+            self.planner.ledger.release(
+                operation_id, reason="workflow_start_not_started"
+            )
+            raise
+        except Exception as exc:
+            raise CloudflareWorkflowIndeterminate(
+                "workflow_instance_start_indeterminate",
+                operation_id=operation_id,
+                instance_id=instance_id,
+                estimate=estimate,
+            ) from exc
+        if response.get("instanceId") != instance_id:
+            raise CloudflareWorkflowIndeterminate(
+                "workflow_instance_start_identity_unclassified",
+                operation_id=operation_id,
+                instance_id=instance_id,
+                estimate=estimate,
+            )
+        try:
+            status = require_provider_status(response.get("status"))
+        except Exception as exc:
+            raise CloudflareWorkflowIndeterminate(
+                "workflow_instance_start_status_unclassified",
+                operation_id=operation_id,
+                instance_id=instance_id,
+                estimate=estimate,
+            ) from exc
+        self.planner.ledger.commit(operation_id)
+        return CloudflareWorkflowStartResult(
+            operation_id, workflow, instance_id, status, estimate
+        )
+
+    def reconcile_start(
+        self,
+        *,
+        operation_id: str,
+        workflow: str,
+        max_steps: int,
+        day: date,
+    ) -> CloudflareWorkflowStatusResult:
+        instance_id = self.bridge.workflow_expected_instance_id(
+            operation_id=operation_id, workflow=workflow
+        )
+        estimate = CloudflareFreeEstimate(workflow_steps=max_steps)
+        try:
+            checked = self.planner.ledger.require_reservation_match(
+                operation_id,
+                CloudflareWorkClass.DURABLE_ORCHESTRATION.value,
+                estimate,
+                day=day,
+            )
+        except KeyError as exc:
+            raise CloudflareDispatchNotStarted(
+                "CLOUDFLARE_WORKFLOW_RESERVATION_NOT_FOUND"
+            ) from exc
+        if checked["state"] == "released":
+            raise CloudflareDispatchNotStarted(
+                "CLOUDFLARE_WORKFLOW_RESERVATION_RELEASED"
+            )
+        try:
+            response = self.bridge.workflow_instance_status(
+                workflow=workflow, instance_id=instance_id
+            )
+        except Exception as exc:
+            raise CloudflareWorkflowIndeterminate(
+                "workflow_instance_reconciliation_indeterminate",
+                operation_id=operation_id,
+                instance_id=instance_id,
+                estimate=estimate,
+            ) from exc
+        try:
+            status = require_provider_status(response.get("status"))
+        except Exception as exc:
+            raise CloudflareWorkflowIndeterminate(
+                "workflow_instance_reconciliation_status_unclassified",
+                operation_id=operation_id,
+                instance_id=instance_id,
+                estimate=estimate,
+            ) from exc
+        self.planner.ledger.commit(operation_id)
+        return CloudflareWorkflowStatusResult(
+            workflow=workflow,
+            instance_id=instance_id,
+            provider_status=status,
+            evidence=response.get("evidence"),
+            estimate=estimate,
+            effect="workflow_instance_start_reconciled",
+        )
+
+    def status(
+        self, *, workflow: str, instance_id: str
+    ) -> CloudflareWorkflowStatusResult:
+        response = self.bridge.workflow_instance_status(
+            workflow=workflow, instance_id=instance_id
+        )
+        status = require_provider_status(response.get("status"))
+        return CloudflareWorkflowStatusResult(
+            workflow=workflow,
+            instance_id=instance_id,
+            provider_status=status,
+            evidence=response.get("evidence"),
+        )
+
+    def event(
+        self,
+        *,
+        operation_id: str,
+        workflow: str,
+        instance_id: str,
+        event_type: str,
+        body: dict[str, Any],
+    ) -> CloudflareWorkflowEventResult:
+        try:
+            response = self.bridge.workflow_instance_event(
+                operation_id=operation_id,
+                workflow=workflow,
+                instance_id=instance_id,
+                event_type=event_type,
+                body=body,
+            )
+        except CloudflareDispatchNotStarted:
+            raise
+        except Exception as exc:
+            raise CloudflareWorkflowIndeterminate(
+                "workflow_event_delivery_indeterminate",
+                operation_id=operation_id,
+                instance_id=instance_id,
+            ) from exc
+        if response.get("instanceId") != instance_id:
+            raise CloudflareWorkflowIndeterminate(
+                "workflow_event_identity_unclassified",
+                operation_id=operation_id,
+                instance_id=instance_id,
+            )
+        timestamp = response.get("timestamp")
+        if not isinstance(timestamp, str) or not timestamp:
+            raise CloudflareWorkflowIndeterminate(
+                "workflow_event_timestamp_unclassified",
+                operation_id=operation_id,
+                instance_id=instance_id,
+            )
+        return CloudflareWorkflowEventResult(
+            operation_id, workflow, instance_id, event_type, timestamp
+        )
+
+    def step_evidence(
+        self,
+        *,
+        operation_id: str,
+        workflow: str,
+        instance_id: str,
+        step_name: str,
+        step_type: str,
+        attempt: int | None = None,
+    ) -> CloudflareWorkflowStepEvidenceResult:
+        evidence = self.bridge.workflow_instance_step_evidence(
+            operation_id=operation_id,
+            workflow=workflow,
+            instance_id=instance_id,
+            step_name=step_name,
+            step_type=step_type,
+            attempt=attempt,
+        )
+        if not isinstance(evidence, dict) or evidence.get("kind") not in {
+            "json",
+            "binary",
+        }:
+            raise RuntimeError("cloudflare_workflow_step_evidence_unclassified")
+        return CloudflareWorkflowStepEvidenceResult(
+            operation_id, workflow, instance_id, evidence
+        )
+
+
 @dataclass(frozen=True)
 class CloudflareNativeSurfaces:
     workers: CloudflareWorkersCoordinator
@@ -404,3 +662,4 @@ class CloudflareNativeSurfaces:
     d1: CloudflareD1StateStore
     browser: CloudflareBrowserRunner
     ai: CloudflareWorkersAIInferencer
+    workflows: CloudflareWorkflowOrchestrator

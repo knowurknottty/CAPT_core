@@ -27,6 +27,16 @@ from .cloudflare_resource_inventory import (
     CloudflareResourceKind,
     parse_cloudflare_resource_inventory,
 )
+from .cloudflare_workflows import (
+    MAX_WORKFLOW_EVENT_BYTES,
+    MAX_WORKFLOW_START_PARAMS_BYTES,
+    canonical_json,
+    require_event_type,
+    require_provider_status,
+    require_workflow_instance_id,
+    require_workflow_name,
+    workflow_instance_id,
+)
 
 _API_ROOT = "https://api.cloudflare.com/client/v4"
 _ENV_RE = re.compile(r"^[A-Z_][A-Z0-9_]*$")
@@ -290,6 +300,37 @@ class CloudflareNativeAPIBridge:
             isinstance(item, dict) for item in worker_rows
         ):
             raise RuntimeError("cloudflare_worker_inventory_result_unclassified")
+        workflow_rows: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            query = urlencode({"page": page, "per_page": 100})
+            value = self._get(
+                f"{_API_ROOT}/accounts/{self.profile.account_id}/workflows?{query}",
+                token,
+            )
+            result = self._require_success(value)
+            info = value.get("result_info")
+            if not isinstance(result, list) or not isinstance(info, dict):
+                raise RuntimeError("cloudflare_workflow_inventory_pagination_unclassified")
+            current_page = info.get("page")
+            total_pages = info.get("total_pages")
+            if (
+                isinstance(current_page, bool)
+                or not isinstance(current_page, int)
+                or isinstance(total_pages, bool)
+                or not isinstance(total_pages, int)
+                or current_page != page
+                or total_pages < page
+                or total_pages < 1
+                or total_pages > 100
+            ):
+                raise RuntimeError("cloudflare_workflow_inventory_pagination_unclassified")
+            if not all(isinstance(item, dict) for item in result):
+                raise RuntimeError("cloudflare_workflow_inventory_result_unclassified")
+            workflow_rows.extend(result)
+            if page >= total_pages:
+                break
+            page += 1
         fetched_at = self.now()
         if fetched_at.tzinfo is None or fetched_at.utcoffset() is None:
             raise RuntimeError("cloudflare_resource_inventory_clock_unaware")
@@ -299,7 +340,157 @@ class CloudflareNativeAPIBridge:
             queue_rows=queue_rows,
             worker_rows=worker_rows,
             fetched_at=fetched_at,
+            workflow_rows=workflow_rows,
         )
+
+    def _workflow_binding(self, workflow: str) -> tuple[dict[str, Any], str, str]:
+        binding = self._require_binding(CloudflareResourceKind.WORKFLOW, workflow)
+        if binding.get("targetEndpoint") is not None:
+            raise CloudflareDispatchNotStarted("CLOUDFLARE_WORKFLOW_BINDING_ENDPOINT_FORBIDDEN")
+        resource_id = binding.get("resourceId")
+        resource_name = binding.get("resourceName")
+        if not isinstance(resource_id, str) or not resource_id:
+            raise CloudflareDispatchNotStarted("CLOUDFLARE_WORKFLOW_BINDING_ID_INVALID")
+        try:
+            resource_name = require_workflow_name(resource_name)
+        except ValueError as exc:
+            raise CloudflareDispatchNotStarted(str(exc)) from exc
+        return binding, resource_id, resource_name
+
+    def workflow_expected_instance_id(self, *, operation_id: str, workflow: str) -> str:
+        if not operation_id:
+            raise ValueError("cloudflare_workflow_operation_id_required")
+        _, resource_id, _ = self._workflow_binding(workflow)
+        return workflow_instance_id(self.profile.account_id, resource_id, operation_id)
+
+    def workflow_instance_start(
+        self, *, operation_id: str, workflow: str, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        if not operation_id:
+            raise ValueError("cloudflare_workflow_operation_id_required")
+        _, resource_id, resource_name = self._workflow_binding(workflow)
+        encoded_params = canonical_json(
+            params, max_bytes=MAX_WORKFLOW_START_PARAMS_BYTES, code="cloudflare_workflow_start_params"
+        )
+        instance_id = self.workflow_expected_instance_id(operation_id=operation_id, workflow=workflow)
+        value = self._post(
+            f"{_API_ROOT}/accounts/{self.profile.account_id}/workflows/{quote(resource_name, safe='')}/instances",
+            self._secret(self.profile.api_token_env),
+            {"instance_id": instance_id, "params": encoded_params},
+        )
+        result = self._require_success(value)
+        if not isinstance(result, dict):
+            raise RuntimeError("cloudflare_workflow_start_result_unclassified")
+        if result.get("id") != instance_id:
+            raise RuntimeError("cloudflare_workflow_instance_id_mismatch")
+        if result.get("workflow_id") != resource_id:
+            raise RuntimeError("cloudflare_workflow_resource_id_mismatch")
+        status = require_provider_status(result.get("status"))
+        return {"instanceId": instance_id, "status": status, "workflowId": resource_id, "versionId": result.get("version_id")}
+
+    def workflow_instance_status(self, *, workflow: str, instance_id: str) -> dict[str, Any]:
+        require_workflow_instance_id(instance_id)
+        _, resource_id, resource_name = self._workflow_binding(workflow)
+        value = self._get(
+            f"{_API_ROOT}/accounts/{self.profile.account_id}/workflows/{quote(resource_name, safe='')}/instances/{quote(instance_id, safe='')}",
+            self._secret(self.profile.api_token_env),
+        )
+        result = self._require_success(value)
+        if not isinstance(result, dict):
+            raise RuntimeError("cloudflare_workflow_status_result_unclassified")
+        status = require_provider_status(result.get("status"))
+        return {"instanceId": instance_id, "workflowId": resource_id, "status": status, "evidence": result}
+
+    def workflow_instance_event(
+        self, *, operation_id: str, workflow: str, instance_id: str, event_type: str, body: dict[str, Any]
+    ) -> dict[str, Any]:
+        if not operation_id:
+            raise ValueError("cloudflare_workflow_operation_id_required")
+        require_workflow_instance_id(instance_id)
+        event_type = require_event_type(event_type)
+        _, _, resource_name = self._workflow_binding(workflow)
+        envelope = {"operationId": operation_id, "payload": body}
+        canonical_json(envelope, max_bytes=MAX_WORKFLOW_EVENT_BYTES, code="cloudflare_workflow_event_body")
+        value = self._post(
+            f"{_API_ROOT}/accounts/{self.profile.account_id}/workflows/{quote(resource_name, safe='')}/instances/{quote(instance_id, safe='')}/events/{quote(event_type, safe='')}",
+            self._secret(self.profile.api_token_env),
+            envelope,
+        )
+        result = self._require_success(value)
+        if not isinstance(result, dict):
+            raise RuntimeError("cloudflare_workflow_event_result_unclassified")
+        if result.get("instanceId") != instance_id:
+            raise RuntimeError("cloudflare_workflow_event_instance_id_mismatch")
+        timestamp = result.get("timestamp")
+        if not isinstance(timestamp, str) or not timestamp:
+            raise RuntimeError("cloudflare_workflow_event_timestamp_unclassified")
+        return {"instanceId": instance_id, "timestamp": timestamp, "eventType": event_type}
+
+    def workflow_instance_step_evidence(
+        self, *, operation_id: str, workflow: str, instance_id: str,
+        step_name: str, step_type: str, attempt: int | None = None,
+    ) -> dict[str, Any]:
+        if self.artifact_spool is None:
+            raise CloudflareDispatchNotStarted("CLOUDFLARE_WORKFLOW_STEP_ARTIFACT_SPOOL_REQUIRED")
+        if not operation_id:
+            raise ValueError("cloudflare_workflow_operation_id_required")
+        require_workflow_instance_id(instance_id)
+        if not isinstance(step_name, str) or not step_name or len(step_name) > 512:
+            raise ValueError("cloudflare_workflow_step_name_invalid")
+        if step_type not in {"step", "waitForEvent"}:
+            raise ValueError("cloudflare_workflow_step_type_invalid")
+        if attempt is not None and (isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1):
+            raise ValueError("cloudflare_workflow_step_attempt_invalid")
+        _, _, resource_name = self._workflow_binding(workflow)
+        query_data: dict[str, Any] = {"name": step_name, "type": step_type}
+        if attempt is not None:
+            query_data["attempt"] = attempt
+        url = (
+            f"{_API_ROOT}/accounts/{self.profile.account_id}/workflows/{quote(resource_name, safe='')}/"
+            f"instances/{quote(instance_id, safe='')}/step?{urlencode(query_data)}"
+        )
+        request = urllib.request.Request(
+            url, headers={"Authorization": f"Bearer {self._secret(self.profile.api_token_env)}"}, method="GET"
+        )
+        try:
+            with self.opener(request, timeout=30.0) as response:
+                raw = response.read(self.artifact_spool.max_bytes + 1)
+                headers = getattr(response, "headers", None)
+                content_type = headers.get("Content-Type") if hasattr(headers, "get") else None
+        except urllib.error.HTTPError as exc:
+            raise CloudflareProviderRejected(f"cloudflare_http_rejected:{exc.code}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError("cloudflare_transport_outcome_unclassified") from exc
+        if len(raw) > self.artifact_spool.max_bytes:
+            raise RuntimeError("cloudflare_workflow_step_artifact_too_large")
+        if not isinstance(content_type, str) or not content_type:
+            raise RuntimeError("cloudflare_workflow_step_content_type_missing")
+        media_type = content_type.split(";", 1)[0].strip().lower()
+        if media_type == "application/octet-stream":
+            manifest = self.artifact_spool.capture_workflow_step(
+                operation_id=operation_id, data=raw, media_type=media_type
+            )
+            return {
+                "kind": "binary", "artifactRef": manifest["ref"],
+                "artifactSha256": manifest["sha256"], "artifactBytes": manifest["bytes"],
+                "mediaType": manifest["mediaType"], "artifactAction": manifest["action"],
+            }
+        if media_type != "application/json":
+            raise RuntimeError("cloudflare_workflow_step_content_type_unclassified")
+        try:
+            value = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("cloudflare_workflow_step_json_unclassified") from exc
+        if not isinstance(value, dict):
+            raise RuntimeError("cloudflare_workflow_step_result_unclassified")
+        result = self._require_success(value)
+        if not isinstance(result, dict):
+            raise RuntimeError("cloudflare_workflow_step_result_unclassified")
+        status = require_provider_status(result.get("status"))
+        return {
+            "kind": "json", "status": status, "error": result.get("error"),
+            "output": result.get("output"), "eventType": result.get("event_type"),
+        }
 
     def worker_request(
         self,

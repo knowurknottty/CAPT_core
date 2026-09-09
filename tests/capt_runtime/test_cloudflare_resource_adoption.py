@@ -254,3 +254,34 @@ def test_non_worker_adoption_rejects_target_endpoint():
             kind=CloudflareResourceKind.D1_DATABASE, resource_id="db-1", resource_name="capt-state",
             target_alias="capt-state", created_at=CREATED, target_endpoint="https://example.com",
         )
+
+
+def test_workflow_adoption_round_trip_binds_no_endpoint_and_replays(tmp_path):
+    inv = parse_cloudflare_resource_inventory(
+        account_id="acct-1", d1_rows=[], queue_rows=[], worker_rows=[],
+        workflow_rows=[{"id": "wf-1", "name": "capt-mission", "script_name": "capt-control"}],
+        fetched_at=datetime(2026, 9, 9, 5, 19, tzinfo=timezone.utc),
+    )
+    prop = CloudflareResourceAdoptionProposal.from_inventory(
+        inv, proposal_id="cf-workflow-adopt-1", mission_id="m-1", task_id="t-1",
+        kind=CloudflareResourceKind.WORKFLOW, resource_id="wf-1", resource_name="capt-mission",
+        target_alias="capt-mission", created_at=CREATED,
+    )
+    assert prop.target_endpoint is None
+    request = prop.human_approval_request(
+        request_id="cf-workflow-approval-1",
+        requested_by={"actorId": "exec-1", "kind": "execution_plane"},
+        expires_at=EXPIRES, correlation_id="corr-cloudflare-adoption",
+    )
+    assert request["scope"]["adoptionBinding"]["targetEndpoint"] is None
+    store = EventStore(str(tmp_path / "ledger.db"))
+    svc = GovernedRuntimeService(store)
+    svc.request_human_approval(request, meta("cf-workflow-request-1", "execution_plane"))
+    svc.submit_human_approval_decision({"schemaVersion": "1.0.0", "requestId": "cf-workflow-approval-1", "decision": "approve", "operatorId": "operator-1", "decidedAt": APPROVED, "note": None, "idempotencyKey": "cf-workflow-decision-1", "correlationId": "corr-cloudflare-adoption", "sessionId": "sess-1"}, meta("cf-workflow-decision-1", "human", issued_at=APPROVED), now=APPROVED)
+    result = svc.bind_cloudflare_resource_adoption(prop, request_id="cf-workflow-approval-1", binding_id="cf-workflow-binding-1", use_id="cf-workflow-use-1", now=BOUND, metadata=meta("cf-workflow-bind-1", "execution_plane", issued_at=BOUND))
+    assert result["binding"]["resourceKind"] == "workflow"
+    assert result["binding"]["targetEndpoint"] is None
+    assert CloudflareResourceBindingRegistry(store).resolve("acct-1", CloudflareResourceKind.WORKFLOW, "capt-mission") == result["binding"]
+    replayed = full_replay(store)
+    assert replayed.aggregates["cloudflare_resource_binding-cf-workflow-binding-1"] == result["binding"]
+    store.close()

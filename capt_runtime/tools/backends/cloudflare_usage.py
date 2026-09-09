@@ -69,6 +69,7 @@ class CloudflareUsageLedger:
             "workers_ai_neurons": 0,
             "d1_rows_read": 0,
             "d1_rows_written": 0,
+            "workflow_steps": 0,
         }
         for row in rows:
             if row["state"] == "released":
@@ -80,6 +81,7 @@ class CloudflareUsageLedger:
             totals["workers_ai_neurons"] += int(estimate["ai_neurons"])
             totals["d1_rows_read"] += int(estimate["d1_rows_read"])
             totals["d1_rows_written"] += int(estimate["d1_rows_written"])
+            totals["workflow_steps"] += int(estimate.get("workflow_steps", 0))
         return CloudflareUsageSnapshot(**totals)
 
     def _snapshot_unlocked(self, day: date) -> CloudflareUsageSnapshot:
@@ -149,6 +151,42 @@ class CloudflareUsageLedger:
             except Exception:
                 self._db.rollback()
                 raise
+
+    def reservation(self, operation_id: str) -> dict[str, str] | None:
+        if not operation_id:
+            raise ValueError("cloudflare_operation_id_required")
+        with self._lock:
+            row = self._db.execute(
+                "SELECT operation_id, day, work_class, request_digest, state FROM cloudflare_usage_reservations WHERE operation_id=?",
+                (operation_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "operationId": row["operation_id"], "day": row["day"],
+            "workClass": row["work_class"], "requestDigest": row["request_digest"],
+            "state": row["state"],
+        }
+
+    def require_reservation_match(
+        self,
+        operation_id: str,
+        work_class: str,
+        estimate: CloudflareFreeEstimate,
+        *,
+        day: date,
+    ) -> dict[str, str]:
+        existing = self.reservation(operation_id)
+        if existing is None:
+            raise KeyError(operation_id)
+        expected_digest = _digest(work_class, estimate, day)
+        if existing["day"] != day.isoformat():
+            raise AuthorityViolation("CLOUDFLARE_USAGE_RESERVATION_DAY_MISMATCH")
+        if existing["workClass"] != work_class:
+            raise AuthorityViolation("CLOUDFLARE_USAGE_RESERVATION_WORK_CLASS_MISMATCH")
+        if existing["requestDigest"] != expected_digest:
+            raise AuthorityViolation("CLOUDFLARE_USAGE_RESERVATION_DIGEST_MISMATCH")
+        return existing
 
     def release(self, operation_id: str, *, reason: str) -> None:
         if not reason:

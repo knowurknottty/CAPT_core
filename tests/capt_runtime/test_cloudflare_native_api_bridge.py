@@ -322,6 +322,7 @@ def test_resource_inventory_uses_get_only_and_returns_unadopted_candidates(monke
         {"success": True, "result": [{"uuid": "db-1", "name": "capt-state"}], "result_info": {"page": 1, "total_pages": 1}},
         {"success": True, "result": [{"queue_id": "q-1", "queue_name": "capt-delegates"}]},
         {"success": True, "result": [{"id": "capt-control"}]},
+        {"success": True, "result": [], "result_info": {"page": 1, "total_pages": 1}},
     ])
     bridge = CloudflareNativeAPIBridge(_profile(), opener=opener, now=lambda: now, binding_registry=_binding_registry())
     inventory = bridge.resource_inventory()
@@ -334,6 +335,7 @@ def test_resource_inventory_uses_get_only_and_returns_unadopted_candidates(monke
     assert any("/accounts/acct-1/d1/database?" in url for url in urls)
     assert any(url.endswith("/accounts/acct-1/queues") for url in urls)
     assert any(url.endswith("/accounts/acct-1/workers/scripts") for url in urls)
+    assert any("/accounts/acct-1/workflows?" in url for url in urls)
     assert not hasattr(bridge, "adopt_resource")
     assert not hasattr(bridge, "create_resource")
 

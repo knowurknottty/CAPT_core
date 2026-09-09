@@ -16,6 +16,7 @@ class CloudflareResourceKind(str, Enum):
     D1_DATABASE = "d1_database"
     QUEUE = "queue"
     WORKER_SCRIPT = "worker_script"
+    WORKFLOW = "workflow"
 
 
 @dataclass(frozen=True, order=True)
@@ -89,6 +90,7 @@ def parse_cloudflare_resource_inventory(
     queue_rows: Any,
     worker_rows: Any,
     fetched_at: datetime,
+    workflow_rows: Any = None,
 ) -> CloudflareResourceInventorySnapshot:
     resources: list[CloudflareResourceCandidate] = []
     for row in _require_rows(d1_rows, "cloudflare_d1_inventory_invalid"):
@@ -97,6 +99,12 @@ def parse_cloudflare_resource_inventory(
         resources.append(CloudflareResourceCandidate(CloudflareResourceKind.QUEUE, row.get("queue_id"), row.get("queue_name")))
     for row in _require_rows(worker_rows, "cloudflare_worker_inventory_invalid"):
         resources.append(CloudflareResourceCandidate(CloudflareResourceKind.WORKER_SCRIPT, row.get("id"), row.get("id")))
+    for row in _require_rows(workflow_rows or [], "cloudflare_workflow_inventory_invalid"):
+        resources.append(
+            CloudflareResourceCandidate(
+                CloudflareResourceKind.WORKFLOW, row.get("id"), row.get("name")
+            )
+        )
     seen: set[tuple[str, str]] = set()
     for resource in resources:
         key = (resource.kind.value, resource.resource_id)

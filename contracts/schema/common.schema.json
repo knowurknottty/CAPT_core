@@ -2025,7 +2025,8 @@
       "enum": [
         "d1_database",
         "queue",
-        "worker_script"
+        "worker_script",
+        "workflow"
       ]
     },
     "CloudflareResourceBinding": {

@@ -46,6 +46,7 @@ from .tools.backends.cloudflare_native import (
     CloudflareQueueDelegator,
     CloudflareWorkersAIInferencer,
     CloudflareWorkersCoordinator,
+    CloudflareWorkflowOrchestrator,
 )
 from .tools.backends.cloudflare_native_api import (
     CloudflareNativeAPIBridge,
@@ -240,6 +241,7 @@ def create_runtime(
             d1=CloudflareD1StateStore(cloudflare_free_planner, native_bridge),
             browser=CloudflareBrowserRunner(cloudflare_free_planner, native_bridge),
             ai=CloudflareWorkersAIInferencer(cloudflare_free_planner, native_bridge),
+            workflows=CloudflareWorkflowOrchestrator(cloudflare_free_planner, native_bridge),
         )
     cloudflare_terminal = CloudflareTerminalToolAdapter(
         CloudflareSandboxBackend(cloudflare_profile_registry)

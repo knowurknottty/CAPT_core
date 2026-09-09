@@ -35,6 +35,9 @@ def test_runtime_constructs_all_native_surfaces_without_network_call(tmp_path):
         assert native.d1 is not None
         assert native.browser is not None
         assert native.ai is not None
+        assert native.workflows is not None
+        assert native.workflows.bridge is native.queues.bridge
+        assert native.workflows.planner is runtime.cloudflare_free_planner
         assert native.queues.bridge.binding_registry is not None
         assert native.queues.bridge.binding_registry.store is runtime.store
         assert runtime.cloudflare_artifact_spool is not None
