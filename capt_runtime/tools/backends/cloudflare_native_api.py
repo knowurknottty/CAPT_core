@@ -20,6 +20,7 @@ from .cloudflare_ai_catalog import (
     CloudflareAIModelCatalogSnapshot,
     parse_cloudflare_ai_model_catalog,
 )
+from .cloudflare_artifacts import CloudflareBinaryArtifactSpool
 from .cloudflare_native import CloudflareBrowserAction, CloudflareDispatchNotStarted
 from .cloudflare_resource_inventory import (
     CloudflareResourceInventorySnapshot,
@@ -79,11 +80,13 @@ class CloudflareNativeAPIBridge:
         opener: Callable[..., Any] = urllib.request.urlopen,
         now: Callable[[], datetime] | None = None,
         binding_registry: CloudflareResourceBindingRegistry | None = None,
+        artifact_spool: CloudflareBinaryArtifactSpool | None = None,
     ) -> None:
         self.profile = profile
         self.opener = opener
         self.now = now or (lambda: datetime.now(timezone.utc))
         self.binding_registry = binding_registry
+        self.artifact_spool = artifact_spool
 
     def _require_binding(self, kind: CloudflareResourceKind, target_alias: str) -> dict[str, Any]:
         if self.binding_registry is None:
@@ -126,6 +129,48 @@ class CloudflareNativeAPIBridge:
         if not isinstance(value, dict):
             raise RuntimeError("cloudflare_response_root_unclassified")
         return value
+
+    def _post_binary(
+        self, url: str, token: str, payload: dict[str, Any]
+    ) -> tuple[bytes, str]:
+        if self.artifact_spool is None:
+            raise CloudflareDispatchNotStarted(
+                "CLOUDFLARE_BROWSER_BINARY_ARTIFACT_SPOOL_REQUIRED"
+            )
+        request = urllib.request.Request(
+            url,
+            data=json.dumps(payload, separators=(",", ":")).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with self.opener(request, timeout=30.0) as response:
+                raw = response.read(self.artifact_spool.max_bytes + 1)
+                headers = getattr(response, "headers", None)
+                content_type = headers.get("Content-Type") if hasattr(headers, "get") else None
+        except urllib.error.HTTPError as exc:
+            raise CloudflareProviderRejected(
+                f"cloudflare_http_rejected:{exc.code}"
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError("cloudflare_transport_outcome_unclassified") from exc
+        if len(raw) > self.artifact_spool.max_bytes:
+            raise RuntimeError("cloudflare_browser_binary_artifact_too_large")
+        if not isinstance(content_type, str) or not content_type:
+            raise RuntimeError("cloudflare_browser_binary_content_type_missing")
+        media_type = content_type.split(";", 1)[0].strip().lower()
+        if media_type == "application/json":
+            try:
+                value = json.loads(raw.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise RuntimeError("cloudflare_browser_binary_json_unclassified") from exc
+            if isinstance(value, dict) and value.get("success") is False:
+                self._require_success(value)
+            raise RuntimeError("cloudflare_browser_binary_response_unclassified")
+        return raw, media_type
 
     def _get(self, url: str, token: str) -> dict[str, Any]:
         request = urllib.request.Request(
@@ -368,19 +413,43 @@ class CloudflareNativeAPIBridge:
     ) -> dict[str, Any]:
         if not isinstance(action, CloudflareBrowserAction):
             raise AuthorityViolation("CLOUDFLARE_BROWSER_ACTION_INVALID")
-        if action in {CloudflareBrowserAction.PDF, CloudflareBrowserAction.SCREENSHOT}:
-            raise CloudflareDispatchNotStarted(
-                "CLOUDFLARE_BROWSER_BINARY_ARTIFACT_CAPTURE_NOT_IMPLEMENTED"
-            )
         url = (
             f"{_API_ROOT}/accounts/{self.profile.account_id}/browser-rendering/"
             f"{action.value}"
         )
-        value = self._post(
-            url,
-            self._secret(self.profile.api_token_env),
-            arguments,
-        )
+        if action in {CloudflareBrowserAction.PDF, CloudflareBrowserAction.SCREENSHOT}:
+            if self.artifact_spool is None:
+                raise CloudflareDispatchNotStarted(
+                    "CLOUDFLARE_BROWSER_BINARY_ARTIFACT_SPOOL_REQUIRED"
+                )
+            token = self._secret(self.profile.api_token_env)
+            if action is CloudflareBrowserAction.SCREENSHOT:
+                url += "?encoding=binary"
+            artifact_bytes, media_type = self._post_binary(url, token, arguments)
+            allowed_media = (
+                {"image/png", "image/jpeg", "image/webp"}
+                if action is CloudflareBrowserAction.SCREENSHOT
+                else {"application/pdf"}
+            )
+            if media_type not in allowed_media:
+                raise RuntimeError("cloudflare_browser_binary_media_type_mismatch")
+            manifest = self.artifact_spool.capture(
+                operation_id=operation_id,
+                action=action,
+                media_type=media_type,
+                data=artifact_bytes,
+            )
+            return {
+                "browserSeconds": estimated_seconds,
+                "artifactRef": manifest["ref"],
+                "artifactSha256": manifest["sha256"],
+                "artifactBytes": manifest["bytes"],
+                "mediaType": manifest["mediaType"],
+                "artifactAction": manifest["action"],
+                "usageBasis": "reserved_ceiling",
+            }
+        token = self._secret(self.profile.api_token_env)
+        value = self._post(url, token, arguments)
         result = self._require_success(value)
         if isinstance(result, str):
             artifact_bytes = result.encode("utf-8")

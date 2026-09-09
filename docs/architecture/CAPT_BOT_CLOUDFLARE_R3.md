@@ -63,7 +63,7 @@ The reservation bucket date is derived from the planner's timezone-aware UTC clo
 
 Existing-resource API failures that are provably pre-dispatch—missing secret references, unconfigured Queue/D1 resources, or invalid Worker routes—raise `CloudflareDispatchNotStarted`, allowing the reservation to be released. Transport or provider-outcome ambiguity after dispatch remains locked and becomes `CloudflareNativeIndeterminate`.
 
-Browser/Workers-AI metering carries an explicit `usageBasis`: `provider_reported` or `reserved_ceiling`. CAPT never relabels its estimate as provider measurement. Browser `content` and `scrape` results receive SHA-256-bound artifact identities. `pdf` and `screenshot` are intentionally blocked before dispatch until binary artifact capture/evidence spooling is implemented.
+Browser/Workers-AI metering carries an explicit `usageBasis`: `provider_reported` or `reserved_ceiling`. CAPT never relabels its estimate as provider measurement. Browser `content` and `scrape` results receive SHA-256-bound artifact identities. Binary `pdf` and `screenshot` responses are captured only when a runtime-owned private artifact spool is present; absent spool state fails before secret resolution or provider dispatch.
 
 
 ## Workers AI Catalog Authority Closure
@@ -93,3 +93,12 @@ A proposal is converted into an existing `HumanApprovalRequest` with `operation=
 `CloudflareResourceBindingRegistry` resolves only active durable bindings and revalidates each binding SHA-256 before returning it. Queue and D1 provider IDs come from this registry, never profile maps. Coordination Worker dispatch requires both the adopted Worker-script alias and an exact endpoint match before secret lookup or network dispatch. Missing, ambiguous, corrupt, or endpoint-mismatched bindings fail pre-dispatch and therefore cannot consume Cloudflare quota. Full event-ledger replay reconstructs both the consumed approval and the resulting binding.
 
 No live Cloudflare resource was adopted while implementing this closure. The eight previously observed D1 databases remain unadopted discovery candidates, and no Queue or Worker was created or deployed.
+
+
+## Browser Binary Evidence Closure
+
+Browser Run `screenshot` and `pdf` use a separate bounded binary response path rather than the JSON response decoder. Screenshot requests explicitly select `encoding=binary`; PDF consumes the raw PDF response. Provider content type is part of the evidence contract: screenshots accept only PNG/JPEG/WebP media types and PDF accepts only `application/pdf`. A mismatched or otherwise unclassified response occurs after dispatch and is therefore indeterminate; the Browser quota reservation remains locked for reconciliation.
+
+`CloudflareBinaryArtifactSpool` is runtime-owned at `<ledger>.cloudflare-artifacts`, with a private `0700` directory and `0600` artifact/metadata files where supported. Binary artifacts are capped at 32 MiB, receive an opaque `cloudflare-artifact://` identity, SHA-256 digest, byte count, media type, action, and operation binding. Reads are limited to 64 KiB per request and reject wrong-operation access. Each read revalidates file size, metadata/token identity, and content SHA-256 before returning base64-encoded bytes, so same-size local corruption is detected.
+
+`CloudflareBrowserResult` preserves the binary manifest rather than collapsing it to an untyped reference. Runtime composition creates the spool only when the native Cloudflare profile is enabled and injects the same instance into the native API bridge. `content` and `scrape` semantics are unchanged. No live Browser Run request was made while implementing or verifying this closure.

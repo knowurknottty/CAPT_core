@@ -229,7 +229,7 @@ def test_browser_content_artifact_identity_binds_provider_result(monkeypatch):
     assert result["artifactRef"] != "capt:browser-bound"
 
 
-def test_binary_browser_actions_are_blocked_before_dispatch(monkeypatch):
+def test_binary_browser_actions_require_local_spool_before_dispatch(monkeypatch):
     from capt_runtime.tools.backends.cloudflare_native import (
         CloudflareDispatchNotStarted,
     )
@@ -241,7 +241,7 @@ def test_binary_browser_actions_are_blocked_before_dispatch(monkeypatch):
     for action in (CloudflareBrowserAction.PDF, CloudflareBrowserAction.SCREENSHOT):
         with pytest.raises(
             CloudflareDispatchNotStarted,
-            match="CLOUDFLARE_BROWSER_BINARY_ARTIFACT_CAPTURE_NOT_IMPLEMENTED",
+            match="CLOUDFLARE_BROWSER_BINARY_ARTIFACT_SPOOL_REQUIRED",
         ):
             bridge.browser_run(
                 operation_id=f"browser-{action.value}",
@@ -249,6 +249,29 @@ def test_binary_browser_actions_are_blocked_before_dispatch(monkeypatch):
                 arguments={"url": "https://example.com"},
                 estimated_seconds=3,
             )
+    assert opener.calls == []
+
+
+def test_binary_spool_requirement_precedes_secret_resolution(monkeypatch):
+    from capt_runtime.tools.backends.cloudflare_native import (
+        CloudflareDispatchNotStarted,
+    )
+
+    monkeypatch.delenv("CF_API_TOKEN", raising=False)
+    opener = Recorder([])
+    bridge = CloudflareNativeAPIBridge(
+        _profile(), opener=opener, binding_registry=_binding_registry()
+    )
+    with pytest.raises(
+        CloudflareDispatchNotStarted,
+        match="CLOUDFLARE_BROWSER_BINARY_ARTIFACT_SPOOL_REQUIRED",
+    ):
+        bridge.browser_run(
+            operation_id="browser-no-spool-no-secret",
+            action=CloudflareBrowserAction.PDF,
+            arguments={"url": "https://example.com"},
+            estimated_seconds=2,
+        )
     assert opener.calls == []
 
 

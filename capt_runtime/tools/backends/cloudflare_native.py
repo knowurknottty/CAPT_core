@@ -151,6 +151,10 @@ class CloudflareBrowserResult:
     artifact_ref: str
     browser_seconds: int
     usage_basis: str
+    artifact_sha256: str | None = None
+    artifact_bytes: int | None = None
+    media_type: str | None = None
+    artifact_action: str | None = None
     effect: str = "browser_run_completed"
 
 
@@ -285,6 +289,10 @@ class CloudflareBrowserRunner:
         seconds = response.get("browserSeconds")
         artifact_ref = response.get("artifactRef")
         usage_basis = response.get("usageBasis")
+        artifact_sha256 = response.get("artifactSha256")
+        artifact_bytes = response.get("artifactBytes")
+        media_type = response.get("mediaType")
+        artifact_action = response.get("artifactAction")
         if not isinstance(seconds, int) or seconds < 0:
             raise CloudflareNativeIndeterminate("browser_usage_evidence_unclassified")
         if not isinstance(artifact_ref, str) or not artifact_ref:
@@ -295,8 +303,28 @@ class CloudflareBrowserRunner:
             raise CloudflareNativeIndeterminate("browser_reserved_ceiling_mismatch")
         if usage_basis == "provider_reported" and seconds > estimated_seconds:
             raise CloudflareNativeIndeterminate("browser_actual_usage_exceeded_reservation")
+        if action in {CloudflareBrowserAction.PDF, CloudflareBrowserAction.SCREENSHOT}:
+            if not artifact_ref.startswith("cloudflare-artifact://"):
+                raise CloudflareNativeIndeterminate("browser_binary_artifact_ref_unclassified")
+            if not isinstance(artifact_sha256, str) or not artifact_sha256.startswith("sha256:"):
+                raise CloudflareNativeIndeterminate("browser_binary_artifact_digest_unclassified")
+            if isinstance(artifact_bytes, bool) or not isinstance(artifact_bytes, int) or artifact_bytes < 1:
+                raise CloudflareNativeIndeterminate("browser_binary_artifact_size_unclassified")
+            if not isinstance(media_type, str) or not media_type:
+                raise CloudflareNativeIndeterminate("browser_binary_artifact_media_type_unclassified")
+            if artifact_action != action.value:
+                raise CloudflareNativeIndeterminate("browser_binary_artifact_action_mismatch")
         self.planner.ledger.commit(operation_id)
-        return CloudflareBrowserResult(operation_id, artifact_ref, seconds, usage_basis)
+        return CloudflareBrowserResult(
+            operation_id=operation_id,
+            artifact_ref=artifact_ref,
+            browser_seconds=seconds,
+            usage_basis=usage_basis,
+            artifact_sha256=artifact_sha256,
+            artifact_bytes=artifact_bytes,
+            media_type=media_type,
+            artifact_action=artifact_action,
+        )
 
 
 class CloudflareWorkersAIInferencer:

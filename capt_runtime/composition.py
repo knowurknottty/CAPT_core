@@ -36,6 +36,7 @@ from .tools.backends.cloudflare import (
     CloudflareSandboxProfile,
     CloudflareSandboxProfileRegistry,
 )
+from .tools.backends.cloudflare_artifacts import CloudflareBinaryArtifactSpool
 from .tools.backends.cloudflare_free_planner import CloudflareFreeExecutionPlanner
 from .tools.backends.cloudflare_free_router import CloudflareFreeTierRouter
 from .tools.backends.cloudflare_native import (
@@ -84,6 +85,7 @@ class RuntimeComposition:
     cloudflare_profile_registry: CloudflareSandboxProfileRegistry
     cloudflare_usage_ledger: CloudflareUsageLedger
     cloudflare_free_planner: CloudflareFreeExecutionPlanner
+    cloudflare_artifact_spool: CloudflareBinaryArtifactSpool | None
     cloudflare_native: CloudflareNativeSurfaces | None
     mcp_manager: MCPManager | None
 
@@ -221,11 +223,16 @@ def create_runtime(
     cloudflare_free_planner = CloudflareFreeExecutionPlanner(
         cloudflare_usage_ledger, cloudflare_free_router
     )
+    cloudflare_artifact_spool = None
     cloudflare_native = None
     if cloudflare_native_profile is not None:
+        cloudflare_artifact_spool = CloudflareBinaryArtifactSpool(
+            ledger + ".cloudflare-artifacts"
+        )
         native_bridge = CloudflareNativeAPIBridge(
             cloudflare_native_profile,
             binding_registry=CloudflareResourceBindingRegistry(store),
+            artifact_spool=cloudflare_artifact_spool,
         )
         cloudflare_native = CloudflareNativeSurfaces(
             workers=CloudflareWorkersCoordinator(cloudflare_free_planner, native_bridge),
@@ -275,6 +282,7 @@ def create_runtime(
         cloudflare_profile_registry=cloudflare_profile_registry,
         cloudflare_usage_ledger=cloudflare_usage_ledger,
         cloudflare_free_planner=cloudflare_free_planner,
+        cloudflare_artifact_spool=cloudflare_artifact_spool,
         cloudflare_native=cloudflare_native,
         mcp_manager=mcp_manager,
     )
