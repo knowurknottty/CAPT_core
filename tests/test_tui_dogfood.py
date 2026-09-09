@@ -173,6 +173,13 @@ def test_provider_switch_invalidates_model_and_rebinds(monkeypatch):
     asyncio.run(run())
 
 
+def test_unmounted_model_filter_change_is_ignored(monkeypatch):
+    app = _app(monkeypatch)
+    event = SimpleNamespace(input=SimpleNamespace(id="model-filter", is_mounted=False))
+
+    app.on_input_changed(event)
+
+
 def test_model_filter_cannot_change_command_selection_to_other_provider(monkeypatch):
     app = _app(monkeypatch)
 

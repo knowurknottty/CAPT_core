@@ -473,6 +473,8 @@ class CaptTUI(App):
             self._invalidate_prompt_proposal()
 
     def on_input_changed(self, event: Input.Changed) -> None:
+        if not event.input.is_mounted:
+            return
         if event.input.id == "model-filter":
             self._apply_model_filter()
         elif event.input.id == "target-root":
