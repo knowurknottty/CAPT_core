@@ -228,3 +228,44 @@ extension CAPTNativeSessionStoreTests {
         XCTAssertFalse(String(data: try Data(contentsOf: file), encoding: .utf8)?.contains("private prompt") ?? false)
     }
 }
+
+extension CAPTNativeSessionStoreTests {
+    func testLegacyRuntimeReceiptAssistantMessageMigratesToObservationSummary() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let file = root.appendingPathComponent("native_sessions.enc")
+        let store = CAPTEncryptedSessionStore(
+            fileURL: file,
+            keyProvider: StaticSessionKeyProvider(bytes: Data(repeating: 0x61, count: 32))
+        )
+        let receipt = #"{"status":"accepted","classification":"accepted","commandId":"cmd-old","sessionId":"sess-old","result":{"driverRunId":"dr-old","observations":[{"summary":"CAPT_MAC_FALLBACK_GOLDEN"}]}}"#
+        try store.save([CAPTNativeSession(
+            title: "legacy receipt",
+            messages: [CAPTChatMessage(role: .assistant, text: receipt, authorityState: "awaiting_verification")],
+            provider: "openrouter", model: "glm", targetRoot: "/repo"
+        )])
+
+        let restored = try store.load()
+
+        XCTAssertEqual(restored.first?.messages.first?.text, "CAPT_MAC_FALLBACK_GOLDEN")
+        XCTAssertEqual(restored.first?.messages.first?.authorityState, "awaiting_verification")
+    }
+
+    func testArbitraryAssistantJSONIsNotRewrittenByReceiptMigration() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let file = root.appendingPathComponent("native_sessions.enc")
+        let store = CAPTEncryptedSessionStore(
+            fileURL: file,
+            keyProvider: StaticSessionKeyProvider(bytes: Data(repeating: 0x62, count: 32))
+        )
+        let json = #"{"result":{"observations":[{"summary":"user data"}]}}"#
+        try store.save([CAPTNativeSession(
+            title: "json response",
+            messages: [CAPTChatMessage(role: .assistant, text: json)],
+            provider: "ollama", model: "qwen", targetRoot: "/repo"
+        )])
+
+        XCTAssertEqual(try store.load().first?.messages.first?.text, json)
+    }
+}

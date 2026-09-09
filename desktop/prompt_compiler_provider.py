@@ -6,6 +6,7 @@ compiler may enhance a prompt before a different provider/model executes it.
 from __future__ import annotations
 
 import json
+import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -224,8 +225,11 @@ class OpenAICompatiblePromptCompilerTransport:
         try:
             with urllib.request.urlopen(request, timeout=min(self.timeout_seconds, 5)) as response:
                 raw = response.read(_MAX_RESPONSE_BYTES + 1)
-        except OSError:
+        except urllib.error.HTTPError:
+            # Endpoint is reachable but may not implement model discovery.
             return self.selection.model
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            raise OSError("prompt compiler endpoint unavailable") from exc
         if len(raw) > _MAX_RESPONSE_BYTES:
             raise ValueError("prompt compiler model discovery exceeded byte limit")
         try:
@@ -343,7 +347,11 @@ class FailoverPromptCompiler:
             except (OSError, TimeoutError, ValueError) as exc:
                 last_error = exc
         if last_error is not None:
-            raise last_error
+            # Prompt enhancement is optional. Preserve the literal human prompt in
+            # a durable compiler_unavailable proposal instead of turning compiler
+            # availability into an execution dependency.
+            from capt_runtime.prompt_compiler import PromptCompiler
+            return PromptCompiler().compile(request)
         raise ValueError("no configured prompt compiler available")
 
 
@@ -356,7 +364,9 @@ def build_prompt_compiler(ui_config_dir: Path):
             compilers.append(compiler)
     if not compilers:
         return None
-    return compilers[0] if len(compilers) == 1 else FailoverPromptCompiler(compilers)
+    # Even a single configured compiler is wrapped so transient availability
+    # failures degrade to an original-selectable proposal rather than escaping.
+    return FailoverPromptCompiler(compilers)
 
 
 def build_local_prompt_compiler(ui_config_dir: Path):

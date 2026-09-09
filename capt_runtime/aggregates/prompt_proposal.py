@@ -28,6 +28,9 @@ class PromptProposalAggregate(object):
             "prompt_proposal.effectiveContextBudget",
             "prompt_proposal.capabilityRequests",
             "prompt_proposal.verificationContract",
+            "prompt_proposal.compilationStatus",
+            "prompt_proposal.rationale",
+            "prompt_proposal.unresolvedQuestions",
             "prompt_proposal.state",
             "prompt_proposal.revision",
             "prompt_proposal.cancelReason",
@@ -47,7 +50,7 @@ class PromptProposalAggregate(object):
         proposed = str(proposal["proposedPrompt"])
         if not original or not proposed:
             raise ValueError("prompt proposal originalPrompt and proposedPrompt are required")
-        return {
+        state = {
             "proposalId": proposal["proposalId"],
             "originalPrompt": original,
             "originalPromptDigest": digest(original),
@@ -67,6 +70,13 @@ class PromptProposalAggregate(object):
             "revision": 0,
             "cancelReason": None,
         }
+        if "compilationStatus" in proposal:
+            state["compilationStatus"] = str(proposal["compilationStatus"])
+        if "rationale" in proposal:
+            state["rationale"] = str(proposal["rationale"])
+        if "unresolvedQuestions" in proposal:
+            state["unresolvedQuestions"] = list(proposal["unresolvedQuestions"])
+        return state
 
     @staticmethod
     def revise(state: Dict[str, Any], revision: Dict[str, Any]) -> Dict[str, Any]:

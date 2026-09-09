@@ -173,3 +173,79 @@ def test_remote_glm_malformed_stage_falls_back_to_configured_local_compiler(monk
     assert proposal.stage_records[0].model == "Youssofal/Qwen3.8-27B-MTPLX-Optimized-Speed"
     assert calls[0] == "https://openrouter.ai/api/v1/chat/completions"
     assert "http://127.0.0.1:18085/v1/chat/completions" in calls
+
+
+def test_unreachable_single_local_compiler_degrades_to_original_proposal(monkeypatch, tmp_path):
+    from urllib.error import URLError
+    from desktop.prompt_compiler_provider import build_prompt_compiler
+    from capt_runtime.prompt_compiler import PromptCompileRequest
+
+    ui = tmp_path / "ui"
+    ui.mkdir()
+    providers = _providers()
+    providers["providers"] = [providers["providers"][1]]
+    (ui / "providers.json").write_text(json.dumps(providers))
+    (ui / "models.json").write_text(json.dumps({"default": {"provider": "mtplx", "model": "Youssofal/Qwen3.8-27B-MTPLX-Optimized-Speed"}}))
+
+    monkeypatch.setattr(
+        "desktop.prompt_compiler_provider.urllib.request.urlopen",
+        lambda *_a, **_k: (_ for _ in ()).throw(URLError("connection refused")),
+    )
+
+    compiler = build_prompt_compiler(ui)
+    proposal = compiler.compile(PromptCompileRequest(
+        original_prompt="Preserve this literal prompt.", requested_engine="OMNI",
+        execution_provider="openrouter", execution_model="google/gemini-3.8-flash",
+    ))
+
+    assert proposal.status == "compiler_unavailable"
+    assert proposal.proposed_prompt == "Preserve this literal prompt."
+    assert proposal.stage_records
+    assert all(record.execution_enabled is False for record in proposal.stage_records)
+
+
+def test_unreachable_local_preference_fails_over_before_chat_dispatch(monkeypatch, tmp_path):
+    from urllib.error import URLError
+    from desktop.prompt_compiler_provider import build_prompt_compiler
+    from capt_runtime.prompt_compiler import PromptCompileRequest
+
+    ui = tmp_path / "ui"
+    ui.mkdir()
+    providers = {
+        "providers": [
+            {"id": "dead", "kind": "local", "transport": "openai_compatible", "base_url": "http://127.0.0.1:18085/v1", "enabled": True, "models": ["dead-model"]},
+            {"id": "live", "kind": "local", "transport": "openai_compatible", "base_url": "http://127.0.0.1:18086/v1", "enabled": True, "models": ["live-model"]},
+        ]
+    }
+    (ui / "providers.json").write_text(json.dumps(providers))
+    (ui / "prompt-compiler.json").write_text(json.dumps({"preferences": [
+        {"provider": "dead", "model": "dead-model"},
+        {"provider": "live", "model": "live-model"},
+    ]}))
+    calls = []
+
+    class Response:
+        def __init__(self, payload): self.payload = payload
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+        def read(self, _limit=-1): return json.dumps(self.payload).encode()
+
+    stage = {"stage": "OMNI", "outcome": "enhanced", "scope": "prompt", "inputs": [], "outputs": ["x"], "constraints": [], "successCriteria": ["clear"], "ambiguities": [], "requestedCapabilities": []}
+
+    def fake_urlopen(request, timeout):
+        calls.append(request.full_url)
+        if request.full_url == "http://127.0.0.1:18085/v1/models":
+            raise URLError("connection refused")
+        if request.full_url == "http://127.0.0.1:18086/v1/models":
+            return Response({"data": [{"id": "live-model"}]})
+        if request.full_url == "http://127.0.0.1:18086/v1/chat/completions":
+            return Response({"choices": [{"message": {"content": json.dumps(stage)}}]})
+        raise AssertionError(request.full_url)
+
+    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen", fake_urlopen)
+    compiler = build_prompt_compiler(ui)
+    proposal = compiler.compile(PromptCompileRequest(original_prompt="Enhance safely.", requested_engine="OMNI"))
+
+    assert proposal.status == "ready_for_approval"
+    assert proposal.stage_records[0].provider_id == "live"
+    assert "http://127.0.0.1:18085/v1/chat/completions" not in calls

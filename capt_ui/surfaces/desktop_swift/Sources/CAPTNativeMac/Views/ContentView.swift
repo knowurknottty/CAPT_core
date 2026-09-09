@@ -3,20 +3,25 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var store: CAPTOperatorStore
     @Binding var selection: CAPTSidebarSection
+    @State private var inspectorVisible = true
 
     var body: some View {
         NavigationSplitView {
             SidebarView(selection: $selection, store: store)
-                .navigationSplitViewColumnWidth(min: 170, ideal: 210, max: 260)
+                .navigationSplitViewColumnWidth(min: 184, ideal: 224, max: 278)
         } detail: {
             VStack(spacing: 0) {
-                HSplitView {
+                if inspectorVisible {
+                    HSplitView {
+                        primaryView
+                            .frame(minWidth: 590)
+                        InspectorView(store: store)
+                            .frame(minWidth: 284, idealWidth: 320, maxWidth: 390)
+                    }
+                } else {
                     primaryView
-                        .frame(minWidth: 560)
-                    InspectorView(store: store)
-                        .frame(minWidth: 280, idealWidth: 310, maxWidth: 380)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                Divider()
                 StatusBarView(store: store)
             }
         }
@@ -25,9 +30,23 @@ struct ContentView: View {
                 Button { store.refreshAll() } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
+                .help("Refresh authoritative runtime state")
+
                 Button { store.connect() } label: {
-                    Label("Connect", systemImage: "bolt.horizontal.circle")
+                    Label(
+                        store.connectionState == .connected ? "Reconnect" : "Connect",
+                        systemImage: "bolt.horizontal.circle"
+                    )
                 }
+                .help("Connect to CAPT RuntimeService")
+
+                Button { inspectorVisible.toggle() } label: {
+                    Label(
+                        inspectorVisible ? "Hide Inspector" : "Show Inspector",
+                        systemImage: "sidebar.right"
+                    )
+                }
+                .help(inspectorVisible ? "Hide operator inspector" : "Show operator inspector")
             }
         }
     }
@@ -56,26 +75,5 @@ struct ContentView: View {
         case .settings:
             SettingsView(store: store)
         }
-    }
-}
-
-private struct InfoSurface: View {
-    let title: String
-    let symbol: String
-    let detail: String
-
-    var body: some View {
-        VStack(spacing: 14) {
-            Image(systemName: symbol)
-                .font(.system(size: 34))
-                .foregroundStyle(.secondary)
-            Text(title).font(.title2.bold())
-            Text(detail)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 440)
-        }
-        .padding(32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

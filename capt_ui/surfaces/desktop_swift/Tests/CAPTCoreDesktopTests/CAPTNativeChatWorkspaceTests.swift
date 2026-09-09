@@ -127,6 +127,45 @@ final class CAPTNativeChatWorkspaceTests: XCTestCase {
         XCTAssertEqual(workspace.activeSession?.messages.last?.authorityState, "approval_expired")
     }
 
+    func testExpiredApprovalClearsBoundProposalSoComposerCanResume() throws {
+        let approval = pending(expiresAt: Date(timeIntervalSince1970: 1_000))
+        let old = CAPTNativeSession(
+            id: oldID, missionID: "mission-1", title: "Old",
+            messages: [], provider: "openrouter", model: "model-a",
+            targetRoot: "/repo", promptProposal: try proposal(), pendingApproval: approval
+        )
+        var workspace = CAPTNativeChatWorkspace(
+            sessions: [old], activeSessionID: oldID,
+            now: Date(timeIntervalSince1970: 500)
+        )
+
+        workspace.reconcileActiveApprovalValidity(now: Date(timeIntervalSince1970: 2_000))
+
+        XCTAssertNil(workspace.activePendingApproval)
+        XCTAssertNil(workspace.activePromptProposal)
+        XCTAssertTrue(workspace.activeFlow.canCompose)
+        XCTAssertEqual(workspace.activeSession?.messages.last?.authorityState, "approval_expired")
+    }
+
+    func testUnknownApprovalClearsBoundProposalSoComposerCanResume() throws {
+        let old = CAPTNativeSession(
+            id: oldID, missionID: "mission-1", title: "Legacy",
+            messages: [], provider: "openrouter", model: "model-a",
+            targetRoot: "/repo", promptProposal: try proposal(),
+            pendingApproval: pending(expiresAt: nil)
+        )
+        var workspace = CAPTNativeChatWorkspace(
+            sessions: [old], activeSessionID: nil
+        )
+
+        XCTAssertTrue(workspace.activate(oldID))
+
+        XCTAssertNil(workspace.activePendingApproval)
+        XCTAssertNil(workspace.activePromptProposal)
+        XCTAssertTrue(workspace.activeFlow.canCompose)
+        XCTAssertEqual(workspace.activeSession?.messages.last?.authorityState, "approval_stale")
+    }
+
     func testConfigurationMutationInvalidatesBoundApprovalCursor() {
         let old = CAPTNativeSession(
             id: oldID, missionID: "mission-1", title: "Old",
@@ -404,5 +443,30 @@ extension CAPTNativeChatWorkspaceTests {
         XCTAssertEqual(bound?.proposalID, "pp-1")
         XCTAssertEqual(workspace.activeFlow.phase, .requestingApproval)
         XCTAssertFalse(workspace.activeFlow.canCompose)
+    }
+}
+
+extension CAPTNativeChatWorkspaceTests {
+    func testAwaitingVerificationRetainsDriverRunUntilHumanReviewClosesIt() {
+        var workspace = CAPTNativeChatWorkspace()
+        let id = workspace.newChat(
+            provider: "openrouter", model: "model-a", targetRoot: "/repo"
+        )
+
+        workspace.completeExecution(
+            text: "provider result",
+            taskState: "awaiting_verification",
+            driverRunID: "dr-review-1",
+            for: id
+        )
+
+        XCTAssertEqual(workspace.session(id)?.verificationDriverRunID, "dr-review-1")
+        XCTAssertEqual(workspace.flow(for: id).phase, .awaitingVerification)
+
+        workspace.completeVerification(accepted: true, for: id)
+
+        XCTAssertNil(workspace.session(id)?.verificationDriverRunID)
+        XCTAssertEqual(workspace.flow(for: id).phase, .idle)
+        XCTAssertEqual(workspace.session(id)?.messages.last?.authorityState, "succeeded")
     }
 }

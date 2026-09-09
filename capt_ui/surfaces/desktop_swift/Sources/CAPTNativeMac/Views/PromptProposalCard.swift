@@ -10,8 +10,8 @@ struct PromptProposalCard: View {
     @State private var editing = false
     @State private var editedPrompt = ""
     @State private var showPromptDetails = false
-    @State private var showVerification = false
-    @State private var showConsiderations = false
+    @State private var showVerification = true
+    @State private var showConsiderations = true
 
     private var canSelect: Bool {
         proposal.isActive && proposal.isApprovalSelectable && !isBusy
@@ -24,157 +24,316 @@ struct PromptProposalCard: View {
         return proposal.status.replacingOccurrences(of: "_", with: " ").uppercased()
     }
 
+    private var statusTone: InversionTone {
+        if !proposal.isApprovalSelectable { return .warning }
+        return proposal.hasMaterialUpgrade ? .violet : .cyan
+    }
+
     private var compilerLabel: String {
         let enabled = proposal.stageRecords.first(where: { $0.executionEnabled })
-        guard let enabled else { return "Deterministic / no model stage executed" }
-        let location = (enabled.endpointClass ?? "unknown").uppercased()
+        guard let enabled else { return "deterministic · no model stage" }
+        let location = (enabled.endpointClass ?? "unknown").lowercased()
         let provider = enabled.provider ?? "unknown-provider"
         let model = enabled.model ?? "unknown-model"
         return "\(location) · \(provider) · \(model)"
     }
 
+    private var executedStageCount: Int {
+        proposal.stageRecords.filter(\.executionEnabled).count
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            header
-            stageStrip
-            actions
-            editSection
-            promptComparison
-            verificationSection
+        InversionPanel(tone: statusTone) {
+            VStack(alignment: .leading, spacing: 16) {
+                header
+                stagePipeline
+                actionBoundary
+                if editing { editSection }
+                if showPromptDetails { promptComparison }
+                verificationSection
+            }
         }
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-        .overlay { RoundedRectangle(cornerRadius: 14).stroke(.blue.opacity(0.45)) }
         .task(id: proposal.proposalID) { editedPrompt = proposal.proposedPrompt }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label("Prompt Intelligence proposal", systemImage: "brain.head.profile")
-                .font(.headline)
-            HStack(spacing: 8) {
-                Text(statusLabel)
-                    .font(.caption.bold())
-                Text("r\(proposal.revision)")
-                    .font(.caption.monospaced())
-                Text(compilerLabel)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                InversionSectionHeader(
+                    "Prompt Intelligence proposal",
+                    eyebrow: "PRE-EXECUTION",
+                    detail: "CAPT has transformed the operator request, but no execution authority has been consumed. Choose the exact prompt bytes that should become the HumanApproval basis.",
+                    symbol: "brain.head.profile",
+                    tone: statusTone
+                )
+                Spacer(minLength: 8)
+                InversionStatusBadge(statusLabel, tone: statusTone)
+            }
+
+            HStack(spacing: 10) {
+                InversionMetric("revision", value: "r\(proposal.revision)", symbol: "arrow.triangle.2.circlepath", tone: .violet)
+                InversionMetric("stages run", value: "\(executedStageCount)", symbol: "point.3.connected.trianglepath.dotted", tone: .cyan)
+                InversionMetric("verification", value: "\(proposal.verificationCriteria.count)", symbol: "checkmark.seal", tone: .success)
+                InversionMetric("questions", value: "\(proposal.unresolvedQuestions.count)", symbol: "questionmark.circle", tone: proposal.unresolvedQuestions.isEmpty ? .neutral : .amber)
+                Spacer(minLength: 0)
+            }
+
+            InversionKeyValueRow("compiler", value: compilerLabel, tone: .cyan, monospaced: true)
+            InversionKeyValueRow("proposal", value: proposal.proposalID, monospaced: true)
+            if !proposal.rationale.isEmpty {
+                Text(proposal.rationale)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Text("CAPT proposed this. You have not approved execution yet.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
         }
     }
 
-    private var stageStrip: some View {
-        HStack(spacing: 6) {
+    private var stagePipeline: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("PROMPT PIPELINE")
+                .font(.caption2.weight(.semibold))
+                .tracking(1.0)
+                .foregroundStyle(.secondary)
+
             if proposal.stageChain.isEmpty {
-                Text("Enhancement OFF").font(.caption.bold())
+                HStack(spacing: 8) {
+                    InversionStatusBadge("ENHANCEMENT OFF", tone: .neutral)
+                    Text("Literal operator prompt is the proposal basis.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             } else {
-                ForEach(Array(proposal.stageChain.enumerated()), id: \.offset) { index, stage in
-                    Text(stage).font(.caption.bold()).padding(.horizontal, 7).padding(.vertical, 4)
-                        .background(.quaternary, in: Capsule())
-                    if index < proposal.stageChain.count - 1 {
-                        Image(systemName: "arrow.right").font(.caption2).foregroundStyle(.secondary)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(Array(proposal.stageChain.enumerated()), id: \.offset) { index, stage in
+                            stageNode(stage)
+                            if index < proposal.stageChain.count - 1 {
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
                     }
                 }
             }
-            Spacer()
+        }
+    }
+
+    private func stageNode(_ stage: String) -> some View {
+        let record = proposal.stageRecords.first { $0.stage.caseInsensitiveCompare(stage) == .orderedSame }
+        let executed = record?.executionEnabled ?? false
+        return HStack(spacing: 6) {
+            Circle()
+                .fill(executed ? InversionTone.cyan.color : Color.secondary.opacity(0.45))
+                .frame(width: 6, height: 6)
+            Text(stage.uppercased())
+                .font(.caption2.monospaced().weight(.semibold))
+            if executed {
+                Text("RUN")
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .foregroundStyle(InversionTone.cyan.color)
+            }
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 6)
+        .background((executed ? InversionTone.cyan.color : Color.primary).opacity(executed ? 0.09 : 0.035), in: Capsule())
+        .overlay {
+            Capsule().strokeBorder((executed ? InversionTone.cyan.color : Color.primary).opacity(executed ? 0.22 : 0.08), lineWidth: 1)
+        }
+        .help(record?.rationale.isEmpty == false ? record!.rationale : (executed ? "Executed prompt stage" : "Stage present but not executed"))
+    }
+
+    private var actionBoundary: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            InversionDivider()
+            HStack(spacing: 8) {
+                Label("SELECT APPROVAL BASIS", systemImage: "signature")
+                    .font(.caption2.weight(.semibold))
+                    .tracking(0.9)
+                    .foregroundStyle(statusTone.color)
+                Spacer()
+                Button(showPromptDetails ? "Hide Comparison" : "Compare Prompts") {
+                    withAnimation(.easeInOut(duration: 0.18)) { showPromptDetails.toggle() }
+                }
+                .controlSize(.small)
+            }
+
+            HStack {
+                Button("Cancel Proposal", role: .destructive, action: cancel)
+                    .disabled(isBusy)
+                Spacer()
+                Button(editing ? "Close Editor" : "Edit Upgrade") {
+                    withAnimation(.easeInOut(duration: 0.18)) { editing.toggle() }
+                }
+                .disabled(!canSelect)
+                Button("Use Original") { select(.original, "") }
+                    .disabled(!canSelect)
+                if editing {
+                    Button("Use Edited") { select(.edited, editedPrompt) }
+                        .disabled(!canSelect || editedPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+                Button {
+                    select(.upgrade, "")
+                } label: {
+                    Label("Use CAPT Upgrade", systemImage: "sparkles")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canSelect || !proposal.hasMaterialUpgrade)
+            }
+        }
+    }
+
+    private var editSection: some View {
+        InversionPanel(tone: .amber, padding: 13) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("OPERATOR-EDITED BASIS")
+                        .font(.caption2.weight(.semibold))
+                        .tracking(1.0)
+                        .foregroundStyle(InversionTone.amber.color)
+                    Spacer()
+                    Text("exact bytes")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+                TextEditor(text: $editedPrompt)
+                    .font(.body.monospaced())
+                    .frame(minHeight: 140)
+                    .padding(7)
+                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 9))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 9)
+                            .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
+                    }
+                Text("If selected, these edited bytes—not the displayed upgrade—become the exact prompt bound into HumanApproval.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
     private var promptComparison: some View {
-        DisclosureGroup("Review prompt details", isExpanded: $showPromptDetails) {
-            VStack(spacing: 10) {
-                GroupBox("Original — literal operator prompt") {
-                    Text(proposal.originalPrompt)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                        .font(.callout)
-                }
-                GroupBox("CAPT proposed execution prompt") {
-                    Text(proposal.proposedPrompt)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                        .font(.callout)
-                }
+        VStack(alignment: .leading, spacing: 10) {
+            Text("PROMPT COMPARISON")
+                .font(.caption2.weight(.semibold))
+                .tracking(1.0)
+                .foregroundStyle(.secondary)
+
+            HStack(alignment: .top, spacing: 10) {
+                promptPane(
+                    label: "ORIGINAL",
+                    digest: proposal.originalPromptDigest,
+                    text: proposal.originalPrompt,
+                    tone: .neutral
+                )
+                promptPane(
+                    label: "CAPT UPGRADE",
+                    digest: proposal.proposedPromptDigest,
+                    text: proposal.proposedPrompt,
+                    tone: .violet
+                )
             }
-            .padding(.top, 6)
         }
-        .font(.caption)
+    }
+
+    private func promptPane(label: String, digest: String, text: String, tone: InversionTone) -> some View {
+        InversionPanel(tone: tone, padding: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(label)
+                        .font(.caption2.weight(.semibold))
+                        .tracking(0.9)
+                        .foregroundStyle(tone == .neutral ? Color.secondary : tone.color)
+                    Spacer()
+                    Text(shortDigest(digest))
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.tertiary)
+                }
+                ScrollView {
+                    Text(text)
+                        .font(.callout)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .textSelection(.enabled)
+                }
+                .frame(minHeight: 110, maxHeight: 230)
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder
     private var verificationSection: some View {
-        if !proposal.verificationCriteria.isEmpty {
-            DisclosureGroup(
-                "Verification contract (\(proposal.verificationCriteria.count))",
-                isExpanded: $showVerification
-            ) {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(proposal.verificationCriteria, id: \.self) { item in
-                        Label(item, systemImage: "checkmark.circle")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
+        if !proposal.verificationCriteria.isEmpty || !proposal.unresolvedQuestions.isEmpty {
+            VStack(spacing: 8) {
+                if !proposal.verificationCriteria.isEmpty {
+                    DisclosureGroup(
+                        isExpanded: $showVerification,
+                        content: {
+                            VStack(alignment: .leading, spacing: 7) {
+                                ForEach(proposal.verificationCriteria, id: \.self) { item in
+                                    HStack(alignment: .top, spacing: 8) {
+                                        Image(systemName: "checkmark.circle")
+                                            .foregroundStyle(InversionTone.success.color)
+                                        Text(item)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            .padding(.top, 8)
+                        },
+                        label: {
+                            HStack {
+                                Text("VERIFICATION CONTRACT")
+                                    .font(.caption2.weight(.semibold))
+                                    .tracking(0.9)
+                                Spacer()
+                                InversionStatusBadge("\(proposal.verificationCriteria.count)", tone: .success, monospaced: true)
+                            }
+                        }
+                    )
                 }
-                .padding(.top, 6)
-            }
-            .font(.caption)
-        }
-        if !proposal.unresolvedQuestions.isEmpty {
-            let blocking = !proposal.isApprovalSelectable
-            DisclosureGroup(
-                blocking
-                    ? "Blocking clarifications (\(proposal.unresolvedQuestions.count))"
-                    : "Advisory considerations (\(proposal.unresolvedQuestions.count))",
-                isExpanded: $showConsiderations
-            ) {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(proposal.unresolvedQuestions, id: \.self) { item in
-                        Label(item, systemImage: blocking ? "exclamationmark.circle" : "questionmark.circle")
-                            .font(.caption)
-                            .foregroundStyle(blocking ? Color.orange : Color.secondary)
-                    }
+
+                if !proposal.unresolvedQuestions.isEmpty {
+                    let blocking = !proposal.isApprovalSelectable
+                    DisclosureGroup(
+                        isExpanded: $showConsiderations,
+                        content: {
+                            VStack(alignment: .leading, spacing: 7) {
+                                ForEach(proposal.unresolvedQuestions, id: \.self) { item in
+                                    HStack(alignment: .top, spacing: 8) {
+                                        Image(systemName: blocking ? "exclamationmark.circle" : "questionmark.circle")
+                                            .foregroundStyle(blocking ? InversionTone.warning.color : InversionTone.amber.color)
+                                        Text(item)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            .padding(.top, 8)
+                        },
+                        label: {
+                            HStack {
+                                Text(blocking ? "BLOCKING CLARIFICATIONS" : "ADVISORY CONSIDERATIONS")
+                                    .font(.caption2.weight(.semibold))
+                                    .tracking(0.9)
+                                Spacer()
+                                InversionStatusBadge(
+                                    "\(proposal.unresolvedQuestions.count)",
+                                    tone: blocking ? .warning : .amber,
+                                    monospaced: true
+                                )
+                            }
+                        }
+                    )
                 }
-                .padding(.top, 6)
             }
-            .font(.caption)
         }
     }
 
-    @ViewBuilder
-    private var editSection: some View {
-        if editing {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Operator-edited proposal").font(.caption.bold())
-                TextEditor(text: $editedPrompt)
-                    .font(.body.monospaced())
-                    .frame(minHeight: 120)
-                    .padding(6)
-                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-                Text("The edited bytes become the exact prompt bound into HumanApproval.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var actions: some View {
-        HStack {
-            Button("Cancel Proposal", role: .destructive, action: cancel)
-                .disabled(isBusy)
-            Spacer()
-            Button(editing ? "Hide Editor" : "Edit Upgrade") { editing.toggle() }
-                .disabled(!canSelect)
-            Button("Use Original") { select(.original, "") }
-                .disabled(!canSelect)
-            if editing {
-                Button("Use Edited") { select(.edited, editedPrompt) }
-                    .disabled(!canSelect || editedPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-            Button("Use Upgrade") { select(.upgrade, "") }
-                .buttonStyle(.borderedProminent)
-                .disabled(!canSelect || !proposal.hasMaterialUpgrade)
-        }
+    private func shortDigest(_ digest: String) -> String {
+        if digest.count <= 18 { return digest }
+        return String(digest.prefix(11)) + "…" + String(digest.suffix(6))
     }
 }

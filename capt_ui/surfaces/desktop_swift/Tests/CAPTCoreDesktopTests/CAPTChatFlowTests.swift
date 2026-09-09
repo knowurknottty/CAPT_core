@@ -76,6 +76,14 @@ final class CAPTChatFlowTests: XCTestCase {
         XCTAssertTrue(flow.canCompose)
     }
 
+    func testIndeterminateExecutionHasDistinctTruthfulPhase() {
+        var flow = CAPTChatFlow()
+        flow.executionCompleted(taskState: "indeterminate")
+        XCTAssertEqual(flow.phase, .executionIndeterminate)
+        XCTAssertNil(flow.requestID)
+        XCTAssertTrue(flow.canCompose)
+    }
+
     func testExecutionCompletionAllowsContinuationWhileAwaitingVerification() {
         var flow = CAPTChatFlow()
         flow.executionCompleted(taskState: "awaiting_verification")

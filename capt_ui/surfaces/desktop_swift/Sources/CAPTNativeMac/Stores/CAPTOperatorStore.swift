@@ -87,6 +87,10 @@ final class CAPTOperatorStore: ObservableObject {
         chatWorkspace.activePromptProposal
     }
 
+    var verificationDriverRunID: String? {
+        chatWorkspace.activeSession?.verificationDriverRunID
+    }
+
     var activeChatFlow: CAPTChatFlow {
         chatWorkspace.activeFlow
     }
@@ -339,6 +343,7 @@ final class CAPTOperatorStore: ObservableObject {
                     $0.completeExecution(
                         text: result.text,
                         taskState: result.taskState,
+                        driverRunID: result.driverRunID,
                         for: sessionID
                     )
                 }
@@ -355,6 +360,31 @@ final class CAPTOperatorStore: ObservableObject {
                 }
                 saveSessions()
                 refreshHistory()
+            }
+        }
+    }
+
+    func reviewProviderResult(disposition: String, note: String) {
+        guard let sessionID = activeSessionID,
+              let driverRunID = verificationDriverRunID,
+              ["accept", "reject"].contains(disposition) else { return }
+        isBusy = true
+        lastError = nil
+        Task {
+            defer { isBusy = false }
+            do {
+                let result = try await runtime.reviewProviderResult(
+                    driverRunID: driverRunID, disposition: disposition, note: note
+                )
+                let accepted = disposition == "accept"
+                mutateWorkspace { $0.completeVerification(accepted: accepted, for: sessionID) }
+                if activeSessionID == sessionID {
+                    taskState = (result["taskState"] as? String) ?? (accepted ? "succeeded" : "failed")
+                }
+                saveSessions()
+                refreshHistory()
+            } catch {
+                if activeSessionID == sessionID { lastError = error.localizedDescription }
             }
         }
     }
@@ -637,6 +667,32 @@ final class CAPTOperatorStore: ObservableObject {
 
     var effectiveAuthorityFilesystemRoot: String? {
         authoritySettings.effectiveFilesystemRoot(projectRoot: targetRoot)
+    }
+
+    var selectedProviderRequiresRemoteNetwork: Bool {
+        guard let snapshot = providers.first(where: { $0.id == provider }) else { return false }
+        return snapshot.kind.lowercased() != "local"
+    }
+
+    var selectedProviderBlockedByNetworkAuthority: Bool {
+        authoritySettings.providerNetwork == .localOnly && selectedProviderRequiresRemoteNetwork
+    }
+
+    var runtimeCompatibilityIssue: String? {
+        guard connectionState == .connected, let capabilities = runtimeCapabilities else { return nil }
+        let requiredQueries = ["managed_skills"]
+        let requiredCommands = [
+            "compile_prompt_proposal",
+            "request_prompt_proposal_approval",
+            "run_approved_hermes_inspection",
+            "install_managed_skill",
+            "create_managed_skill",
+        ]
+        let missingQueries = requiredQueries.filter { !capabilities.supportsQuery($0) }
+        let missingCommands = requiredCommands.filter { !capabilities.supportsCommand($0) }
+        let missing = missingQueries + missingCommands
+        guard !missing.isEmpty else { return nil }
+        return "Runtime API is older than this GUI · missing " + missing.joined(separator: ", ")
     }
 
     func refreshAll() {
@@ -997,6 +1053,7 @@ final class CAPTOperatorStore: ObservableObject {
         case .awaitingApproval: taskState = "approval_required"
         case .executing: taskState = "executing"
         case .awaitingVerification: taskState = "awaiting_verification"
+        case .executionIndeterminate: taskState = "indeterminate"
         case .recoverableFailure:
             taskState = chatWorkspace.activeSession?.messages.last?.authorityState
                 ?? "recoverable_failure"

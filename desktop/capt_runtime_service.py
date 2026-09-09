@@ -623,7 +623,7 @@ class RuntimeQueryService:
                 return {"ok": True, "result": {
                     "schemaVersion": CONTRACT_SCHEMA_VERSION,
                     "queryOperations": ["identity", "capabilities", "list_aggregates", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers", "managed_skills"],
-                    "commandOperations": ["create_mission", "compile_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool", "install_managed_skill", "create_managed_skill"],
+                    "commandOperations": ["create_mission", "compile_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "submit_provider_result_review", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool", "install_managed_skill", "create_managed_skill"],
                     "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True, "toolRegistry": True, "toolBroker": True, "mcpClient": self.mcp_manager is not None, "promptCompiler": True},
                     "lifecycleOperations": {"checkpoint": True, "shutdown": True, "resume": True},
                 }}
@@ -1289,19 +1289,6 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 # 4. Verification + ClaimGuard (CAPT-authored).
                 artifact_path = out["artifactCandidate"]["artifactPath"]
                 artifact_digest = out["artifactCandidate"]["artifactDigest"]
-                accepted = guard_claim("Repository inspected in read-only mode.")
-                svc.propose_claim(
-                    {"schemaVersion": "1.0.0", "claimId": claim_id, "missionId": mission_id,
-                     "taskId": task_id, "kind": "completion", "statement": accepted,
-                     "evidenceIds": [], "promotionState": "proposed",
-                     "proposedBy": {"actorId": "cog-1", "kind": "cognitive_plane"},
-                     "proposedAt": now, "sourceProposalId": None},
-                    commands.command(command_id=command_id + ":claim", idempotency_key=key + ":claim",
-                                     operation_fingerprint=commands.fingerprint("propose_claim", {"claimId": claim_id}),
-                                     correlation_id=correlation_id,
-                                     actor_id="cog-1", actor_kind="cognitive_plane",
-                                     issued_at=now, replay_policy="never"),
-                )
                 baseline_ev_id = "ev-" + commands.fingerprint(
                     "artifact_hash", {"artifact": baseline["artifactDigest"], "role": "verification_baseline"}
                 )
@@ -1327,11 +1314,30 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         actor_id="verification_pipeline", actor_kind="verification_plane",
                         issued_at=now, replay_policy="never",
                     )
-                svc.record_evidence(
-                    claim_id, baseline_evidence, evidence_meta("evidence-baseline", baseline_ev_id)
+                accepted = guard_claim(
+                    "Provider response and immutable artifact recorded for independent verification."
                 )
-                svc.record_evidence(
-                    claim_id, result_evidence, evidence_meta("evidence-result", result_ev_id)
+                claim_record = {
+                    "schemaVersion": "1.0.0", "claimId": claim_id, "missionId": mission_id,
+                    "taskId": task_id, "kind": "completion", "statement": accepted,
+                    "evidenceIds": [baseline_ev_id, result_ev_id], "promotionState": "proposed",
+                    "proposedBy": {"actorId": "cog-1", "kind": "cognitive_plane"},
+                    "proposedAt": now, "sourceProposalId": None,
+                }
+                claim_meta = commands.command(
+                    command_id=command_id + ":claim", idempotency_key=key + ":claim",
+                    operation_fingerprint=commands.fingerprint("propose_claim", {"claimId": claim_id}),
+                    correlation_id=correlation_id,
+                    actor_id="cog-1", actor_kind="cognitive_plane",
+                    issued_at=now, replay_policy="never",
+                )
+                svc.propose_claim_with_evidence(
+                    claim_record,
+                    [
+                        (baseline_evidence, evidence_meta("evidence-baseline", baseline_ev_id)),
+                        (result_evidence, evidence_meta("evidence-result", result_ev_id)),
+                    ],
+                    claim_meta,
                 )
                 _test_fault("evidence_recorded")
                 # A provider response and its immutable artifact are evidence, not

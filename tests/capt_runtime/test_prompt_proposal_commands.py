@@ -10,6 +10,7 @@ from capt_runtime.prompt_compiler import (
     PromptCompiler,
 )
 from capt_runtime.services import RuntimeService
+from capt_runtime.replay import full_replay
 from capt_runtime.store import EventStore
 from desktop.m1_command_service import RuntimeCommandService
 
@@ -371,3 +372,29 @@ def test_proposal_approval_forwards_explicit_managed_skill_selection(tmp_path):
         assert [item["name"] for item in authored["skills"]] == ["sentinel-reviewer"]
     finally:
         store.close()
+
+
+def test_compile_persists_compiler_disposition_for_reconnect_and_replay(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    store = EventStore(str(tmp_path / "ledger.db"))
+    relay = RuntimeCommandService(
+        store, "operator", "session",
+        runtime_service=RuntimeService(store),
+        prompt_compiler=PromptCompiler(),
+    )
+    payload = _compile_payload(str(root))
+    payload["promptIntelligence"] = "OMNI"
+
+    receipt = relay.execute(_cmd("compile_prompt_proposal", payload, "compile-durable-disposition"))
+
+    assert receipt["status"] == "accepted"
+    result = receipt["result"]
+    assert result["status"] == "compiler_unavailable"
+    state = store.require_state("prompt_proposal-" + result["proposalId"])
+    assert state["compilationStatus"] == "compiler_unavailable"
+    assert state["rationale"] == result["rationale"]
+    assert state["unresolvedQuestions"] == result["unresolvedQuestions"]
+    replayed = full_replay(store).aggregates["prompt_proposal-" + result["proposalId"]]
+    assert replayed == state
+    store.close()

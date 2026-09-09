@@ -89,6 +89,9 @@ def compile_prompt_proposal(service: Any, compiler: PromptCompiler,
         "verificationContract": {
             "acceptanceCriteria": list(compiled.verification_contract.acceptance_criteria)
         },
+        "compilationStatus": compiled.status,
+        "rationale": compiled.rationale,
+        "unresolvedQuestions": list(compiled.unresolved_questions),
     })
     require("PromptProposalSnapshot", snapshot)
     event = commands.envelope(

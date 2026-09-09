@@ -122,3 +122,28 @@ def test_prompt_proposal_stream_id_and_generated_bindings_are_contract_parity() 
         line.strip().split(":", 1)[0].removeprefix("readonly ")
         for line in typescript[start:end].splitlines()[1:]
     }
+
+
+def test_prompt_proposal_compilation_disposition_is_durable_and_replayable() -> None:
+    proposal = {
+        **_proposal(),
+        "compilationStatus": "compiler_unavailable",
+        "rationale": "Configured compiler endpoint was unavailable; literal prompt preserved.",
+        "unresolvedQuestions": [],
+    }
+    state = PromptProposalAggregate.create(proposal)
+
+    assert state["compilationStatus"] == "compiler_unavailable"
+    assert state["rationale"] == proposal["rationale"]
+    assert state["unresolvedQuestions"] == []
+    assert PromptProposalAggregate.replay_create(state) == state
+
+
+def test_legacy_prompt_proposal_snapshot_without_compilation_disposition_remains_valid() -> None:
+    state = PromptProposalAggregate.create(_proposal())
+    state.pop("compilationStatus", None)
+    state.pop("rationale", None)
+    state.pop("unresolvedQuestions", None)
+
+    require("PromptProposalSnapshot", state)
+    assert PromptProposalAggregate.replay_create(state) == state

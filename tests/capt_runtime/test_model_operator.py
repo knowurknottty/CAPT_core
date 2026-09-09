@@ -361,3 +361,116 @@ def test_composition_provider_host_wires_model_tool_bridge(tmp_path: Path) -> No
         assert host._driver.tool_bridge is sentinel_bridge
     finally:
         runtime.close()
+
+
+def _seed_provider_result_awaiting_review(runtime, suffix="review"):
+    from capt_runtime import commands
+    svc = runtime.service
+    now = "2026-09-08T21:00:00Z"
+    def meta(step, actor="execution_plane", actor_id="exec-1"):
+        return commands.command(
+            command_id=f"cmd-{suffix}-{step}", idempotency_key=f"idem-{suffix}-{step}",
+            operation_fingerprint=commands.fingerprint(step, {"suffix": suffix}),
+            correlation_id=f"corr-{suffix}", actor_id=actor_id, actor_kind=actor,
+            issued_at=now, replay_policy="never",
+        )
+    task_id = f"t-provider-{suffix}"
+    mission_id = f"m-provider-{suffix}"
+    run_id = f"dr-provider-{suffix}"
+    claim_id = f"cl-provider-{suffix}"
+    svc.create_task({
+        "taskId": task_id, "missionId": mission_id, "title": "review provider output",
+        "state": "pending", "consequential": True, "capabilityRequirements": [],
+        "assignedDriverId": None, "attempt": 0, "maxAttempts": 1, "recoveryState": "none",
+    }, meta("task-create", "cognitive_plane", "cog-1"))
+    for state in ("ready", "assigned", "running"):
+        svc.transition_task(task_id, state, state, meta("task-" + state))
+    svc.create_driver_run({
+        "schemaVersion": "1.0.0", "driverRunId": run_id, "driverId": "provider",
+        "missionId": mission_id, "taskId": task_id, "workOrderVersion": 1,
+        "externalRunId": None, "state": "created", "reconciliationStatus": "not_required",
+        "createdAt": now,
+    }, meta("run-create"))
+    for state in ("submitted", "running", "completed"):
+        svc.transition_driver_run(run_id, state, meta("run-" + state))
+    evidence = {
+        "schemaVersion": "1.0.0", "evidenceId": f"ev-provider-{suffix}",
+        "missionId": mission_id, "taskId": task_id,
+        "evidence": {"kind": "artifact_hash", "artifactPath": "/tmp/provider-result.json",
+                     "artifactDigest": "sha256:" + "a" * 64},
+        "collectedBy": {"actorId": "verification_pipeline", "kind": "verification_plane"},
+        "collectedAt": now, "trust": "capt_authoritative",
+    }
+    claim = {
+        "schemaVersion": "1.0.0", "claimId": claim_id, "missionId": mission_id,
+        "taskId": task_id, "kind": "completion",
+        "statement": "Provider response and immutable artifact recorded for independent verification.",
+        "evidenceIds": [evidence["evidenceId"]], "promotionState": "proposed",
+        "proposedBy": {"actorId": "cog-1", "kind": "cognitive_plane"},
+        "proposedAt": now, "sourceProposalId": None,
+    }
+    svc.propose_claim_with_evidence(
+        claim, [(evidence, meta("claim-evidence", "verification_plane", "verification_pipeline"))],
+        meta("claim-create", "cognitive_plane", "cog-1"),
+    )
+    svc.transition_task(task_id, "awaiting_verification", "provider result recorded", meta("task-await"))
+    return {"driverRunId": run_id, "claimId": claim_id, "taskId": task_id}
+
+
+def test_operator_can_close_completed_provider_run_by_driver_identity(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "ledger-review.db"))
+    try:
+        ids = _seed_provider_result_awaiting_review(runtime)
+        relay = RuntimeCommandService(runtime.store, "operator-x", "sess-1", runtime_service=runtime.service)
+        receipt = relay.execute(_envelope(
+            "submit_provider_result_review",
+            {"driverRunId": ids["driverRunId"], "disposition": "accept",
+             "note": "Provider output satisfies the visible acceptance criterion."},
+            key="provider-review-accept",
+        ))
+        assert receipt["status"] == "accepted", receipt
+        assert receipt["result"]["claimId"] == ids["claimId"]
+        assert receipt["result"]["taskState"] == "succeeded"
+        assert runtime.store.require_state("claim-" + ids["claimId"])["promotionState"] == "accepted"
+        assert runtime.store.require_state("task-" + ids["taskId"])["state"] == "succeeded"
+    finally:
+        runtime.close()
+
+
+def test_provider_result_review_rejects_noncompleted_driver_run(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "ledger-review-invalid.db"))
+    try:
+        ids = _seed_provider_result_awaiting_review(runtime, "invalid")
+        # Corrupt only the review precondition by asking about a distinct running run.
+        from capt_runtime import commands
+        now = "2026-09-08T21:00:00Z"
+        meta = commands.command(
+            command_id="cmd-running-review", idempotency_key="idem-running-review",
+            operation_fingerprint=commands.fingerprint("running-review", {}),
+            correlation_id="corr-running-review", actor_id="exec-1", actor_kind="execution_plane",
+            issued_at=now, replay_policy="never",
+        )
+        runtime.service.create_driver_run({
+            "schemaVersion": "1.0.0", "driverRunId": "dr-still-running", "driverId": "provider",
+            "missionId": "m-x", "taskId": "t-x", "workOrderVersion": 1, "externalRunId": None,
+            "state": "created", "reconciliationStatus": "not_required", "createdAt": now,
+        }, meta)
+        runtime.service.transition_driver_run("dr-still-running", "submitted", commands.command(
+            command_id="cmd-running-submit", idempotency_key="idem-running-submit",
+            operation_fingerprint=commands.fingerprint("running-submit", {}), correlation_id="corr-running-review",
+            actor_id="exec-1", actor_kind="execution_plane", issued_at=now, replay_policy="never"))
+        runtime.service.transition_driver_run("dr-still-running", "running", commands.command(
+            command_id="cmd-running-state", idempotency_key="idem-running-state",
+            operation_fingerprint=commands.fingerprint("running-state", {}), correlation_id="corr-running-review",
+            actor_id="exec-1", actor_kind="execution_plane", issued_at=now, replay_policy="never"))
+        relay = RuntimeCommandService(runtime.store, "operator-x", "sess-1", runtime_service=runtime.service)
+        receipt = relay.execute(_envelope(
+            "submit_provider_result_review",
+            {"driverRunId": "dr-still-running", "disposition": "accept"},
+            key="provider-review-running",
+        ))
+        assert receipt["status"] == "rejected"
+        assert "completed" in (receipt.get("detail") or "").lower()
+        assert runtime.store.require_state("task-" + ids["taskId"])["state"] == "awaiting_verification"
+    finally:
+        runtime.close()

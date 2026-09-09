@@ -65,4 +65,20 @@ extension CAPTPromptProposalTests {
         let proposal = try CAPTPromptProposal(dictionary: value)
         XCTAssertFalse(proposal.isApprovalSelectable)
     }
+    func testCompilerUnavailableStillAllowsOriginalSelection() throws {
+        var value = payload()
+        value["status"] = "compiler_unavailable"
+        value["proposedPrompt"] = value["originalPrompt"]
+        value["proposedPromptDigest"] = value["originalPromptDigest"]
+        value["stageRecords"] = [[
+            "stage": "OMNI", "executionEnabled": false,
+            "provider": "mtplx", "model": "qwen3.8-27b-mtplx",
+            "endpointClass": "local", "rationale": "compiler unavailable"
+        ]]
+        let proposal = try CAPTPromptProposal(dictionary: value)
+        XCTAssertTrue(proposal.isApprovalSelectable)
+        XCTAssertFalse(proposal.hasMaterialUpgrade)
+        XCTAssertEqual(proposal.selectedPrompt(.original), "fix provider")
+    }
+
 }

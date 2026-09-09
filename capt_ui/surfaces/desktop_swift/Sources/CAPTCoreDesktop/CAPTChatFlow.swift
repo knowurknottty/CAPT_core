@@ -8,6 +8,7 @@ public enum CAPTChatFlowPhase: String, Equatable, Sendable {
     case awaitingApproval
     case executing
     case awaitingVerification
+    case executionIndeterminate
     case recoverableFailure
 }
 
@@ -163,7 +164,13 @@ public struct CAPTChatFlow: Equatable, Sendable {
     }
 
     public mutating func executionCompleted(taskState: String) {
-        phase = taskState == "awaiting_verification" ? .awaitingVerification : .idle
+        if taskState == "awaiting_verification" {
+            phase = .awaitingVerification
+        } else if taskState == "indeterminate" {
+            phase = .executionIndeterminate
+        } else {
+            phase = .idle
+        }
         requestID = nil
         proposalID = nil
         failureMessage = nil

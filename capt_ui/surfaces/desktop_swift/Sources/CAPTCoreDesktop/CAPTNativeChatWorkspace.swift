@@ -271,11 +271,13 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
     public mutating func completeExecution(
         text: String,
         taskState: String,
+        driverRunID: String? = nil,
         for id: UUID
     ) {
         guard let index = index(of: id) else { return }
         sessions[index].pendingApproval = nil
         sessions[index].promptProposal = nil
+        sessions[index].verificationDriverRunID = taskState == "awaiting_verification" ? driverRunID : nil
         sessions[index].messages.append(CAPTChatMessage(
             role: .assistant,
             text: text,
@@ -284,6 +286,22 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         sessions[index].updatedAt = Date()
         var currentFlow = flow(for: id)
         currentFlow.executionCompleted(taskState: taskState)
+        flows[id] = currentFlow
+    }
+
+    public mutating func completeVerification(accepted: Bool, for id: UUID) {
+        guard let index = index(of: id) else { return }
+        sessions[index].verificationDriverRunID = nil
+        sessions[index].messages.append(CAPTChatMessage(
+            role: .system,
+            text: accepted
+                ? "Human review verified the provider result; ClaimGuard accepted the completion claim."
+                : "Human review rejected the provider result; ClaimGuard rejected the completion claim.",
+            authorityState: accepted ? "succeeded" : "failed"
+        ))
+        sessions[index].updatedAt = Date()
+        var currentFlow = flow(for: id)
+        currentFlow.reset()
         flows[id] = currentFlow
     }
 
@@ -420,6 +438,7 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
     ) {
         guard let index = index(of: id) else { return }
         sessions[index].pendingApproval = nil
+        sessions[index].promptProposal = nil
         let message = "Prompt approval expired. Submit the prompt again to mint a fresh approval."
         sessions[index].messages.append(CAPTChatMessage(
             role: .system,
@@ -441,6 +460,7 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
     ) {
         guard let index = index(of: id) else { return }
         sessions[index].pendingApproval = nil
+        sessions[index].promptProposal = nil
         let message = "Approval validity is unavailable for this cached request. Submit the prompt again to mint a fresh approval."
         sessions[index].messages.append(CAPTChatMessage(
             role: .system,

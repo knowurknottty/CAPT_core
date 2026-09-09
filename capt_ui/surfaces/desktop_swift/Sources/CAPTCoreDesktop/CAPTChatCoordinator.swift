@@ -3,10 +3,12 @@ import Foundation
 public struct CAPTExecutionResult: Equatable, Sendable {
     public let text: String
     public let taskState: String
+    public let driverRunID: String
 
-    public init(text: String, taskState: String) {
+    public init(text: String, taskState: String, driverRunID: String) {
         self.text = text
         self.taskState = taskState
+        self.driverRunID = driverRunID
     }
 }
 
@@ -122,7 +124,8 @@ public final class CAPTChatCoordinator {
         targetRoot: String,
         provider: String,
         model: String,
-        missionID: String? = nil
+        missionID: String? = nil,
+        authoritySettings: CAPTExecutionAuthoritySettings = .default
     ) throws -> CAPTPendingApproval {
         var payload: [String: Any] = [
             "objective": objective,
@@ -135,6 +138,18 @@ public final class CAPTChatCoordinator {
             "humanVerificationRequired": true,
         ]
         if let missionID, !missionID.isEmpty { payload["missionId"] = missionID }
+        guard let filesystemRoot = authoritySettings.effectiveFilesystemRoot(projectRoot: targetRoot) else {
+            throw CAPTRuntimeClientError.malformedResponse(
+                "custom filesystem scope requires a selected root"
+            )
+        }
+        payload["authorityProfile"] = [
+            "filesystemScope": authoritySettings.filesystemScope.rawValue,
+            "filesystemRoot": filesystemRoot,
+            "fileMutationAllowed": authoritySettings.fileMutationAllowed,
+            "shellAccessAllowed": authoritySettings.shellAccessAllowed,
+            "providerNetworkPolicy": authoritySettings.providerNetwork.rawValue,
+        ]
         let response = try client.command(
             op: "request_model_prompt_approval",
             payload: payload,
@@ -211,15 +226,24 @@ public final class CAPTChatCoordinator {
         )
         try Self.ensureAcceptedOrApplied(run)
 
-        let taskResponse = try client.query(
-            op: "get_state",
-            payload: ["streamId": "task-" + pending.taskID]
-        )
-        let taskState = Self.extractTaskState(taskResponse)
-        return CAPTExecutionResult(
-            text: Self.extractAssistantText(run),
-            taskState: taskState
-        )
+        let text = Self.extractAssistantText(run)
+        do {
+            let taskResponse = try client.query(
+                op: "get_state",
+                payload: ["streamId": "task-" + pending.taskID]
+            )
+            return CAPTExecutionResult(
+                text: text,
+                taskState: Self.extractTaskState(taskResponse),
+                driverRunID: pending.driverRunID
+            )
+        } catch {
+            return CAPTExecutionResult(
+                text: text,
+                taskState: "indeterminate",
+                driverRunID: pending.driverRunID
+            )
+        }
     }
 
     private static func pendingApproval(

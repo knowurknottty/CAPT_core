@@ -168,6 +168,18 @@ class Operator:
     def create_mission(self, payload: Dict[str, Any], idempotency_key: Optional[str] = None) -> Dict[str, Any]:
         return self._client.command("create_mission", payload, idempotency_key)
 
+    def compile_prompt_proposal(
+        self, payload: Dict[str, Any], idempotency_key: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Ask RuntimeService to compile a durable PromptProposal."""
+        return self._client.command("compile_prompt_proposal", payload, idempotency_key)
+
+    def request_prompt_proposal_approval(
+        self, payload: Dict[str, Any], idempotency_key: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Request HumanApproval bound to one exact PromptProposal revision/selection."""
+        return self._client.command("request_prompt_proposal_approval", payload, idempotency_key)
+
     def request_prompt_approval(
         self, payload: Dict[str, Any], idempotency_key: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -179,6 +191,13 @@ class Operator:
         if note:
             payload["note"] = note
         return self._client.command("submit_approval_decision", payload)
+
+    def approval_state(self, request_id: str) -> Dict[str, Any]:
+        """Read the authoritative HumanApproval aggregate after a decision."""
+        state = self._client.get_state("human_approval-" + str(request_id))
+        if not isinstance(state, dict):
+            raise OperatorError("HumanApproval %s not found" % request_id)
+        return state
 
     def cancel_task(self, task_id: str, reason: str = "operator stop") -> Dict[str, Any]:
         return self._client.command("cancel_task", {"taskId": task_id, "reason": reason})

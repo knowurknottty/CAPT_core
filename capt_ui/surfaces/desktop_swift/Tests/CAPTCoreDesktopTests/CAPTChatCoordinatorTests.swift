@@ -4,11 +4,13 @@ import XCTest
 final class MockRuntimeClient: CAPTRuntimeCommanding {
     var calls: [(String, [String: Any])] = []
     var responses: [String: [String: Any]] = [:]
+    var queryErrors: [String: Error] = [:]
 
     func connect() throws -> [String: Any] { [:] }
     func disconnect() {}
     func query(op: String, payload: [String: Any]) throws -> [String: Any] {
         calls.append((op, payload))
+        if let error = queryErrors[op] { throw error }
         return responses["query:" + op] ?? [:]
     }
     func command(op: String, payload: [String: Any], idempotencyKey: String?) throws -> [String: Any] {
@@ -25,6 +27,33 @@ final class CAPTChatCoordinatorTests: XCTestCase {
             "promptAssemblyDigest": "sha256:abc",
             "expiresAt": "2026-08-18T18:30:00Z"
         ]]
+    }
+
+    func testDirectApprovalCarriesOperatorAuthorityIntent() throws {
+        let client = MockRuntimeClient()
+        client.responses["request_model_prompt_approval"] = approvalResponse()
+        let coordinator = CAPTChatCoordinator(client: client)
+        let settings = CAPTExecutionAuthoritySettings(
+            filesystemScope: .custom,
+            customFilesystemRoot: "/workspace",
+            fileMutationAllowed: true,
+            shellAccessAllowed: true,
+            providerNetwork: .remoteAllowed,
+            remotePromptCompilationAllowed: false
+        )
+
+        _ = try coordinator.requestApproval(
+            objective: "inspect repo", targetRoot: "/repo",
+            provider: "openrouter", model: "model-a",
+            authoritySettings: settings
+        )
+
+        let profile = try XCTUnwrap(client.calls[0].1["authorityProfile"] as? [String: Any])
+        XCTAssertEqual(profile["filesystemScope"] as? String, "custom")
+        XCTAssertEqual(profile["filesystemRoot"] as? String, "/workspace")
+        XCTAssertEqual(profile["fileMutationAllowed"] as? Bool, true)
+        XCTAssertEqual(profile["shellAccessAllowed"] as? Bool, true)
+        XCTAssertEqual(profile["providerNetworkPolicy"] as? String, "remote_allowed")
     }
 
     func testRequestCreatesPendingApprovalWithoutDispatch() throws {
@@ -58,6 +87,33 @@ final class CAPTChatCoordinatorTests: XCTestCase {
         ])
     }
 
+    func testApproveAndRunPreservesAcceptedExecutionWhenStateProbeFails() throws {
+        let client = MockRuntimeClient()
+        client.responses["request_model_prompt_approval"] = approvalResponse()
+        client.responses["submit_approval_decision"] = ["status": "accepted"]
+        client.responses["run_approved_hermes_inspection"] = [
+            "status": "accepted",
+            "observations": [["content": "accepted model observation"]]
+        ]
+        client.queryErrors["get_state"] = NSError(
+            domain: "CAPTTest", code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "state probe unavailable"]
+        )
+        let coordinator = CAPTChatCoordinator(client: client)
+        let pending = try coordinator.requestApproval(
+            objective: "inspect repo", targetRoot: "/repo",
+            provider: "ollama", model: "model-a"
+        )
+
+        let result = try coordinator.approveAndRun(pending)
+
+        XCTAssertEqual(result.text, "accepted model observation")
+        XCTAssertEqual(result.taskState, "indeterminate")
+        XCTAssertEqual(client.calls.map(\.0).suffix(3), [
+            "submit_approval_decision", "run_approved_hermes_inspection", "get_state"
+        ])
+    }
+
     func testApproveRunsExactBoundExecutionAndExtractsObservation() throws {
         let client = MockRuntimeClient()
         client.responses["request_model_prompt_approval"] = approvalResponse()
@@ -79,6 +135,7 @@ final class CAPTChatCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(result.text, "CAPT says hello")
         XCTAssertEqual(result.taskState, "awaiting_verification")
+        XCTAssertEqual(result.driverRunID, "run-1")
         XCTAssertEqual(client.calls.map(\.0), [
             "request_model_prompt_approval", "submit_approval_decision",
             "run_approved_hermes_inspection", "get_state"

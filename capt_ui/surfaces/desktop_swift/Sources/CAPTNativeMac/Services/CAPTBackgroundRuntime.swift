@@ -210,6 +210,27 @@ actor CAPTBackgroundRuntime {
         client.disconnect()
     }
 
+    func reviewProviderResult(
+        driverRunID: String, disposition: String, note: String
+    ) throws -> [String: Any] {
+        let receipt = try client.command(
+            op: "submit_provider_result_review",
+            payload: [
+                "driverRunId": driverRunID,
+                "disposition": disposition,
+                "note": note,
+            ],
+            idempotencyKey: "native-provider-review-" + disposition + "-" + driverRunID
+        )
+        if let status = receipt["status"] as? String,
+           ["rejected", "failed", "denied"].contains(status.lowercased()) {
+            throw CAPTRuntimeClientError.malformedResponse(
+                (receipt["detail"] as? String) ?? "provider result review rejected"
+            )
+        }
+        return receipt["result"] as? [String: Any] ?? [:]
+    }
+
     func cancelTask(_ taskID: String) throws {
         _ = try client.command(
             op: "cancel_task",
@@ -311,14 +332,16 @@ actor CAPTBackgroundRuntime {
         targetRoot: String,
         provider: String,
         model: String,
-        missionID: String? = nil
+        missionID: String? = nil,
+        authoritySettings: CAPTExecutionAuthoritySettings = .default
     ) throws -> CAPTPendingApproval {
         try coordinator.requestApproval(
             objective: objective,
             targetRoot: targetRoot,
             provider: provider,
             model: model,
-            missionID: missionID
+            missionID: missionID,
+            authoritySettings: authoritySettings
         )
     }
 

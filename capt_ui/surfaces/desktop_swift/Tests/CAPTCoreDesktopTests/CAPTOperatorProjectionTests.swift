@@ -40,6 +40,24 @@ final class CAPTOperatorProjectionTests: XCTestCase {
         XCTAssertTrue(summary.tasks.last?.consequential == true)
     }
 
+    func testMissionCountersDistinguishSuccessFromTerminality() {
+        let mission: [String: Any] = ["missionId": "m-counts", "state": "executing"]
+        let tasks: [[String: Any]] = [
+            ["taskId": "t-success", "missionId": "m-counts", "state": "succeeded"],
+            ["taskId": "t-failed", "missionId": "m-counts", "state": "failed"],
+            ["taskId": "t-cancelled", "missionId": "m-counts", "state": "cancelled"],
+            ["taskId": "t-running", "missionId": "m-counts", "state": "running"],
+        ]
+
+        let summary = CAPTOperatorProjection.mission(mission, tasks: tasks)
+
+        XCTAssertEqual(summary.succeededTaskCount, 1)
+        XCTAssertEqual(summary.failedTaskCount, 1)
+        XCTAssertEqual(summary.cancelledTaskCount, 1)
+        XCTAssertEqual(summary.terminalTaskCount, 3)
+        XCTAssertEqual(summary.completedTaskCount, 1)
+    }
+
     func testEvidenceProjectionPreservesEpistemicState() {
         let claim: [String: Any] = [
             "claimId": "cl-1", "missionId": "m-1",

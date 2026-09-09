@@ -50,6 +50,7 @@ _VALID_OPS = (
     "request_prompt_proposal_approval",
     "request_model_prompt_approval",
     "submit_approval_decision",
+    "submit_provider_result_review",
     "cancel_task",
     "cancel_driver_run",
     "update_memory_trigger_policy",
@@ -345,6 +346,54 @@ class RuntimeCommandService:
                     "sessionId": self.session_id,
                 }
                 result = self.svc.submit_human_approval_decision(decision, meta)
+
+            elif op == "submit_provider_result_review":
+                p = cmd["payload"]
+                run_id = p.get("driverRunId")
+                disposition = p.get("disposition")
+                if not isinstance(run_id, str) or not run_id.strip():
+                    raise ValueError("PROVIDER_RESULT_REVIEW_DRIVER_RUN_REQUIRED")
+                if disposition not in {"accept", "reject"}:
+                    raise ValueError("PROVIDER_RESULT_REVIEW_DISPOSITION_INVALID")
+                run = self.store.require_state("driverrun-" + run_id)
+                if run.get("driverId") != "provider":
+                    raise AuthorityViolation("provider result review requires a provider DriverRun")
+                if run.get("state") != "completed":
+                    raise AuthorityViolation("provider result review requires a completed DriverRun")
+                if run.get("reconciliationStatus") != "not_required":
+                    raise AuthorityViolation("provider result review requires reconciliationStatus=not_required")
+                task_id = run.get("taskId")
+                candidates = []
+                for stream_id, kind, _version in self.store.all_aggregates():
+                    if kind != "claim":
+                        continue
+                    state = self.store.load_state(stream_id)
+                    if (
+                        state
+                        and state.get("taskId") == task_id
+                        and state.get("kind") == "completion"
+                        and state.get("promotionState") == "proposed"
+                    ):
+                        candidates.append(state)
+                if len(candidates) != 1:
+                    raise AuthorityViolation(
+                        "provider result review requires exactly one proposed completion claim for task %s; found %d"
+                        % (task_id, len(candidates))
+                    )
+                result = self.svc.review_claim_with_human_attestation(
+                    claim_id=candidates[0]["claimId"],
+                    disposition=disposition,
+                    operator_id=self.operator_id,
+                    note=p.get("note"),
+                    metadata=meta,
+                )
+                return self._receipt(
+                    cmd,
+                    status="accepted",
+                    classification="accepted",
+                    result={**result, "driverRunId": run_id},
+                    stream_id="claim-" + str(result["claimId"]),
+                )
 
             elif op == "cancel_task":
                 result = self.svc.cancel_task(

@@ -25,7 +25,11 @@ public struct CAPTMissionSummary: Identifiable, Sendable, Equatable {
     public var taskID: String? { tasks.last?.id }
     public var taskState: String? { tasks.last?.state }
     public var taskCount: Int { tasks.count }
-    public var completedTaskCount: Int { tasks.filter(\.isTerminal).count }
+    public var succeededTaskCount: Int { tasks.filter { $0.state == "succeeded" }.count }
+    public var failedTaskCount: Int { tasks.filter { $0.state == "failed" }.count }
+    public var cancelledTaskCount: Int { tasks.filter { $0.state == "cancelled" }.count }
+    public var terminalTaskCount: Int { tasks.filter(\.isTerminal).count }
+    public var completedTaskCount: Int { succeededTaskCount }
     public var isMultiTask: Bool { tasks.count > 1 }
     public var hasActiveExecution: Bool {
         tasks.contains { ["ready", "assigned", "running", "suspended"].contains($0.state) }

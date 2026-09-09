@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import CAPTCoreDesktop
 
@@ -20,18 +21,24 @@ struct SkillsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            controlHeader
-            Divider()
-            if let snapshot = store.managedSkills, snapshot.installed {
-                List(filteredSkills) { skill in
-                    skillRow(skill)
+            ScrollView {
+                VStack(alignment: .leading, spacing: InversionVisualLanguage.sectionSpacing) {
+                    header
+                    if let snapshot = store.managedSkills, snapshot.installed {
+                        packPanel(snapshot)
+                        selectionPanel
+                        skillCatalog(snapshot)
+                    } else {
+                        emptyState
+                    }
                 }
-                .searchable(text: $search, placement: .toolbar, prompt: "Search skills")
-            } else {
-                emptyState
+                .padding(InversionVisualLanguage.pagePadding)
+                .frame(maxWidth: 980, alignment: .topLeading)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
         }
         .navigationTitle("Skills")
+        .searchable(text: $search, placement: .toolbar, prompt: "Search managed skills")
         .onAppear { store.refreshSkills() }
         .sheet(isPresented: $showingCreateSheet) {
             SkillCreationSheet(isBusy: store.skillManagementBusy) { name, description, version, body in
@@ -43,172 +50,277 @@ struct SkillsView: View {
         }
     }
 
-    private var controlHeader: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Governed Skill Context").font(.title3.bold())
-                    Text(modeDescription)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button(action: chooseInstallSource) {
-                    Label("Install…", systemImage: "square.and.arrow.down")
-                }
-                .disabled(!canMutatePack)
-                Button {
-                    showingCreateSheet = true
-                } label: {
-                    Label("Create…", systemImage: "plus.square")
-                }
-                .disabled(!canMutatePack)
-                Button {
-                    store.beginGuidedSkillCreation()
-                    selection = .chat
-                } label: {
-                    Label("Create with CAPT", systemImage: "bubble.left.and.text.bubble.right")
-                }
-                .disabled(store.connectionState != .connected)
-                Button {
-                    store.refreshSkills()
-                } label: {
-                    Label("Verify Pack", systemImage: "checkmark.shield")
-                }
-                .disabled(store.connectionState != .connected || store.skillManagementBusy)
-            }
+    private var header: some View {
+        HStack(alignment: .top, spacing: 16) {
+            InversionSectionHeader(
+                "Skill lattice",
+                eyebrow: "COGNITIVE CONTEXT",
+                detail: "Verified local skill instructions can be auto-selected or explicitly frozen into HumanApproval. Pack mutation remains a separate governed operator action.",
+                symbol: "puzzlepiece.extension",
+                tone: .violet
+            )
+            Spacer(minLength: 16)
+            actionCluster
+        }
+    }
 
-            Picker("Selection", selection: Binding(
-                get: { store.skillSelectionMode },
-                set: { store.setSkillSelectionMode($0) }
-            )) {
-                Text("Auto").tag("auto")
-                Text("Manual").tag("manual")
-                Text("Off").tag("off")
+    private var actionCluster: some View {
+        HStack(spacing: 8) {
+            Button(action: chooseInstallSource) {
+                Label("Install", systemImage: "square.and.arrow.down")
             }
-            .pickerStyle(.segmented)
-            .frame(maxWidth: 360)
+            .disabled(!canMutatePack)
 
-            if let snapshot = store.managedSkills, snapshot.installed {
-                HStack(spacing: 12) {
-                    Label("\(snapshot.skills.count) verified", systemImage: "checkmark.seal")
-                    Text(snapshot.packName + (snapshot.packVersion.map { " · " + $0 } ?? ""))
-                    if let trust = snapshot.trust {
-                        Text(trust.replacingOccurrences(of: "_", with: " "))
+            Button {
+                showingCreateSheet = true
+            } label: {
+                Label("Create", systemImage: "plus.square")
+            }
+            .disabled(!canMutatePack)
+
+            Button {
+                store.beginGuidedSkillCreation()
+                selection = .chat
+            } label: {
+                Label("Create with CAPT", systemImage: "sparkles.rectangle.stack")
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(store.connectionState != .connected)
+        }
+        .controlSize(.small)
+    }
+
+    private func packPanel(_ snapshot: CAPTManagedSkillSnapshot) -> some View {
+        InversionPanel(tone: .cyan) {
+            VStack(alignment: .leading, spacing: 13) {
+                HStack(alignment: .top) {
+                    InversionSectionHeader(
+                        "Managed pack",
+                        detail: "Runtime-verified metadata only; instruction bodies stay behind the governed context boundary.",
+                        symbol: "checkmark.shield",
+                        tone: .cyan
+                    )
+                    Spacer()
+                    InversionStatusBadge("VERIFIED", tone: .success)
+                }
+
+                HStack(spacing: 10) {
+                    InversionMetric("skills", value: "\(snapshot.skills.count)", symbol: "square.stack.3d.up", tone: .cyan)
+                    InversionMetric("selection", value: store.skillSelectionMode.uppercased(), symbol: "slider.horizontal.3", tone: .violet)
+                    InversionMetric("trust", value: (snapshot.trust ?? "unknown").replacingOccurrences(of: "_", with: " "), symbol: "lock.shield", tone: .success)
+                    Spacer(minLength: 0)
+                }
+
+                InversionDivider()
+                InversionKeyValueRow("pack", value: snapshot.packName + (snapshot.packVersion.map { " · " + $0 } ?? ""), monospaced: true)
+                if let digest = snapshot.manifestDigest {
+                    InversionKeyValueRow("manifest", value: digest, tone: .cyan, monospaced: true)
+                }
+
+                HStack {
+                    if store.skillManagementBusy {
+                        ProgressView().controlSize(.small)
+                        Text(store.skillManagementMessage.isEmpty ? "Updating verified pack…" : store.skillManagementMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if !store.skillManagementMessage.isEmpty {
+                        Label(store.skillManagementMessage, systemImage: "checkmark.circle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
                     }
+                    Spacer()
+                    Button {
+                        store.refreshSkills()
+                    } label: {
+                        Label("Reverify", systemImage: "arrow.clockwise")
+                    }
+                    .controlSize(.small)
+                    .disabled(store.connectionState != .connected || store.skillManagementBusy)
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-            }
-
-            if store.skillManagementBusy {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text(store.skillManagementMessage)
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            } else if !store.skillManagementMessage.isEmpty {
-                Label(store.skillManagementMessage, systemImage: "checkmark.circle")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
             }
         }
-        .padding(20)
+    }
+
+    private var selectionPanel: some View {
+        InversionPanel(tone: selectionTone) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("EXECUTION SELECTION")
+                            .font(.caption2.weight(.semibold))
+                            .tracking(1.0)
+                            .foregroundStyle(selectionTone.color)
+                        Text(modeDescription)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if store.skillSelectionMode == "manual" {
+                        InversionStatusBadge("\(store.selectedSkillNames.count) selected", tone: .amber, monospaced: true)
+                    }
+                }
+
+                Picker("Selection", selection: Binding(
+                    get: { store.skillSelectionMode },
+                    set: { store.setSkillSelectionMode($0) }
+                )) {
+                    Text("Auto-select").tag("auto")
+                    Text("Manual bind").tag("manual")
+                    Text("Disabled").tag("off")
+                }
+                .pickerStyle(.segmented)
+                .frame(maxWidth: 460)
+            }
+        }
+    }
+
+    private func skillCatalog(_ snapshot: CAPTManagedSkillSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("VERIFIED SKILLS")
+                    .font(.caption2.weight(.semibold))
+                    .tracking(1.1)
+                    .foregroundStyle(.secondary)
+                Text("\(filteredSkills.count) / \(snapshot.skills.count)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                Spacer()
+            }
+
+            LazyVStack(spacing: 9) {
+                ForEach(filteredSkills) { skill in
+                    skillRow(skill)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func skillRow(_ skill: CAPTManagedSkill) -> some View {
+        let isSelected = store.skillSelectionMode == "manual" && store.selectedSkillNames.contains(skill.name)
+        Button {
+            guard store.skillSelectionMode == "manual" else { return }
+            store.toggleSkill(skill.name)
+        } label: {
+            HStack(alignment: .top, spacing: 13) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill((isSelected ? InversionTone.amber : InversionTone.violet).color.opacity(isSelected ? 0.16 : 0.08))
+                    Image(systemName: selectionSymbol(for: skill.name))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle((isSelected ? InversionTone.amber : InversionTone.violet).color)
+                }
+                .frame(width: 34, height: 34)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Text(skill.name)
+                            .font(.body.weight(.semibold))
+                        Text(skill.version)
+                            .font(.caption2.monospaced())
+                            .foregroundStyle(.tertiary)
+                        if isSelected {
+                            InversionStatusBadge("BOUND", tone: .amber)
+                        }
+                        Spacer()
+                    }
+                    if !skill.description.isEmpty {
+                        Text(skill.description)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if !skill.triggers.isEmpty {
+                        HStack(spacing: 5) {
+                            ForEach(Array(skill.triggers.prefix(3)), id: \.self) { trigger in
+                                Text(trigger)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(Color.primary.opacity(0.04), in: Capsule())
+                            }
+                        }
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(13)
+            .contentShape(Rectangle())
+            .background {
+                RoundedRectangle(cornerRadius: InversionVisualLanguage.compactRadius, style: .continuous)
+                    .fill(.thinMaterial)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: InversionVisualLanguage.compactRadius, style: .continuous)
+                    .strokeBorder(
+                        (isSelected ? InversionTone.amber : InversionTone.violet).color.opacity(isSelected ? 0.32 : 0.12),
+                        lineWidth: 1
+                    )
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(store.skillSelectionMode != "manual")
+        .help(store.skillSelectionMode == "manual" ? "Toggle exact HumanApproval skill binding" : "Switch to Manual bind to choose exact skills")
     }
 
     private var canMutatePack: Bool {
         store.connectionState == .connected && !store.skillManagementBusy
     }
 
-    private var modeDescription: String {
+    private var selectionTone: InversionTone {
         switch store.skillSelectionMode {
-        case "manual":
-            return "Only checked managed skills are frozen into the execution approval."
-        case "off":
-            return "Managed skill context is explicitly disabled for new approvals."
-        default:
-            return "CAPT verifies the pack and selects relevant skills from each objective."
+        case "manual": return .amber
+        case "off": return .neutral
+        default: return .violet
         }
     }
 
-    @ViewBuilder
-    private func skillRow(_ skill: CAPTManagedSkill) -> some View {
-        Button {
-            guard store.skillSelectionMode == "manual" else { return }
-            store.toggleSkill(skill.name)
-        } label: {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: selectionSymbol(for: skill.name))
-                    .foregroundStyle(selectionStyle(for: skill.name))
-                    .frame(width: 18)
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(skill.name).font(.headline)
-                        Text(skill.version).font(.caption.monospaced()).foregroundStyle(.tertiary)
-                    }
-                    if !skill.description.isEmpty {
-                        Text(skill.description)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(3)
-                    }
-                    if !skill.triggers.isEmpty {
-                        Text(skill.triggers.prefix(3).joined(separator: " · "))
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
-                    }
-                }
-                Spacer()
-            }
-            .contentShape(Rectangle())
-            .padding(.vertical, 4)
+    private var modeDescription: String {
+        switch store.skillSelectionMode {
+        case "manual": return "Only checked managed skills are frozen into the next execution approval."
+        case "off": return "Managed skill context is explicitly excluded from new approvals."
+        default: return "CAPT verifies the pack and ranks relevant skills against each objective."
         }
-        .buttonStyle(.plain)
-        .disabled(store.skillSelectionMode != "manual")
-        .help(store.skillSelectionMode == "manual" ? "Toggle skill" : "Switch to Manual to choose exact skills")
     }
 
     private func selectionSymbol(for name: String) -> String {
         switch store.skillSelectionMode {
-        case "manual": return store.selectedSkillNames.contains(name) ? "checkmark.circle.fill" : "circle"
-        case "off": return "minus.circle"
+        case "manual": return store.selectedSkillNames.contains(name) ? "checkmark" : "circle"
+        case "off": return "minus"
         default: return "sparkles"
         }
     }
 
-    private func selectionStyle(for name: String) -> HierarchicalShapeStyle {
-        if store.skillSelectionMode == "manual" && store.selectedSkillNames.contains(name) {
-            return .primary
-        }
-        return .secondary
-    }
-
     private var emptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "puzzlepiece.extension")
-                .font(.system(size: 34))
-                .foregroundStyle(.secondary)
-            Text("No verified managed skill pack").font(.headline)
-            Text("Install an Agent Skill folder, create one here, or ask CAPT to guide the authoring process. CAPT will not inject a skill until the runtime verifies the resulting pack.")
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 500)
-            HStack {
-                Button("Install…", action: chooseInstallSource).disabled(!canMutatePack)
-                Button("Create…") { showingCreateSheet = true }.disabled(!canMutatePack)
-                Button("Create with CAPT") {
-                    store.beginGuidedSkillCreation()
-                    selection = .chat
+        InversionPanel(tone: .violet) {
+            VStack(spacing: 14) {
+                InversionBrandMark(compact: true)
+                Image(systemName: "puzzlepiece.extension")
+                    .font(.system(size: 30))
+                    .foregroundStyle(InversionTone.violet.color)
+                Text("No verified managed skill pack")
+                    .font(.title3.weight(.semibold))
+                Text("Install an Agent Skill folder, author one directly, or let CAPT guide the design in chat. Nothing becomes selectable until RuntimeService verifies the resulting pack.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 540)
+                HStack {
+                    Button("Install…", action: chooseInstallSource).disabled(!canMutatePack)
+                    Button("Create…") { showingCreateSheet = true }.disabled(!canMutatePack)
+                    Button("Create with CAPT") {
+                        store.beginGuidedSkillCreation()
+                        selection = .chat
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(store.connectionState != .connected)
                 }
-                .disabled(store.connectionState != .connected)
             }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 28)
         }
-        .padding(32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func chooseInstallSource() {
@@ -218,7 +330,7 @@ struct SkillsView: View {
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = false
         panel.prompt = "Install Skills"
-        panel.message = "Choose a folder containing SKILL.md files or .skill bundles. CAPT will verify and atomically merge the discovered skills."
+        panel.message = "Choose a folder containing SKILL.md files or .skill bundles. CAPT verifies and atomically merges discovered skills."
         if panel.runModal() == .OK, let url = panel.url {
             store.installManagedSkill(from: url.path)
         }
@@ -235,33 +347,48 @@ private struct SkillCreationSheet: View {
     @State private var instructions = ""
 
     private var canCreate: Bool {
-        !isBusy &&
-        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !isBusy && !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            !instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    var bodyContent: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Create Managed Skill").font(.title2.bold())
-            Text("CAPT constructs a real SKILL.md, atomically merges it into the managed pack, and verifies the new manifest before it becomes selectable.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            TextField("name, e.g. capt-ui-review", text: $name)
-            TextField("description — when CAPT should use this skill", text: $description)
-            TextField("version", text: $version)
-                .frame(maxWidth: 180)
-            Text("Skill instructions").font(.headline)
-            TextEditor(text: $instructions)
-                .font(.body.monospaced())
-                .frame(minHeight: 260)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(.quaternary, lineWidth: 1)
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            InversionSectionHeader(
+                "Create managed skill",
+                eyebrow: "AUTHORING BOUNDARY",
+                detail: "CAPT constructs SKILL.md, atomically merges it into the managed pack, then verifies the new manifest before activation.",
+                symbol: "square.and.pencil",
+                tone: .violet
+            )
+
+            InversionPanel {
+                VStack(alignment: .leading, spacing: 12) {
+                    TextField("name, e.g. capt-ui-review", text: $name)
+                    TextField("description — when CAPT should use this skill", text: $description)
+                    TextField("version", text: $version)
+                        .frame(maxWidth: 180)
+                    InversionDivider()
+                    Text("INSTRUCTIONS")
+                        .font(.caption2.weight(.semibold))
+                        .tracking(1)
+                        .foregroundStyle(.secondary)
+                    TextEditor(text: $instructions)
+                        .font(.body.monospaced())
+                        .frame(minHeight: 250)
+                        .padding(8)
+                        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 9))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 9)
+                                .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
+                        }
                 }
+            }
+
             HStack {
                 Button("Cancel") { dismiss() }
                 Spacer()
+                if isBusy { ProgressView().controlSize(.small) }
                 Button("Create & Verify") {
                     create(name, description, version, instructions)
                 }
@@ -270,8 +397,6 @@ private struct SkillCreationSheet: View {
             }
         }
         .padding(24)
-        .frame(minWidth: 640, minHeight: 520)
+        .frame(minWidth: 660, minHeight: 540)
     }
-
-    var body: some View { bodyContent }
 }

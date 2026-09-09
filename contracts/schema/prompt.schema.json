@@ -63,6 +63,11 @@
         "runCommands": {"type": "array", "maxItems": 64, "items": {"type": "string", "maxLength": 2048}}
       }
     },
+    "PromptCompilationStatus": {
+      "title": "PromptCompilationStatus",
+      "type": "string",
+      "enum": ["ready_for_approval", "clarification_required", "compiler_unavailable"]
+    },
     "PromptProposalState": {
       "title": "PromptProposalState",
       "type": "string",
@@ -90,6 +95,9 @@
         "effectiveContextBudget": {"type": "integer", "minimum": 0, "maximum": 10000000},
         "capabilityRequests": {"type": "array", "maxItems": 128, "items": {"$ref": "prompt.schema.json#/$defs/PromptCapabilityRequest"}},
         "verificationContract": {"$ref": "prompt.schema.json#/$defs/PromptVerificationContract"},
+        "compilationStatus": {"$ref": "prompt.schema.json#/$defs/PromptCompilationStatus"},
+        "rationale": {"type": "string", "maxLength": 8192},
+        "unresolvedQuestions": {"type": "array", "maxItems": 128, "items": {"type": "string", "maxLength": 2048}},
         "state": {"$ref": "prompt.schema.json#/$defs/PromptProposalState"},
         "revision": {"type": "integer", "minimum": 0},
         "cancelReason": {"type": ["string", "null"], "maxLength": 2048}
