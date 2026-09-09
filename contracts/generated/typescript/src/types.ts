@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:dee298e33f1c587f30ec8f9d9b3b200c3bdf863c39f7fe1cc560baf23c8fb790
+// source digest:  sha256:26e3ac1625862ed2d37a6a9c9b5a4e0c328b04e89341175068142c8d0c3389c5
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -2045,6 +2045,57 @@ export interface ReplayForkState {
   readonly sourceStateDigest: Digest;
   readonly state: "created";
 }
+
+/** Exact full Docker object ID; names and abbreviated IDs are not identity. */
+export type SandboxDockerObjectId = string;
+
+/** Resource lifetime facts only; grants no capability authority. Identity fields are immutable once bound. Optional external identities are absent until observed. TTL default is 1800 seconds; callers materialize the profile-approved value. sideEffectIdentity is the canonical lifecycle identity digest. */
+export interface SandboxLease {
+  readonly createdAt: Timestamp;
+  readonly creationToolExecutionId: Identifier;
+  readonly daemonIdentityDigest: Digest;
+  readonly dockerEndpoint: string;
+  readonly executionContextId: Identifier;
+  readonly expiresAt: Timestamp;
+  readonly filesystemScopeDigest: Digest;
+  readonly imageId: Digest;
+  readonly networkPolicyDigest: Digest;
+  readonly operatorId: Identifier;
+  readonly persistentEntrypointDigest: Digest;
+  readonly profileDigest: Digest;
+  readonly profileId: Identifier;
+  readonly sandboxLeaseId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly securityProfileDigest: Digest;
+  readonly sessionId: Identifier;
+  readonly state: SandboxLeaseState;
+  readonly ttlSeconds: number;
+  readonly closeReason?: string;
+  readonly closedAt?: Timestamp;
+  readonly closureReceiptDigest?: Digest;
+  readonly containerId?: SandboxDockerObjectId;
+  readonly creationAttestationDigest?: Digest;
+  readonly guardianContainerId?: SandboxDockerObjectId;
+  readonly guardianImageId?: Digest;
+  readonly lastReconciledAt?: Timestamp;
+  readonly networkId?: SandboxDockerObjectId;
+  readonly networkName?: string;
+  readonly reconciliationEvidenceDigest?: Digest;
+  readonly reconciliationReason?: string;
+  readonly sideEffectIdentity?: Digest;
+  readonly updatedAt?: Timestamp;
+}
+
+/** SandboxLeaseState */
+export type SandboxLeaseState = "reserved" | "created" | "running" | "closing" | "closed" | "indeterminate";
+export const SandboxLeaseStateValues = [
+  "reserved",
+  "created",
+  "running",
+  "closing",
+  "closed",
+  "indeterminate",
+] as const;
 
 /** Spec 8: 'parallel' is NOT an edge type. Parallelism emerges when predecessor conditions are simultaneously satisfied. */
 export type DependencyCondition = "completed" | "succeeded" | "failed" | "verified" | "approved";

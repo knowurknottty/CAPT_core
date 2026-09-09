@@ -12,6 +12,7 @@ from .human_approval import HumanApprovalAggregate
 from .lab_board import LabBoardAggregate
 from .mission_task import MissionAggregate, TaskAggregate
 from .replay_fork import ReplayForkAggregate
+from .sandbox_lease import SandboxLeaseAggregate
 from .skill_candidate import SkillCandidateAggregate
 from .tool_execution import ToolExecutionAggregate
 
@@ -32,6 +33,7 @@ ALL_AGGREGATES = (
     HumanApprovalAggregate,
     ArtifactPromotionAggregate,
     ToolExecutionAggregate,
+    SandboxLeaseAggregate,
 )
 
 __all__ = [
@@ -52,5 +54,6 @@ __all__ = [
     "MissionAggregate",
     "TaskAggregate",
     "ToolExecutionAggregate",
+    "SandboxLeaseAggregate",
     "scope_contains",
 ]
