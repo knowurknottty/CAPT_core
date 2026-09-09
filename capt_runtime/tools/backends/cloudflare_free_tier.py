@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from capt_runtime.errors import AuthorityViolation
+
+from .cloudflare_ai_catalog import CloudflareAIModelCatalogSnapshot
 
 
 @dataclass(frozen=True)
@@ -29,17 +32,6 @@ class CloudflareUsageSnapshot:
     workers_ai_neurons: int = 0
     d1_rows_read: int = 0
     d1_rows_written: int = 0
-
-
-_PAID_AI_MODELS = frozenset({
-    "@cf/moonshotai/kimi-k2.6",
-    "@cf/moonshotai/kimi-k2.7-code",
-    "@cf/zai-org/glm-5.2",
-    "@cf/zai-org/glm-5.3",
-    "@cf/zai-org/glm-5.3-flash",
-    "@cf/deepseek-ai/deepseek-v4-flash-0731",
-    "@cf/deepseek-ai/deepseek-v4-pro-0813",
-})
 
 
 @dataclass(frozen=True)
@@ -79,12 +71,21 @@ class CloudflareFreeTierEnvelope:
             raise AuthorityViolation("CLOUDFLARE_WORKERS_DAILY_BUDGET_EXHAUSTED")
 
     def require_workers_ai(
-        self, *, model: str, neurons: int, usage: CloudflareUsageSnapshot | None = None
+        self,
+        *,
+        model: str,
+        neurons: int,
+        usage: CloudflareUsageSnapshot | None = None,
+        catalog: CloudflareAIModelCatalogSnapshot | None = None,
+        at: datetime | None = None,
     ) -> None:
         usage = usage or CloudflareUsageSnapshot()
         self._nonnegative(neurons, "workers_ai_neurons_invalid")
-        if model in _PAID_AI_MODELS:
-            raise AuthorityViolation("CLOUDFLARE_AI_MODEL_REQUIRES_PAID_AUTHORITY")
+        if catalog is None:
+            raise AuthorityViolation("CLOUDFLARE_AI_MODEL_CATALOG_REQUIRED")
+        if at is None:
+            raise ValueError("cloudflare_ai_catalog_check_time_required")
+        catalog.require_free(model, at=at)
         if usage.workers_ai_neurons + neurons > self.workers_ai_neurons_per_day:
             raise AuthorityViolation("CLOUDFLARE_AI_DAILY_BUDGET_EXHAUSTED")
 

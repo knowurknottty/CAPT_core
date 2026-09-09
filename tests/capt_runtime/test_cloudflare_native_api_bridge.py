@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 import pytest
 
@@ -227,3 +228,42 @@ def test_binary_browser_actions_are_blocked_before_dispatch(monkeypatch):
                 estimated_seconds=3,
             )
     assert opener.calls == []
+
+
+def test_ai_model_catalog_is_read_only_paginated_and_metadata_bound(monkeypatch):
+    monkeypatch.setenv("CF_API_TOKEN", "api-secret")
+    monkeypatch.setenv("CF_WORKER_TOKEN", "worker-secret")
+    now = datetime(2026, 9, 9, 4, 30, tzinfo=timezone.utc)
+    opener = Recorder([
+        {
+            "success": True,
+            "result": [
+                {"name": "@cf/meta/free", "properties": []},
+                {"name": "@cf/zai-org/glm-5.3-flash", "properties": [
+                    {"property_id": "require_workers_paid", "value": "true"}
+                ]},
+            ],
+            "result_info": {"page": 1, "total_pages": 1},
+        }
+    ])
+    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener, now=lambda: now)
+    catalog = bridge.ai_model_catalog()
+    request = opener.calls[0][0]
+    assert request.get_method() == "GET"
+    assert "/accounts/acct-1/ai/models/search?" in request.full_url
+    assert "include_deprecated=false" in request.full_url
+    assert "per_page=100" in request.full_url
+    assert request.headers["Authorization"] == "Bearer api-secret"
+    assert catalog.fetched_at == now
+    assert catalog.catalog_models == frozenset({"@cf/meta/free", "@cf/zai-org/glm-5.3-flash"})
+    assert catalog.paid_required_models == frozenset({"@cf/zai-org/glm-5.3-flash"})
+    assert catalog.source_digest.startswith("sha256:")
+
+
+def test_ai_model_catalog_rejects_partial_or_invalid_pagination(monkeypatch):
+    monkeypatch.setenv("CF_API_TOKEN", "api-secret")
+    monkeypatch.setenv("CF_WORKER_TOKEN", "worker-secret")
+    opener = Recorder([{"success": True, "result": [], "result_info": {"page": 1}}])
+    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener)
+    with pytest.raises(RuntimeError, match="cloudflare_ai_catalog_pagination_unclassified"):
+        bridge.ai_model_catalog()

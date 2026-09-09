@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
 
 from capt_runtime.errors import AuthorityViolation
 
+from .cloudflare_ai_catalog import CloudflareAIModelCatalogSnapshot
 from .cloudflare_free_tier import (
     CloudflareFreeTierEnvelope,
     CloudflareUsageSnapshot,
@@ -64,6 +66,8 @@ class CloudflareFreeTierRouter:
         estimate: CloudflareFreeEstimate,
         *,
         usage: CloudflareUsageSnapshot | None = None,
+        ai_catalog: CloudflareAIModelCatalogSnapshot | None = None,
+        at: datetime | None = None,
     ) -> CloudflareRouteDecision:
         usage = usage or CloudflareUsageSnapshot()
         if work_class is CloudflareWorkClass.COORDINATION:
@@ -88,8 +92,9 @@ class CloudflareFreeTierRouter:
                 rows_written=estimate.d1_rows_written,
                 usage=usage,
             )
-            return CloudflareRouteDecision(CloudflareSurface.D1, "free_native_d1_admitted")
-
+            return CloudflareRouteDecision(
+                CloudflareSurface.D1, "free_native_d1_admitted"
+            )
         if work_class is CloudflareWorkClass.BROWSER:
             self.envelope.require_browser(
                 seconds=estimate.browser_seconds, usage=usage
@@ -104,6 +109,8 @@ class CloudflareFreeTierRouter:
                 model=estimate.ai_model,
                 neurons=estimate.ai_neurons,
                 usage=usage,
+                catalog=ai_catalog,
+                at=at,
             )
             return CloudflareRouteDecision(
                 CloudflareSurface.WORKERS_AI, "free_native_workers_ai_admitted"

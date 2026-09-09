@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 
 from capt_runtime.errors import AuthorityViolation
+from capt_runtime.tools.backends.cloudflare_ai_catalog import (
+    parse_cloudflare_ai_model_catalog,
+)
 from capt_runtime.tools.backends.cloudflare_free_router import (
     CloudflareFreeEstimate,
     CloudflareFreeTierRouter,
@@ -11,6 +16,17 @@ from capt_runtime.tools.backends.cloudflare_free_router import (
 )
 from capt_runtime.tools.backends.cloudflare_free_tier import CloudflareUsageSnapshot
 
+NOW = datetime(2026, 9, 9, 4, 30, tzinfo=timezone.utc)
+CATALOG = parse_cloudflare_ai_model_catalog(
+    [
+        {"name": "@cf/meta/llama-3.1-8b-instruct", "properties": []},
+        {"name": "@cf/zai-org/glm-5.3-flash", "properties": [
+            {"property_id": "require_workers_paid", "value": "true"}
+        ]},
+    ],
+    fetched_at=NOW,
+)
+
 
 def test_router_selects_narrow_free_native_surface():
     router = CloudflareFreeTierRouter.default()
@@ -18,7 +34,7 @@ def test_router_selects_narrow_free_native_surface():
     assert router.route(CloudflareWorkClass.DELEGATION, CloudflareFreeEstimate(queue_operations=2)).surface is CloudflareSurface.QUEUES
     assert router.route(CloudflareWorkClass.SHARED_STATE, CloudflareFreeEstimate(d1_rows_read=10)).surface is CloudflareSurface.D1
     assert router.route(CloudflareWorkClass.BROWSER, CloudflareFreeEstimate(browser_seconds=5)).surface is CloudflareSurface.BROWSER_RUN
-    assert router.route(CloudflareWorkClass.INFERENCE, CloudflareFreeEstimate(ai_model="@cf/meta/llama-3.1-8b-instruct", ai_neurons=50)).surface is CloudflareSurface.WORKERS_AI
+    assert router.route(CloudflareWorkClass.INFERENCE, CloudflareFreeEstimate(ai_model="@cf/meta/llama-3.1-8b-instruct", ai_neurons=50), ai_catalog=CATALOG, at=NOW).surface is CloudflareSurface.WORKERS_AI
 
 
 def test_router_never_falls_back_to_sandbox_or_containers():
@@ -44,6 +60,8 @@ def test_router_rejects_paid_ai_model_and_ambiguous_estimate():
         router.route(
             CloudflareWorkClass.INFERENCE,
             CloudflareFreeEstimate(ai_model="@cf/zai-org/glm-5.3-flash", ai_neurons=1),
+            ai_catalog=CATALOG,
+            at=NOW,
         )
     with pytest.raises(ValueError, match="cloudflare_ai_model_required"):
         router.route(CloudflareWorkClass.INFERENCE, CloudflareFreeEstimate(ai_neurons=1))

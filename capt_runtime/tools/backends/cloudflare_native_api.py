@@ -9,11 +9,16 @@ import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Callable, Mapping
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, urlencode, urlparse
 
 from capt_runtime.errors import AuthorityViolation
 
+from .cloudflare_ai_catalog import (
+    CloudflareAIModelCatalogSnapshot,
+    parse_cloudflare_ai_model_catalog,
+)
 from .cloudflare_native import CloudflareBrowserAction, CloudflareDispatchNotStarted
 
 _API_ROOT = "https://api.cloudflare.com/client/v4"
@@ -59,9 +64,11 @@ class CloudflareNativeAPIBridge:
         profile: CloudflareNativeAPIProfile,
         *,
         opener: Callable[..., Any] = urllib.request.urlopen,
+        now: Callable[[], datetime] | None = None,
     ) -> None:
         self.profile = profile
         self.opener = opener
+        self.now = now or (lambda: datetime.now(timezone.utc))
 
     @staticmethod
     def _secret(env_name: str) -> str:
@@ -97,6 +104,29 @@ class CloudflareNativeAPIBridge:
             raise RuntimeError("cloudflare_response_root_unclassified")
         return value
 
+    def _get(self, url: str, token: str) -> dict[str, Any]:
+        request = urllib.request.Request(
+            url,
+            headers={"Authorization": f"Bearer {token}"},
+            method="GET",
+        )
+        try:
+            with self.opener(request, timeout=30.0) as response:
+                raw = response.read()
+        except urllib.error.HTTPError as exc:
+            raise CloudflareProviderRejected(
+                f"cloudflare_http_rejected:{exc.code}"
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError("cloudflare_transport_outcome_unclassified") from exc
+        try:
+            value = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("cloudflare_response_json_unclassified") from exc
+        if not isinstance(value, dict):
+            raise RuntimeError("cloudflare_response_root_unclassified")
+        return value
+
     @staticmethod
     def _require_success(value: dict[str, Any]) -> Any:
         if value.get("success") is True:
@@ -108,6 +138,42 @@ class CloudflareNativeAPIBridge:
             if raw_code is not None:
                 code = str(raw_code)
         raise CloudflareProviderRejected(f"cloudflare_api_rejected:{code}")
+
+    def ai_model_catalog(self) -> CloudflareAIModelCatalogSnapshot:
+        token = self._secret(self.profile.api_token_env)
+        rows: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            query = urlencode({"page": page, "per_page": 100, "include_deprecated": "false"})
+            url = f"{_API_ROOT}/accounts/{self.profile.account_id}/ai/models/search?{query}"
+            value = self._get(url, token)
+            result = self._require_success(value)
+            info = value.get("result_info")
+            if not isinstance(result, list) or not isinstance(info, dict):
+                raise RuntimeError("cloudflare_ai_catalog_pagination_unclassified")
+            current_page = info.get("page")
+            total_pages = info.get("total_pages")
+            if (
+                isinstance(current_page, bool)
+                or not isinstance(current_page, int)
+                or isinstance(total_pages, bool)
+                or not isinstance(total_pages, int)
+                or current_page != page
+                or total_pages < page
+                or total_pages < 1
+                or total_pages > 100
+            ):
+                raise RuntimeError("cloudflare_ai_catalog_pagination_unclassified")
+            if not all(isinstance(item, dict) for item in result):
+                raise RuntimeError("cloudflare_ai_catalog_result_unclassified")
+            rows.extend(result)
+            if page >= total_pages:
+                break
+            page += 1
+        fetched_at = self.now()
+        if fetched_at.tzinfo is None or fetched_at.utcoffset() is None:
+            raise RuntimeError("cloudflare_ai_catalog_clock_unaware")
+        return parse_cloudflare_ai_model_catalog(rows, fetched_at=fetched_at)
 
     def worker_request(
         self,

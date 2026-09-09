@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 import pytest
 
 from capt_runtime.errors import AuthorityViolation
+from capt_runtime.tools.backends.cloudflare_ai_catalog import (
+    parse_cloudflare_ai_model_catalog,
+)
 from capt_runtime.tools.backends.cloudflare_free_tier import (
     CLOUDFLARE_FREE_TIER,
     CloudflareFreeTierEnvelope,
@@ -39,8 +44,17 @@ def test_admission_rejects_projected_worker_overrun():
 
 def test_admission_rejects_paid_workers_ai_model_even_with_neurons_available():
     envelope = CloudflareFreeTierEnvelope.default()
+    now = datetime(2026, 9, 9, 4, 30, tzinfo=timezone.utc)
+    catalog = parse_cloudflare_ai_model_catalog(
+        [{"name": "@cf/zai-org/glm-5.3-flash", "properties": [
+            {"property_id": "require_workers_paid", "value": "true"}
+        ]}],
+        fetched_at=now,
+    )
     with pytest.raises(AuthorityViolation, match="CLOUDFLARE_AI_MODEL_REQUIRES_PAID_AUTHORITY"):
-        envelope.require_workers_ai(model="@cf/zai-org/glm-5.3-flash", neurons=1)
+        envelope.require_workers_ai(
+            model="@cf/zai-org/glm-5.3-flash", neurons=1, catalog=catalog, at=now
+        )
 
 
 def test_queue_browser_and_d1_budgets_are_independently_enforced():

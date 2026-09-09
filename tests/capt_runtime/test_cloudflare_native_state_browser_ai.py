@@ -5,6 +5,9 @@ from datetime import date, datetime, timezone
 import pytest
 
 from capt_runtime.errors import AuthorityViolation
+from capt_runtime.tools.backends.cloudflare_ai_catalog import (
+    parse_cloudflare_ai_model_catalog,
+)
 from capt_runtime.tools.backends.cloudflare_free_planner import (
     CloudflareFreeExecutionPlanner,
 )
@@ -17,8 +20,20 @@ from capt_runtime.tools.backends.cloudflare_native import (
 )
 from capt_runtime.tools.backends.cloudflare_usage import CloudflareUsageLedger
 
+CATALOG = parse_cloudflare_ai_model_catalog(
+    [
+        {"name": "@cf/meta/llama-3.1-8b-instruct", "properties": []},
+        {"name": "@cf/zai-org/glm-5.3-flash", "properties": [
+            {"property_id": "require_workers_paid", "value": "true"}
+        ]},
+    ],
+    fetched_at=datetime(2026, 9, 8, 12, tzinfo=timezone.utc),
+)
 
 class Bridge:
+    def ai_model_catalog(self):
+        return CATALOG
+
     def d1_read(self, **kwargs):
         return {"rows": [{"value": "ok"}], "rowsRead": 3}
 

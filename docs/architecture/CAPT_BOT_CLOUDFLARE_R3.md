@@ -31,7 +31,7 @@ CAPT treats Cloudflare's public Free-plan ceilings as provider limits, not spend
 
 Provider ceilings verified on 2026-09-08 are Workers 100,000 requests/day, Queues 10,000 operations/day with 24-hour Free retention, Browser Run 600 seconds/day, Workers AI 10,000 neurons/day, and D1 5M rows read plus 100,000 rows written/day. These values are policy inputs and must be reverified before future release snapshots.
 
-Workers AI models requiring paid billing are denied under `free_only`, including current GLM-5.3/GLM-5.3-Flash, DeepSeek V4 Flash/Pro, Kimi K2.6/K2.7 Code, and GLM-5.2. Having credentials or prepaid credits does not create economic authority.
+Workers AI model billing admission is provider-metadata-bound, not name-list-bound. Before neuron reservation, CAPT requires a fresh Cloudflare Model Search snapshot, verifies the requested model is present, evaluates its `require_workers_paid` property, and rejects stale/unknown/paid-required status under `free_only`. The immutable snapshot carries a fetch timestamp and SHA-256 source digest; that digest is included in the reservation identity and returned inference provenance. Having credentials, a Workers Paid plan, or prepaid credits does not create economic authority.
 
 Cloudflare Sandbox/Containers remain `free_tier_eligible=false` by default. Localhost bridge testing is admissible because it incurs no provider usage; remote Sandbox execution remains blocked until $0 eligibility is independently proven or explicit human paid authority exists.
 
@@ -64,3 +64,12 @@ The reservation bucket date is derived from the planner's timezone-aware UTC clo
 Existing-resource API failures that are provably pre-dispatch—missing secret references, unconfigured Queue/D1 resources, or invalid Worker routes—raise `CloudflareDispatchNotStarted`, allowing the reservation to be released. Transport or provider-outcome ambiguity after dispatch remains locked and becomes `CloudflareNativeIndeterminate`.
 
 Browser/Workers-AI metering carries an explicit `usageBasis`: `provider_reported` or `reserved_ceiling`. CAPT never relabels its estimate as provider measurement. Browser `content` and `scrape` results receive SHA-256-bound artifact identities. `pdf` and `screenshot` are intentionally blocked before dispatch until binary artifact capture/evidence spooling is implemented.
+
+
+## Workers AI Catalog Authority Closure
+
+The account-scoped Model Search endpoint is read-only control-plane discovery. `CloudflareNativeAPIBridge.ai_model_catalog()` uses authenticated GET requests only, validates pagination, excludes deprecated models, and converts the complete result into `CloudflareAIModelCatalogSnapshot`. Partial, malformed, empty, stale, clock-inconsistent, or model-missing catalogs fail closed before quota reservation or inference dispatch.
+
+The free-only admission order is `discover catalog -> validate provenance/freshness -> classify model billing -> transactional quota recheck/reservation -> inference dispatch`. The SQLite recheck receives the same immutable catalog snapshot and timestamp; concurrency protection therefore cannot weaken the billing gate. A reservation digest binds the catalog source digest as well as operation, work class, estimate, and trusted UTC quota day.
+
+Live read-only validation on 2026-09-09 parsed the current Wrangler/Cloudflare catalog successfully: 65 models total and 7 marked `require_workers_paid`, matching the current provider pricing list. No inference was invoked during this validation.

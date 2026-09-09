@@ -7,11 +7,12 @@ import json
 import sqlite3
 import threading
 from dataclasses import asdict
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from capt_runtime.errors import AuthorityViolation
 
+from .cloudflare_ai_catalog import CloudflareAIModelCatalogSnapshot
 from .cloudflare_free_router import (
     CloudflareFreeEstimate,
     CloudflareFreeTierRouter,
@@ -20,8 +21,18 @@ from .cloudflare_free_router import (
 from .cloudflare_free_tier import CloudflareUsageSnapshot
 
 
-def _digest(work_class: str, estimate: CloudflareFreeEstimate, day: date) -> str:
-    payload = {"workClass": work_class, "estimate": asdict(estimate), "day": day.isoformat()}
+def _digest(
+    work_class: str,
+    estimate: CloudflareFreeEstimate,
+    day: date,
+    catalog_digest: str | None = None,
+) -> str:
+    payload = {
+        "workClass": work_class,
+        "estimate": asdict(estimate),
+        "day": day.isoformat(),
+        "catalogDigest": catalog_digest,
+    }
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     return "sha256:" + hashlib.sha256(raw).hexdigest()
 
@@ -89,10 +100,17 @@ class CloudflareUsageLedger:
         estimate: CloudflareFreeEstimate,
         *,
         day: date,
+        ai_catalog: CloudflareAIModelCatalogSnapshot | None = None,
+        at: datetime | None = None,
     ) -> dict[str, str]:
         if not operation_id:
             raise ValueError("cloudflare_operation_id_required")
-        digest = _digest(work_class, estimate, day)
+        digest = _digest(
+            work_class,
+            estimate,
+            day,
+            ai_catalog.source_digest if ai_catalog is not None else None,
+        )
         estimate_json = json.dumps(asdict(estimate), sort_keys=True, separators=(",", ":"))
         with self._lock:
             self._db.execute("BEGIN IMMEDIATE")
@@ -115,7 +133,13 @@ class CloudflareUsageLedger:
                     work = CloudflareWorkClass(work_class)
                 except ValueError as exc:
                     raise ValueError(f"cloudflare_work_class_invalid:{work_class}") from exc
-                self.router.route(work, estimate, usage=usage)
+                self.router.route(
+                    work,
+                    estimate,
+                    usage=usage,
+                    ai_catalog=ai_catalog,
+                    at=at,
+                )
                 self._db.execute(
                     "INSERT INTO cloudflare_usage_reservations(operation_id,day,work_class,estimate_json,request_digest,state) VALUES(?,?,?,?,?,?)",
                     (operation_id, day.isoformat(), work_class, estimate_json, digest, "reserved"),

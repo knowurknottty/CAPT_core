@@ -7,6 +7,7 @@ from datetime import date
 from enum import Enum
 from typing import Any
 
+from .cloudflare_ai_catalog import CloudflareAIModelCatalogSnapshot
 from .cloudflare_free_planner import CloudflareFreeExecutionPlanner
 from .cloudflare_free_router import CloudflareFreeEstimate, CloudflareWorkClass
 
@@ -160,6 +161,8 @@ class CloudflareWorkersAIResult:
     output: Any
     neurons: int
     usage_basis: str
+    catalog_digest: str
+    catalog_fetched_at: str
     effect: str = "workers_ai_inference_completed"
 
 
@@ -310,6 +313,18 @@ class CloudflareWorkersAIInferencer:
         estimated_neurons: int,
         day: date,
     ) -> CloudflareWorkersAIResult:
+        try:
+            catalog = self.bridge.ai_model_catalog()
+        except CloudflareDispatchNotStarted:
+            raise
+        except Exception as exc:
+            raise CloudflareDispatchNotStarted(
+                "CLOUDFLARE_AI_CATALOG_DISCOVERY_UNCLASSIFIED"
+            ) from exc
+        if not isinstance(catalog, CloudflareAIModelCatalogSnapshot):
+            raise CloudflareDispatchNotStarted(
+                "CLOUDFLARE_AI_CATALOG_RESULT_INVALID"
+            )
         self.planner.reserve(
             operation_id=operation_id,
             work_class=CloudflareWorkClass.INFERENCE,
@@ -318,6 +333,7 @@ class CloudflareWorkersAIInferencer:
                 ai_neurons=estimated_neurons,
             ),
             day=day,
+            ai_catalog=catalog,
         )
         try:
             response = self.bridge.workers_ai(
@@ -348,6 +364,8 @@ class CloudflareWorkersAIInferencer:
             output=response.get("output"),
             neurons=neurons,
             usage_basis=usage_basis,
+            catalog_digest=catalog.source_digest,
+            catalog_fetched_at=catalog.fetched_at.isoformat(),
         )
 
 
