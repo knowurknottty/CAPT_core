@@ -389,13 +389,21 @@ def _cmd_authored_skills(args, as_json: bool) -> int:
     return _fail("skills action required")
 
 
+def _runtime_child_environment(environment: dict[str, str] | None = None) -> dict[str, str]:
+    """Sanitize CAPT RuntimeService child imports from ambient developer overrides."""
+    child = dict(os.environ if environment is None else environment)
+    child.pop("PYTHONPATH", None)
+    child.pop("PYTHONHOME", None)
+    return child
+
+
 def _cmd_harness(args) -> int:
     if args.action == "start":
         argv = [sys.executable, "-m", "desktop.capt_runtime_service", "--ledger", args.ledger,
                 "--sock", args.sock, "--token-file", args.token_file]
         if args.seed:
             argv.append("--seed")
-        return subprocess.call(argv)
+        return subprocess.call(argv, env=_runtime_child_environment())
     if args.action == "health" or args.action == "capabilities":
         from desktop.desktop_runtime_client import RuntimeClient
         client = RuntimeClient(args.sock, args.token_file)
@@ -552,7 +560,10 @@ def _cmd_ramp_start(args, paths, as_json) -> int:
     devnull = open(os.devnull, "wb")
     logf = open(base / "start.log", "ab")
     try:
-        proc = subprocess.Popen(argv, stdout=devnull, stderr=logf, start_new_session=True)
+        proc = subprocess.Popen(
+            argv, stdout=devnull, stderr=logf, start_new_session=True,
+            env=_runtime_child_environment(),
+        )
     finally:
         devnull.close()
         logf.close()

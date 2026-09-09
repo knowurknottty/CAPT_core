@@ -81,6 +81,20 @@ final class CAPTCrossSurfaceRuntimeTests: XCTestCase {
         XCTAssertEqual(approval["state"] as? String, "requested")
     }
 
+    func testNativeReadsSemanticOperatorControlSnapshot() throws {
+        try requireAcceptance(stage: "operator-control")
+        let resultFile = try requireEnv("CAPT_CROSS_SURFACE_RESULT_FILE")
+        let client = CAPTRuntimeClient()
+        defer { client.disconnect() }
+        _ = try client.connect()
+
+        let response = try client.query(op: "operator_control_snapshot")
+        let control = try XCTUnwrap(response["result"] as? [String: Any])
+        XCTAssertNotNil(control["revision"])
+        XCTAssertNotNil(control["configurationDigest"])
+        try writeJSON(control, path: resultFile)
+    }
+
     func testNativeObservesMCPExecutionAuthoritatively() throws {
         try requireAcceptance(stage: "observe")
         let requestID = try requireEnv("CAPT_CROSS_SURFACE_REQUEST_ID")

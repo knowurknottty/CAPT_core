@@ -50,7 +50,7 @@ class RuntimeComposition:
     docker_profile_registry: DockerProfileRegistry
     mcp_manager: MCPManager | None
 
-    def command_service(self, operator_id: str, session_id: str, *, prompt_compiler=None):
+    def command_service(self, operator_id: str, session_id: str, *, prompt_compiler=None, operator_control=None):
         # Import lazily to avoid a desktop-to-runtime import cycle at module load.
         from desktop.replay_command_service import ReplayRuntimeCommandService
 
@@ -62,6 +62,7 @@ class RuntimeComposition:
             runtime_service=self.service,
             tool_broker=self.tool_broker,
             prompt_compiler=prompt_compiler,
+            operator_control=operator_control,
         )
 
     def openharness_host(

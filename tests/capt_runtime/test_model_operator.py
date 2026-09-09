@@ -474,3 +474,24 @@ def test_provider_result_review_rejects_noncompleted_driver_run(tmp_path: Path) 
         assert runtime.store.require_state("task-" + ids["taskId"])["state"] == "awaiting_verification"
     finally:
         runtime.close()
+
+
+def test_operator_can_close_completed_provider_run_by_claim_identity(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "ledger-review-claim.db"))
+    try:
+        ids = _seed_provider_result_awaiting_review(runtime, "claim")
+        relay = RuntimeCommandService(
+            runtime.store, "operator-x", "sess-1", runtime_service=runtime.service
+        )
+        receipt = relay.execute(_envelope(
+            "submit_provider_result_review",
+            {"claimId": ids["claimId"], "disposition": "accept",
+             "note": "Exact claim reviewed through semantic operator control."},
+            key="provider-review-claim-accept",
+        ))
+        assert receipt["status"] == "accepted", receipt
+        assert receipt["result"]["claimId"] == ids["claimId"]
+        assert receipt["result"]["driverRunId"] == ids["driverRunId"]
+        assert runtime.store.require_state("task-" + ids["taskId"])["state"] == "succeeded"
+    finally:
+        runtime.close()

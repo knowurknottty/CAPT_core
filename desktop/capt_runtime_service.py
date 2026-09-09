@@ -75,6 +75,7 @@ from capt_runtime.authored_skills import (
 )
 from capt_runtime.managed_skills import default_managed_skill_root, verify_managed_skill_pack
 from desktop.prompt_compiler_provider import build_prompt_compiler
+from desktop.operator_control import OperatorControlStore
 
 
 RUNTIME_VERSION = getattr(capt_runtime, "RUNTIME_VERSION", "0.1.0")
@@ -452,11 +453,16 @@ def _seed_memory_store(mem_store) -> None:
 # --------------------------------------------------------------------------
 
 class RuntimeQueryService:
-    def __init__(self, store: EventStore, demo: Optional[Dict[str, Any]] = None, memory_engine: Any = None, mcp_manager: Any = None) -> None:
+    def __init__(
+        self, store: EventStore, demo: Optional[Dict[str, Any]] = None,
+        memory_engine: Any = None, mcp_manager: Any = None,
+        operator_control: OperatorControlStore | None = None,
+    ) -> None:
         self.store = store
         self.demo = demo or {}
         self.memory_engine = memory_engine
         self.mcp_manager = mcp_manager
+        self.operator_control = operator_control
 
     def identity(self) -> Dict[str, Any]:
         return {
@@ -541,6 +547,39 @@ class RuntimeQueryService:
             })
         return result
 
+    def operator_control_snapshot(self) -> Dict[str, Any]:
+        if self.operator_control is None:
+            raise RuntimeError("OPERATOR_CONTROL_UNAVAILABLE")
+        return self.operator_control.snapshot()
+
+    def operator_session_get(self, session_id: str) -> Dict[str, Any]:
+        if self.operator_control is None:
+            raise RuntimeError("OPERATOR_CONTROL_UNAVAILABLE")
+        state = self.operator_control.session_get(session_id)
+        if state is None:
+            raise KeyError("OPERATOR_CONTROL_SESSION_UNKNOWN")
+        return state
+
+    def operator_proposal_get(self, proposal_id: str | None = None) -> Dict[str, Any]:
+        control = self.operator_control_snapshot()
+        selected = proposal_id or control.get("proposalId")
+        if not selected:
+            return {"control": control, "configurationDigest": control["configurationDigest"], "proposal": None}
+        proposal = self.store.load_state("prompt_proposal-" + str(selected))
+        if proposal is None:
+            raise KeyError("OPERATOR_CONTROL_PROPOSAL_UNKNOWN")
+        return {"control": control, "configurationDigest": control["configurationDigest"], "proposal": proposal}
+
+    def operator_execution_state(self) -> Dict[str, Any]:
+        control = self.operator_control_snapshot()
+        out: Dict[str, Any] = {"control": control}
+        for key, prefix in (("approvalRequestId", "human_approval-"), ("taskId", "task-"),
+                            ("driverRunId", "driverrun-"), ("claimId", "claim-")):
+            identity = control.get(key)
+            if identity:
+                out[key.removesuffix("Id") + "State"] = self.store.load_state(prefix + str(identity))
+        return out
+
     def _claim_id_for_statement(self, statement: str) -> Optional[str]:
         """Find the most recent claim with this exact statement, if any."""
         matches = []
@@ -622,11 +661,19 @@ class RuntimeQueryService:
             if op == "capabilities":
                 return {"ok": True, "result": {
                     "schemaVersion": CONTRACT_SCHEMA_VERSION,
-                    "queryOperations": ["identity", "capabilities", "list_aggregates", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers", "managed_skills"],
-                    "commandOperations": ["create_mission", "compile_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "submit_provider_result_review", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool", "install_managed_skill", "create_managed_skill"],
+                    "queryOperations": ["identity", "capabilities", "list_aggregates", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers", "managed_skills", "operator_control_snapshot", "operator_session_get", "operator_proposal_get", "operator_execution_state"],
+                    "commandOperations": ["create_mission", "operator_chat_new", "operator_execution_config_set", "operator_prompt_submit", "operator_proposal_select", "compile_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "submit_provider_result_review", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool", "install_managed_skill", "create_managed_skill"],
                     "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True, "toolRegistry": True, "toolBroker": True, "mcpClient": self.mcp_manager is not None, "promptCompiler": True},
                     "lifecycleOperations": {"checkpoint": True, "shutdown": True, "resume": True},
                 }}
+            if op == "operator_control_snapshot":
+                return {"ok": True, "result": self.operator_control_snapshot()}
+            if op == "operator_session_get":
+                return {"ok": True, "result": self.operator_session_get(str(request["sessionId"]))}
+            if op == "operator_proposal_get":
+                return {"ok": True, "result": self.operator_proposal_get(request.get("proposalId"))}
+            if op == "operator_execution_state":
+                return {"ok": True, "result": self.operator_execution_state()}
             if op == "managed_skills":
                 return {"ok": True, "result": self.managed_skills()}
             if op == "list_aggregates":
@@ -745,8 +792,19 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
     # execution surfaces only. The engine is wired into every connection's
     # command service and into DriverHost dispatch gating.
     memory_engine = runtime.memory_engine
+    operator_control = OperatorControlStore(
+        Path(ledger_path).parent / "operator-control.json",
+        {
+            "provider": "ollama",
+            "model": "qwen3.5-defiant-fable:latest",
+            "targetRoot": str(Path.home() / "CAPT_core"),
+            "promptIntelligence": "AUTO",
+        },
+    )
 
-    query = RuntimeQueryService(store, demo, memory_engine, runtime.mcp_manager)
+    query = RuntimeQueryService(
+        store, demo, memory_engine, runtime.mcp_manager, operator_control
+    )
 
     token = secrets.token_hex(32)
     tf = Path(token_file)
@@ -787,7 +845,8 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             operator_id = "operator-" + (getpass.getuser() or "local")
             session_id = "sess-" + secrets.token_hex(8)
             cmd_svc = runtime.command_service(
-                operator_id, session_id, prompt_compiler=prompt_compiler
+                operator_id, session_id, prompt_compiler=prompt_compiler,
+                operator_control=operator_control,
             )
             provider_governor = _build_provider_governor(store)
             # Fixed v0.5 OpenHarness inspection: service-owned runner uses the

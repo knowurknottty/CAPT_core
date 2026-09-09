@@ -27,6 +27,7 @@ from capt_runtime.services import RuntimeService
 from capt_runtime.store import EventStore
 from capt_runtime.tool_broker import ToolBrokerError, ToolUnavailable
 from capt_runtime.tools.registry import UnknownToolId
+from desktop.operator_control import OperatorControlStale, OperatorControlStore
 
 CONTRACT_SCHEMA_VERSION = "1.0.0"
 
@@ -44,6 +45,10 @@ _REQUIRED_ENVELOPE = (
 
 _VALID_OPS = (
     "create_mission",
+    "operator_chat_new",
+    "operator_execution_config_set",
+    "operator_prompt_submit",
+    "operator_proposal_select",
     "compile_prompt_proposal",
     "revise_prompt_proposal",
     "cancel_prompt_proposal",
@@ -83,6 +88,7 @@ class RuntimeCommandService:
         runtime_service: Optional[RuntimeService] = None,
         tool_broker: Any = None,
         prompt_compiler: Optional[PromptCompiler] = None,
+        operator_control: Optional[OperatorControlStore] = None,
     ) -> None:
         self.store = store
         self.svc = runtime_service or RuntimeService(store)
@@ -91,6 +97,7 @@ class RuntimeCommandService:
         self.memory_engine = memory_engine
         self.tool_broker = tool_broker
         self.prompt_compiler = prompt_compiler or PromptCompiler()
+        self.operator_control = operator_control
         self.fixed_openharness_runner = None
         self.approved_hermes_runner: Any = None
         self.runtime_checkpoint_runner = None
@@ -132,6 +139,18 @@ class RuntimeCommandService:
             issued_at=cmd.get("timestamp") or _now_rfc3339(),
             replay_policy="never",
         )
+
+    def _control(self) -> OperatorControlStore:
+        if self.operator_control is None:
+            raise RuntimeError("OPERATOR_CONTROL_UNAVAILABLE")
+        return self.operator_control
+
+    @staticmethod
+    def _control_revision(payload: Dict[str, Any], key: str = "expectedRevision") -> int:
+        value = payload.get(key)
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError("OPERATOR_CONTROL_REVISION_REQUIRED")
+        return value
 
     def _managed_skill_mutation_result(self, verified: Dict[str, Any], root: Path) -> Dict[str, Any]:
         return {
@@ -195,6 +214,131 @@ class RuntimeCommandService:
         op = cmd["op"]
         meta = self._operator_metadata(cmd)
         try:
+            if op == "operator_chat_new":
+                payload = cmd["payload"]
+                result = self._control().new_chat(
+                    expected_revision=self._control_revision(payload),
+                    provider=payload.get("provider"), model=payload.get("model"),
+                    target_root=payload.get("targetRoot"),
+                    prompt_intelligence=payload.get("promptIntelligence"),
+                )
+                return self._receipt(
+                    cmd, status="accepted", classification="accepted", result=result
+                )
+
+            if op == "operator_execution_config_set":
+                payload = cmd["payload"]
+                result = self._control().set_configuration(
+                    expected_revision=self._control_revision(payload),
+                    provider=payload.get("provider"), model=payload.get("model"),
+                    target_root=payload.get("targetRoot"),
+                    prompt_intelligence=payload.get("promptIntelligence"),
+                )
+                return self._receipt(
+                    cmd, status="accepted", classification="accepted", result=result
+                )
+
+            if op == "operator_prompt_submit":
+                payload = cmd["payload"]
+                prior = self.store.find_idempotent(cmd["idempotencyKey"])
+                if prior is not None:
+                    control = self._control().snapshot()
+                    proposal_id = control.get("proposalId")
+                    proposal = (
+                        self.store.load_state("prompt_proposal-" + str(proposal_id))
+                        if proposal_id else None
+                    )
+                    return self._receipt(
+                        cmd, status="idempotent", classification="duplicate",
+                        result={"control": control, "proposal": proposal or {}},
+                    )
+                control = self._control().require_current(
+                    expected_revision=self._control_revision(payload, "controlRevision"),
+                    configuration_digest=str(payload.get("configurationDigest") or ""),
+                )
+                text = str(payload.get("text") or "").strip()
+                if not text:
+                    raise ValueError("OPERATOR_PROMPT_TEXT_REQUIRED")
+                proposal = compile_prompt_proposal(
+                    self.svc, self.prompt_compiler,
+                    {
+                        "originalPrompt": text,
+                        "targetRoot": control["targetRoot"],
+                        "promptIntelligence": control["promptIntelligence"],
+                        "mode": str(payload.get("mode") or "normal"),
+                        "provider": control["provider"],
+                        "model": control["model"],
+                        "requestedContextBudget": int(payload.get("requestedContextBudget", 32_000)),
+                        "requestedCapabilities": list(payload.get("requestedCapabilities") or []),
+                        "remoteCompilationAuthorized": bool(payload.get("remoteCompilationAuthorized", False)),
+                    },
+                    meta,
+                )
+                bound = self._control().bind_proposal(
+                    expected_revision=control["revision"],
+                    configuration_digest=control["configurationDigest"],
+                    proposal=proposal,
+                )
+                return self._receipt(
+                    cmd, status="accepted", classification="accepted",
+                    result={"control": bound, "proposal": proposal},
+                    stream_id="prompt_proposal-" + str(proposal["proposalId"]),
+                )
+
+            if op == "operator_proposal_select":
+                payload = cmd["payload"]
+                prior = self.store.find_idempotent(cmd["idempotencyKey"])
+                if prior is not None:
+                    control = self._control().snapshot()
+                    approval_id = control.get("approvalRequestId")
+                    approval = (
+                        self.store.load_state("human_approval-" + str(approval_id))
+                        if approval_id else None
+                    )
+                    return self._receipt(
+                        cmd, status="idempotent", classification="duplicate",
+                        result={"control": control, "approval": approval or {}},
+                    )
+                control = self._control().require_current(
+                    expected_revision=self._control_revision(payload, "controlRevision"),
+                    configuration_digest=str(payload.get("configurationDigest") or ""),
+                )
+                proposal_id = str(payload.get("proposalId") or "")
+                if proposal_id != str(control.get("proposalId") or ""):
+                    raise OperatorControlStale(control)
+                proposal = self.store.require_state("prompt_proposal-" + proposal_id)
+                basis = str(payload.get("basis") or "").lower()
+                selection = {"original": "original", "proposed": "upgrade", "edited": "edited"}.get(basis)
+                if selection is None:
+                    raise ValueError("OPERATOR_PROPOSAL_BASIS_INVALID")
+                approval_payload = {
+                    "proposalId": proposal_id,
+                    "proposalRevision": int(proposal["revision"]),
+                    "selection": selection,
+                    "editedPrompt": str(payload.get("editedPrompt") or ""),
+                    "responseMode": str(payload.get("responseMode") or "SPOCK"),
+                    "humanVerificationRequired": bool(payload.get("humanVerificationRequired", True)),
+                }
+                for key in (
+                    "missionId", "managedSkillNames", "autoSelectSkills",
+                    "skillLimit", "authorityProfile", "executable",
+                ):
+                    if key in payload:
+                        approval_payload[key] = payload[key]
+                approval = request_prompt_proposal_approval(
+                    self.svc, approval_payload, meta
+                )
+                bound = self._control().bind_approval(
+                    expected_revision=control["revision"],
+                    configuration_digest=control["configurationDigest"],
+                    proposal_id=proposal_id, selection=basis, approval=approval,
+                )
+                return self._receipt(
+                    cmd, status="accepted", classification="accepted",
+                    result={"control": bound, "approval": approval},
+                    stream_id="human_approval-" + str(approval["requestId"]),
+                )
+
             if op == "install_managed_skill":
                 from capt_runtime.managed_skills import (
                     default_managed_skill_root, install_managed_skill_source,
@@ -350,11 +494,31 @@ class RuntimeCommandService:
             elif op == "submit_provider_result_review":
                 p = cmd["payload"]
                 run_id = p.get("driverRunId")
+                claim_id = p.get("claimId")
                 disposition = p.get("disposition")
-                if not isinstance(run_id, str) or not run_id.strip():
-                    raise ValueError("PROVIDER_RESULT_REVIEW_DRIVER_RUN_REQUIRED")
                 if disposition not in {"accept", "reject"}:
                     raise ValueError("PROVIDER_RESULT_REVIEW_DISPOSITION_INVALID")
+                if (not isinstance(run_id, str) or not run_id.strip()) and isinstance(claim_id, str) and claim_id.strip():
+                    claim = self.store.require_state("claim-" + claim_id)
+                    task_id = claim.get("taskId")
+                    matches = []
+                    for stream_id, kind, _version in self.store.all_aggregates():
+                        if kind != "driverrun":
+                            continue
+                        candidate = self.store.load_state(stream_id)
+                        if (candidate and candidate.get("taskId") == task_id
+                                and candidate.get("driverId") == "provider"
+                                and candidate.get("state") == "completed"
+                                and candidate.get("reconciliationStatus") == "not_required"):
+                            matches.append(candidate)
+                    if len(matches) != 1:
+                        raise AuthorityViolation(
+                            "provider result review claim requires exactly one completed provider DriverRun for task %s; found %d"
+                            % (task_id, len(matches))
+                        )
+                    run_id = matches[0]["driverRunId"]
+                if not isinstance(run_id, str) or not run_id.strip():
+                    raise ValueError("PROVIDER_RESULT_REVIEW_DRIVER_RUN_OR_CLAIM_REQUIRED")
                 run = self.store.require_state("driverrun-" + run_id)
                 if run.get("driverId") != "provider":
                     raise AuthorityViolation("provider result review requires a provider DriverRun")
@@ -654,6 +818,15 @@ class RuntimeCommandService:
 
             return self._receipt_from_runtime(cmd, result)
 
+        except OperatorControlStale as exc:
+            return self._receipt(
+                cmd, status="rejected", classification="concurrency",
+                error=self._error_envelope(
+                    cmd, "concurrency", "E_OPERATOR_CONTROL_STALE"
+                ),
+                result={"current": exc.current_snapshot},
+                detail="E_OPERATOR_CONTROL_STALE",
+            )
         except ToolUnavailable as exc:
             return self._receipt(
                 cmd,

@@ -1,6 +1,9 @@
 #!/bin/zsh
 set -euo pipefail
 
+# Never let caller Python import overrides shadow the freshly built CAPT runtime.
+unset PYTHONPATH PYTHONHOME
+
 SCRIPT_DIR="${0:A:h}"
 REPO_ROOT="${SCRIPT_DIR:h:h:h:h}"
 STATE_DIR="${CAPT_STATE_DIR:-$HOME/.capt}"
