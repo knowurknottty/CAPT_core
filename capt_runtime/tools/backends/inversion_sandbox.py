@@ -14,7 +14,11 @@ from capt_runtime.tools.backends.docker import (
     DockerMount,
     DockerNetworkPolicy,
     DockerPreparedTarget,
+    DockerProcessBackend,
+    DockerProcessRequest,
+    DockerProcessResult,
     DockerProfile,
+    DockerProfileRegistry,
     DockerTmpfsMount,
 )
 
@@ -328,3 +332,159 @@ def attest_created_container(
         filesystem_scope_digest=filesystem_digest,
         canonical_json=canonical,
     )
+
+
+@dataclass(frozen=True)
+class InversionSandboxPreparedTarget:
+    profile: InversionSandboxProfile
+    docker: DockerPreparedTarget
+
+
+@dataclass(frozen=True)
+class InversionSandboxProcessResult:
+    docker: DockerProcessResult
+    attestation: InversionSandboxAttestation | None
+    side_effect_identity: str | None
+
+
+class InversionSandboxProcessBackend:
+    backend_id = "inversion_sandbox"
+    adapter_id = "backend-inversion-sandbox-process"
+
+    def __init__(self, profiles: InversionSandboxProfileRegistry) -> None:
+        self.profiles = profiles
+        self.docker_profiles = DockerProfileRegistry(
+            profile.docker_profile() for profile in profiles.values()
+        )
+        self.docker_backend = DockerProcessBackend(self.docker_profiles)
+
+    def readiness(self) -> dict[str, object]:
+        if len(self.profiles) == 0:
+            return {
+                "status": "unavailable",
+                "reason": "no named InversionSandbox profiles configured",
+            }
+        base = self.docker_backend.readiness()
+        if base.get("status") != "available":
+            return base
+        for profile in self.profiles.values():
+            prepared_profile = self.docker_profiles.require(profile.profile_id)
+            try:
+                endpoint = self.docker_backend.preflight(
+                    DockerProcessRequest(
+                        profile_id=prepared_profile.profile_id,
+                        argv=("/bin/true",),
+                        cwd=prepared_profile.working_dir,
+                        filesystem_root=prepared_profile.working_dir,
+                        timeout_seconds=1.0,
+                    )
+                ).context_endpoint
+                info = self.docker_backend._run_endpoint(
+                    endpoint, ("info", "--format", "{{json .SecurityOptions}}"),
+                    timeout_seconds=3.0, stdout_limit_bytes=8192, stderr_limit_bytes=8192,
+                )
+            except (AuthorityViolation, RuntimeError, ValueError):
+                continue
+            if info.exit_code != 0 or info.timed_out:
+                continue
+            try:
+                security_options = json.loads(info.stdout)
+            except json.JSONDecodeError:
+                continue
+            if docker_security_options_have_seccomp(security_options):
+                return {
+                    "status": "available",
+                    "reason": "local Docker profile available with seccomp enabled",
+                }
+        return {
+            "status": "unavailable",
+            "reason": "no InversionSandbox profile proved local image, daemon, and seccomp readiness",
+        }
+
+    def preflight(self, request: DockerProcessRequest) -> InversionSandboxPreparedTarget:
+        profile = self.profiles.require(request.profile_id)
+        docker = self.docker_backend.preflight(request)
+        if docker.profile.profile_id != profile.profile_id:
+            raise AuthorityViolation("InversionSandbox prepared Docker profile identity drifted")
+        return InversionSandboxPreparedTarget(profile=profile, docker=docker)
+
+    def effect_identity(
+        self,
+        prepared: DockerPreparedTarget,
+        profile: InversionSandboxProfile,
+        container_id: str,
+        cwd: str,
+        attestation: InversionSandboxAttestation,
+    ) -> str:
+        return _canonical_json(
+            {
+                "backend": self.backend_id,
+                "profileId": profile.profile_id,
+                "contextEndpoint": prepared.context_endpoint,
+                "containerId": container_id,
+                "imageId": prepared.image_id,
+                "repoDigest": prepared.repo_digest,
+                "containerCwd": cwd,
+                "securityProfileDigest": attestation.security_profile_digest,
+                "networkPolicyDigest": attestation.network_policy_digest,
+                "filesystemScopeDigest": attestation.filesystem_scope_digest,
+                "attestationDigest": attestation.digest,
+            }
+        )
+
+    def execute(
+        self,
+        request: DockerProcessRequest,
+        *,
+        prepared: InversionSandboxPreparedTarget | None = None,
+        observe_effect=None,
+    ) -> InversionSandboxProcessResult:
+        target = prepared or self.preflight(request)
+        profile = target.profile
+        if profile.network_policy.mode == "allowlist":
+            raise AuthorityViolation(
+                "InversionSandbox allowlist mode is not available until guardian orchestration is configured"
+            )
+        attestation: InversionSandboxAttestation | None = None
+        enriched_identity: str | None = None
+
+        def observe(base_identity: str) -> None:
+            nonlocal attestation, enriched_identity
+            base = json.loads(base_identity)
+            container_id = base["containerId"]
+            inspected = self.docker_backend._run_endpoint(
+                target.docker.context_endpoint,
+                ("inspect", container_id),
+                timeout_seconds=5.0,
+                stdout_limit_bytes=4 * 1024 * 1024,
+                stderr_limit_bytes=16 * 1024,
+            )
+            if inspected.exit_code != 0 or inspected.timed_out:
+                self.docker_backend._cleanup(target.docker.context_endpoint, container_id)
+                raise AuthorityViolation("InversionSandbox could not re-inspect created container")
+            try:
+                record = json.loads(inspected.stdout)[0]
+                attestation = attest_created_container(profile, target.docker, record)
+                enriched_identity = self.effect_identity(
+                    target.docker,
+                    profile,
+                    container_id,
+                    base["containerCwd"],
+                    attestation,
+                )
+                if observe_effect is not None:
+                    observe_effect(enriched_identity)
+            except Exception:
+                self.docker_backend._cleanup(target.docker.context_endpoint, container_id)
+                raise
+
+        docker_result = self.docker_backend.execute(
+            request,
+            prepared=target.docker,
+            observe_effect=observe,
+        )
+        return InversionSandboxProcessResult(
+            docker=docker_result,
+            attestation=attestation,
+            side_effect_identity=enriched_identity,
+        )

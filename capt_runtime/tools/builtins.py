@@ -65,6 +65,24 @@ TERMINAL_DOCKER_DESCRIPTOR = {
     ],
 }
 
+TERMINAL_INVERSION_SANDBOX_DESCRIPTOR = {
+    "schemaVersion": "1.0.0",
+    "toolId": "terminal.inversion_sandbox",
+    "displayName": "Inversion Sandbox Terminal",
+    "family": "terminal",
+    "operations": ["terminal.exec"],
+    "requiredCapabilities": ["terminal.exec"],
+    "operationEffects": [{"operation": "terminal.exec", "effectClass": "durable_local"}],
+    "terminalBackends": ["inversion_sandbox"],
+    "platforms": ["macos", "linux"],
+    "supportsTimeout": True,
+    "supportsCancellation": False,
+    "idempotencySupport": "broker_settled_replay",
+    "artifactOutputs": ["stdout", "stderr", "exit_code", "container_id", "image_id",
+        "security_profile_digest", "network_policy_digest", "filesystem_scope_digest",
+        "attestation_digest", "cleanup_status"],
+}
+
 TERMINAL_CLOUDFLARE_DESCRIPTOR = {
     "schemaVersion": "1.0.0",
     "toolId": "terminal.cloudflare",
