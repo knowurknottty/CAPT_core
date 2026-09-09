@@ -184,7 +184,7 @@ def test_model_filter_cannot_change_command_selection_to_other_provider(monkeypa
     app = _app(monkeypatch)
 
     async def run():
-        async with app.run_test():
+        async with app.run_test() as pilot:
             app._selected_provider = "ollama"
             app._refresh_models("ollama", preserve_model=False)
             for _ in range(40):
@@ -192,7 +192,7 @@ def test_model_filter_cannot_change_command_selection_to_other_provider(monkeypa
                 if app._model_inventory.get("ollama"):
                     break
             app.query_one("#model-filter").value = "qwen"
-            app._apply_model_filter()
+            await pilot.pause()
             assert app._selected_model == "qwen3.6-fable-fusion:latest"
             app._selected_provider = "openrouter"
             app._selected_model = ""
@@ -201,6 +201,7 @@ def test_model_filter_cannot_change_command_selection_to_other_provider(monkeypa
                 await asyncio.sleep(0.01)
                 if app._selected_model == "deepseek/deepseek-v4-flash-0731":
                     break
+            await pilot.pause()
             assert app._selected_model == "deepseek/deepseek-v4-flash-0731"
 
     asyncio.run(run())
