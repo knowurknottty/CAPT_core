@@ -37,6 +37,18 @@ from .tools.backends.cloudflare import (
 )
 from .tools.backends.cloudflare_free_planner import CloudflareFreeExecutionPlanner
 from .tools.backends.cloudflare_free_router import CloudflareFreeTierRouter
+from .tools.backends.cloudflare_native import (
+    CloudflareBrowserRunner,
+    CloudflareD1StateStore,
+    CloudflareNativeSurfaces,
+    CloudflareQueueDelegator,
+    CloudflareWorkersAIInferencer,
+    CloudflareWorkersCoordinator,
+)
+from .tools.backends.cloudflare_native_api import (
+    CloudflareNativeAPIBridge,
+    CloudflareNativeAPIProfile,
+)
 from .tools.backends.cloudflare_usage import CloudflareUsageLedger
 from .tools.backends.docker import (
     DockerProcessBackend,
@@ -71,6 +83,7 @@ class RuntimeComposition:
     cloudflare_profile_registry: CloudflareSandboxProfileRegistry
     cloudflare_usage_ledger: CloudflareUsageLedger
     cloudflare_free_planner: CloudflareFreeExecutionPlanner
+    cloudflare_native: CloudflareNativeSurfaces | None
     mcp_manager: MCPManager | None
 
     def command_service(self, operator_id: str, session_id: str):
@@ -164,6 +177,7 @@ def create_runtime(
     ssh_profiles: Iterable[SSHProfile] = (),
     docker_profiles: Iterable[DockerProfile] = (),
     cloudflare_profiles: Iterable[CloudflareSandboxProfile] = (),
+    cloudflare_native_profile: CloudflareNativeAPIProfile | None = None,
     enable_mcp: bool = False,
     mcp_timeout: float = 3.0,
 ) -> RuntimeComposition:
@@ -206,6 +220,16 @@ def create_runtime(
     cloudflare_free_planner = CloudflareFreeExecutionPlanner(
         cloudflare_usage_ledger, cloudflare_free_router
     )
+    cloudflare_native = None
+    if cloudflare_native_profile is not None:
+        native_bridge = CloudflareNativeAPIBridge(cloudflare_native_profile)
+        cloudflare_native = CloudflareNativeSurfaces(
+            workers=CloudflareWorkersCoordinator(cloudflare_free_planner, native_bridge),
+            queues=CloudflareQueueDelegator(cloudflare_free_planner, native_bridge),
+            d1=CloudflareD1StateStore(cloudflare_free_planner, native_bridge),
+            browser=CloudflareBrowserRunner(cloudflare_free_planner, native_bridge),
+            ai=CloudflareWorkersAIInferencer(cloudflare_free_planner, native_bridge),
+        )
     cloudflare_terminal = CloudflareTerminalToolAdapter(
         CloudflareSandboxBackend(cloudflare_profile_registry)
     )
@@ -247,5 +271,6 @@ def create_runtime(
         cloudflare_profile_registry=cloudflare_profile_registry,
         cloudflare_usage_ledger=cloudflare_usage_ledger,
         cloudflare_free_planner=cloudflare_free_planner,
+        cloudflare_native=cloudflare_native,
         mcp_manager=mcp_manager,
     )

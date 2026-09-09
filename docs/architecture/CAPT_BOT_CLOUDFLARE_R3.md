@@ -44,3 +44,23 @@ CAPT routes free-admissible cloud work to typed native surfaces before consideri
 Provider dispatch follows `reserve -> dispatch -> classify -> commit | release | indeterminate`. A reservation is released only when CAPT can prove dispatch never started. Proven provider completion commits usage. Lost/ambiguous responses keep the reservation locked for reconciliation; uncertainty never becomes permission to retry.
 
 Typed native executors currently exist for Workers coordination, Queue delegation, D1 read/write, Browser Run, and Workers AI. Provider-reported actual usage is evidence. If reported usage exceeds the CAPT-authorized estimate, the operation becomes a specific accounting indeterminacy rather than widening economic authority after the fact.
+
+## Existing-Resource Native API Bridge
+
+The free-native execution bundle can be constructed only from an explicit `CloudflareNativeAPIProfile`. The profile contains account/resource identifiers and environment-variable names, never API-token or Worker-secret values. The bridge resolves secrets at call time and does not serialize them into results, receipts, or profile state.
+
+Cloudflare account API authority and Worker invocation authority are separate credential domains. Queue, D1, Browser Rendering, and Workers AI calls use the configured account API token; coordination Worker calls use a distinct Worker bearer-secret reference.
+
+The bridge is existing-resource-only. It can address configured Queue IDs and D1 database IDs and the fixed account endpoints for Browser Rendering and Workers AI; it contains no create/delete/deploy API methods. Browser actions are a closed vocabulary: `content`, `scrape`, `screenshot`, and `pdf`. Queue effect identity is CAPT-owned (`capt:<operationId>`) because Cloudflare Queue push does not provide a durable provider message ID in the push response.
+
+D1 provider metadata supplies actual `rows_read` and `rows_written` evidence. Browser Run and Workers AI currently account conservatively at the pre-authorized CAPT estimate when the REST response does not expose a reliable free-quota usage counter. These estimates are reservations/ceilings, not claims of provider-measured consumption.
+
+## Free-Native Hardening Closure
+
+Quota admission is serialized at the SQLite transaction boundary with `BEGIN IMMEDIATE`, not merely by an in-process lock. Independent runtime/ledger connections therefore cannot reserve the same remaining free-tier budget concurrently.
+
+The reservation bucket date is derived from the planner's timezone-aware UTC clock. A caller-supplied date is advisory only when it exactly matches that trusted date; mismatches are rejected as `CLOUDFLARE_QUOTA_DAY_UNTRUSTED`. Bots cannot move usage into a future quota bucket.
+
+Existing-resource API failures that are provably pre-dispatch—missing secret references, unconfigured Queue/D1 resources, or invalid Worker routes—raise `CloudflareDispatchNotStarted`, allowing the reservation to be released. Transport or provider-outcome ambiguity after dispatch remains locked and becomes `CloudflareNativeIndeterminate`.
+
+Browser/Workers-AI metering carries an explicit `usageBasis`: `provider_reported` or `reserved_ceiling`. CAPT never relabels its estimate as provider measurement. Browser `content` and `scrape` results receive SHA-256-bound artifact identities. `pdf` and `screenshot` are intentionally blocked before dispatch until binary artifact capture/evidence spooling is implemented.

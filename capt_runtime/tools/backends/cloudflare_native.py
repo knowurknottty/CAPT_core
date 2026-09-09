@@ -4,10 +4,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from enum import Enum
 from typing import Any
 
 from .cloudflare_free_planner import CloudflareFreeExecutionPlanner
 from .cloudflare_free_router import CloudflareFreeEstimate, CloudflareWorkClass
+
+
+class CloudflareBrowserAction(str, Enum):
+    CONTENT = "content"
+    SCRAPE = "scrape"
+    SCREENSHOT = "screenshot"
+    PDF = "pdf"
 
 
 class CloudflareDispatchNotStarted(RuntimeError):
@@ -141,6 +149,7 @@ class CloudflareBrowserResult:
     operation_id: str
     artifact_ref: str
     browser_seconds: int
+    usage_basis: str
     effect: str = "browser_run_completed"
 
 
@@ -150,6 +159,7 @@ class CloudflareWorkersAIResult:
     model: str
     output: Any
     neurons: int
+    usage_basis: str
     effect: str = "workers_ai_inference_completed"
 
 
@@ -244,11 +254,13 @@ class CloudflareBrowserRunner:
         self,
         *,
         operation_id: str,
-        action: str,
+        action: CloudflareBrowserAction,
         arguments: dict[str, Any],
         estimated_seconds: int,
         day: date,
     ) -> CloudflareBrowserResult:
+        if not isinstance(action, CloudflareBrowserAction):
+            raise ValueError("cloudflare_browser_action_invalid")
         self.planner.reserve(
             operation_id=operation_id,
             work_class=CloudflareWorkClass.BROWSER,
@@ -260,6 +272,7 @@ class CloudflareBrowserRunner:
                 operation_id=operation_id,
                 action=action,
                 arguments=arguments,
+                estimated_seconds=estimated_seconds,
             )
         except CloudflareDispatchNotStarted:
             self.planner.ledger.release(operation_id, reason="browser_run_not_started")
@@ -268,14 +281,19 @@ class CloudflareBrowserRunner:
             raise CloudflareNativeIndeterminate("browser_run_outcome_unclassified") from exc
         seconds = response.get("browserSeconds")
         artifact_ref = response.get("artifactRef")
+        usage_basis = response.get("usageBasis")
         if not isinstance(seconds, int) or seconds < 0:
             raise CloudflareNativeIndeterminate("browser_usage_evidence_unclassified")
         if not isinstance(artifact_ref, str) or not artifact_ref:
             raise CloudflareNativeIndeterminate("browser_artifact_identity_unclassified")
-        if seconds > estimated_seconds:
+        if usage_basis not in {"provider_reported", "reserved_ceiling"}:
+            raise CloudflareNativeIndeterminate("browser_usage_basis_unclassified")
+        if usage_basis == "reserved_ceiling" and seconds != estimated_seconds:
+            raise CloudflareNativeIndeterminate("browser_reserved_ceiling_mismatch")
+        if usage_basis == "provider_reported" and seconds > estimated_seconds:
             raise CloudflareNativeIndeterminate("browser_actual_usage_exceeded_reservation")
         self.planner.ledger.commit(operation_id)
-        return CloudflareBrowserResult(operation_id, artifact_ref, seconds)
+        return CloudflareBrowserResult(operation_id, artifact_ref, seconds, usage_basis)
 
 
 class CloudflareWorkersAIInferencer:
@@ -306,6 +324,7 @@ class CloudflareWorkersAIInferencer:
                 operation_id=operation_id,
                 model=model,
                 input_payload=input_payload,
+                estimated_neurons=estimated_neurons,
             )
         except CloudflareDispatchNotStarted:
             self.planner.ledger.release(operation_id, reason="workers_ai_not_started")
@@ -313,9 +332,14 @@ class CloudflareWorkersAIInferencer:
         except Exception as exc:
             raise CloudflareNativeIndeterminate("workers_ai_outcome_unclassified") from exc
         neurons = response.get("neurons")
+        usage_basis = response.get("usageBasis")
         if not isinstance(neurons, int) or neurons < 0:
             raise CloudflareNativeIndeterminate("workers_ai_usage_evidence_unclassified")
-        if neurons > estimated_neurons:
+        if usage_basis not in {"provider_reported", "reserved_ceiling"}:
+            raise CloudflareNativeIndeterminate("workers_ai_usage_basis_unclassified")
+        if usage_basis == "reserved_ceiling" and neurons != estimated_neurons:
+            raise CloudflareNativeIndeterminate("workers_ai_reserved_ceiling_mismatch")
+        if usage_basis == "provider_reported" and neurons > estimated_neurons:
             raise CloudflareNativeIndeterminate("workers_ai_actual_usage_exceeded_reservation")
         self.planner.ledger.commit(operation_id)
         return CloudflareWorkersAIResult(
@@ -323,4 +347,14 @@ class CloudflareWorkersAIInferencer:
             model=model,
             output=response.get("output"),
             neurons=neurons,
+            usage_basis=usage_basis,
         )
+
+
+@dataclass(frozen=True)
+class CloudflareNativeSurfaces:
+    workers: CloudflareWorkersCoordinator
+    queues: CloudflareQueueDelegator
+    d1: CloudflareD1StateStore
+    browser: CloudflareBrowserRunner
+    ai: CloudflareWorkersAIInferencer

@@ -58,3 +58,36 @@ def test_commit_keeps_consumed_usage_and_is_idempotent(tmp_path):
     ledger.commit("op-d1")
     ledger.commit("op-d1")
     assert ledger.snapshot(day=date(2026, 9, 8)).d1_rows_written == 5
+
+
+def test_separate_connections_cannot_oversubscribe_same_daily_budget(tmp_path):
+    import threading
+
+    path = tmp_path / "usage-shared.sqlite"
+    left = CloudflareUsageLedger(path)
+    right = CloudflareUsageLedger(path)
+    barrier = threading.Barrier(2)
+    outcomes: list[str] = []
+
+    def reserve(ledger, operation_id):
+        barrier.wait()
+        try:
+            ledger.reserve(
+                operation_id, "browser",
+                CloudflareFreeEstimate(browser_seconds=540),
+                day=date(2026, 9, 8),
+            )
+            outcomes.append("reserved")
+        except AuthorityViolation as exc:
+            outcomes.append(str(exc))
+
+    threads = [
+        threading.Thread(target=reserve, args=(left, "op-left")),
+        threading.Thread(target=reserve, args=(right, "op-right")),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert outcomes.count("reserved") == 1
+    assert outcomes.count("CLOUDFLARE_BROWSER_DAILY_BUDGET_EXHAUSTED") == 1

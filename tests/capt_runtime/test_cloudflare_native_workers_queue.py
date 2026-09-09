@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -34,7 +34,9 @@ class Bridge:
 def _planner(tmp_path):
     router = CloudflareFreeTierRouter.default()
     ledger = CloudflareUsageLedger(tmp_path / "usage.sqlite", router=router)
-    return CloudflareFreeExecutionPlanner(ledger, router), ledger
+    return CloudflareFreeExecutionPlanner(
+        ledger, router, now=lambda: datetime(2026, 9, 8, 12, tzinfo=timezone.utc)
+    ), ledger
 
 
 def test_workers_coordination_reserves_then_commits(tmp_path):
@@ -104,3 +106,32 @@ def test_uncertain_dispatch_keeps_reservation_locked(tmp_path):
             day=date(2026, 9, 8),
         )
     assert ledger.snapshot(day=date(2026, 9, 8)).queue_operations == 1
+
+
+def test_native_api_pre_dispatch_secret_failure_releases_queue_budget(tmp_path, monkeypatch):
+    from capt_runtime.tools.backends.cloudflare_native_api import (
+        CloudflareNativeAPIBridge,
+        CloudflareNativeAPIProfile,
+    )
+
+    monkeypatch.delenv("CF_API_TOKEN", raising=False)
+    monkeypatch.delenv("CF_WORKER_TOKEN", raising=False)
+    planner, ledger = _planner(tmp_path)
+    bridge = CloudflareNativeAPIBridge(
+        CloudflareNativeAPIProfile(
+            account_id="acct-1",
+            api_token_env="CF_API_TOKEN",
+            worker_base_url="https://capt-control.example.workers.dev",
+            worker_auth_env="CF_WORKER_TOKEN",
+            queue_ids={"capt-delegates": "queue-123"},
+        )
+    )
+    backend = CloudflareQueueDelegator(planner, bridge)
+    with pytest.raises(CloudflareDispatchNotStarted, match="CLOUDFLARE_SECRET_UNAVAILABLE"):
+        backend.delegate(
+            operation_id="queue-no-secret",
+            queue="capt-delegates",
+            body={},
+            day=date(2026, 9, 8),
+        )
+    assert ledger.snapshot(day=date(2026, 9, 8)).queue_operations == 0

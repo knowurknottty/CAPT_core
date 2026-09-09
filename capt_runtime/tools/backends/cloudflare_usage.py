@@ -95,26 +95,36 @@ class CloudflareUsageLedger:
         digest = _digest(work_class, estimate, day)
         estimate_json = json.dumps(asdict(estimate), sort_keys=True, separators=(",", ":"))
         with self._lock:
-            existing = self._db.execute(
-                "SELECT * FROM cloudflare_usage_reservations WHERE operation_id=?",
-                (operation_id,),
-            ).fetchone()
-            if existing is not None:
-                if existing["request_digest"] != digest:
-                    raise AuthorityViolation("CLOUDFLARE_USAGE_RESERVATION_DIGEST_MISMATCH")
-                return {"operationId": operation_id, "state": existing["state"], "requestDigest": digest}
-            usage = self._snapshot_unlocked(day)
+            self._db.execute("BEGIN IMMEDIATE")
             try:
-                work = CloudflareWorkClass(work_class)
-            except ValueError as exc:
-                raise ValueError(f"cloudflare_work_class_invalid:{work_class}") from exc
-            self.router.route(work, estimate, usage=usage)
-            self._db.execute(
-                "INSERT INTO cloudflare_usage_reservations(operation_id,day,work_class,estimate_json,request_digest,state) VALUES(?,?,?,?,?,?)",
-                (operation_id, day.isoformat(), work_class, estimate_json, digest, "reserved"),
-            )
-            self._db.commit()
-            return {"operationId": operation_id, "state": "reserved", "requestDigest": digest}
+                existing = self._db.execute(
+                    "SELECT * FROM cloudflare_usage_reservations WHERE operation_id=?",
+                    (operation_id,),
+                ).fetchone()
+                if existing is not None:
+                    if existing["request_digest"] != digest:
+                        raise AuthorityViolation("CLOUDFLARE_USAGE_RESERVATION_DIGEST_MISMATCH")
+                    self._db.commit()
+                    return {
+                        "operationId": operation_id,
+                        "state": existing["state"],
+                        "requestDigest": digest,
+                    }
+                usage = self._snapshot_unlocked(day)
+                try:
+                    work = CloudflareWorkClass(work_class)
+                except ValueError as exc:
+                    raise ValueError(f"cloudflare_work_class_invalid:{work_class}") from exc
+                self.router.route(work, estimate, usage=usage)
+                self._db.execute(
+                    "INSERT INTO cloudflare_usage_reservations(operation_id,day,work_class,estimate_json,request_digest,state) VALUES(?,?,?,?,?,?)",
+                    (operation_id, day.isoformat(), work_class, estimate_json, digest, "reserved"),
+                )
+                self._db.commit()
+                return {"operationId": operation_id, "state": "reserved", "requestDigest": digest}
+            except Exception:
+                self._db.rollback()
+                raise
 
     def release(self, operation_id: str, *, reason: str) -> None:
         if not reason:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -10,6 +10,7 @@ from capt_runtime.tools.backends.cloudflare_free_planner import (
 )
 from capt_runtime.tools.backends.cloudflare_free_router import CloudflareFreeTierRouter
 from capt_runtime.tools.backends.cloudflare_native import (
+    CloudflareBrowserAction,
     CloudflareBrowserRunner,
     CloudflareD1StateStore,
     CloudflareWorkersAIInferencer,
@@ -25,16 +26,18 @@ class Bridge:
         return {"rowsWritten": 1, "changeId": "chg-1"}
 
     def browser_run(self, **kwargs):
-        return {"browserSeconds": 4, "artifactRef": "browser-artifact-1"}
+        return {"browserSeconds": 4, "artifactRef": "browser-artifact-1", "usageBasis": "provider_reported"}
 
     def workers_ai(self, **kwargs):
-        return {"neurons": 20, "output": {"text": "ok"}}
+        return {"neurons": 20, "output": {"text": "ok"}, "usageBasis": "provider_reported"}
 
 
 def _planner(tmp_path):
     router = CloudflareFreeTierRouter.default()
     ledger = CloudflareUsageLedger(tmp_path / "usage.sqlite", router=router)
-    return CloudflareFreeExecutionPlanner(ledger, router), ledger
+    return CloudflareFreeExecutionPlanner(
+        ledger, router, now=lambda: datetime(2026, 9, 8, 12, tzinfo=timezone.utc)
+    ), ledger
 
 
 def test_d1_read_and_write_are_independently_metered(tmp_path):
@@ -68,12 +71,13 @@ def test_browser_run_reserves_seconds_and_requires_artifact_identity(tmp_path):
     browser = CloudflareBrowserRunner(planner, Bridge())
     result = browser.run(
         operation_id="browser-1",
-        action="navigate_and_extract",
+        action=CloudflareBrowserAction.CONTENT,
         arguments={"url": "https://example.com"},
         estimated_seconds=5,
         day=date(2026, 9, 8),
     )
     assert result.artifact_ref == "browser-artifact-1"
+    assert result.usage_basis == "provider_reported"
     assert ledger.snapshot(day=date(2026, 9, 8)).browser_seconds == 5
 
 
@@ -88,6 +92,7 @@ def test_workers_ai_is_free_model_gated_and_metered(tmp_path):
         day=date(2026, 9, 8),
     )
     assert result.output["text"] == "ok"
+    assert result.usage_basis == "provider_reported"
     assert ledger.snapshot(day=date(2026, 9, 8)).workers_ai_neurons == 25
     with pytest.raises(AuthorityViolation, match="CLOUDFLARE_AI_MODEL_REQUIRES_PAID_AUTHORITY"):
         ai.infer(
