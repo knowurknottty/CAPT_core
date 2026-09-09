@@ -116,7 +116,9 @@ jobs:
           print("PACKAGE_CONTENT_OK")
           PY
       - name: Upload wheel artifact
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: wheel-py${{ matrix.python-version }}
           path: dist/*.whl
+          retention-days: 7

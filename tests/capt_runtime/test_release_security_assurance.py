@@ -389,6 +389,30 @@ def test_openrouter_billing_assurance_rejects_missing_cap_and_management_key():
         validate_openrouter_key_policy({"limit": 10, "is_management_key": True}, source_sha="abc")
 
 
+def test_release_security_artifact_quota_cannot_mask_completed_security_checks():
+    text = Path(".github/workflows/release-security.yml").read_text()
+    assert 'GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"' in text
+    for step in (
+        "Upload pytest diagnostics",
+        "Upload billing assurance receipt",
+        "Download live billing assurance receipt",
+        "Upload security evidence and gate result",
+    ):
+        marker = "- name: " + step
+        start = text.index(marker)
+        window = text[start:start + 420]
+        assert "continue-on-error: true" in window, step
+    assert text.count("retention-days: 7") >= 3
+
+
+def test_m0_wheel_archival_is_nonblocking_when_actions_storage_is_full():
+    text = Path(".github/workflows/m0a-contract-runtime.yml").read_text()
+    start = text.index("- name: Upload wheel artifact")
+    window = text[start:start + 320]
+    assert "continue-on-error: true" in window
+    assert "retention-days: 7" in window
+
+
 def test_release_security_attests_billing_control_only_after_live_cap_job_success():
     text = Path(".github/workflows/release-security.yml").read_text()
     assert "billing-assurance:" in text
