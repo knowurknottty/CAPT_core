@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:dee298e33f1c587f30ec8f9d9b3b200c3bdf863c39f7fe1cc560baf23c8fb790
+// source digest:  sha256:58d31a4d2a15f6684f81976d8c23fa8f0ded13c4fc57574cf300da22d92d4451
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -1616,10 +1616,12 @@ export type EventPayload =
   | DelegateAssignedPayload
   | DelegateAssignmentTransitionedPayload
   | CloudflareResourceAdoptionApprovalConsumedPayload
-  | CloudflareResourceBindingCreatedPayload;
+  | CloudflareResourceBindingCreatedPayload
+  | SandboxLeaseReservedPayload
+  | SandboxLeaseTransitionedPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated" | "BotRegistered" | "CognitiveCandidateProposed" | "CognitiveCandidateDecided" | "SkillCandidateCreated" | "SkillCandidateTransitioned" | "LabBoardItemCreated" | "LabBoardItemTransitioned" | "DelegateAssigned" | "DelegateAssignmentTransitioned" | "CloudflareResourceAdoptionApprovalConsumed" | "CloudflareResourceBindingCreated";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated" | "BotRegistered" | "CognitiveCandidateProposed" | "CognitiveCandidateDecided" | "SkillCandidateCreated" | "SkillCandidateTransitioned" | "LabBoardItemCreated" | "LabBoardItemTransitioned" | "DelegateAssigned" | "DelegateAssignmentTransitioned" | "CloudflareResourceAdoptionApprovalConsumed" | "CloudflareResourceBindingCreated" | "SandboxLeaseReserved" | "SandboxLeaseTransitioned";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -1669,6 +1671,8 @@ export const EventTypeValues = [
   "DelegateAssignmentTransitioned",
   "CloudflareResourceAdoptionApprovalConsumed",
   "CloudflareResourceBindingCreated",
+  "SandboxLeaseReserved",
+  "SandboxLeaseTransitioned",
 ] as const;
 
 /** EvidenceRecordedPayload */
@@ -1742,6 +1746,21 @@ export interface PolicyEvaluatedPayload {
 export interface ReplayForkCreatedPayload {
   readonly eventType: "ReplayForkCreated";
   readonly fork: ReplayForkState;
+}
+
+/** SandboxLeaseReservedPayload */
+export interface SandboxLeaseReservedPayload {
+  readonly eventType: "SandboxLeaseReserved";
+  readonly lease: SandboxLease;
+}
+
+/** SandboxLeaseTransitionedPayload */
+export interface SandboxLeaseTransitionedPayload {
+  readonly eventType: "SandboxLeaseTransitioned";
+  readonly fromState: SandboxLeaseState;
+  readonly lease: SandboxLease;
+  readonly sandboxLeaseId: Identifier;
+  readonly toState: SandboxLeaseState;
 }
 
 /** SkillCandidateCreatedPayload */
@@ -2045,6 +2064,57 @@ export interface ReplayForkState {
   readonly sourceStateDigest: Digest;
   readonly state: "created";
 }
+
+/** Exact full Docker object ID; names and abbreviated IDs are not identity. */
+export type SandboxDockerObjectId = string;
+
+/** Resource lifetime facts only; grants no capability authority. Identity fields are immutable once bound. Optional external identities are absent until observed. TTL default is 1800 seconds; callers materialize the profile-approved value. sideEffectIdentity is the canonical lifecycle identity digest. */
+export interface SandboxLease {
+  readonly createdAt: Timestamp;
+  readonly creationToolExecutionId: Identifier;
+  readonly daemonIdentityDigest: Digest;
+  readonly dockerEndpoint: string;
+  readonly executionContextId: Identifier;
+  readonly expiresAt: Timestamp;
+  readonly filesystemScopeDigest: Digest;
+  readonly imageId: Digest;
+  readonly networkPolicyDigest: Digest;
+  readonly operatorId: Identifier;
+  readonly persistentEntrypointDigest: Digest;
+  readonly profileDigest: Digest;
+  readonly profileId: Identifier;
+  readonly sandboxLeaseId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly securityProfileDigest: Digest;
+  readonly sessionId: Identifier;
+  readonly state: SandboxLeaseState;
+  readonly ttlSeconds: number;
+  readonly closeReason?: string;
+  readonly closedAt?: Timestamp;
+  readonly closureReceiptDigest?: Digest;
+  readonly containerId?: SandboxDockerObjectId;
+  readonly creationAttestationDigest?: Digest;
+  readonly guardianContainerId?: SandboxDockerObjectId;
+  readonly guardianImageId?: Digest;
+  readonly lastReconciledAt?: Timestamp;
+  readonly networkId?: SandboxDockerObjectId;
+  readonly networkName?: string;
+  readonly reconciliationEvidenceDigest?: Digest;
+  readonly reconciliationReason?: string;
+  readonly sideEffectIdentity?: Digest;
+  readonly updatedAt?: Timestamp;
+}
+
+/** SandboxLeaseState */
+export type SandboxLeaseState = "reserved" | "created" | "running" | "closing" | "closed" | "indeterminate";
+export const SandboxLeaseStateValues = [
+  "reserved",
+  "created",
+  "running",
+  "closing",
+  "closed",
+  "indeterminate",
+] as const;
 
 /** Spec 8: 'parallel' is NOT an edge type. Parallelism emerges when predecessor conditions are simultaneously satisfied. */
 export type DependencyCondition = "completed" | "succeeded" | "failed" | "verified" | "approved";

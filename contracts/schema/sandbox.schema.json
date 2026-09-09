@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.capt.dev/sandbox.schema.json",
+  "title": "CAPT persistent sandbox resource lifetime",
+  "x-domain": "sandbox",
+  "$defs": {
+    "SandboxLeaseState": {
+      "title": "SandboxLeaseState",
+      "type": "string",
+      "enum": [
+        "reserved",
+        "created",
+        "running",
+        "closing",
+        "closed",
+        "indeterminate"
+      ]
+    },
+    "SandboxDockerObjectId": {
+      "title": "SandboxDockerObjectId",
+      "description": "Exact full Docker object ID; names and abbreviated IDs are not identity.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "SandboxLease": {
+      "title": "SandboxLease",
+      "description": "Resource lifetime facts only; grants no capability authority. Identity fields are immutable once bound. Optional external identities are absent until observed. TTL default is 1800 seconds; callers materialize the profile-approved value. sideEffectIdentity is the canonical lifecycle identity digest.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "sandboxLeaseId",
+        "profileId",
+        "operatorId",
+        "sessionId",
+        "executionContextId",
+        "creationToolExecutionId",
+        "profileDigest",
+        "imageId",
+        "securityProfileDigest",
+        "networkPolicyDigest",
+        "filesystemScopeDigest",
+        "persistentEntrypointDigest",
+        "daemonIdentityDigest",
+        "dockerEndpoint",
+        "createdAt",
+        "expiresAt",
+        "ttlSeconds",
+        "state"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "sandboxLeaseId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "profileId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "operatorId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "sessionId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "executionContextId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "creationToolExecutionId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "profileDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "imageId": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "securityProfileDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "networkPolicyDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "filesystemScopeDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "persistentEntrypointDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "daemonIdentityDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "dockerEndpoint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "createdAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "expiresAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "ttlSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "state": {
+          "$ref": "sandbox.schema.json#/$defs/SandboxLeaseState"
+        },
+        "containerId": {
+          "$ref": "sandbox.schema.json#/$defs/SandboxDockerObjectId"
+        },
+        "guardianContainerId": {
+          "$ref": "sandbox.schema.json#/$defs/SandboxDockerObjectId"
+        },
+        "networkId": {
+          "$ref": "sandbox.schema.json#/$defs/SandboxDockerObjectId"
+        },
+        "networkName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "guardianImageId": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "creationAttestationDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "sideEffectIdentity": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "reconciliationEvidenceDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "closureReceiptDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "lastReconciledAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "closedAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "updatedAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "reconciliationReason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "closeReason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      }
+    }
+  }
+}

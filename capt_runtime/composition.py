@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
 
+from .aggregates import SandboxLeaseAggregate
 from .cloudflare_resource_adoption import CloudflareResourceBindingRegistry
 from .driver_host import DriverHost
 from .drivers.openharness import DESCRIPTOR, OpenHarnessDriver
@@ -18,6 +19,7 @@ from .drivers.registry import DriverRegistry
 from .mcp import MCPManager
 from .memory.engine import MemoryTriggerEngine
 from .memory.store import MemoryStore
+from .sandbox_reconciliation import SandboxLeaseReconciler
 from .services import RuntimeService
 from .steered_service import SteeredRuntimeService
 from .store import EventStore
@@ -28,6 +30,7 @@ from .tools.adapters import (
     CodeExecutionAdapter,
     DockerTerminalToolAdapter,
     FileToolAdapter,
+    InversionSandboxLifecycleToolAdapter,
     InversionSandboxTerminalToolAdapter,
     SSHTerminalToolAdapter,
     TerminalToolAdapter,
@@ -68,6 +71,7 @@ from .tools.backends.ssh import SSHProcessBackend, SSHProfile, SSHProfileRegistr
 from .tools.builtins import (
     CODE_EXECUTION_DESCRIPTOR,
     FILE_OPERATIONS_DESCRIPTOR,
+    SANDBOX_INVERSION_DESCRIPTOR,
     TERMINAL_CLOUDFLARE_DESCRIPTOR,
     TERMINAL_DOCKER_DESCRIPTOR,
     TERMINAL_INVERSION_SANDBOX_DESCRIPTOR,
@@ -88,6 +92,8 @@ class RuntimeComposition:
     memory_engine: MemoryTriggerEngine
     tool_registry: ToolRegistry
     tool_broker: ToolBroker
+    sandbox_reconciler: SandboxLeaseReconciler
+    sandbox_reconciliation_report: list[dict[str, Any]]
     ssh_profile_registry: SSHProfileRegistry
     docker_profile_registry: DockerProfileRegistry
     inversion_sandbox_profile_registry: InversionSandboxProfileRegistry
@@ -172,6 +178,11 @@ class RuntimeComposition:
         """Reconcile durable ToolExecutions without redispatching adapters."""
         return self.tool_broker.reconcile_stranded()
 
+    def reconcile_sandbox_leases(self) -> list[dict[str, Any]]:
+        """Reconcile persistent sandbox leases without creating/adopting resources."""
+        self.sandbox_reconciliation_report = self.sandbox_reconciler.reconcile_all()
+        return list(self.sandbox_reconciliation_report)
+
     def close(self) -> None:
         if self.mcp_manager is not None:
             self.mcp_manager.close()
@@ -226,8 +237,15 @@ def create_runtime(
     docker_profile_registry = DockerProfileRegistry(docker_profiles)
     docker_terminal = DockerTerminalToolAdapter(DockerProcessBackend(docker_profile_registry))
     inversion_sandbox_profile_registry = InversionSandboxProfileRegistry(inversion_sandbox_profiles)
+    inversion_sandbox_backend = InversionSandboxProcessBackend(inversion_sandbox_profile_registry)
+    inversion_sandbox_lifecycle = InversionSandboxLifecycleToolAdapter(
+        inversion_sandbox_backend, store
+    )
     inversion_sandbox_terminal = InversionSandboxTerminalToolAdapter(
-        InversionSandboxProcessBackend(inversion_sandbox_profile_registry)
+        inversion_sandbox_backend,
+        lease_resolver=lambda lease_id: store.load_state(
+            SandboxLeaseAggregate.stream_id(lease_id)
+        ),
     )
     cloudflare_profile_registry = CloudflareSandboxProfileRegistry(cloudflare_profiles)
     cloudflare_free_router = CloudflareFreeTierRouter.default()
@@ -263,6 +281,7 @@ def create_runtime(
         (TERMINAL_LOCAL_DESCRIPTOR, terminal),
         (TERMINAL_SSH_DESCRIPTOR, ssh_terminal),
         (TERMINAL_DOCKER_DESCRIPTOR, docker_terminal),
+        (SANDBOX_INVERSION_DESCRIPTOR, inversion_sandbox_lifecycle),
         (TERMINAL_INVERSION_SANDBOX_DESCRIPTOR, inversion_sandbox_terminal),
         (TERMINAL_CLOUDFLARE_DESCRIPTOR, cloudflare_terminal),
         (FILE_OPERATIONS_DESCRIPTOR, files),
@@ -285,6 +304,14 @@ def create_runtime(
             )
     now = lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     tool_broker = ToolBroker(service, tool_registry, now=now)
+    sandbox_reconciler = SandboxLeaseReconciler(service, inversion_sandbox_backend, now=now)
+    try:
+        sandbox_reconciliation_report = sandbox_reconciler.reconcile_all()
+    except Exception as exc:  # noqa: BLE001 - startup reconciliation is non-fatal and fail-closed
+        sandbox_reconciliation_report = [{
+            "status": "unproven",
+            "reason": f"startup sandbox reconciliation failed: {type(exc).__name__}: {exc}"[:1024],
+        }]
     return RuntimeComposition(
         store=store,
         service=service,
@@ -293,6 +320,8 @@ def create_runtime(
         memory_engine=memory_engine,
         tool_registry=tool_registry,
         tool_broker=tool_broker,
+        sandbox_reconciler=sandbox_reconciler,
+        sandbox_reconciliation_report=sandbox_reconciliation_report,
         ssh_profile_registry=ssh_profile_registry,
         docker_profile_registry=docker_profile_registry,
         inversion_sandbox_profile_registry=inversion_sandbox_profile_registry,

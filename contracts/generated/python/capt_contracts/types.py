@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:dee298e33f1c587f30ec8f9d9b3b200c3bdf863c39f7fe1cc560baf23c8fb790
+# source digest:  sha256:58d31a4d2a15f6684f81976d8c23fa8f0ded13c4fc57574cf300da22d92d4451
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -1922,6 +1922,25 @@ class ReplayForkCreatedPayload(object):
 
 
 @dataclass(frozen=True)
+class SandboxLeaseReservedPayload(object):
+    """SandboxLeaseReservedPayload"""
+
+    eventType: Literal["SandboxLeaseReserved"]
+    lease: SandboxLease
+
+
+@dataclass(frozen=True)
+class SandboxLeaseTransitionedPayload(object):
+    """SandboxLeaseTransitionedPayload"""
+
+    eventType: Literal["SandboxLeaseTransitioned"]
+    fromState: SandboxLeaseState
+    lease: SandboxLease
+    sandboxLeaseId: Identifier
+    toState: SandboxLeaseState
+
+
+@dataclass(frozen=True)
 class SkillCandidateCreatedPayload(object):
     """SkillCandidateCreatedPayload"""
 
@@ -2019,7 +2038,7 @@ class ToolExecutionTerminatedPayload(object):
 
 
 # discriminated on 'eventType'
-EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload, BotRegisteredPayload, CognitiveCandidateProposedPayload, CognitiveCandidateDecidedPayload, SkillCandidateCreatedPayload, SkillCandidateTransitionedPayload, LabBoardItemCreatedPayload, LabBoardItemTransitionedPayload, DelegateAssignedPayload, DelegateAssignmentTransitionedPayload, CloudflareResourceAdoptionApprovalConsumedPayload, CloudflareResourceBindingCreatedPayload]
+EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload, BotRegisteredPayload, CognitiveCandidateProposedPayload, CognitiveCandidateDecidedPayload, SkillCandidateCreatedPayload, SkillCandidateTransitionedPayload, LabBoardItemCreatedPayload, LabBoardItemTransitionedPayload, DelegateAssignedPayload, DelegateAssignmentTransitionedPayload, CloudflareResourceAdoptionApprovalConsumedPayload, CloudflareResourceBindingCreatedPayload, SandboxLeaseReservedPayload, SandboxLeaseTransitionedPayload]
 
 
 class EventType(str, Enum):
@@ -2073,6 +2092,8 @@ class EventType(str, Enum):
     DELEGATEASSIGNMENTTRANSITIONED = "DelegateAssignmentTransitioned"
     CLOUDFLARERESOURCEADOPTIONAPPROVALCONSUMED = "CloudflareResourceAdoptionApprovalConsumed"
     CLOUDFLARERESOURCEBINDINGCREATED = "CloudflareResourceBindingCreated"
+    SANDBOXLEASERESERVED = "SandboxLeaseReserved"
+    SANDBOXLEASETRANSITIONED = "SandboxLeaseTransitioned"
 
 
 @dataclass(frozen=True)
@@ -2329,6 +2350,59 @@ class ReplayForkState(object):
     sourceSequence: int
     sourceStateDigest: Digest
     state: Literal["created"]
+
+
+SandboxDockerObjectId = str
+
+
+@dataclass(frozen=True)
+class SandboxLease(object):
+    """Resource lifetime facts only; grants no capability authority. Identity fields are immutable once bound. Optional external identities are absent until observed. TTL default is 1800 seconds; callers materialize the profile-approved value. sideEffectIdentity is the canonical lifecycle identity digest."""
+
+    createdAt: Timestamp
+    creationToolExecutionId: Identifier
+    daemonIdentityDigest: Digest
+    dockerEndpoint: str
+    executionContextId: Identifier
+    expiresAt: Timestamp
+    filesystemScopeDigest: Digest
+    imageId: Digest
+    networkPolicyDigest: Digest
+    operatorId: Identifier
+    persistentEntrypointDigest: Digest
+    profileDigest: Digest
+    profileId: Identifier
+    sandboxLeaseId: Identifier
+    schemaVersion: SchemaVersion
+    securityProfileDigest: Digest
+    sessionId: Identifier
+    state: SandboxLeaseState
+    ttlSeconds: int
+    closeReason: Optional[str] = None
+    closedAt: Optional[Timestamp] = None
+    closureReceiptDigest: Optional[Digest] = None
+    containerId: Optional[SandboxDockerObjectId] = None
+    creationAttestationDigest: Optional[Digest] = None
+    guardianContainerId: Optional[SandboxDockerObjectId] = None
+    guardianImageId: Optional[Digest] = None
+    lastReconciledAt: Optional[Timestamp] = None
+    networkId: Optional[SandboxDockerObjectId] = None
+    networkName: Optional[str] = None
+    reconciliationEvidenceDigest: Optional[Digest] = None
+    reconciliationReason: Optional[str] = None
+    sideEffectIdentity: Optional[Digest] = None
+    updatedAt: Optional[Timestamp] = None
+
+
+class SandboxLeaseState(str, Enum):
+    """SandboxLeaseState"""
+
+    RESERVED = "reserved"
+    CREATED = "created"
+    RUNNING = "running"
+    CLOSING = "closing"
+    CLOSED = "closed"
+    INDETERMINATE = "indeterminate"
 
 
 class DependencyCondition(str, Enum):

@@ -398,6 +398,7 @@ def _docker_create_args(
     argv: tuple[str, ...],
     *,
     network_mode_override: str | None = None,
+    labels: tuple[tuple[str, str], ...] = (),
 ) -> list[str]:
     network_mode = profile.network_policy.mode
     if network_mode_override is not None:
@@ -428,6 +429,20 @@ def _docker_create_args(
     for mount in profile.mounts:
         mount_spec = f"type=bind,src={mount.host_path},dst={mount.container_path}" + (",readonly" if mount.mode == "ro" else "")
         args.extend(("--mount", mount_spec))
+    seen_labels: set[str] = set()
+    for key, value in labels:
+        if (
+            not isinstance(key, str)
+            or not key
+            or len(key) > 128
+            or any(ch.isspace() or ord(ch) < 32 or ch == "=" for ch in key)
+            or key in seen_labels
+        ):
+            raise ValueError(f"invalid Docker label key: {key!r}")
+        if not isinstance(value, str) or len(value) > 4096 or "\x00" in value or "\n" in value or "\r" in value:
+            raise ValueError(f"invalid Docker label value for {key}")
+        seen_labels.add(key)
+        args.extend(("--label", f"{key}={value}"))
     args.append(prepared.image_id)
     args.extend(argv)
     return args
@@ -560,6 +575,88 @@ class DockerProcessBackend:
             repo_digest=repo_digest,
         )
 
+    def _create_stopped(
+        self,
+        prepared: DockerPreparedTarget,
+        cwd: str,
+        argv: tuple[str, ...],
+        *,
+        network_mode_override: str | None = None,
+        labels: tuple[tuple[str, str], ...] = (),
+    ):
+        create_args = _docker_create_args(
+            prepared.profile,
+            prepared,
+            cwd,
+            argv,
+            network_mode_override=network_mode_override,
+            labels=labels,
+        )
+        created = self._run_endpoint(
+            prepared.context_endpoint,
+            tuple(create_args),
+            timeout_seconds=15.0,
+            stdout_limit_bytes=4096,
+            stderr_limit_bytes=64 * 1024,
+        )
+        if created.exit_code != 0 or created.timed_out:
+            return "", created
+        container_id = created.stdout.strip()
+        if not _CONTAINER_ID_RE.fullmatch(container_id):
+            raise RuntimeError("docker create returned invalid container identity")
+        return container_id, created
+
+    def _inspect_exact(self, endpoint: str, container_id: str) -> dict:
+        inspected = self._run_endpoint(
+            endpoint,
+            ("inspect", container_id),
+            timeout_seconds=5.0,
+            stdout_limit_bytes=MAX_DOCKER_CONTROL_BYTES,
+            stderr_limit_bytes=16 * 1024,
+        )
+        if inspected.exit_code != 0 or inspected.timed_out:
+            raise RuntimeError("Docker exact container inspect failed")
+        try:
+            record = json.loads(inspected.stdout)[0]
+        except (json.JSONDecodeError, IndexError, TypeError) as exc:
+            raise RuntimeError("Docker exact container inspect returned invalid JSON") from exc
+        if record.get("Id") != container_id:
+            raise RuntimeError("Docker exact container inspect returned a different identity")
+        return record
+
+    def _start_exact(self, endpoint: str, container_id: str) -> None:
+        started = self._run_endpoint(
+            endpoint,
+            ("start", container_id),
+            timeout_seconds=10.0,
+            stdout_limit_bytes=4096,
+            stderr_limit_bytes=64 * 1024,
+        )
+        if started.exit_code != 0 or started.timed_out:
+            raise RuntimeError(
+                "docker start failed: " + (started.stderr or started.stdout or "unknown")[:2048]
+            )
+
+    def _exec_exact(
+        self,
+        endpoint: str,
+        container_id: str,
+        *,
+        user: str,
+        cwd: str,
+        argv: tuple[str, ...],
+        timeout_seconds: float,
+        stdout_limit_bytes: int,
+        stderr_limit_bytes: int,
+    ):
+        return self._run_endpoint(
+            endpoint,
+            ("exec", "--user", user, "--workdir", cwd, container_id, *argv),
+            timeout_seconds=timeout_seconds,
+            stdout_limit_bytes=stdout_limit_bytes,
+            stderr_limit_bytes=stderr_limit_bytes,
+        )
+
     def effect_identity(
         self, prepared: DockerPreparedTarget, container_id: str, cwd: str
     ) -> str:
@@ -606,16 +703,11 @@ class DockerProcessBackend:
         if current_endpoint != prepared.context_endpoint:
             raise RuntimeError("Docker context endpoint changed after preflight")
 
-        create_args = _docker_create_args(
-            profile, prepared, cwd, request.argv, network_mode_override=network_mode_override
-        )
-
-        created = self._run_endpoint(
-            prepared.context_endpoint,
-            tuple(create_args),
-            timeout_seconds=15.0,
-            stdout_limit_bytes=4096,
-            stderr_limit_bytes=64 * 1024,
+        container_id, created = self._create_stopped(
+            prepared,
+            cwd,
+            request.argv,
+            network_mode_override=network_mode_override,
         )
         if created.exit_code != 0 or created.timed_out:
             return DockerProcessResult(
@@ -635,30 +727,12 @@ class DockerProcessBackend:
                 cleanup_succeeded=True,
                 control_error="docker create failed before container identity was returned",
             )
-        container_id = created.stdout.strip()
-        if not _CONTAINER_ID_RE.fullmatch(container_id):
-            raise RuntimeError("docker create returned invalid container identity")
-
-        created_inspect = self._run_endpoint(
-            prepared.context_endpoint,
-            ("inspect", container_id),
-            timeout_seconds=5.0,
-            stdout_limit_bytes=MAX_DOCKER_CONTROL_BYTES,
-            stderr_limit_bytes=16 * 1024,
-        )
-        if created_inspect.exit_code != 0 or created_inspect.timed_out:
-            cleanup_ok, cleanup_error = self._cleanup(prepared.context_endpoint, container_id)
-            raise RuntimeError(
-                "Docker could not verify created container identity before start; cleanup="
-                f"{cleanup_ok} {cleanup_error}"
-            )
         try:
-            created_record = json.loads(created_inspect.stdout)[0]
-        except (json.JSONDecodeError, IndexError, TypeError) as exc:
+            created_record = self._inspect_exact(prepared.context_endpoint, container_id)
+        except RuntimeError as exc:
             cleanup_ok, cleanup_error = self._cleanup(prepared.context_endpoint, container_id)
             raise RuntimeError(
-                "Docker created-container inspect returned invalid JSON; cleanup="
-                f"{cleanup_ok} {cleanup_error}"
+                f"{exc}; cleanup={cleanup_ok} {cleanup_error}"
             ) from exc
         if created_record.get("Id") != container_id or created_record.get("Image") != prepared.image_id:
             cleanup_ok, cleanup_error = self._cleanup(prepared.context_endpoint, container_id)
