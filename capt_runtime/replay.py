@@ -17,6 +17,7 @@ from .aggregates import (
     BotAggregate,
     CapabilityAggregate,
     ClaimAggregate,
+    CloudflareResourceBindingAggregate,
     CognitiveCandidateAggregate,
     CohortAggregate,
     DelegateAssignmentAggregate,
@@ -98,6 +99,7 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         "LabBoardItemCreated",
         "CohortCreated",
         "ReplayForkCreated",
+        "CloudflareResourceBindingCreated",
     )
     if event_type not in _CREATION_EVENTS and current is None:
         # A mutation event on a stream with no prior state means the ledger is
@@ -169,6 +171,13 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         nxt = HumanApprovalAggregate.consume(
             existing(), consumption["useId"], consumption["consumedAt"]
         )
+    elif event_type == "CloudflareResourceAdoptionApprovalConsumed":
+        consumption = payload["consumption"]
+        nxt = HumanApprovalAggregate.consume(
+            existing(), consumption["useId"], consumption["consumedAt"]
+        )
+    elif event_type == "CloudflareResourceBindingCreated":
+        nxt = CloudflareResourceBindingAggregate.create(payload["binding"])
     elif event_type == "ArtifactPromotionPrepared":
         nxt = ArtifactPromotionAggregate.prepare(payload["promotion"])
     elif event_type == "ArtifactPromotionAuthorized":

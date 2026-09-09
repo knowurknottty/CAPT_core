@@ -11,14 +11,20 @@ from . import commands
 from .aggregates.artifact_promotion import ArtifactPromotionAggregate
 from .aggregates.bot import BotAggregate
 from .aggregates.claim_driver import ClaimAggregate
+from .aggregates.cloudflare_resource_binding import CloudflareResourceBindingAggregate
 from .aggregates.cognitive_candidate import CognitiveCandidateAggregate
 from .aggregates.cohort_state import CohortAggregate
 from .aggregates.delegate_assignment import DelegateAssignmentAggregate
+from .aggregates.human_approval import HumanApprovalAggregate
 from .aggregates.lab_board import LabBoardAggregate
 from .aggregates.mission_task import MissionAggregate, TaskAggregate
 from .aggregates.skill_candidate import SkillCandidateAggregate
 from .artifact_workspace import atomic_adopt_verified_artifact, file_digest
 from .authority import require_authority
+from .cloudflare_resource_adoption import (
+    CloudflareResourceAdoptionProposal,
+    build_cloudflare_resource_binding,
+)
 from .contracts import digest, require
 from .errors import AuthorityViolation, IdempotencyConflict, IntegrityViolation
 from .services import RuntimeService
@@ -36,6 +42,140 @@ class GovernedRuntimeService(RuntimeService):
         result = dict(self._commit([], metadata))
         result[label] = self.store.load_state(stream)
         return result
+
+    # -- Cloudflare resource adoption -------------------------------------
+
+    def bind_cloudflare_resource_adoption(
+        self,
+        proposal: CloudflareResourceAdoptionProposal,
+        *,
+        request_id: str,
+        binding_id: str,
+        use_id: str,
+        now: str,
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        require("CommandMetadata", metadata)
+        require_authority("bind_cloudflare_resource_adoption", metadata["actor"]["kind"])
+        if not isinstance(proposal, CloudflareResourceAdoptionProposal):
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_ADOPTION_PROPOSAL_TYPE_INVALID")
+        binding_stream = CloudflareResourceBindingAggregate.stream_id(binding_id)
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            existing_binding = self.store.load_state(binding_stream)
+            if existing_binding is None:
+                raise IntegrityViolation("CLOUDFLARE_RESOURCE_ADOPTION_IDEMPOTENCY_WITHOUT_BINDING")
+            return {"status": "idempotent", "binding": existing_binding}
+
+        approval_stream = HumanApprovalAggregate.stream_id(request_id)
+        current = self.store.load_state(approval_stream)
+        if current is None or current.get("state") != "approved":
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_ADOPTION_NOT_APPROVED")
+        if current.get("operation") != "CloudflareResourceAdoption":
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_ADOPTION_OPERATION_MISMATCH")
+        if current.get("requestedCapability") != "cloudflare.resource.adopt":
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_ADOPTION_CAPABILITY_MISMATCH")
+        if current.get("missionId") != proposal.mission_id:
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_ADOPTION_MISSION_MISMATCH")
+        if current.get("taskId") != proposal.task_id:
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_ADOPTION_TASK_MISMATCH")
+        if current.get("resource") != proposal.resource_uri():
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_ADOPTION_RESOURCE_MISMATCH")
+        if now > str(current.get("expiresAt") or ""):
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_ADOPTION_APPROVAL_EXPIRED")
+        if current.get("remainingUses") != 1:
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_ADOPTION_ONE_USE_REQUIRED")
+
+        offered = proposal.approval_binding()
+        approved = (current.get("scope") or {}).get("adoptionBinding")
+        if not isinstance(approved, Mapping):
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_ADOPTION_SCOPE_MISSING")
+        checks = (
+            ("proposalDigest", "CLOUDFLARE_RESOURCE_ADOPTION_PROPOSAL_DIGEST_MISMATCH"),
+            ("inventoryDigest", "CLOUDFLARE_RESOURCE_ADOPTION_INVENTORY_DIGEST_MISMATCH"),
+            ("proposalId", "CLOUDFLARE_RESOURCE_ADOPTION_PROPOSAL_ID_MISMATCH"),
+            ("accountId", "CLOUDFLARE_RESOURCE_ADOPTION_ACCOUNT_MISMATCH"),
+            ("resourceKind", "CLOUDFLARE_RESOURCE_ADOPTION_KIND_MISMATCH"),
+            ("resourceId", "CLOUDFLARE_RESOURCE_ADOPTION_RESOURCE_ID_MISMATCH"),
+            ("resourceName", "CLOUDFLARE_RESOURCE_ADOPTION_RESOURCE_NAME_MISMATCH"),
+            ("targetAlias", "CLOUDFLARE_RESOURCE_ADOPTION_ALIAS_MISMATCH"),
+            ("inventoryFetchedAt", "CLOUDFLARE_RESOURCE_ADOPTION_INVENTORY_TIME_MISMATCH"),
+            ("targetEndpoint", "CLOUDFLARE_RESOURCE_ADOPTION_ENDPOINT_MISMATCH"),
+        )
+        for key, code in checks:
+            if approved.get(key) != offered.get(key):
+                raise AuthorityViolation(code)
+
+        if self.store.aggregate_version(binding_stream) != 0:
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_BINDING_ID_ALREADY_EXISTS")
+        for stream_id, kind, _version in self.store.all_aggregates():
+            if kind != CloudflareResourceBindingAggregate.KIND:
+                continue
+            existing = self.store.load_state(stream_id)
+            if not existing or existing.get("state") != "active":
+                continue
+            if (
+                existing.get("accountId") == proposal.account_id
+                and existing.get("resourceKind") == proposal.resource_kind.value
+                and existing.get("targetAlias") == proposal.target_alias
+            ):
+                raise AuthorityViolation("CLOUDFLARE_RESOURCE_BINDING_ALIAS_ALREADY_ACTIVE")
+
+        binding = build_cloudflare_resource_binding(
+            proposal,
+            binding_id=binding_id,
+            approval_request_id=request_id,
+            approved_by=str(current.get("operatorId") or ""),
+            approved_at=str(current.get("decidedAt") or ""),
+            bound_at=now,
+        )
+        require("CloudflareResourceBinding", binding)
+        binding_state = CloudflareResourceBindingAggregate.create(binding)
+        approval_expected = self.store.aggregate_version(approval_stream)
+        approval_state = HumanApprovalAggregate.consume(current, use_id, now)
+        consumption = {
+            "schemaVersion": "1.0.0",
+            "requestId": request_id,
+            "useId": use_id,
+            "consumedAt": now,
+            "missionId": proposal.mission_id,
+            "taskId": proposal.task_id,
+            "bindingId": binding_id,
+            "proposalDigest": proposal.proposal_digest,
+            "inventoryDigest": proposal.inventory_digest,
+        }
+        require("CloudflareResourceAdoptionConsumption", consumption)
+        approval_event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1",
+            stream_id=approval_stream,
+            event_type="CloudflareResourceAdoptionApprovalConsumed",
+            payload={
+                "eventType": "CloudflareResourceAdoptionApprovalConsumed",
+                "consumption": consumption,
+            },
+            metadata=metadata,
+            occurred_at=now,
+            mission_id=proposal.mission_id,
+            task_id=proposal.task_id,
+        )
+        binding_event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev2",
+            stream_id=binding_stream,
+            event_type="CloudflareResourceBindingCreated",
+            payload={"eventType": "CloudflareResourceBindingCreated", "binding": binding},
+            metadata=metadata,
+            occurred_at=now,
+            mission_id=proposal.mission_id,
+            task_id=proposal.task_id,
+        )
+        result = self._commit(
+            [
+                AppendRequest(approval_stream, HumanApprovalAggregate.KIND, approval_expected, approval_event, approval_state),
+                AppendRequest(binding_stream, CloudflareResourceBindingAggregate.KIND, 0, binding_event, binding_state),
+            ],
+            metadata,
+        )
+        return {**result, "binding": binding_state}
 
     # -- CAPT Bot foundation ---------------------------------------------
 

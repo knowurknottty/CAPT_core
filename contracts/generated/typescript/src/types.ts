@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:aa365514ce442221cf6df53c17ed3ffd7a776d66377f1a748290d43fc7193b97
+// source digest:  sha256:309eaf480256fc592a537eca2d8a10fb09ea29f7d383645539245b60b8dc224b
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -606,6 +606,49 @@ export interface CapabilitySubject {
   readonly subjectId: Identifier;
   readonly subjectKind: string;
 }
+
+/** One-use human approval consumption bound to a specific Cloudflare resource adoption proposal and resulting binding. */
+export interface CloudflareResourceAdoptionConsumption {
+  readonly bindingId: Identifier;
+  readonly consumedAt: Timestamp;
+  readonly inventoryDigest: Digest;
+  readonly missionId: Identifier;
+  readonly proposalDigest: Digest;
+  readonly requestId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly taskId: Identifier;
+  readonly useId: Identifier;
+}
+
+/** A human-approved, provenance-bound adoption of one exact existing Cloudflare resource. Discovery alone cannot create this binding. */
+export interface CloudflareResourceBinding {
+  readonly accountId: Identifier;
+  readonly approvalRequestId: Identifier;
+  readonly approvedAt: Timestamp;
+  readonly approvedBy: Identifier;
+  readonly bindingDigest: Digest;
+  readonly bindingId: Identifier;
+  readonly boundAt: Timestamp;
+  readonly inventoryDigest: Digest;
+  readonly inventoryFetchedAt: Timestamp;
+  readonly proposalDigest: Digest;
+  readonly proposalId: Identifier;
+  readonly resourceId: string;
+  readonly resourceKind: CloudflareResourceKind;
+  readonly resourceName: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly state: "active";
+  readonly targetAlias: Identifier;
+  readonly targetEndpoint: string | null;
+}
+
+/** CloudflareResourceKind */
+export type CloudflareResourceKind = "d1_database" | "queue" | "worker_script";
+export const CloudflareResourceKindValues = [
+  "d1_database",
+  "queue",
+  "worker_script",
+] as const;
 
 /** Mandatory envelope for every consequential command (ADR-0108). */
 export interface CommandMetadata {
@@ -1424,6 +1467,18 @@ export interface ClaimVerifiedPayload {
   readonly verification: VerificationResult;
 }
 
+/** CloudflareResourceAdoptionApprovalConsumedPayload */
+export interface CloudflareResourceAdoptionApprovalConsumedPayload {
+  readonly consumption: CloudflareResourceAdoptionConsumption;
+  readonly eventType: "CloudflareResourceAdoptionApprovalConsumed";
+}
+
+/** CloudflareResourceBindingCreatedPayload */
+export interface CloudflareResourceBindingCreatedPayload {
+  readonly binding: CloudflareResourceBinding;
+  readonly eventType: "CloudflareResourceBindingCreated";
+}
+
 /** CognitiveCandidateDecidedPayload */
 export interface CognitiveCandidateDecidedPayload {
   readonly candidateId: Identifier;
@@ -1558,10 +1613,12 @@ export type EventPayload =
   | LabBoardItemCreatedPayload
   | LabBoardItemTransitionedPayload
   | DelegateAssignedPayload
-  | DelegateAssignmentTransitionedPayload;
+  | DelegateAssignmentTransitionedPayload
+  | CloudflareResourceAdoptionApprovalConsumedPayload
+  | CloudflareResourceBindingCreatedPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated" | "BotRegistered" | "CognitiveCandidateProposed" | "CognitiveCandidateDecided" | "SkillCandidateCreated" | "SkillCandidateTransitioned" | "LabBoardItemCreated" | "LabBoardItemTransitioned" | "DelegateAssigned" | "DelegateAssignmentTransitioned";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated" | "BotRegistered" | "CognitiveCandidateProposed" | "CognitiveCandidateDecided" | "SkillCandidateCreated" | "SkillCandidateTransitioned" | "LabBoardItemCreated" | "LabBoardItemTransitioned" | "DelegateAssigned" | "DelegateAssignmentTransitioned" | "CloudflareResourceAdoptionApprovalConsumed" | "CloudflareResourceBindingCreated";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -1609,6 +1666,8 @@ export const EventTypeValues = [
   "LabBoardItemTransitioned",
   "DelegateAssigned",
   "DelegateAssignmentTransitioned",
+  "CloudflareResourceAdoptionApprovalConsumed",
+  "CloudflareResourceBindingCreated",
 ] as const;
 
 /** EvidenceRecordedPayload */

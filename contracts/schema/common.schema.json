@@ -20,7 +20,7 @@
       "title": "StreamId",
       "description": "Aggregate stream identifier. The prefix declares the owning aggregate (ADR-0103) and is enforced by the store.",
       "type": "string",
-      "pattern": "^(mission|task|capability|driverrun|claim|human_approval|artifact_promotion|cohort|replay_fork|tool_execution|bot|cognitive_candidate|skill_candidate|lab_board|delegate_assignment)-[A-Za-z0-9_.-]{1,96}$"
+      "pattern": "^(mission|task|capability|driverrun|claim|human_approval|artifact_promotion|cohort|replay_fork|tool_execution|bot|cognitive_candidate|skill_candidate|lab_board|delegate_assignment|cloudflare_resource_binding)-[A-Za-z0-9_.-]{1,96}$"
     },
     "Timestamp": {
       "title": "Timestamp",
@@ -2016,6 +2016,150 @@
             "null"
           ],
           "maxLength": 64
+        }
+      }
+    },
+    "CloudflareResourceKind": {
+      "title": "CloudflareResourceKind",
+      "type": "string",
+      "enum": [
+        "d1_database",
+        "queue",
+        "worker_script"
+      ]
+    },
+    "CloudflareResourceBinding": {
+      "title": "CloudflareResourceBinding",
+      "description": "A human-approved, provenance-bound adoption of one exact existing Cloudflare resource. Discovery alone cannot create this binding.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "bindingId",
+        "proposalId",
+        "accountId",
+        "resourceKind",
+        "resourceId",
+        "resourceName",
+        "targetAlias",
+        "inventoryDigest",
+        "inventoryFetchedAt",
+        "proposalDigest",
+        "approvalRequestId",
+        "approvedBy",
+        "approvedAt",
+        "boundAt",
+        "bindingDigest",
+        "targetEndpoint",
+        "state"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "bindingId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "proposalId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "accountId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "resourceKind": {
+          "$ref": "common.schema.json#/$defs/CloudflareResourceKind"
+        },
+        "resourceId": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "resourceName": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "targetAlias": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "inventoryDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "inventoryFetchedAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "proposalDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "approvalRequestId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "approvedBy": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "approvedAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "boundAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "bindingDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "state": {
+          "type": "string",
+          "const": "active"
+        },
+        "targetEndpoint": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 2048
+        }
+      }
+    },
+    "CloudflareResourceAdoptionConsumption": {
+      "title": "CloudflareResourceAdoptionConsumption",
+      "description": "One-use human approval consumption bound to a specific Cloudflare resource adoption proposal and resulting binding.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "requestId",
+        "useId",
+        "consumedAt",
+        "missionId",
+        "taskId",
+        "bindingId",
+        "proposalDigest",
+        "inventoryDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "requestId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "useId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "consumedAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "missionId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "taskId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "bindingId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "proposalDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "inventoryDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
         }
       }
     }

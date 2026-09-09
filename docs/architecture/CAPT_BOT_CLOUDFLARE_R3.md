@@ -47,11 +47,11 @@ Typed native executors currently exist for Workers coordination, Queue delegatio
 
 ## Existing-Resource Native API Bridge
 
-The free-native execution bundle can be constructed only from an explicit `CloudflareNativeAPIProfile`. The profile contains account/resource identifiers and environment-variable names, never API-token or Worker-secret values. The bridge resolves secrets at call time and does not serialize them into results, receipts, or profile state.
+The free-native execution bundle can be constructed only from an explicit `CloudflareNativeAPIProfile`. The profile contains the Cloudflare account identity, Worker endpoint/alias, and environment-variable names, never Queue/D1 provider IDs, API-token values, or Worker-secret values. Non-empty raw Queue/D1 ID maps are rejected as `CLOUDFLARE_NATIVE_RAW_RESOURCE_IDS_FORBIDDEN`. The bridge resolves secrets at call time and does not serialize them into results, receipts, or profile state.
 
 Cloudflare account API authority and Worker invocation authority are separate credential domains. Queue, D1, Browser Rendering, and Workers AI calls use the configured account API token; coordination Worker calls use a distinct Worker bearer-secret reference.
 
-The bridge is existing-resource-only. It can address configured Queue IDs and D1 database IDs and the fixed account endpoints for Browser Rendering and Workers AI; it contains no create/delete/deploy API methods. Browser actions are a closed vocabulary: `content`, `scrape`, `screenshot`, and `pdf`. Queue effect identity is CAPT-owned (`capt:<operationId>`) because Cloudflare Queue push does not provide a durable provider message ID in the push response.
+The bridge is existing-resource-only. Queue, D1, and coordination-Worker targets are resolved immediately before dispatch from CAPT EventStore `CloudflareResourceBinding` state; configuration cannot supply provider IDs as authority. Browser Rendering and Workers AI use their fixed account endpoints and remain subject to their separate free-tier/catalog gates. The bridge contains no create/delete/deploy API methods. Browser actions are a closed vocabulary: `content`, `scrape`, `screenshot`, and `pdf`. Queue effect identity is CAPT-owned (`capt:<operationId>`) because Cloudflare Queue push does not provide a durable provider message ID in the push response.
 
 D1 provider metadata supplies actual `rows_read` and `rows_written` evidence. Browser Run and Workers AI currently account conservatively at the pre-authorized CAPT estimate when the REST response does not expose a reliable free-quota usage counter. These estimates are reservations/ceilings, not claims of provider-measured consumption.
 
@@ -82,3 +82,14 @@ Cloudflare resource discovery is informational, not authority. `CloudflareNative
 Every discovered `CloudflareResourceCandidate` is immutable with `adopted=false` and `adoptionAuthority=human_required`. Name lookup is convenience only: duplicate names are `CLOUDFLARE_RESOURCE_NAME_AMBIGUOUS`, and a provider ID/name disagreement is `CLOUDFLARE_RESOURCE_ID_NAME_MISMATCH`. The bridge exposes no resource-adoption, resource-create, deploy, update, or delete method. Discovery therefore cannot silently convert an old CAPT-looking Cloudflare resource into an execution target.
 
 Live read-only Wrangler discovery on 2026-09-09 observed 8 D1 databases with typed UUID/name identity and 0 Queues. Wrangler 4.90.0 does not expose an account-wide Worker-script list command in its top-level CLI, so Worker inventory was not live-observed through Wrangler and is explicitly not represented as empty. The direct Worker list endpoint remains API-contract and test verified. No discovered resource has been adopted by this tranche.
+
+
+## Human Resource Adoption Closure
+
+Discovery never becomes execution authority by itself. `CloudflareResourceAdoptionProposal` binds one exact inventory snapshot, account, typed resource kind, provider ID, provider name, CAPT alias, and proposal digest. Worker-script adoption additionally binds the exact approved HTTPS Worker endpoint; Queue and D1 proposals may not carry an endpoint.
+
+A proposal is converted into an existing `HumanApprovalRequest` with `operation=CloudflareResourceAdoption`, `requestedCapability=cloudflare.resource.adopt`, `remainingUses=1`, and the exact adoption binding in scope. Only a human actor can approve it. The irreversible bind path is an atomic EventStore command: the approval stream receives `CloudflareResourceAdoptionApprovalConsumed` while a `cloudflare_resource_binding-*` stream receives `CloudflareResourceBindingCreated`. A crash cannot consume the one-use approval without creating the binding, or create a binding without consuming the approval.
+
+`CloudflareResourceBindingRegistry` resolves only active durable bindings and revalidates each binding SHA-256 before returning it. Queue and D1 provider IDs come from this registry, never profile maps. Coordination Worker dispatch requires both the adopted Worker-script alias and an exact endpoint match before secret lookup or network dispatch. Missing, ambiguous, corrupt, or endpoint-mismatched bindings fail pre-dispatch and therefore cannot consume Cloudflare quota. Full event-ledger replay reconstructs both the consumed approval and the resulting binding.
+
+No live Cloudflare resource was adopted while implementing this closure. The eight previously observed D1 databases remain unadopted discovery candidates, and no Queue or Worker was created or deployed.

@@ -12,6 +12,9 @@ from capt_runtime.tools.backends.cloudflare_native_api import (
     CloudflareNativeAPIProfile,
     CloudflareProviderRejected,
 )
+from capt_runtime.tools.backends.cloudflare_resource_inventory import (
+    CloudflareResourceKind,
+)
 
 
 class FakeResponse:
@@ -39,14 +42,33 @@ class Recorder:
         return FakeResponse(self.responses.pop(0))
 
 
+class BindingRegistry:
+    def resolve(self, account_id, kind, alias):
+        ids = {
+            CloudflareResourceKind.QUEUE: "queue-123",
+            CloudflareResourceKind.D1_DATABASE: "db-123",
+            CloudflareResourceKind.WORKER_SCRIPT: "capt-control",
+        }
+        return {
+            "accountId": account_id, "resourceKind": kind.value,
+            "resourceId": ids[kind], "resourceName": alias,
+            "targetAlias": alias,
+            "targetEndpoint": ("https://capt-control.example.workers.dev" if kind is CloudflareResourceKind.WORKER_SCRIPT else None),
+            "state": "active",
+        }
+
+
+def _binding_registry():
+    return BindingRegistry()
+
+
 def _profile():
     return CloudflareNativeAPIProfile(
         account_id="acct-1",
         api_token_env="CF_API_TOKEN",
         worker_base_url="https://capt-control.example.workers.dev",
         worker_auth_env="CF_WORKER_TOKEN",
-        queue_ids={"capt-delegates": "queue-123"},
-        d1_database_ids={"capt-state": "db-123"},
+        worker_alias="capt-control",
     )
 
 
@@ -64,7 +86,7 @@ def test_queue_push_uses_configured_resource_id_and_capt_effect_identity(monkeyp
     monkeypatch.setenv("CF_API_TOKEN", "api-secret")
     monkeypatch.setenv("CF_WORKER_TOKEN", "worker-secret")
     opener = Recorder([{"success": True, "result": {"metadata": {}}}])
-    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener)
+    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener, binding_registry=_binding_registry())
     result = bridge.queue_send(
         operation_id="queue-op-1",
         queue="capt-delegates",
@@ -84,7 +106,7 @@ def test_d1_read_and_write_parse_metering(monkeypatch):
         {"success": True, "result": [{"success": True, "meta": {"rows_read": 3}, "results": [{"value": "ok"}]}]},
         {"success": True, "result": [{"success": True, "meta": {"rows_written": 1, "changes": 1}, "results": []}]},
     ])
-    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener)
+    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener, binding_registry=_binding_registry())
     read = bridge.d1_read(
         operation_id="d1-r-1", database="capt-state",
         statement="SELECT value FROM kv", params=[]
@@ -106,7 +128,7 @@ def test_browser_and_workers_ai_use_closed_account_endpoints(monkeypatch):
         {"success": True, "result": "<html>ok</html>"},
         {"success": True, "result": {"response": "hello"}},
     ])
-    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener)
+    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener, binding_registry=_binding_registry())
     browser = bridge.browser_run(
         operation_id="browser-1",
         action=CloudflareBrowserAction.CONTENT,
@@ -129,7 +151,7 @@ def test_worker_coordination_uses_separate_worker_secret(monkeypatch):
     monkeypatch.setenv("CF_API_TOKEN", "api-secret")
     monkeypatch.setenv("CF_WORKER_TOKEN", "worker-secret")
     opener = Recorder([{"ok": True}])
-    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener)
+    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener, binding_registry=_binding_registry())
     result = bridge.worker_request(
         operation_id="worker-1",
         route="/bot/coordinate",
@@ -146,7 +168,7 @@ def test_provider_rejection_is_specific_and_does_not_leak_secret(monkeypatch):
     monkeypatch.setenv("CF_API_TOKEN", "api-secret")
     monkeypatch.setenv("CF_WORKER_TOKEN", "worker-secret")
     opener = Recorder([{"success": False, "errors": [{"code": 1001, "message": "denied"}]}])
-    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener)
+    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener, binding_registry=_binding_registry())
     with pytest.raises(CloudflareProviderRejected, match="cloudflare_api_rejected:1001") as caught:
         bridge.queue_send(operation_id="queue-denied", queue="capt-delegates", body={})
     assert "api-secret" not in str(caught.value)
@@ -159,7 +181,7 @@ def test_missing_secret_is_proven_pre_dispatch(monkeypatch):
 
     monkeypatch.delenv("CF_API_TOKEN", raising=False)
     monkeypatch.delenv("CF_WORKER_TOKEN", raising=False)
-    bridge = CloudflareNativeAPIBridge(_profile(), opener=Recorder([]))
+    bridge = CloudflareNativeAPIBridge(_profile(), opener=Recorder([]), binding_registry=_binding_registry())
     with pytest.raises(CloudflareDispatchNotStarted, match="CLOUDFLARE_SECRET_UNAVAILABLE"):
         bridge.queue_send(
             operation_id="queue-no-secret",
@@ -175,7 +197,7 @@ def test_estimated_metering_is_labeled_reserved_ceiling(monkeypatch):
         {"success": True, "result": "<html>ok</html>"},
         {"success": True, "result": {"response": "hello"}},
     ])
-    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener)
+    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener, binding_registry=_binding_registry())
     browser = bridge.browser_run(
         operation_id="browser-meter",
         action=CloudflareBrowserAction.CONTENT,
@@ -196,7 +218,7 @@ def test_browser_content_artifact_identity_binds_provider_result(monkeypatch):
     monkeypatch.setenv("CF_API_TOKEN", "api-secret")
     monkeypatch.setenv("CF_WORKER_TOKEN", "worker-secret")
     opener = Recorder([{"success": True, "result": "<html>bound</html>"}])
-    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener)
+    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener, binding_registry=_binding_registry())
     result = bridge.browser_run(
         operation_id="browser-bound",
         action=CloudflareBrowserAction.CONTENT,
@@ -215,7 +237,7 @@ def test_binary_browser_actions_are_blocked_before_dispatch(monkeypatch):
     monkeypatch.setenv("CF_API_TOKEN", "api-secret")
     monkeypatch.setenv("CF_WORKER_TOKEN", "worker-secret")
     opener = Recorder([])
-    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener)
+    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener, binding_registry=_binding_registry())
     for action in (CloudflareBrowserAction.PDF, CloudflareBrowserAction.SCREENSHOT):
         with pytest.raises(
             CloudflareDispatchNotStarted,
@@ -246,7 +268,7 @@ def test_ai_model_catalog_is_read_only_paginated_and_metadata_bound(monkeypatch)
             "result_info": {"page": 1, "total_pages": 1},
         }
     ])
-    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener, now=lambda: now)
+    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener, now=lambda: now, binding_registry=_binding_registry())
     catalog = bridge.ai_model_catalog()
     request = opener.calls[0][0]
     assert request.get_method() == "GET"
@@ -264,7 +286,7 @@ def test_ai_model_catalog_rejects_partial_or_invalid_pagination(monkeypatch):
     monkeypatch.setenv("CF_API_TOKEN", "api-secret")
     monkeypatch.setenv("CF_WORKER_TOKEN", "worker-secret")
     opener = Recorder([{"success": True, "result": [], "result_info": {"page": 1}}])
-    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener)
+    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener, binding_registry=_binding_registry())
     with pytest.raises(RuntimeError, match="cloudflare_ai_catalog_pagination_unclassified"):
         bridge.ai_model_catalog()
 
@@ -278,7 +300,7 @@ def test_resource_inventory_uses_get_only_and_returns_unadopted_candidates(monke
         {"success": True, "result": [{"queue_id": "q-1", "queue_name": "capt-delegates"}]},
         {"success": True, "result": [{"id": "capt-control"}]},
     ])
-    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener, now=lambda: now)
+    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener, now=lambda: now, binding_registry=_binding_registry())
     inventory = bridge.resource_inventory()
     assert inventory.fetched_at == now
     assert inventory.account_id == "acct-1"
@@ -297,6 +319,6 @@ def test_resource_inventory_rejects_partial_d1_pagination(monkeypatch):
     monkeypatch.setenv("CF_API_TOKEN", "api-secret")
     monkeypatch.setenv("CF_WORKER_TOKEN", "worker-secret")
     opener = Recorder([{"success": True, "result": [], "result_info": {"page": 1}}])
-    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener)
+    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener, binding_registry=_binding_registry())
     with pytest.raises(RuntimeError, match="cloudflare_d1_inventory_pagination_unclassified"):
         bridge.resource_inventory()

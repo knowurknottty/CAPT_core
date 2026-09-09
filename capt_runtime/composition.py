@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
 
+from .cloudflare_resource_adoption import CloudflareResourceBindingRegistry
 from .driver_host import DriverHost
 from .drivers.openharness import DESCRIPTOR, OpenHarnessDriver
 from .drivers.registry import DriverRegistry
@@ -222,7 +223,10 @@ def create_runtime(
     )
     cloudflare_native = None
     if cloudflare_native_profile is not None:
-        native_bridge = CloudflareNativeAPIBridge(cloudflare_native_profile)
+        native_bridge = CloudflareNativeAPIBridge(
+            cloudflare_native_profile,
+            binding_registry=CloudflareResourceBindingRegistry(store),
+        )
         cloudflare_native = CloudflareNativeSurfaces(
             workers=CloudflareWorkersCoordinator(cloudflare_free_planner, native_bridge),
             queues=CloudflareQueueDelegator(cloudflare_free_planner, native_bridge),

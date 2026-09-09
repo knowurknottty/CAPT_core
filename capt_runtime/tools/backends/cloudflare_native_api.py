@@ -13,7 +13,8 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Mapping
 from urllib.parse import quote, urlencode, urlparse
 
-from capt_runtime.errors import AuthorityViolation
+from capt_runtime.cloudflare_resource_adoption import CloudflareResourceBindingRegistry
+from capt_runtime.errors import AuthorityViolation, IntegrityViolation
 
 from .cloudflare_ai_catalog import (
     CloudflareAIModelCatalogSnapshot,
@@ -22,11 +23,13 @@ from .cloudflare_ai_catalog import (
 from .cloudflare_native import CloudflareBrowserAction, CloudflareDispatchNotStarted
 from .cloudflare_resource_inventory import (
     CloudflareResourceInventorySnapshot,
+    CloudflareResourceKind,
     parse_cloudflare_resource_inventory,
 )
 
 _API_ROOT = "https://api.cloudflare.com/client/v4"
 _ENV_RE = re.compile(r"^[A-Z_][A-Z0-9_]*$")
+_ALIAS_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 _LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 
@@ -42,6 +45,7 @@ class CloudflareNativeAPIProfile:
     api_token_env: str
     worker_base_url: str
     worker_auth_env: str
+    worker_alias: str = "capt-control"
     queue_ids: Mapping[str, str] = None  # type: ignore[assignment]
     d1_database_ids: Mapping[str, str] = None  # type: ignore[assignment]
 
@@ -58,8 +62,13 @@ class CloudflareNativeAPIProfile:
             raise AuthorityViolation("CLOUDFLARE_NATIVE_WORKER_REQUIRES_HTTPS")
         if parsed.query or parsed.fragment or parsed.username or parsed.password:
             raise AuthorityViolation("CLOUDFLARE_NATIVE_WORKER_URL_INVALID")
-        object.__setattr__(self, "queue_ids", dict(self.queue_ids or {}))
-        object.__setattr__(self, "d1_database_ids", dict(self.d1_database_ids or {}))
+        if not _ALIAS_RE.fullmatch(self.worker_alias):
+            raise AuthorityViolation("CLOUDFLARE_NATIVE_WORKER_ALIAS_INVALID")
+        if self.queue_ids or self.d1_database_ids:
+            raise AuthorityViolation("CLOUDFLARE_NATIVE_RAW_RESOURCE_IDS_FORBIDDEN")
+        object.__setattr__(self, "worker_base_url", self.worker_base_url.rstrip("/"))
+        object.__setattr__(self, "queue_ids", {})
+        object.__setattr__(self, "d1_database_ids", {})
 
 
 class CloudflareNativeAPIBridge:
@@ -69,10 +78,20 @@ class CloudflareNativeAPIBridge:
         *,
         opener: Callable[..., Any] = urllib.request.urlopen,
         now: Callable[[], datetime] | None = None,
+        binding_registry: CloudflareResourceBindingRegistry | None = None,
     ) -> None:
         self.profile = profile
         self.opener = opener
         self.now = now or (lambda: datetime.now(timezone.utc))
+        self.binding_registry = binding_registry
+
+    def _require_binding(self, kind: CloudflareResourceKind, target_alias: str) -> dict[str, Any]:
+        if self.binding_registry is None:
+            raise CloudflareDispatchNotStarted("CLOUDFLARE_RESOURCE_BINDING_REGISTRY_REQUIRED")
+        try:
+            return self.binding_registry.resolve(self.profile.account_id, kind, target_alias)
+        except (AuthorityViolation, IntegrityViolation) as exc:
+            raise CloudflareDispatchNotStarted(str(exc)) from exc
 
     @staticmethod
     def _secret(env_name: str) -> str:
@@ -247,7 +266,10 @@ class CloudflareNativeAPIBridge:
     ) -> dict[str, Any]:
         if not route.startswith("/") or ".." in route.split("/"):
             raise CloudflareDispatchNotStarted("CLOUDFLARE_WORKER_ROUTE_INVALID")
-        url = self.profile.worker_base_url.rstrip("/") + route
+        binding = self._require_binding(CloudflareResourceKind.WORKER_SCRIPT, self.profile.worker_alias)
+        if binding.get("targetEndpoint") != self.profile.worker_base_url:
+            raise CloudflareDispatchNotStarted("CLOUDFLARE_WORKER_ENDPOINT_BINDING_MISMATCH")
+        url = self.profile.worker_base_url + route
         value = self._post(
             url,
             self._secret(self.profile.worker_auth_env),
@@ -262,9 +284,8 @@ class CloudflareNativeAPIBridge:
         queue: str,
         body: dict[str, Any],
     ) -> dict[str, Any]:
-        queue_id = self.profile.queue_ids.get(queue)
-        if not queue_id:
-            raise CloudflareDispatchNotStarted("CLOUDFLARE_QUEUE_RESOURCE_NOT_CONFIGURED")
+        binding = self._require_binding(CloudflareResourceKind.QUEUE, queue)
+        queue_id = str(binding["resourceId"])
         url = f"{_API_ROOT}/accounts/{self.profile.account_id}/queues/{queue_id}/messages"
         value = self._post(
             url,
@@ -284,9 +305,8 @@ class CloudflareNativeAPIBridge:
         statement: str,
         params: list[Any],
     ) -> dict[str, Any]:
-        database_id = self.profile.d1_database_ids.get(database)
-        if not database_id:
-            raise CloudflareDispatchNotStarted("CLOUDFLARE_D1_RESOURCE_NOT_CONFIGURED")
+        binding = self._require_binding(CloudflareResourceKind.D1_DATABASE, database)
+        database_id = str(binding["resourceId"])
         url = (
             f"{_API_ROOT}/accounts/{self.profile.account_id}/d1/database/"
             f"{database_id}/query"

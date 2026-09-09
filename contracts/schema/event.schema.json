@@ -54,7 +54,9 @@
         "LabBoardItemCreated",
         "LabBoardItemTransitioned",
         "DelegateAssigned",
-        "DelegateAssignmentTransitioned"
+        "DelegateAssignmentTransitioned",
+        "CloudflareResourceAdoptionApprovalConsumed",
+        "CloudflareResourceBindingCreated"
       ]
     },
     "EventPayload": {
@@ -1065,6 +1067,42 @@
             },
             "transitionedAt": {
               "$ref": "common.schema.json#/$defs/Timestamp"
+            }
+          }
+        },
+        {
+          "title": "CloudflareResourceAdoptionApprovalConsumedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "consumption"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "CloudflareResourceAdoptionApprovalConsumed"
+            },
+            "consumption": {
+              "$ref": "common.schema.json#/$defs/CloudflareResourceAdoptionConsumption"
+            }
+          }
+        },
+        {
+          "title": "CloudflareResourceBindingCreatedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "binding"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "CloudflareResourceBindingCreated"
+            },
+            "binding": {
+              "$ref": "common.schema.json#/$defs/CloudflareResourceBinding"
             }
           }
         }

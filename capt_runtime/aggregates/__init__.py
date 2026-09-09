@@ -4,14 +4,15 @@ from .artifact_promotion import ArtifactPromotionAggregate
 from .bot import BotAggregate
 from .capability import CapabilityAggregate, scope_contains
 from .claim_driver import ClaimAggregate, DriverRunAggregate
+from .cloudflare_resource_binding import CloudflareResourceBindingAggregate
 from .cognitive_candidate import CognitiveCandidateAggregate
-from .delegate_assignment import DelegateAssignmentAggregate
 from .cohort_state import CohortAggregate
-from .lab_board import LabBoardAggregate
-from .skill_candidate import SkillCandidateAggregate
-from .replay_fork import ReplayForkAggregate
+from .delegate_assignment import DelegateAssignmentAggregate
 from .human_approval import HumanApprovalAggregate
+from .lab_board import LabBoardAggregate
 from .mission_task import MissionAggregate, TaskAggregate
+from .replay_fork import ReplayForkAggregate
+from .skill_candidate import SkillCandidateAggregate
 from .tool_execution import ToolExecutionAggregate
 
 ALL_AGGREGATES = (
@@ -22,6 +23,7 @@ ALL_AGGREGATES = (
     ClaimAggregate,
     BotAggregate,
     CognitiveCandidateAggregate,
+    CloudflareResourceBindingAggregate,
     DelegateAssignmentAggregate,
     SkillCandidateAggregate,
     LabBoardAggregate,
@@ -39,6 +41,7 @@ __all__ = [
     "CapabilityAggregate",
     "ClaimAggregate",
     "CognitiveCandidateAggregate",
+    "CloudflareResourceBindingAggregate",
     "DelegateAssignmentAggregate",
     "CohortAggregate",
     "LabBoardAggregate",

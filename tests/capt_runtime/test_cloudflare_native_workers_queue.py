@@ -123,8 +123,8 @@ def test_native_api_pre_dispatch_secret_failure_releases_queue_budget(tmp_path, 
             api_token_env="CF_API_TOKEN",
             worker_base_url="https://capt-control.example.workers.dev",
             worker_auth_env="CF_WORKER_TOKEN",
-            queue_ids={"capt-delegates": "queue-123"},
-        )
+        ),
+        binding_registry=type("QueueBindingRegistry", (), {"resolve": lambda self, account_id, kind, alias: {"accountId": account_id, "resourceKind": kind.value, "resourceId": "queue-123", "resourceName": alias, "targetAlias": alias, "targetEndpoint": None, "state": "active"}})(),
     )
     backend = CloudflareQueueDelegator(planner, bridge)
     with pytest.raises(CloudflareDispatchNotStarted, match="CLOUDFLARE_SECRET_UNAVAILABLE"):

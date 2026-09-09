@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:aa365514ce442221cf6df53c17ed3ffd7a776d66377f1a748290d43fc7193b97
+# source digest:  sha256:309eaf480256fc592a537eca2d8a10fb09ea29f7d383645539245b60b8dc224b
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -691,6 +691,53 @@ class CapabilitySubject(object):
     schemaVersion: SchemaVersion
     subjectId: Identifier
     subjectKind: str
+
+
+@dataclass(frozen=True)
+class CloudflareResourceAdoptionConsumption(object):
+    """One-use human approval consumption bound to a specific Cloudflare resource adoption proposal and resulting binding."""
+
+    bindingId: Identifier
+    consumedAt: Timestamp
+    inventoryDigest: Digest
+    missionId: Identifier
+    proposalDigest: Digest
+    requestId: Identifier
+    schemaVersion: SchemaVersion
+    taskId: Identifier
+    useId: Identifier
+
+
+@dataclass(frozen=True)
+class CloudflareResourceBinding(object):
+    """A human-approved, provenance-bound adoption of one exact existing Cloudflare resource. Discovery alone cannot create this binding."""
+
+    accountId: Identifier
+    approvalRequestId: Identifier
+    approvedAt: Timestamp
+    approvedBy: Identifier
+    bindingDigest: Digest
+    bindingId: Identifier
+    boundAt: Timestamp
+    inventoryDigest: Digest
+    inventoryFetchedAt: Timestamp
+    proposalDigest: Digest
+    proposalId: Identifier
+    resourceId: str
+    resourceKind: CloudflareResourceKind
+    resourceName: str
+    schemaVersion: SchemaVersion
+    state: Literal["active"]
+    targetAlias: Identifier
+    targetEndpoint: Optional[str]
+
+
+class CloudflareResourceKind(str, Enum):
+    """CloudflareResourceKind"""
+
+    D1_DATABASE = "d1_database"
+    QUEUE = "queue"
+    WORKER_SCRIPT = "worker_script"
 
 
 @dataclass(frozen=True)
@@ -1657,6 +1704,22 @@ class ClaimVerifiedPayload(object):
 
 
 @dataclass(frozen=True)
+class CloudflareResourceAdoptionApprovalConsumedPayload(object):
+    """CloudflareResourceAdoptionApprovalConsumedPayload"""
+
+    consumption: CloudflareResourceAdoptionConsumption
+    eventType: Literal["CloudflareResourceAdoptionApprovalConsumed"]
+
+
+@dataclass(frozen=True)
+class CloudflareResourceBindingCreatedPayload(object):
+    """CloudflareResourceBindingCreatedPayload"""
+
+    binding: CloudflareResourceBinding
+    eventType: Literal["CloudflareResourceBindingCreated"]
+
+
+@dataclass(frozen=True)
 class CognitiveCandidateDecidedPayload(object):
     """CognitiveCandidateDecidedPayload"""
 
@@ -1955,7 +2018,7 @@ class ToolExecutionTerminatedPayload(object):
 
 
 # discriminated on 'eventType'
-EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload, BotRegisteredPayload, CognitiveCandidateProposedPayload, CognitiveCandidateDecidedPayload, SkillCandidateCreatedPayload, SkillCandidateTransitionedPayload, LabBoardItemCreatedPayload, LabBoardItemTransitionedPayload, DelegateAssignedPayload, DelegateAssignmentTransitionedPayload]
+EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload, BotRegisteredPayload, CognitiveCandidateProposedPayload, CognitiveCandidateDecidedPayload, SkillCandidateCreatedPayload, SkillCandidateTransitionedPayload, LabBoardItemCreatedPayload, LabBoardItemTransitionedPayload, DelegateAssignedPayload, DelegateAssignmentTransitionedPayload, CloudflareResourceAdoptionApprovalConsumedPayload, CloudflareResourceBindingCreatedPayload]
 
 
 class EventType(str, Enum):
@@ -2007,6 +2070,8 @@ class EventType(str, Enum):
     LABBOARDITEMTRANSITIONED = "LabBoardItemTransitioned"
     DELEGATEASSIGNED = "DelegateAssigned"
     DELEGATEASSIGNMENTTRANSITIONED = "DelegateAssignmentTransitioned"
+    CLOUDFLARERESOURCEADOPTIONAPPROVALCONSUMED = "CloudflareResourceAdoptionApprovalConsumed"
+    CLOUDFLARERESOURCEBINDINGCREATED = "CloudflareResourceBindingCreated"
 
 
 @dataclass(frozen=True)

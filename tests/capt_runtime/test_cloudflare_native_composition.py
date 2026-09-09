@@ -10,8 +10,7 @@ def _profile():
         api_token_env="CF_API_TOKEN",
         worker_base_url="https://capt-control.example.workers.dev",
         worker_auth_env="CF_WORKER_TOKEN",
-        queue_ids={"capt-delegates": "queue-123"},
-        d1_database_ids={"capt-state": "db-123"},
+        worker_alias="capt-control",
     )
 
 
@@ -36,5 +35,7 @@ def test_runtime_constructs_all_native_surfaces_without_network_call(tmp_path):
         assert native.d1 is not None
         assert native.browser is not None
         assert native.ai is not None
+        assert native.queues.bridge.binding_registry is not None
+        assert native.queues.bridge.binding_registry.store is runtime.store
     finally:
         runtime.close()
