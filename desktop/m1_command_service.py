@@ -494,11 +494,31 @@ class RuntimeCommandService:
             elif op == "submit_provider_result_review":
                 p = cmd["payload"]
                 run_id = p.get("driverRunId")
+                claim_id = p.get("claimId")
                 disposition = p.get("disposition")
-                if not isinstance(run_id, str) or not run_id.strip():
-                    raise ValueError("PROVIDER_RESULT_REVIEW_DRIVER_RUN_REQUIRED")
                 if disposition not in {"accept", "reject"}:
                     raise ValueError("PROVIDER_RESULT_REVIEW_DISPOSITION_INVALID")
+                if (not isinstance(run_id, str) or not run_id.strip()) and isinstance(claim_id, str) and claim_id.strip():
+                    claim = self.store.require_state("claim-" + claim_id)
+                    task_id = claim.get("taskId")
+                    matches = []
+                    for stream_id, kind, _version in self.store.all_aggregates():
+                        if kind != "driverrun":
+                            continue
+                        candidate = self.store.load_state(stream_id)
+                        if (candidate and candidate.get("taskId") == task_id
+                                and candidate.get("driverId") == "provider"
+                                and candidate.get("state") == "completed"
+                                and candidate.get("reconciliationStatus") == "not_required"):
+                            matches.append(candidate)
+                    if len(matches) != 1:
+                        raise AuthorityViolation(
+                            "provider result review claim requires exactly one completed provider DriverRun for task %s; found %d"
+                            % (task_id, len(matches))
+                        )
+                    run_id = matches[0]["driverRunId"]
+                if not isinstance(run_id, str) or not run_id.strip():
+                    raise ValueError("PROVIDER_RESULT_REVIEW_DRIVER_RUN_OR_CLAIM_REQUIRED")
                 run = self.store.require_state("driverrun-" + run_id)
                 if run.get("driverId") != "provider":
                     raise AuthorityViolation("provider result review requires a provider DriverRun")
