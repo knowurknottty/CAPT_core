@@ -70,3 +70,14 @@ class SandboxBrokerHooks(Protocol):
     def sandbox_terminal_patch(
         self, request: dict[str, Any], result: dict[str, Any], *, now: str
     ) -> SandboxTerminalPatch | None: ...
+
+
+@runtime_checkable
+class PersistentSandboxExecHooks(Protocol):
+    def validate_persistent_exec_context(
+        self, request: dict[str, Any], *, operator_id: str, session_id: str
+    ) -> None: ...
+
+    def persistent_exec_terminal_patch(
+        self, request: dict[str, Any], result: dict[str, Any], *, now: str
+    ) -> SandboxTerminalPatch | None: ...

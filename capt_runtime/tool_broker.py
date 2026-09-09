@@ -25,6 +25,7 @@ from .services import RuntimeService
 from .tools.registry import ToolRegistry
 from .tools.sandbox_broker_hooks import (
     CapabilityLeaseBoundary,
+    PersistentSandboxExecHooks,
     SandboxBrokerHooks,
 )
 from .world_receipt import (
@@ -510,8 +511,15 @@ class ToolBroker:
 
         adapter = registration["adapter"]
         sandbox_hooks = adapter if isinstance(adapter, SandboxBrokerHooks) else None
+        persistent_exec_hooks = (
+            adapter if isinstance(adapter, PersistentSandboxExecHooks) else None
+        )
         if sandbox_hooks is not None:
             sandbox_hooks.validate_sandbox_context(
+                deepcopy(request), operator_id=operator_id, session_id=session_id
+            )
+        if persistent_exec_hooks is not None:
+            persistent_exec_hooks.validate_persistent_exec_context(
                 deepcopy(request), operator_id=operator_id, session_id=session_id
             )
         preflight = getattr(adapter, "preflight", None)
@@ -688,6 +696,13 @@ class ToolBroker:
             if sandbox_hooks is not None
             else None
         )
+        persistent_exec_terminal = (
+            persistent_exec_hooks.persistent_exec_terminal_patch(
+                deepcopy(request), deepcopy(result), now=self._now()
+            )
+            if persistent_exec_hooks is not None
+            else None
+        )
         sandbox_settled = False
         if request["consequential"] and reservation_id is not None:
             outcome = (
@@ -699,7 +714,15 @@ class ToolBroker:
                 execution_id, reservation_id, request["leaseId"], outcome,
                 result.get("sideEffectIdentity"),
             )
-            if sandbox_terminal is not None and request["operation"] == "sandbox.create":
+            if persistent_exec_terminal is not None:
+                self.runtime.settle_sandbox_exec_indeterminate(
+                    request["grantId"], consumption, execution_id,
+                    persistent_exec_terminal.sandbox_lease_id, result,
+                    persistent_exec_terminal.patch,
+                    self.metadata(execution_id, "settle-persistent-sandbox-exec"),
+                )
+                sandbox_settled = True
+            elif sandbox_terminal is not None and request["operation"] == "sandbox.create":
                 self.runtime.settle_sandbox_create(
                     request["grantId"], consumption, execution_id,
                     sandbox_terminal.sandbox_lease_id, result, sandbox_terminal.patch,

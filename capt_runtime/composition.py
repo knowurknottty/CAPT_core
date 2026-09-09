@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
 
+from .aggregates import SandboxLeaseAggregate
 from .cloudflare_resource_adoption import CloudflareResourceBindingRegistry
 from .driver_host import DriverHost
 from .drivers.openharness import DESCRIPTOR, OpenHarnessDriver
@@ -233,7 +234,10 @@ def create_runtime(
         inversion_sandbox_backend, store
     )
     inversion_sandbox_terminal = InversionSandboxTerminalToolAdapter(
-        inversion_sandbox_backend
+        inversion_sandbox_backend,
+        lease_resolver=lambda lease_id: store.load_state(
+            SandboxLeaseAggregate.stream_id(lease_id)
+        ),
     )
     cloudflare_profile_registry = CloudflareSandboxProfileRegistry(cloudflare_profiles)
     cloudflare_free_router = CloudflareFreeTierRouter.default()

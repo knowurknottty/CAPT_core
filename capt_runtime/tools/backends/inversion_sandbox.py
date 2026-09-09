@@ -11,7 +11,7 @@ import secrets
 import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from capt_runtime.errors import AuthorityViolation
 from capt_runtime.tools.backends import inversion_guardian
@@ -898,9 +898,11 @@ class InversionSandboxProcessBackend:
         *,
         argv: tuple[str, ...],
         cwd: str,
+        filesystem_root: str | None = None,
         timeout_seconds: float,
         stdout_limit_bytes: int,
         stderr_limit_bytes: int,
+        observe_effect: Callable[[str], None] | None = None,
     ) -> PersistentSandboxExecResult:
         profile, _prepared = self._persistent_prepared_from_identity(identity)
         observation = self.inspect_persistent(identity)
@@ -910,12 +912,17 @@ class InversionSandboxProcessBackend:
             profile_id=profile.profile_id,
             argv=argv,
             cwd=cwd,
-            filesystem_root=profile.working_dir,
+            filesystem_root=filesystem_root or profile.working_dir,
             timeout_seconds=timeout_seconds,
             stdout_limit_bytes=stdout_limit_bytes,
             stderr_limit_bytes=stderr_limit_bytes,
         )
-        _root, normalized_cwd = _validate_process_request(request, self.docker_profiles.require(profile.profile_id))
+        _root, normalized_cwd = _validate_process_request(
+            request, self.docker_profiles.require(profile.profile_id)
+        )
+        observation_digest = str(observation["observationDigest"])
+        if observe_effect is not None:
+            observe_effect(observation_digest)
         result = self.docker_backend._exec_exact(
             identity.context_endpoint,
             identity.workload_container_id,
@@ -936,7 +943,7 @@ class InversionSandboxProcessBackend:
             stderr_truncated=result.stderr_truncated,
             timed_out=result.timed_out,
             termination_proven=not result.timed_out,
-            observation_digest=str(observation["observationDigest"]),
+            observation_digest=observation_digest,
         )
 
     def _container_absent(self, endpoint: str, container_id: str) -> bool:
