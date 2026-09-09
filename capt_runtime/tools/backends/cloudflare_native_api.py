@@ -20,6 +20,10 @@ from .cloudflare_ai_catalog import (
     parse_cloudflare_ai_model_catalog,
 )
 from .cloudflare_native import CloudflareBrowserAction, CloudflareDispatchNotStarted
+from .cloudflare_resource_inventory import (
+    CloudflareResourceInventorySnapshot,
+    parse_cloudflare_resource_inventory,
+)
 
 _API_ROOT = "https://api.cloudflare.com/client/v4"
 _ENV_RE = re.compile(r"^[A-Z_][A-Z0-9_]*$")
@@ -174,6 +178,64 @@ class CloudflareNativeAPIBridge:
         if fetched_at.tzinfo is None or fetched_at.utcoffset() is None:
             raise RuntimeError("cloudflare_ai_catalog_clock_unaware")
         return parse_cloudflare_ai_model_catalog(rows, fetched_at=fetched_at)
+
+    def resource_inventory(self) -> CloudflareResourceInventorySnapshot:
+        token = self._secret(self.profile.api_token_env)
+        d1_rows: list[dict[str, Any]] = []
+        page = 1
+        while True:
+            query = urlencode({"page": page, "per_page": 100})
+            url = f"{_API_ROOT}/accounts/{self.profile.account_id}/d1/database?{query}"
+            value = self._get(url, token)
+            result = self._require_success(value)
+            info = value.get("result_info")
+            if not isinstance(result, list) or not isinstance(info, dict):
+                raise RuntimeError("cloudflare_d1_inventory_pagination_unclassified")
+            current_page = info.get("page")
+            total_pages = info.get("total_pages")
+            if (
+                isinstance(current_page, bool)
+                or not isinstance(current_page, int)
+                or isinstance(total_pages, bool)
+                or not isinstance(total_pages, int)
+                or current_page != page
+                or total_pages < page
+                or total_pages < 1
+                or total_pages > 100
+            ):
+                raise RuntimeError("cloudflare_d1_inventory_pagination_unclassified")
+            if not all(isinstance(item, dict) for item in result):
+                raise RuntimeError("cloudflare_d1_inventory_result_unclassified")
+            d1_rows.extend(result)
+            if page >= total_pages:
+                break
+            page += 1
+        queue_value = self._get(
+            f"{_API_ROOT}/accounts/{self.profile.account_id}/queues", token
+        )
+        queue_rows = self._require_success(queue_value)
+        if not isinstance(queue_rows, list) or not all(
+            isinstance(item, dict) for item in queue_rows
+        ):
+            raise RuntimeError("cloudflare_queue_inventory_result_unclassified")
+        worker_value = self._get(
+            f"{_API_ROOT}/accounts/{self.profile.account_id}/workers/scripts", token
+        )
+        worker_rows = self._require_success(worker_value)
+        if not isinstance(worker_rows, list) or not all(
+            isinstance(item, dict) for item in worker_rows
+        ):
+            raise RuntimeError("cloudflare_worker_inventory_result_unclassified")
+        fetched_at = self.now()
+        if fetched_at.tzinfo is None or fetched_at.utcoffset() is None:
+            raise RuntimeError("cloudflare_resource_inventory_clock_unaware")
+        return parse_cloudflare_resource_inventory(
+            account_id=self.profile.account_id,
+            d1_rows=d1_rows,
+            queue_rows=queue_rows,
+            worker_rows=worker_rows,
+            fetched_at=fetched_at,
+        )
 
     def worker_request(
         self,

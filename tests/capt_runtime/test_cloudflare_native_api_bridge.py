@@ -267,3 +267,36 @@ def test_ai_model_catalog_rejects_partial_or_invalid_pagination(monkeypatch):
     bridge = CloudflareNativeAPIBridge(_profile(), opener=opener)
     with pytest.raises(RuntimeError, match="cloudflare_ai_catalog_pagination_unclassified"):
         bridge.ai_model_catalog()
+
+
+def test_resource_inventory_uses_get_only_and_returns_unadopted_candidates(monkeypatch):
+    monkeypatch.setenv("CF_API_TOKEN", "api-secret")
+    monkeypatch.setenv("CF_WORKER_TOKEN", "worker-secret")
+    now = datetime(2026, 9, 9, 5, 15, tzinfo=timezone.utc)
+    opener = Recorder([
+        {"success": True, "result": [{"uuid": "db-1", "name": "capt-state"}], "result_info": {"page": 1, "total_pages": 1}},
+        {"success": True, "result": [{"queue_id": "q-1", "queue_name": "capt-delegates"}]},
+        {"success": True, "result": [{"id": "capt-control"}]},
+    ])
+    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener, now=lambda: now)
+    inventory = bridge.resource_inventory()
+    assert inventory.fetched_at == now
+    assert inventory.account_id == "acct-1"
+    assert {r.resource_id for r in inventory.resources} == {"db-1", "q-1", "capt-control"}
+    assert all(r.adopted is False and r.adoption_authority == "human_required" for r in inventory.resources)
+    assert all(request.get_method() == "GET" for request, _ in opener.calls)
+    urls = [request.full_url for request, _ in opener.calls]
+    assert any("/accounts/acct-1/d1/database?" in url for url in urls)
+    assert any(url.endswith("/accounts/acct-1/queues") for url in urls)
+    assert any(url.endswith("/accounts/acct-1/workers/scripts") for url in urls)
+    assert not hasattr(bridge, "adopt_resource")
+    assert not hasattr(bridge, "create_resource")
+
+
+def test_resource_inventory_rejects_partial_d1_pagination(monkeypatch):
+    monkeypatch.setenv("CF_API_TOKEN", "api-secret")
+    monkeypatch.setenv("CF_WORKER_TOKEN", "worker-secret")
+    opener = Recorder([{"success": True, "result": [], "result_info": {"page": 1}}])
+    bridge = CloudflareNativeAPIBridge(_profile(), opener=opener)
+    with pytest.raises(RuntimeError, match="cloudflare_d1_inventory_pagination_unclassified"):
+        bridge.resource_inventory()

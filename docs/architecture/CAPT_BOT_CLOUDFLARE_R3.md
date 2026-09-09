@@ -73,3 +73,12 @@ The account-scoped Model Search endpoint is read-only control-plane discovery. `
 The free-only admission order is `discover catalog -> validate provenance/freshness -> classify model billing -> transactional quota recheck/reservation -> inference dispatch`. The SQLite recheck receives the same immutable catalog snapshot and timestamp; concurrency protection therefore cannot weaken the billing gate. A reservation digest binds the catalog source digest as well as operation, work class, estimate, and trusted UTC quota day.
 
 Live read-only validation on 2026-09-09 parsed the current Wrangler/Cloudflare catalog successfully: 65 models total and 7 marked `require_workers_paid`, matching the current provider pricing list. No inference was invoked during this validation.
+
+
+## Read-Only Resource Inventory and Adoption Boundary
+
+Cloudflare resource discovery is informational, not authority. `CloudflareNativeAPIBridge.resource_inventory()` performs authenticated GET-only discovery for D1 databases, Queues, and Worker scripts. D1 pagination must be complete and all provider rows must resolve to typed kind + provider ID + name identities before a snapshot is accepted. The snapshot binds account ID, timezone-aware fetch time, canonical resource identities, and a SHA-256 source digest.
+
+Every discovered `CloudflareResourceCandidate` is immutable with `adopted=false` and `adoptionAuthority=human_required`. Name lookup is convenience only: duplicate names are `CLOUDFLARE_RESOURCE_NAME_AMBIGUOUS`, and a provider ID/name disagreement is `CLOUDFLARE_RESOURCE_ID_NAME_MISMATCH`. The bridge exposes no resource-adoption, resource-create, deploy, update, or delete method. Discovery therefore cannot silently convert an old CAPT-looking Cloudflare resource into an execution target.
+
+Live read-only Wrangler discovery on 2026-09-09 observed 8 D1 databases with typed UUID/name identity and 0 Queues. Wrangler 4.90.0 does not expose an account-wide Worker-script list command in its top-level CLI, so Worker inventory was not live-observed through Wrangler and is explicitly not represented as empty. The direct Worker list endpoint remains API-contract and test verified. No discovered resource has been adopted by this tranche.
