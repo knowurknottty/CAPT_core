@@ -85,14 +85,19 @@ public enum CAPTOperatorCLIError: Error, LocalizedError {
 }
 public struct CAPTOperatorCLI {
     public let executablePath: String
+    let processEnvironment: [String: String]
 
-    public init(executablePath: String? = nil) {
+    public init(
+        executablePath: String? = nil,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) {
         if let executablePath {
             self.executablePath = executablePath
         } else {
             self.executablePath = FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent(".capt/runtime-venv/bin/capt-ui").path
         }
+        self.processEnvironment = CAPTRuntimeBootstrapper.sanitizedChildEnvironment(environment)
     }
 
     public static func isSafeSecretReference(_ value: String) -> Bool {
@@ -208,6 +213,7 @@ public struct CAPTOperatorCLI {
         let stderr = Pipe()
         process.executableURL = URL(fileURLWithPath: executablePath)
         process.arguments = arguments
+        process.environment = processEnvironment
         process.standardOutput = stdout
         process.standardError = stderr
         do { try process.run() }

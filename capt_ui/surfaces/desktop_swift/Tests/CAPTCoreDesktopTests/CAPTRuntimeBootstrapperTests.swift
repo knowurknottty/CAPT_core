@@ -18,3 +18,31 @@ final class CAPTRuntimeBootstrapperTests: XCTestCase {
         XCTAssertEqual(candidates.first, "/Users/tester/.capt/runtime-venv/bin/capt")
     }
 }
+
+
+extension CAPTRuntimeBootstrapperTests {
+    func testChildEnvironmentScrubsCallerPythonImportOverrides() {
+        let sanitized = CAPTRuntimeBootstrapper.sanitizedChildEnvironment([
+            "PATH": "/usr/bin:/bin",
+            "PYTHONPATH": "/tmp/stale-core",
+            "PYTHONHOME": "/tmp/stale-python",
+        ])
+        XCTAssertNil(sanitized["PYTHONPATH"])
+        XCTAssertNil(sanitized["PYTHONHOME"])
+        XCTAssertEqual(sanitized["PATH"], "/usr/bin:/bin")
+    }
+
+    func testOperatorCLIUsesSanitizedChildEnvironment() {
+        let cli = CAPTOperatorCLI(
+            executablePath: "/tmp/capt-ui",
+            environment: [
+                "PATH": "/usr/bin:/bin",
+                "PYTHONPATH": "/tmp/stale-core",
+                "PYTHONHOME": "/tmp/stale-python",
+            ]
+        )
+        XCTAssertNil(cli.processEnvironment["PYTHONPATH"])
+        XCTAssertNil(cli.processEnvironment["PYTHONHOME"])
+        XCTAssertEqual(cli.processEnvironment["PATH"], "/usr/bin:/bin")
+    }
+}

@@ -61,6 +61,15 @@ public struct CAPTRuntimeBootstrapper {
         executableCandidates.first(where: fileExists)
     }
 
+    public static func sanitizedChildEnvironment(
+        _ environment: [String: String]
+    ) -> [String: String] {
+        var sanitized = environment
+        sanitized.removeValue(forKey: "PYTHONPATH")
+        sanitized.removeValue(forKey: "PYTHONHOME")
+        return sanitized
+    }
+
     public func start() throws {
         guard let executable = resolvedExecutable() else {
             throw CAPTRuntimeBootstrapError.executableNotFound(executableCandidates)
@@ -68,6 +77,7 @@ public struct CAPTRuntimeBootstrapper {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = ["start", "--state-dir", stateDirectory]
+        process.environment = Self.sanitizedChildEnvironment(ProcessInfo.processInfo.environment)
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         do {
