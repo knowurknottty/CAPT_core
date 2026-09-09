@@ -23,8 +23,11 @@ public struct CAPTRuntimeBootstrapper {
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
+        var effectiveEnvironment = environment
         if let stateDirectory {
-            self.stateDirectory = NSString(string: stateDirectory).expandingTildeInPath
+            let expanded = NSString(string: stateDirectory).expandingTildeInPath
+            self.stateDirectory = expanded
+            effectiveEnvironment["CAPT_STATE_DIR"] = expanded
         } else if let override = environment["CAPT_STATE_DIR"], !override.isEmpty {
             self.stateDirectory = NSString(string: override).expandingTildeInPath
         } else {
@@ -32,7 +35,7 @@ public struct CAPTRuntimeBootstrapper {
                 .appendingPathComponent(".capt", isDirectory: true).path
         }
         self.executableCandidates = Self.defaultCandidates(
-            home: home, environment: environment
+            home: home, environment: effectiveEnvironment
         )
     }
 
@@ -41,7 +44,12 @@ public struct CAPTRuntimeBootstrapper {
         environment: [String: String]
     ) -> [String] {
         var paths: [String] = []
-        if let explicit = environment["CAPT_CLI"], !explicit.isEmpty {
+        if let state = environment["CAPT_STATE_DIR"], !state.isEmpty {
+            paths.append(
+                URL(fileURLWithPath: NSString(string: state).expandingTildeInPath)
+                    .appendingPathComponent("runtime-venv/bin/capt").path
+            )
+        } else if let explicit = environment["CAPT_CLI"], !explicit.isEmpty {
             paths.append(NSString(string: explicit).expandingTildeInPath)
         }
         paths.append(URL(fileURLWithPath: home)
@@ -67,6 +75,8 @@ public struct CAPTRuntimeBootstrapper {
         var sanitized = environment
         sanitized.removeValue(forKey: "PYTHONPATH")
         sanitized.removeValue(forKey: "PYTHONHOME")
+        sanitized.removeValue(forKey: "CAPT_CLI")
+        sanitized.removeValue(forKey: "CAPT_UI")
         return sanitized
     }
 

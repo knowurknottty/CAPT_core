@@ -26,9 +26,13 @@ extension CAPTRuntimeBootstrapperTests {
             "PATH": "/usr/bin:/bin",
             "PYTHONPATH": "/tmp/stale-core",
             "PYTHONHOME": "/tmp/stale-python",
+            "CAPT_CLI": "/custom/stale/capt",
+            "CAPT_UI": "/custom/stale/capt-ui",
         ])
         XCTAssertNil(sanitized["PYTHONPATH"])
         XCTAssertNil(sanitized["PYTHONHOME"])
+        XCTAssertNil(sanitized["CAPT_CLI"])
+        XCTAssertNil(sanitized["CAPT_UI"])
         XCTAssertEqual(sanitized["PATH"], "/usr/bin:/bin")
     }
 
@@ -45,4 +49,16 @@ extension CAPTRuntimeBootstrapperTests {
         XCTAssertNil(cli.processEnvironment["PYTHONHOME"])
         XCTAssertEqual(cli.processEnvironment["PATH"], "/usr/bin:/bin")
     }
+    func testExplicitStateDirectoryOwnsRuntimeDespiteAmbientCLIOverride() {
+        let bootstrapper = CAPTRuntimeBootstrapper(
+            stateDirectory: "/tmp/capt-isolated",
+            environment: ["CAPT_CLI": "/custom/stale/capt"]
+        )
+        XCTAssertEqual(
+            bootstrapper.executableCandidates.first,
+            "/tmp/capt-isolated/runtime-venv/bin/capt"
+        )
+        XCTAssertFalse(bootstrapper.executableCandidates.contains("/custom/stale/capt"))
+    }
+
 }
