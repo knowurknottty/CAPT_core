@@ -83,6 +83,29 @@ TERMINAL_INVERSION_SANDBOX_DESCRIPTOR = {
         "attestation_digest", "cleanup_status"],
 }
 
+SANDBOX_INVERSION_DESCRIPTOR = {
+    "schemaVersion": "1.0.0",
+    "toolId": "sandbox.inversion",
+    "displayName": "Inversion Sandbox Lifecycle",
+    "family": "sandbox",
+    "operations": ["sandbox.create", "sandbox.inspect", "sandbox.close"],
+    "requiredCapabilities": ["sandbox.create", "sandbox.inspect", "sandbox.close"],
+    "operationEffects": [
+        {"operation": "sandbox.create", "effectClass": "resource_creation"},
+        {"operation": "sandbox.inspect", "effectClass": "pure_read_only"},
+        {"operation": "sandbox.close", "effectClass": "durable_local"},
+    ],
+    "terminalBackends": ["inversion_sandbox"],
+    "platforms": ["macos", "linux"],
+    "supportsTimeout": False,
+    "supportsCancellation": False,
+    "idempotencySupport": "broker_settled_replay",
+    "artifactOutputs": [
+        "sandbox_lease_id", "state", "container_id", "identity_digest",
+        "closure_receipt_digest", "observation"
+    ],
+}
+
 TERMINAL_CLOUDFLARE_DESCRIPTOR = {
     "schemaVersion": "1.0.0",
     "toolId": "terminal.cloudflare",

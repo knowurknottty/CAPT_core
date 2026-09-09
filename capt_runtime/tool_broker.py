@@ -23,6 +23,10 @@ from .errors import (
 )
 from .services import RuntimeService
 from .tools.registry import ToolRegistry
+from .tools.sandbox_broker_hooks import (
+    CapabilityLeaseBoundary,
+    SandboxBrokerHooks,
+)
 from .world_receipt import (
     build_effect_intent,
     receipt_required,
@@ -150,6 +154,25 @@ class ToolBroker:
             raise CapabilityDenied("WORLD_RECEIPT_EFFECT_LEASE_EXPIRY_REQUIRED", lease_id)
         return str(expires_at)
 
+    def _capability_boundary(self, request: Dict[str, Any]) -> CapabilityLeaseBoundary:
+        grant_id = request.get("grantId")
+        lease_id = request.get("leaseId")
+        if not grant_id or not lease_id:
+            raise CapabilityDenied("sandbox lifecycle requires a bound capability lease", lease_id)
+        state = self.store.load_state(CapabilityAggregate.stream_id(grant_id)) or {}
+        lease = state.get("lease") or {}
+        if lease.get("leaseId") != lease_id:
+            raise CapabilityDenied("sandbox lifecycle capability lease is not active", lease_id)
+        execution_context_id = lease.get("executionContextId")
+        valid_until = lease.get("validUntil")
+        if not execution_context_id or not valid_until:
+            raise CapabilityDenied("sandbox lifecycle capability lease boundary is incomplete", lease_id)
+        return CapabilityLeaseBoundary(
+            lease_id=str(lease_id),
+            execution_context_id=str(execution_context_id),
+            valid_until=str(valid_until),
+        )
+
     def build_execution(
         self, request: Dict[str, Any], *, operator_id: str, session_id: str
     ) -> Dict[str, Any]:
@@ -201,6 +224,11 @@ class ToolBroker:
 
     @staticmethod
     def _scope_for(request: Dict[str, Any]) -> Dict[str, Any]:
+        # Sandbox lifecycle authority governs the resource control surface,
+        # not arbitrary access to the sandbox filesystem. The profile-owned
+        # filesystem scope is bound separately into SandboxLease identity.
+        if request.get("toolId") == "sandbox.inversion":
+            return {"kind": "tool", "toolIds": ["sandbox.inversion"]}
         filesystem_scope = request.get("filesystemScope")
         if filesystem_scope:
             return {"kind": "filesystem", "rootPath": filesystem_scope, "recursive": True}
@@ -481,6 +509,11 @@ class ToolBroker:
             }
 
         adapter = registration["adapter"]
+        sandbox_hooks = adapter if isinstance(adapter, SandboxBrokerHooks) else None
+        if sandbox_hooks is not None:
+            sandbox_hooks.validate_sandbox_context(
+                deepcopy(request), operator_id=operator_id, session_id=session_id
+            )
         preflight = getattr(adapter, "preflight", None)
         if execution["state"] == "prepared" and callable(preflight):
             try:
@@ -526,6 +559,29 @@ class ToolBroker:
             )
             reservation_id = reservation["reservationId"]
 
+        if sandbox_hooks is not None and request["consequential"]:
+            reservation_record = sandbox_hooks.reserve_sandbox_lease_record(
+                deepcopy(request),
+                execution_id=execution_id,
+                operator_id=operator_id,
+                session_id=session_id,
+                capability=self._capability_boundary(request),
+                now=self._now(),
+            )
+            if reservation_record is not None:
+                self.runtime.reserve_sandbox_lease(
+                    reservation_record.lease,
+                    self.metadata(execution_id, "reserve-sandbox-lease"),
+                )
+            close_begin = sandbox_hooks.begin_sandbox_close_patch(
+                deepcopy(request), operator_id=operator_id, session_id=session_id
+            )
+            if close_begin is not None and not close_begin.already_closed:
+                self.runtime.begin_sandbox_close(
+                    close_begin.sandbox_lease_id, close_begin.patch,
+                    self.metadata(execution_id, "begin-sandbox-close"),
+                )
+
         if execution["state"] == "prepared":
             self.runtime.transition_tool_execution(
                 execution_id, "admitted", {"reservationId": reservation_id},
@@ -550,15 +606,29 @@ class ToolBroker:
                 if side_effect_identity != observed_identity:
                     raise IntegrityViolation("adapter attempted to replace observed side-effect identity")
                 return
-            self.runtime.transition_tool_execution(
-                execution_id,
-                "effect_observed",
-                {
-                    "sideEffectIdentity": side_effect_identity,
-                    "dispatchBoundary": "effect_observed",
-                },
-                self.metadata(execution_id, "effect-observed"),
+            created_patch = (
+                sandbox_hooks.sandbox_created_patch(deepcopy(request), side_effect_identity)
+                if sandbox_hooks is not None
+                else None
             )
+            if created_patch is not None:
+                self.runtime.observe_sandbox_create_effect(
+                    execution_id,
+                    created_patch.sandbox_lease_id,
+                    side_effect_identity,
+                    created_patch.patch,
+                    self.metadata(execution_id, "effect-observed"),
+                )
+            else:
+                self.runtime.transition_tool_execution(
+                    execution_id,
+                    "effect_observed",
+                    {
+                        "sideEffectIdentity": side_effect_identity,
+                        "dispatchBoundary": "effect_observed",
+                    },
+                    self.metadata(execution_id, "effect-observed"),
+                )
             observed_identity = side_effect_identity
 
         world_receipt: Dict[str, Any] | None = None
@@ -613,6 +683,12 @@ class ToolBroker:
                     "sideEffectIdentity": None, "error": None,
                 })
 
+        sandbox_terminal = (
+            sandbox_hooks.sandbox_terminal_patch(deepcopy(request), deepcopy(result), now=self._now())
+            if sandbox_hooks is not None
+            else None
+        )
+        sandbox_settled = False
         if request["consequential"] and reservation_id is not None:
             outcome = (
                 "succeeded" if result["status"] == "succeeded"
@@ -623,18 +699,33 @@ class ToolBroker:
                 execution_id, reservation_id, request["leaseId"], outcome,
                 result.get("sideEffectIdentity"),
             )
-            try:
-                self.runtime.finalize_use(
-                    request["grantId"], consumption,
-                    self.metadata(execution_id, "finalize-capability"),
+            if sandbox_terminal is not None and request["operation"] == "sandbox.create":
+                self.runtime.settle_sandbox_create(
+                    request["grantId"], consumption, execution_id,
+                    sandbox_terminal.sandbox_lease_id, result, sandbox_terminal.patch,
+                    self.metadata(execution_id, "settle-sandbox-create"),
                 )
-            except Exception as exc:
-                result = self._indeterminate_result(
-                    request["toolRequestId"], request["idempotencyKey"],
-                    "capability settlement failed after tool dispatch: "
-                    f"{type(exc).__name__}: {exc}",
-                    side_effect_identity=result.get("sideEffectIdentity"),
+                sandbox_settled = True
+            elif sandbox_terminal is not None and request["operation"] == "sandbox.close":
+                self.runtime.settle_sandbox_close(
+                    request["grantId"], consumption, execution_id,
+                    sandbox_terminal.sandbox_lease_id, result, sandbox_terminal.patch,
+                    self.metadata(execution_id, "settle-sandbox-close"),
                 )
+                sandbox_settled = True
+            else:
+                try:
+                    self.runtime.finalize_use(
+                        request["grantId"], consumption,
+                        self.metadata(execution_id, "finalize-capability"),
+                    )
+                except Exception as exc:
+                    result = self._indeterminate_result(
+                        request["toolRequestId"], request["idempotencyKey"],
+                        "capability settlement failed after tool dispatch: "
+                        f"{type(exc).__name__}: {exc}",
+                        side_effect_identity=result.get("sideEffectIdentity"),
+                    )
 
         reason = None
         if result["status"] == "indeterminate":
@@ -645,12 +736,16 @@ class ToolBroker:
                 ),
                 "external effect is indeterminate",
             )
-        state = self._transition_terminal(
-            execution_id,
-            "effect_observed" if observed_identity is not None else "dispatching",
-            result,
-            reconciliation_reason=reason,
-            world_receipt=world_receipt,
+        state = (
+            self.store.require_state(ToolExecutionAggregate.stream_id(execution_id))
+            if sandbox_settled
+            else self._transition_terminal(
+                execution_id,
+                "effect_observed" if observed_identity is not None else "dispatching",
+                result,
+                reconciliation_reason=reason,
+                world_receipt=world_receipt,
+            )
         )
         return {
             "toolExecutionId": execution_id,

@@ -28,6 +28,7 @@ from .tools.adapters import (
     CodeExecutionAdapter,
     DockerTerminalToolAdapter,
     FileToolAdapter,
+    InversionSandboxLifecycleToolAdapter,
     InversionSandboxTerminalToolAdapter,
     SSHTerminalToolAdapter,
     TerminalToolAdapter,
@@ -68,6 +69,7 @@ from .tools.backends.ssh import SSHProcessBackend, SSHProfile, SSHProfileRegistr
 from .tools.builtins import (
     CODE_EXECUTION_DESCRIPTOR,
     FILE_OPERATIONS_DESCRIPTOR,
+    SANDBOX_INVERSION_DESCRIPTOR,
     TERMINAL_CLOUDFLARE_DESCRIPTOR,
     TERMINAL_DOCKER_DESCRIPTOR,
     TERMINAL_INVERSION_SANDBOX_DESCRIPTOR,
@@ -226,8 +228,12 @@ def create_runtime(
     docker_profile_registry = DockerProfileRegistry(docker_profiles)
     docker_terminal = DockerTerminalToolAdapter(DockerProcessBackend(docker_profile_registry))
     inversion_sandbox_profile_registry = InversionSandboxProfileRegistry(inversion_sandbox_profiles)
+    inversion_sandbox_backend = InversionSandboxProcessBackend(inversion_sandbox_profile_registry)
+    inversion_sandbox_lifecycle = InversionSandboxLifecycleToolAdapter(
+        inversion_sandbox_backend, store
+    )
     inversion_sandbox_terminal = InversionSandboxTerminalToolAdapter(
-        InversionSandboxProcessBackend(inversion_sandbox_profile_registry)
+        inversion_sandbox_backend
     )
     cloudflare_profile_registry = CloudflareSandboxProfileRegistry(cloudflare_profiles)
     cloudflare_free_router = CloudflareFreeTierRouter.default()
@@ -263,6 +269,7 @@ def create_runtime(
         (TERMINAL_LOCAL_DESCRIPTOR, terminal),
         (TERMINAL_SSH_DESCRIPTOR, ssh_terminal),
         (TERMINAL_DOCKER_DESCRIPTOR, docker_terminal),
+        (SANDBOX_INVERSION_DESCRIPTOR, inversion_sandbox_lifecycle),
         (TERMINAL_INVERSION_SANDBOX_DESCRIPTOR, inversion_sandbox_terminal),
         (TERMINAL_CLOUDFLARE_DESCRIPTOR, cloudflare_terminal),
         (FILE_OPERATIONS_DESCRIPTOR, files),

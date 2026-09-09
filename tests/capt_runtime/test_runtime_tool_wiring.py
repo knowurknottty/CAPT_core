@@ -153,8 +153,8 @@ def test_runtime_composition_owns_slice_a_registry_and_broker(tmp_path: Path) ->
     runtime = create_runtime(str(tmp_path / "rt.db"))
     try:
         assert [d["toolId"] for d in runtime.tool_registry.list_descriptors()] == [
-            "code.execution", "file.operations", "terminal.cloudflare", "terminal.docker",
-            "terminal.inversion_sandbox", "terminal.local", "terminal.ssh"
+            "code.execution", "file.operations", "sandbox.inversion", "terminal.cloudflare",
+            "terminal.docker", "terminal.inversion_sandbox", "terminal.local", "terminal.ssh"
         ]
         assert all(
             runtime.tool_registry.readiness(tool_id)["status"] == "available"
@@ -169,6 +169,9 @@ def test_runtime_composition_owns_slice_a_registry_and_broker(tmp_path: Path) ->
         inversion_readiness = runtime.tool_registry.readiness("terminal.inversion_sandbox")
         assert inversion_readiness["status"] == "unavailable"
         assert "no named InversionSandbox profiles" in inversion_readiness["reason"]
+        lifecycle_readiness = runtime.tool_registry.readiness("sandbox.inversion")
+        assert lifecycle_readiness["status"] == "unavailable"
+        assert "no named InversionSandbox profiles" in lifecycle_readiness["reason"]
         cloudflare_readiness = runtime.tool_registry.readiness("terminal.cloudflare")
         assert cloudflare_readiness["status"] == "unavailable"
         assert "no Cloudflare Sandbox profiles" in cloudflare_readiness["reason"]
