@@ -102,6 +102,14 @@ class OperatorControlStore:
         active_session_id: str | None,
         sessions: dict[str, dict[str, Any]],
     ) -> dict[str, Any]:
+        active = sessions.get(active_session_id, {}) if active_session_id else {}
+        cursors = {
+            key: active.get(key)
+            for key in (
+                "proposalId", "proposalRevision", "proposalSelection",
+                "approvalRequestId", "missionId", "taskId", "driverRunId", "claimId",
+            )
+        }
         return {
             "schemaVersion": SCHEMA_VERSION,
             "revision": revision,
@@ -110,6 +118,7 @@ class OperatorControlStore:
             "configurationRevision": configuration_revision,
             "configurationDigest": self._configuration_digest(configuration),
             **configuration,
+            **cursors,
             "sessions": sessions,
         }
 
@@ -262,3 +271,100 @@ class OperatorControlStore:
             self._persist(next_state)
             self._state = next_state
             return self.snapshot()
+
+    def session_get(self, session_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            session = self._state.get("sessions", {}).get(session_id)
+            return copy.deepcopy(session) if session is not None else None
+
+    def require_current(
+        self, *, expected_revision: int, configuration_digest: str | None = None
+    ) -> dict[str, Any]:
+        with self._lock:
+            self._require_revision(expected_revision)
+            if (
+                configuration_digest is not None
+                and configuration_digest != self._state["configurationDigest"]
+            ):
+                raise OperatorControlStale(self.snapshot())
+            if not self._state.get("activeSessionId"):
+                raise ValueError("OPERATOR_CONTROL_SESSION_REQUIRED")
+            return self.snapshot()
+
+    def _update_active_session(
+        self, expected_revision: int, updates: dict[str, Any]
+    ) -> dict[str, Any]:
+        self._require_revision(expected_revision)
+        active = self._state.get("activeSessionId")
+        if not active:
+            raise ValueError("OPERATOR_CONTROL_SESSION_REQUIRED")
+        sessions = copy.deepcopy(self._state.get("sessions", {}))
+        session = sessions.get(active)
+        if session is None:
+            raise ValueError("OPERATOR_CONTROL_SESSION_UNKNOWN")
+        session.update(updates)
+        next_state = self._build_state(
+            revision=int(self._state["revision"]) + 1,
+            configuration_revision=int(self._state["configurationRevision"]),
+            configuration=self._current_configuration(),
+            active_session_id=active,
+            sessions=sessions,
+        )
+        self._persist(next_state)
+        self._state = next_state
+        return self.snapshot()
+    def bind_proposal(
+        self,
+        *,
+        expected_revision: int,
+        configuration_digest: str,
+        proposal: dict[str, Any],
+    ) -> dict[str, Any]:
+        with self._lock:
+            self.require_current(
+                expected_revision=expected_revision,
+                configuration_digest=configuration_digest,
+            )
+            if proposal.get("targetRoot") != self._state["targetRoot"]:
+                raise ValueError("OPERATOR_CONTROL_PROPOSAL_ROOT_MISMATCH")
+            if (proposal.get("provider") or "") != self._state["provider"]:
+                raise ValueError("OPERATOR_CONTROL_PROPOSAL_PROVIDER_MISMATCH")
+            if (proposal.get("model") or "") != self._state["model"]:
+                raise ValueError("OPERATOR_CONTROL_PROPOSAL_MODEL_MISMATCH")
+            if self._state["promptIntelligence"] == "OFF":
+                if proposal.get("stageChain") or proposal.get("stageRecords"):
+                    raise ValueError("OPERATOR_CONTROL_PROPOSAL_PI_MISMATCH")
+            return self._update_active_session(expected_revision, {
+                "proposalId": proposal.get("proposalId"),
+                "proposalRevision": proposal.get("revision"),
+                "proposalSelection": None,
+                "approvalRequestId": None,
+                "missionId": None,
+                "taskId": None,
+                "driverRunId": None,
+                "claimId": None,
+            })
+
+    def bind_approval(
+        self,
+        *,
+        expected_revision: int,
+        configuration_digest: str,
+        proposal_id: str,
+        selection: str,
+        approval: dict[str, Any],
+    ) -> dict[str, Any]:
+        with self._lock:
+            current = self.require_current(
+                expected_revision=expected_revision,
+                configuration_digest=configuration_digest,
+            )
+            if current.get("proposalId") != proposal_id:
+                raise OperatorControlStale(current)
+            return self._update_active_session(expected_revision, {
+                "proposalSelection": selection,
+                "approvalRequestId": approval.get("requestId"),
+                "missionId": approval.get("missionId"),
+                "taskId": approval.get("taskId"),
+                "driverRunId": approval.get("driverRunId"),
+            })
