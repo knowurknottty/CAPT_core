@@ -28,6 +28,7 @@ from .tools.adapters import (
     CodeExecutionAdapter,
     DockerTerminalToolAdapter,
     FileToolAdapter,
+    InversionSandboxTerminalToolAdapter,
     SSHTerminalToolAdapter,
     TerminalToolAdapter,
 )
@@ -58,12 +59,18 @@ from .tools.backends.docker import (
     DockerProfile,
     DockerProfileRegistry,
 )
+from .tools.backends.inversion_sandbox import (
+    InversionSandboxProcessBackend,
+    InversionSandboxProfile,
+    InversionSandboxProfileRegistry,
+)
 from .tools.backends.ssh import SSHProcessBackend, SSHProfile, SSHProfileRegistry
 from .tools.builtins import (
     CODE_EXECUTION_DESCRIPTOR,
     FILE_OPERATIONS_DESCRIPTOR,
     TERMINAL_CLOUDFLARE_DESCRIPTOR,
     TERMINAL_DOCKER_DESCRIPTOR,
+    TERMINAL_INVERSION_SANDBOX_DESCRIPTOR,
     TERMINAL_LOCAL_DESCRIPTOR,
     TERMINAL_SSH_DESCRIPTOR,
 )
@@ -83,6 +90,7 @@ class RuntimeComposition:
     tool_broker: ToolBroker
     ssh_profile_registry: SSHProfileRegistry
     docker_profile_registry: DockerProfileRegistry
+    inversion_sandbox_profile_registry: InversionSandboxProfileRegistry
     cloudflare_profile_registry: CloudflareSandboxProfileRegistry
     cloudflare_usage_ledger: CloudflareUsageLedger
     cloudflare_free_planner: CloudflareFreeExecutionPlanner
@@ -180,6 +188,7 @@ def create_runtime(
     model_safe_limit_steps: int = 8,
     ssh_profiles: Iterable[SSHProfile] = (),
     docker_profiles: Iterable[DockerProfile] = (),
+    inversion_sandbox_profiles: Iterable[InversionSandboxProfile] = (),
     cloudflare_profiles: Iterable[CloudflareSandboxProfile] = (),
     cloudflare_native_profile: CloudflareNativeAPIProfile | None = None,
     enable_mcp: bool = False,
@@ -216,6 +225,10 @@ def create_runtime(
     ssh_terminal = SSHTerminalToolAdapter(SSHProcessBackend(ssh_profile_registry))
     docker_profile_registry = DockerProfileRegistry(docker_profiles)
     docker_terminal = DockerTerminalToolAdapter(DockerProcessBackend(docker_profile_registry))
+    inversion_sandbox_profile_registry = InversionSandboxProfileRegistry(inversion_sandbox_profiles)
+    inversion_sandbox_terminal = InversionSandboxTerminalToolAdapter(
+        InversionSandboxProcessBackend(inversion_sandbox_profile_registry)
+    )
     cloudflare_profile_registry = CloudflareSandboxProfileRegistry(cloudflare_profiles)
     cloudflare_free_router = CloudflareFreeTierRouter.default()
     cloudflare_usage_ledger = CloudflareUsageLedger(
@@ -250,6 +263,7 @@ def create_runtime(
         (TERMINAL_LOCAL_DESCRIPTOR, terminal),
         (TERMINAL_SSH_DESCRIPTOR, ssh_terminal),
         (TERMINAL_DOCKER_DESCRIPTOR, docker_terminal),
+        (TERMINAL_INVERSION_SANDBOX_DESCRIPTOR, inversion_sandbox_terminal),
         (TERMINAL_CLOUDFLARE_DESCRIPTOR, cloudflare_terminal),
         (FILE_OPERATIONS_DESCRIPTOR, files),
         (CODE_EXECUTION_DESCRIPTOR, code),
@@ -281,6 +295,7 @@ def create_runtime(
         tool_broker=tool_broker,
         ssh_profile_registry=ssh_profile_registry,
         docker_profile_registry=docker_profile_registry,
+        inversion_sandbox_profile_registry=inversion_sandbox_profile_registry,
         cloudflare_profile_registry=cloudflare_profile_registry,
         cloudflare_usage_ledger=cloudflare_usage_ledger,
         cloudflare_free_planner=cloudflare_free_planner,

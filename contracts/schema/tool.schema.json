@@ -303,7 +303,8 @@
         "local",
         "ssh",
         "docker",
-        "cloudflare"
+        "cloudflare",
+        "inversion_sandbox"
       ]
     },
     "ToolReadinessStatus": {

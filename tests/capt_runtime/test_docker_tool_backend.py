@@ -573,3 +573,62 @@ def test_runtime_docker_missing_image_preflight_consumes_no_capability_use(tmp_p
         assert capability["consumptions"] == []
     finally:
         runtime.close()
+
+
+def test_docker_hardening_create_args_are_opt_in(tmp_path: Path) -> None:
+    import capt_runtime.tools.backends.docker as docker_backend
+
+    tmpfs_type = docker_backend.DockerTmpfsMount
+    work = tmp_path / "hardening-work"
+    work.mkdir()
+    profile = DockerProfile(
+        profile_id="docker-hardening",
+        context_name="desktop-linux",
+        image_ref="example.invalid/image:test",
+        allowed_host_roots=(work,),
+        allowed_container_roots=("/workspace",),
+        working_dir="/workspace",
+        user="65532:65532",
+        cap_drop=("ALL",),
+        no_new_privileges=True,
+        tmpfs=(tmpfs_type("/tmp", 64 * 1024 * 1024),),
+        network_policy=DockerNetworkPolicy(mode="none"),
+        read_only_rootfs=True,
+    )
+    prepared = docker_backend.DockerPreparedTarget(profile, "unix:///tmp/docker.sock", "sha256:" + "a" * 64, None)
+    args = docker_backend._docker_create_args(profile, prepared, "/workspace", ("/bin/true",))
+    assert args[args.index("--user") + 1] == "65532:65532"
+    assert args[args.index("--cap-drop") + 1] == "ALL"
+    assert args[args.index("--security-opt") + 1] == "no-new-privileges:true"
+    assert "/tmp:rw,nosuid,nodev,noexec,size=67108864" in args
+
+
+def test_docker_hardening_defaults_emit_no_extra_security_flags(tmp_path: Path) -> None:
+    import capt_runtime.tools.backends.docker as docker_backend
+
+    profile = _profile(tmp_path)
+    prepared = docker_backend.DockerPreparedTarget(profile, "unix:///tmp/docker.sock", "sha256:" + "b" * 64, None)
+    args = docker_backend._docker_create_args(profile, prepared, "/workspace", ("/bin/true",))
+    assert "--user" not in args
+    assert "--cap-drop" not in args
+    assert "--security-opt" not in args
+    assert "--tmpfs" not in args
+
+
+def test_docker_hardening_fields_validate_numeric_user_and_tmpfs(tmp_path: Path) -> None:
+    import capt_runtime.tools.backends.docker as docker_backend
+
+    tmpfs_type = docker_backend.DockerTmpfsMount
+    with pytest.raises(ValueError, match="numeric UID:GID"):
+        DockerProfile(
+            profile_id="docker-bad-user", context_name="desktop-linux", image_ref="image:test",
+            allowed_container_roots=("/workspace",), working_dir="/workspace", user="nobody:nogroup",
+        )
+    with pytest.raises(ValueError, match="tmpfs size"):
+        tmpfs_type("/tmp", 1024)
+    mount = tmpfs_type("/tmp", 8 * 1024 * 1024)
+    with pytest.raises(ValueError, match="duplicate Docker tmpfs"):
+        DockerProfile(
+            profile_id="docker-dupe-tmpfs", context_name="desktop-linux", image_ref="image:test",
+            allowed_container_roots=("/workspace",), working_dir="/workspace", tmpfs=(mount, mount),
+        )
