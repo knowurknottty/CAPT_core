@@ -67,3 +67,6 @@ contracts/generated/typescript/dist/
 # Generated desktop verification artifacts (reproducible; not source)
 desktop/*_evidence.json
 desktop/*_stdout.txt
+
+# Local worktrees
+.worktrees/
