@@ -1,5 +1,8 @@
 # CAPT Public Release: Secure Intake, Projects, Human-First Results, and Council Design
 
+> **Council supersession notice (2026-09-10):** The Model Council portions of this August document are historical. For Council tier/cardinality/runtime semantics, `docs/superpowers/specs/2026-09-10-model-council-alpha-design.md` and its implementation plan supersede the 10-Cohort / 111-Vessel limits. Non-Council sections remain unaffected.
+
+
 Status: `DESIGN_FOR_OWNER_REVIEW`
 
 Base branch: `fix/local-openai-compatible-provider-r1`

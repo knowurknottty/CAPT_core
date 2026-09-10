@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:c489bcc9bda1e9186cd0c72e7ce328e6294d7cedf730d9074424834f8f720493
+# source digest:  sha256:9daf69b76251217a5ba8f42f53324be5bf86464122a37d99696a82233193595c
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -277,6 +277,7 @@ class CheckpointManifest(object):
     taskVersions: List[StreamVersionEntry]
     artifactPromotionVersions: List[StreamVersionEntry] = field(default_factory=list)
     cohortVersions: List[StreamVersionEntry] = field(default_factory=list)
+    councilVersions: List[StreamVersionEntry] = field(default_factory=list)
     humanApprovalVersions: List[StreamVersionEntry] = field(default_factory=list)
     promptProposalVersions: List[StreamVersionEntry] = field(default_factory=list)
     replayForkVersions: List[StreamVersionEntry] = field(default_factory=list)
@@ -987,6 +988,84 @@ class WorkspaceLease(object):
 
 
 @dataclass(frozen=True)
+class CouncilAnalysisRecord(object):
+    """CouncilAnalysisRecord"""
+
+    claims: List[Dict[str, Any]]
+    cohortCount: int
+    councilDigest: Digest
+    disputes: List[Dict[str, Any]]
+    distinctModelSources: int
+    rawObservations: List[Dict[str, Any]]
+    verificationState: Any
+
+
+@dataclass(frozen=True)
+class CouncilClaimObservationRecord(object):
+    """CouncilClaimObservationRecord"""
+
+    assumptions: List[str]
+    claimId: Identifier
+    claimText: str
+    cohortId: Identifier
+    confidence: float
+    evidenceIds: List[Identifier]
+    stance: Any
+    uncertaintyReason: Optional[str]
+    vesselId: Identifier
+
+
+@dataclass(frozen=True)
+class CouncilClaimRecord(object):
+    """CouncilClaimRecord"""
+
+    abstainCohorts: List[Identifier]
+    assumptions: List[str]
+    claimId: Identifier
+    claimText: str
+    dissentCohorts: List[Identifier]
+    dissentVessels: List[Identifier]
+    evidenceIds: List[Identifier]
+    insufficientCohorts: List[Identifier]
+    maxDissentConfidence: float
+    maxSupportConfidence: float
+    status: Any
+    supportCohorts: List[Identifier]
+    supportVessels: List[Identifier]
+    verificationState: Any
+
+
+@dataclass(frozen=True)
+class CouncilDefinitionRecord(object):
+    """CouncilDefinitionRecord"""
+
+    challengePolicy: str
+    cohorts: List[Dict[str, Any]]
+    councilId: Identifier
+    schemaVersion: Any
+    synthesisPolicy: str
+    tier: Any
+    vesselsPerCohort: int
+
+
+@dataclass(frozen=True)
+class CouncilPlanState(object):
+    """CouncilPlanState"""
+
+    admittedAt: Timestamp
+    analysisHistory: List[CouncilAnalysisRecord]
+    cohortCount: int
+    councilDigest: Digest
+    councilId: Identifier
+    definition: CouncilDefinitionRecord
+    launchAuthorization: Dict[str, Any]
+    logicalVesselCount: int
+    tier: Any
+    verificationState: Any
+    vesselsPerCohort: int
+
+
+@dataclass(frozen=True)
 class AuthoredSkillContext(object):
     """Digest-bound authored skill material selected by CAPT from a pinned external or managed local pack. Context-only; never a grant, policy, claim, proof, or executable Foundry skill."""
 
@@ -1468,6 +1547,22 @@ class CohortSteeredPayload(object):
 
 
 @dataclass(frozen=True)
+class CouncilAdmittedPayload(object):
+    """CouncilAdmittedPayload"""
+
+    eventType: Literal["CouncilAdmitted"]
+    plan: CouncilPlanState
+
+
+@dataclass(frozen=True)
+class CouncilAnalysisRecordedPayload(object):
+    """CouncilAnalysisRecordedPayload"""
+
+    analysis: CouncilAnalysisRecord
+    eventType: Literal["CouncilAnalysisRecorded"]
+
+
+@dataclass(frozen=True)
 class DriverRunCreatedPayload(object):
     """DriverRunCreatedPayload"""
 
@@ -1684,7 +1779,7 @@ class ToolExecutionTerminatedPayload(object):
 
 
 # discriminated on 'eventType'
-EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload, PromptProposalCreatedPayload, PromptProposalRevisedPayload, PromptProposalCancelledPayload]
+EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, CouncilAdmittedPayload, CouncilAnalysisRecordedPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload, PromptProposalCreatedPayload, PromptProposalRevisedPayload, PromptProposalCancelledPayload]
 
 
 class EventType(str, Enum):
@@ -1723,6 +1818,8 @@ class EventType(str, Enum):
     COHORTCREATED = "CohortCreated"
     COHORTSNAPSHOTPERSISTED = "CohortSnapshotPersisted"
     COHORTSTEERED = "CohortSteered"
+    COUNCILADMITTED = "CouncilAdmitted"
+    COUNCILANALYSISRECORDED = "CouncilAnalysisRecorded"
     REPLAYFORKCREATED = "ReplayForkCreated"
     TOOLEXECUTIONPREPARED = "ToolExecutionPrepared"
     TOOLEXECUTIONADMITTED = "ToolExecutionAdmitted"

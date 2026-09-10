@@ -1,5 +1,8 @@
 # CAPT Public Release Tranche Implementation Plan
 
+> **Council supersession notice (2026-09-10):** The Model Council portions of this August document are historical. For Council tier/cardinality/runtime semantics, `docs/superpowers/specs/2026-09-10-model-council-alpha-design.md` and its implementation plan supersede the 10-Cohort / 111-Vessel limits. Non-Council sections remain unaffected.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deliver the approved public-release tranche as six independently testable subsystems without weakening CAPT RuntimeService authority.

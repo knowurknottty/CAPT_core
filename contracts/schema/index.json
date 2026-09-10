@@ -19,6 +19,7 @@
     "upgrade.schema.json",
     "replay.schema.json",
     "prompt.schema.json",
+    "council.schema.json",
     "event.schema.json",
     "checkpoint.schema.json"
   ]

@@ -1,0 +1,603 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.capt.dev/council.schema.json",
+  "title": "CAPT Model Council contracts",
+  "x-domain": "council",
+  "$defs": {
+    "CouncilDefinitionRecord": {
+      "title": "CouncilDefinitionRecord",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "councilId",
+        "tier",
+        "vesselsPerCohort",
+        "synthesisPolicy",
+        "challengePolicy",
+        "cohorts"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "council-alpha-1"
+        },
+        "councilId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "tier": {
+          "enum": [
+            "small",
+            "medium",
+            "large",
+            "extreme"
+          ]
+        },
+        "vesselsPerCohort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "synthesisPolicy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "challengePolicy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "cohorts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "cohortId",
+              "providerId",
+              "modelId",
+              "configurationId"
+            ],
+            "properties": {
+              "cohortId": {
+                "$ref": "common.schema.json#/$defs/Identifier"
+              },
+              "providerId": {
+                "$ref": "common.schema.json#/$defs/Identifier"
+              },
+              "modelId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "configurationId": {
+                "$ref": "common.schema.json#/$defs/Identifier"
+              }
+            }
+          },
+          "minItems": 2,
+          "maxItems": 24
+        }
+      }
+    },
+    "CouncilClaimRecord": {
+      "title": "CouncilClaimRecord",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claimId",
+        "claimText",
+        "status",
+        "supportCohorts",
+        "dissentCohorts",
+        "insufficientCohorts",
+        "abstainCohorts",
+        "supportVessels",
+        "dissentVessels",
+        "evidenceIds",
+        "assumptions",
+        "maxSupportConfidence",
+        "maxDissentConfidence",
+        "verificationState"
+      ],
+      "properties": {
+        "claimId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "claimText": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "status": {
+          "enum": [
+            "converged",
+            "disputed",
+            "minority",
+            "insufficient_evidence",
+            "unresolved"
+          ]
+        },
+        "supportCohorts": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/Identifier"
+          },
+          "maxItems": 24
+        },
+        "dissentCohorts": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/Identifier"
+          },
+          "maxItems": 24
+        },
+        "insufficientCohorts": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/Identifier"
+          },
+          "maxItems": 24
+        },
+        "abstainCohorts": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/Identifier"
+          },
+          "maxItems": 24
+        },
+        "supportVessels": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/Identifier"
+          },
+          "maxItems": 24000
+        },
+        "dissentVessels": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/Identifier"
+          },
+          "maxItems": 24000
+        },
+        "evidenceIds": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/Identifier"
+          },
+          "maxItems": 100000
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 8192
+          },
+          "maxItems": 4096
+        },
+        "maxSupportConfidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "maxDissentConfidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "verificationState": {
+          "const": "unverified"
+        }
+      }
+    },
+    "CouncilClaimObservationRecord": {
+      "title": "CouncilClaimObservationRecord",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claimId",
+        "claimText",
+        "cohortId",
+        "vesselId",
+        "stance",
+        "confidence",
+        "evidenceIds",
+        "assumptions",
+        "uncertaintyReason"
+      ],
+      "properties": {
+        "claimId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "claimText": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 65536
+        },
+        "cohortId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "vesselId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "stance": {
+          "enum": [
+            "support",
+            "dissent",
+            "insufficient_evidence",
+            "abstain"
+          ]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "evidenceIds": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/$defs/Identifier"
+          },
+          "maxItems": 4096
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 8192
+          },
+          "maxItems": 4096
+        },
+        "uncertaintyReason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 8192
+        }
+      }
+    },
+    "CouncilAnalysisRecord": {
+      "title": "CouncilAnalysisRecord",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "councilDigest",
+        "cohortCount",
+        "distinctModelSources",
+        "verificationState",
+        "claims",
+        "disputes",
+        "rawObservations"
+      ],
+      "properties": {
+        "councilDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "cohortCount": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 24
+        },
+        "distinctModelSources": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 24
+        },
+        "verificationState": {
+          "const": "unverified"
+        },
+        "claims": {
+          "type": "array",
+          "items": {
+            "title": "CouncilClaimRecord",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "claimId",
+              "claimText",
+              "status",
+              "supportCohorts",
+              "dissentCohorts",
+              "insufficientCohorts",
+              "abstainCohorts",
+              "supportVessels",
+              "dissentVessels",
+              "evidenceIds",
+              "assumptions",
+              "maxSupportConfidence",
+              "maxDissentConfidence",
+              "verificationState"
+            ],
+            "properties": {
+              "claimId": {
+                "$ref": "common.schema.json#/$defs/Identifier"
+              },
+              "claimText": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 65536
+              },
+              "status": {
+                "enum": [
+                  "converged",
+                  "disputed",
+                  "minority",
+                  "insufficient_evidence",
+                  "unresolved"
+                ]
+              },
+              "supportCohorts": {
+                "type": "array",
+                "items": {
+                  "$ref": "common.schema.json#/$defs/Identifier"
+                },
+                "maxItems": 24
+              },
+              "dissentCohorts": {
+                "type": "array",
+                "items": {
+                  "$ref": "common.schema.json#/$defs/Identifier"
+                },
+                "maxItems": 24
+              },
+              "insufficientCohorts": {
+                "type": "array",
+                "items": {
+                  "$ref": "common.schema.json#/$defs/Identifier"
+                },
+                "maxItems": 24
+              },
+              "abstainCohorts": {
+                "type": "array",
+                "items": {
+                  "$ref": "common.schema.json#/$defs/Identifier"
+                },
+                "maxItems": 24
+              },
+              "supportVessels": {
+                "type": "array",
+                "items": {
+                  "$ref": "common.schema.json#/$defs/Identifier"
+                },
+                "maxItems": 24000
+              },
+              "dissentVessels": {
+                "type": "array",
+                "items": {
+                  "$ref": "common.schema.json#/$defs/Identifier"
+                },
+                "maxItems": 24000
+              },
+              "evidenceIds": {
+                "type": "array",
+                "items": {
+                  "$ref": "common.schema.json#/$defs/Identifier"
+                },
+                "maxItems": 100000
+              },
+              "assumptions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "maxItems": 4096
+              },
+              "maxSupportConfidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "maxDissentConfidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "verificationState": {
+                "const": "unverified"
+              }
+            }
+          },
+          "maxItems": 100000
+        },
+        "disputes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "claimId",
+              "supportCohorts",
+              "dissentCohorts"
+            ],
+            "properties": {
+              "claimId": {
+                "$ref": "common.schema.json#/$defs/Identifier"
+              },
+              "supportCohorts": {
+                "type": "array",
+                "items": {
+                  "$ref": "common.schema.json#/$defs/Identifier"
+                },
+                "maxItems": 24
+              },
+              "dissentCohorts": {
+                "type": "array",
+                "items": {
+                  "$ref": "common.schema.json#/$defs/Identifier"
+                },
+                "maxItems": 24
+              }
+            }
+          },
+          "maxItems": 100000
+        },
+        "rawObservations": {
+          "type": "array",
+          "items": {
+            "title": "CouncilClaimObservationRecord",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "claimId",
+              "claimText",
+              "cohortId",
+              "vesselId",
+              "stance",
+              "confidence",
+              "evidenceIds",
+              "assumptions",
+              "uncertaintyReason"
+            ],
+            "properties": {
+              "claimId": {
+                "$ref": "common.schema.json#/$defs/Identifier"
+              },
+              "claimText": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 65536
+              },
+              "cohortId": {
+                "$ref": "common.schema.json#/$defs/Identifier"
+              },
+              "vesselId": {
+                "$ref": "common.schema.json#/$defs/Identifier"
+              },
+              "stance": {
+                "enum": [
+                  "support",
+                  "dissent",
+                  "insufficient_evidence",
+                  "abstain"
+                ]
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "evidenceIds": {
+                "type": "array",
+                "items": {
+                  "$ref": "common.schema.json#/$defs/Identifier"
+                },
+                "maxItems": 4096
+              },
+              "assumptions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 8192
+                },
+                "maxItems": 4096
+              },
+              "uncertaintyReason": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 8192
+              }
+            }
+          },
+          "maxItems": 100000
+        }
+      }
+    },
+    "CouncilPlanState": {
+      "title": "CouncilPlanState",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "councilId",
+        "councilDigest",
+        "definition",
+        "tier",
+        "cohortCount",
+        "vesselsPerCohort",
+        "logicalVesselCount",
+        "launchAuthorization",
+        "admittedAt",
+        "verificationState",
+        "analysisHistory"
+      ],
+      "properties": {
+        "councilId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "councilDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "definition": {
+          "$ref": "council.schema.json#/$defs/CouncilDefinitionRecord"
+        },
+        "tier": {
+          "enum": [
+            "small",
+            "medium",
+            "large",
+            "extreme"
+          ]
+        },
+        "cohortCount": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 24
+        },
+        "vesselsPerCohort": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "logicalVesselCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 24000
+        },
+        "launchAuthorization": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "extremeAck",
+            "customScaleAck",
+            "maximumSpendUsd"
+          ],
+          "properties": {
+            "extremeAck": {
+              "type": "boolean"
+            },
+            "customScaleAck": {
+              "type": "boolean"
+            },
+            "maximumSpendUsd": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9]+(?:\\.[0-9]+)?$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "admittedAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "verificationState": {
+          "const": "unverified"
+        },
+        "analysisHistory": {
+          "type": "array",
+          "items": {
+            "$ref": "council.schema.json#/$defs/CouncilAnalysisRecord"
+          },
+          "maxItems": 4096
+        }
+      }
+    }
+  }
+}
