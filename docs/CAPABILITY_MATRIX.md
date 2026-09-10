@@ -49,7 +49,7 @@ Legend:
 | Secure Intake / Quarantine | DESIGN ON MAIN | approved design/plans merged via #128; implementation not claimed |
 | Projects / composer capability palette | DESIGN ON MAIN | implementation not claimed |
 | Search / Deep Research governance | DESIGN ON MAIN | implementation not claimed |
-| Cohort Council public product layer | DESIGN ON MAIN | not implied by merged low-level Cohorts |
+| Model Council alpha core | ALPHA SOURCE PROVEN ON `feature/model-council-alpha` | tiers/logical blast, launch interlocks, epistemic analysis, durable replay/checkpoint state, and Council Chamber projection; live provider/native GUI/release proof not claimed |
 | unrestricted autonomous repo mutation | NO | explicitly not claimed |
 | Windows support | UNVERIFIED | separate platform proof required |
 

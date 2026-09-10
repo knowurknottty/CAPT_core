@@ -13,6 +13,19 @@ from ..errors import AuthorityViolation, IntegrityViolation
 
 class CouncilAggregate(object):
     KIND = "council"
+    OWNED_FIELDS = frozenset({
+        "council.councilDigest",
+        "council.definition",
+        "council.tier",
+        "council.cohortCount",
+        "council.vesselsPerCohort",
+        "council.logicalVesselCount",
+        "council.launchAuthorization",
+        "council.admittedAt",
+        "council.verificationState",
+        "council.analysisHistory",
+    })
+    REFERENCE_FIELDS = frozenset({"councilId"})
 
     @staticmethod
     def stream_id(council_id: str) -> str:

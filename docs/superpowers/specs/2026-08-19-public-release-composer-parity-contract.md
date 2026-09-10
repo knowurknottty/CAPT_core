@@ -1,5 +1,8 @@
 # CAPT Public Release Composer Parity Contract
 
+> **Council supersession notice (2026-09-10):** The Model Council portions of this August document are historical. For Council tier/cardinality/runtime semantics, `docs/superpowers/specs/2026-09-10-model-council-alpha-design.md` and its implementation plan supersede the 10-Cohort / 111-Vessel limits. Non-Council sections remain unaffected.
+
+
 Status: `NORMATIVE_COMPANION_TO_PUBLIC_RELEASE_DESIGN`
 
 Parent design:

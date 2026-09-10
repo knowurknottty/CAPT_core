@@ -165,10 +165,11 @@ Still implementation-gated unless later source proves otherwise:
 - Projects and project-context eligibility;
 - human-first results layer;
 - composer capability palette;
-- Search / Deep Research governed surfaces;
-- Cohort Council public product layer.
+- Search / Deep Research governed surfaces.
 
-Merged low-level Cohorts do not by themselves equal the planned Council product.
+**Model Council alpha:** `feature/model-council-alpha` supersedes the August 10-Cohort / 111-Vessel Council limits with owner-approved Small (2x3), Medium (4x6), Large (12x9), and Extreme (24x18-1000) tiers. The branch implements deterministic logical Vessel expansion, digest-bound launch interlocks, dissent-preserving claim analysis, durable Council admission/replay/checkpoint state, and a read-only Council Chamber projection. It does **not** by itself prove live provider execution, native GUI integration, paid-provider behavior, or release authorization.
+
+Merged low-level Cohorts remain distinct from the higher-level Model Council protocol.
 
 ---
 
