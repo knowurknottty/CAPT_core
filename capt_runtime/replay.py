@@ -17,6 +17,7 @@ from .aggregates import (
     CapabilityAggregate,
     ClaimAggregate,
     CohortAggregate,
+    CouncilAggregate,
     DriverRunAggregate,
     HumanApprovalAggregate,
     MissionAggregate,
@@ -89,6 +90,7 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         "PromptProposalCreated",
         "ArtifactPromotionPrepared",
         "CohortCreated",
+        "CouncilAdmitted",
         "ReplayForkCreated",
     )
     if event_type not in _CREATION_EVENTS and current is None:
@@ -177,6 +179,10 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         )
     elif event_type == "CohortCreated":
         nxt = CohortAggregate.replay_create(payload["snapshot"])
+    elif event_type == "CouncilAdmitted":
+        nxt = CouncilAggregate.replay_create(payload["plan"])
+    elif event_type == "CouncilAnalysisRecorded":
+        nxt = CouncilAggregate.replay_record_analysis(existing(), payload["analysis"])
     elif event_type == "CohortSnapshotPersisted":
         nxt = CohortAggregate.replay_replace(existing(), payload["snapshot"])
     elif event_type == "CohortSteered":
@@ -291,6 +297,7 @@ def checkpoint_replay(store: EventStore, manifest: Dict[str, Any]) -> ReplayStat
         "promptProposalVersions",
         "artifactPromotionVersions",
         "cohortVersions",
+        "councilVersions",
         "replayForkVersions",
     )
     for field in fields:

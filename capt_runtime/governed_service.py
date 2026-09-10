@@ -11,9 +11,14 @@ from . import commands
 from .aggregates.artifact_promotion import ArtifactPromotionAggregate
 from .aggregates.claim_driver import ClaimAggregate
 from .aggregates.cohort_state import CohortAggregate
+from .aggregates.council_state import CouncilAggregate
 from .artifact_workspace import atomic_adopt_verified_artifact, file_digest
 from .authority import require_authority
 from .contracts import digest, require
+from .council import (
+    CouncilAnalysis, CouncilDefinition, CouncilLaunchAuthorization, authorize_launch,
+    council_analysis_to_record, council_definition_to_record,
+)
 from .errors import AuthorityViolation, IdempotencyConflict, IntegrityViolation
 from .services import RuntimeService
 from .store import AppendRequest
@@ -327,3 +332,79 @@ class GovernedRuntimeService(RuntimeService):
             metadata,
         )
         return {**result, "cohort": state, "evidence": evidence, "claim": claim_state}
+
+    def admit_council_plan(
+        self,
+        definition: CouncilDefinition,
+        authorization: CouncilLaunchAuthorization,
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Admit one immutable Council topology without dispatching providers."""
+        require_authority("admit_council_plan", metadata["actor"]["kind"])
+        stream = CouncilAggregate.stream_id(definition.council_id)
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            offered = metadata.get("operationFingerprint")
+            if offered and prior["operation_fingerprint"] != offered:
+                raise IdempotencyConflict("council admission idempotency conflict")
+            return {"status": "idempotent", "council": self.store.load_state(stream)}
+        if self.store.aggregate_version(stream) != 0:
+            raise AuthorityViolation("council identity already exists")
+
+        preview = authorize_launch(definition, authorization)
+        state = CouncilAggregate.create({
+            "councilId": definition.council_id,
+            "councilDigest": preview.council_digest,
+            "definition": council_definition_to_record(definition),
+            "launchAuthorization": {
+                "extremeAck": bool(authorization.extreme_ack),
+                "customScaleAck": bool(authorization.custom_scale_ack),
+                "maximumSpendUsd": str(authorization.maximum_spend_usd)
+                if authorization.maximum_spend_usd is not None else None,
+            },
+            "admittedAt": metadata["issuedAt"],
+        })
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-council",
+            stream_id=stream,
+            event_type="CouncilAdmitted",
+            payload={"eventType": "CouncilAdmitted", "plan": state},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+        )
+        result = self._commit(
+            [AppendRequest(stream, CouncilAggregate.KIND, 0, event, state)], metadata
+        )
+        return {**result, "council": state}
+
+    def record_council_analysis(
+        self,
+        council_id: str,
+        analysis: CouncilAnalysis,
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Append structured Council cognition; never create Verification authority."""
+        require_authority("record_council_analysis", metadata["actor"]["kind"])
+        stream = CouncilAggregate.stream_id(council_id)
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            offered = metadata.get("operationFingerprint")
+            if offered and prior["operation_fingerprint"] != offered:
+                raise IdempotencyConflict("council analysis idempotency conflict")
+            return {"status": "idempotent", "council": self.store.load_state(stream)}
+        expected = self.store.aggregate_version(stream)
+        current = self.store.require_state(stream)
+        record = council_analysis_to_record(analysis)
+        state = CouncilAggregate.record_analysis(current, record)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-analysis",
+            stream_id=stream,
+            event_type="CouncilAnalysisRecorded",
+            payload={"eventType": "CouncilAnalysisRecorded", "analysis": record},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+        )
+        result = self._commit(
+            [AppendRequest(stream, CouncilAggregate.KIND, expected, event, state)], metadata
+        )
+        return {**result, "council": state}

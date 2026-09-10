@@ -42,6 +42,8 @@
         "CohortCreated",
         "CohortSnapshotPersisted",
         "CohortSteered",
+        "CouncilAdmitted",
+        "CouncilAnalysisRecorded",
         "ReplayForkCreated",
         "ToolExecutionPrepared",
         "ToolExecutionAdmitted",
@@ -686,6 +688,42 @@
             },
             "steer": {
               "$ref": "upgrade.schema.json#/$defs/CohortSteer"
+            }
+          }
+        },
+        {
+          "title": "CouncilAdmittedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "plan"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "CouncilAdmitted"
+            },
+            "plan": {
+              "$ref": "council.schema.json#/$defs/CouncilPlanState"
+            }
+          }
+        },
+        {
+          "title": "CouncilAnalysisRecordedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "analysis"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "CouncilAnalysisRecorded"
+            },
+            "analysis": {
+              "$ref": "council.schema.json#/$defs/CouncilAnalysisRecord"
             }
           }
         },

@@ -447,3 +447,74 @@ def select_challenges(analysis: CouncilAnalysis) -> tuple[CouncilChallenge, ...]
                 evidence_ids=claim.evidence_ids,
             ))
     return tuple(challenges)
+
+def council_definition_to_record(definition: CouncilDefinition) -> dict[str, object]:
+    """Return the canonical durable Council definition record."""
+    return _canonical_material(definition)
+
+
+def council_definition_from_record(record: Mapping[str, object]) -> CouncilDefinition:
+    cohorts = tuple(
+        CohortDefinition(
+            cohort_id=str(item["cohortId"]),
+            provider_id=str(item["providerId"]),
+            model_id=str(item["modelId"]),
+            configuration_id=str(item.get("configurationId") or "default"),
+        )
+        for item in record.get("cohorts", ())  # type: ignore[union-attr]
+    )
+    definition = CouncilDefinition(
+        council_id=str(record["councilId"]),
+        tier=CouncilTier(str(record["tier"])),
+        cohorts=cohorts,
+        vessels_per_cohort=int(record["vesselsPerCohort"]),
+        synthesis_policy=str(record.get("synthesisPolicy") or DEFAULT_SYNTHESIS_POLICY),
+        challenge_policy=str(record.get("challengePolicy") or DEFAULT_CHALLENGE_POLICY),
+    )
+    validate_council(definition)
+    return definition
+
+def council_analysis_to_record(analysis: CouncilAnalysis) -> dict[str, object]:
+    return {
+        "councilDigest": analysis.council_digest,
+        "cohortCount": analysis.cohort_count,
+        "distinctModelSources": analysis.distinct_model_sources,
+        "verificationState": "unverified",
+        "claims": [
+            {
+                "claimId": claim.claim_id, "claimText": claim.claim_text,
+                "status": claim.status.value,
+                "supportCohorts": list(claim.support_cohorts),
+                "dissentCohorts": list(claim.dissent_cohorts),
+                "insufficientCohorts": list(claim.insufficient_cohorts),
+                "abstainCohorts": list(claim.abstain_cohorts),
+                "supportVessels": list(claim.support_vessels),
+                "dissentVessels": list(claim.dissent_vessels),
+                "evidenceIds": list(claim.evidence_ids),
+                "assumptions": list(claim.assumptions),
+                "maxSupportConfidence": claim.max_support_confidence,
+                "maxDissentConfidence": claim.max_dissent_confidence,
+                "verificationState": "unverified",
+            }
+            for claim in analysis.claims
+        ],
+        "disputes": [
+            {
+                "claimId": dispute.claim_id,
+                "supportCohorts": list(dispute.support_cohorts),
+                "dissentCohorts": list(dispute.dissent_cohorts),
+            }
+            for dispute in analysis.disputes
+        ],
+        "rawObservations": [
+            {
+                "claimId": obs.claim_id, "claimText": obs.claim_text,
+                "cohortId": obs.cohort_id, "vesselId": obs.vessel_id,
+                "stance": obs.stance.value, "confidence": float(obs.confidence),
+                "evidenceIds": list(obs.evidence_ids),
+                "assumptions": list(obs.assumptions),
+                "uncertaintyReason": obs.uncertainty_reason,
+            }
+            for obs in analysis.raw_observations
+        ],
+    }

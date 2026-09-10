@@ -35,6 +35,7 @@ _KIND_TO_FIELD = {
     "prompt_proposal": "promptProposalVersions",
     "artifact_promotion": "artifactPromotionVersions",
     "cohort": "cohortVersions",
+    "council": "councilVersions",
     "replay_fork": "replayForkVersions",
     "tool_execution": "toolExecutionVersions",
 }
@@ -131,6 +132,9 @@ def create_checkpoint(
         ),
         "cohortVersions": sorted(
             versions["cohortVersions"], key=lambda e: e["streamId"]
+        ),
+        "councilVersions": sorted(
+            versions["councilVersions"], key=lambda e: e["streamId"]
         ),
         "replayForkVersions": sorted(
             versions["replayForkVersions"], key=lambda e: e["streamId"]

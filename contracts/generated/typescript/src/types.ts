@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:c489bcc9bda1e9186cd0c72e7ce328e6294d7cedf730d9074424834f8f720493
+// source digest:  sha256:9daf69b76251217a5ba8f42f53324be5bf86464122a37d99696a82233193595c
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -236,6 +236,7 @@ export interface CheckpointManifest {
   readonly taskVersions: readonly StreamVersionEntry[];
   readonly artifactPromotionVersions?: readonly StreamVersionEntry[];
   readonly cohortVersions?: readonly StreamVersionEntry[];
+  readonly councilVersions?: readonly StreamVersionEntry[];
   readonly humanApprovalVersions?: readonly StreamVersionEntry[];
   readonly promptProposalVersions?: readonly StreamVersionEntry[];
   readonly replayForkVersions?: readonly StreamVersionEntry[];
@@ -854,6 +855,74 @@ export interface WorkspaceLease {
   readonly workspaceId: Identifier;
 }
 
+/** CouncilAnalysisRecord */
+export interface CouncilAnalysisRecord {
+  readonly claims: readonly Readonly<Record<string, unknown>>[];
+  readonly cohortCount: number;
+  readonly councilDigest: Digest;
+  readonly disputes: readonly Readonly<Record<string, unknown>>[];
+  readonly distinctModelSources: number;
+  readonly rawObservations: readonly Readonly<Record<string, unknown>>[];
+  readonly verificationState: unknown;
+}
+
+/** CouncilClaimObservationRecord */
+export interface CouncilClaimObservationRecord {
+  readonly assumptions: readonly string[];
+  readonly claimId: Identifier;
+  readonly claimText: string;
+  readonly cohortId: Identifier;
+  readonly confidence: number;
+  readonly evidenceIds: readonly Identifier[];
+  readonly stance: unknown;
+  readonly uncertaintyReason: string | null;
+  readonly vesselId: Identifier;
+}
+
+/** CouncilClaimRecord */
+export interface CouncilClaimRecord {
+  readonly abstainCohorts: readonly Identifier[];
+  readonly assumptions: readonly string[];
+  readonly claimId: Identifier;
+  readonly claimText: string;
+  readonly dissentCohorts: readonly Identifier[];
+  readonly dissentVessels: readonly Identifier[];
+  readonly evidenceIds: readonly Identifier[];
+  readonly insufficientCohorts: readonly Identifier[];
+  readonly maxDissentConfidence: number;
+  readonly maxSupportConfidence: number;
+  readonly status: unknown;
+  readonly supportCohorts: readonly Identifier[];
+  readonly supportVessels: readonly Identifier[];
+  readonly verificationState: unknown;
+}
+
+/** CouncilDefinitionRecord */
+export interface CouncilDefinitionRecord {
+  readonly challengePolicy: string;
+  readonly cohorts: readonly Readonly<Record<string, unknown>>[];
+  readonly councilId: Identifier;
+  readonly schemaVersion: unknown;
+  readonly synthesisPolicy: string;
+  readonly tier: unknown;
+  readonly vesselsPerCohort: number;
+}
+
+/** CouncilPlanState */
+export interface CouncilPlanState {
+  readonly admittedAt: Timestamp;
+  readonly analysisHistory: readonly CouncilAnalysisRecord[];
+  readonly cohortCount: number;
+  readonly councilDigest: Digest;
+  readonly councilId: Identifier;
+  readonly definition: CouncilDefinitionRecord;
+  readonly launchAuthorization: Readonly<Record<string, unknown>>;
+  readonly logicalVesselCount: number;
+  readonly tier: unknown;
+  readonly verificationState: unknown;
+  readonly vesselsPerCohort: number;
+}
+
 /** Digest-bound authored skill material selected by CAPT from a pinned external or managed local pack. Context-only; never a grant, policy, claim, proof, or executable Foundry skill. */
 export interface AuthoredSkillContext {
   readonly manifestDigest: string;
@@ -1249,6 +1318,18 @@ export interface CohortSteeredPayload {
   readonly steer: CohortSteer;
 }
 
+/** CouncilAdmittedPayload */
+export interface CouncilAdmittedPayload {
+  readonly eventType: "CouncilAdmitted";
+  readonly plan: CouncilPlanState;
+}
+
+/** CouncilAnalysisRecordedPayload */
+export interface CouncilAnalysisRecordedPayload {
+  readonly analysis: CouncilAnalysisRecord;
+  readonly eventType: "CouncilAnalysisRecorded";
+}
+
 /** DriverRunCreatedPayload */
 export interface DriverRunCreatedPayload {
   readonly driverRun: DriverRun;
@@ -1316,6 +1397,8 @@ export type EventPayload =
   | CohortCreatedPayload
   | CohortSnapshotPersistedPayload
   | CohortSteeredPayload
+  | CouncilAdmittedPayload
+  | CouncilAnalysisRecordedPayload
   | ReplayForkCreatedPayload
   | ToolExecutionPreparedPayload
   | ToolExecutionAdmittedPayload
@@ -1328,7 +1411,7 @@ export type EventPayload =
   | PromptProposalCancelledPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "PromptProposalCreated" | "PromptProposalRevised" | "PromptProposalCancelled" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "PromptProposalCreated" | "PromptProposalRevised" | "PromptProposalCancelled" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "CouncilAdmitted" | "CouncilAnalysisRecorded" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -1363,6 +1446,8 @@ export const EventTypeValues = [
   "CohortCreated",
   "CohortSnapshotPersisted",
   "CohortSteered",
+  "CouncilAdmitted",
+  "CouncilAnalysisRecorded",
   "ReplayForkCreated",
   "ToolExecutionPrepared",
   "ToolExecutionAdmitted",
