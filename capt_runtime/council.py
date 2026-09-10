@@ -269,3 +269,181 @@ class VesselTiming:
 
     def complete(self, timestamp: str) -> "VesselTiming":
         return self._transition("completed_at", timestamp, self.provider_started_at)
+
+
+class ClaimStance(str, Enum):
+    SUPPORT = "support"
+    DISSENT = "dissent"
+    INSUFFICIENT = "insufficient_evidence"
+    ABSTAIN = "abstain"
+
+
+class ClaimStatus(str, Enum):
+    CONVERGED = "converged"
+    DISPUTED = "disputed"
+    MINORITY = "minority"
+    INSUFFICIENT = "insufficient_evidence"
+    UNRESOLVED = "unresolved"
+
+
+@dataclass(frozen=True)
+class ClaimObservation:
+    claim_id: str
+    claim_text: str
+    cohort_id: str
+    vessel_id: str
+    stance: ClaimStance
+    confidence: float
+    evidence_ids: tuple[str, ...] = ()
+    assumptions: tuple[str, ...] = ()
+    uncertainty_reason: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.claim_id.strip() or not self.claim_text.strip():
+            raise CouncilValidationError("CLAIM_ID_AND_TEXT_REQUIRED")
+        if not self.cohort_id.strip() or not self.vessel_id.strip():
+            raise CouncilValidationError("OBSERVATION_SOURCE_REQUIRED")
+        if not 0.0 <= float(self.confidence) <= 1.0:
+            raise CouncilValidationError("CLAIM_CONFIDENCE_RANGE")
+
+@dataclass(frozen=True)
+class CouncilClaim:
+    claim_id: str
+    claim_text: str
+    status: ClaimStatus
+    support_cohorts: tuple[str, ...]
+    dissent_cohorts: tuple[str, ...]
+    insufficient_cohorts: tuple[str, ...]
+    abstain_cohorts: tuple[str, ...]
+    support_vessels: tuple[str, ...]
+    dissent_vessels: tuple[str, ...]
+    evidence_ids: tuple[str, ...]
+    assumptions: tuple[str, ...]
+    max_support_confidence: float
+    max_dissent_confidence: float
+    verification_state: str = "unverified"
+
+
+@dataclass(frozen=True)
+class CouncilDispute:
+    claim_id: str
+    support_cohorts: tuple[str, ...]
+    dissent_cohorts: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CouncilAnalysis:
+    council_digest: str
+    cohort_count: int
+    distinct_model_sources: int
+    claims: tuple[CouncilClaim, ...]
+    disputes: tuple[CouncilDispute, ...]
+    raw_observations: tuple[ClaimObservation, ...]
+
+
+@dataclass(frozen=True)
+class CouncilChallenge:
+    claim_id: str
+    reason: str
+    support_cohorts: tuple[str, ...]
+    dissent_cohorts: tuple[str, ...]
+    evidence_ids: tuple[str, ...]
+def _claim_status(
+    support: tuple[str, ...], dissent: tuple[str, ...],
+    insufficient: tuple[str, ...], abstain: tuple[str, ...],
+) -> ClaimStatus:
+    if support and dissent:
+        return ClaimStatus.DISPUTED
+    if support:
+        non_support = len(insufficient) + len(abstain)
+        if non_support > len(support):
+            return ClaimStatus.MINORITY
+        return ClaimStatus.CONVERGED
+    if insufficient and not dissent:
+        return ClaimStatus.INSUFFICIENT
+    return ClaimStatus.UNRESOLVED
+
+
+def analyze_claims(
+    definition: CouncilDefinition, observations: Iterable[ClaimObservation]
+) -> CouncilAnalysis:
+    validate_council(definition)
+    raw = tuple(observations)
+    vessel_map = {v.vessel_id: v for v in build_logical_blast(definition)}
+    grouped: dict[str, list[ClaimObservation]] = {}
+    for observation in raw:
+        intent = vessel_map.get(observation.vessel_id)
+        if intent is None:
+            raise CouncilValidationError("UNKNOWN_VESSEL")
+        if intent.cohort_id != observation.cohort_id:
+            raise CouncilValidationError("VESSEL_COHORT_MISMATCH")
+        grouped.setdefault(observation.claim_id, []).append(observation)
+
+    claims: list[CouncilClaim] = []
+    disputes: list[CouncilDispute] = []
+    for claim_id in sorted(grouped):
+        values = grouped[claim_id]
+        texts = {value.claim_text for value in values}
+        if len(texts) != 1:
+            raise CouncilValidationError("CLAIM_TEXT_MISMATCH")
+        support_cohorts = tuple(sorted({v.cohort_id for v in values if v.stance == ClaimStance.SUPPORT}))
+        dissent_cohorts = tuple(sorted({v.cohort_id for v in values if v.stance == ClaimStance.DISSENT}))
+        insufficient_cohorts = tuple(sorted({v.cohort_id for v in values if v.stance == ClaimStance.INSUFFICIENT}))
+        abstain_cohorts = tuple(sorted({v.cohort_id for v in values if v.stance == ClaimStance.ABSTAIN}))
+        support_vessels = tuple(sorted({v.vessel_id for v in values if v.stance == ClaimStance.SUPPORT}))
+        dissent_vessels = tuple(sorted({v.vessel_id for v in values if v.stance == ClaimStance.DISSENT}))
+        evidence_ids = tuple(sorted({ev for v in values for ev in v.evidence_ids}))
+        assumptions = tuple(sorted({a for v in values for a in v.assumptions}))
+        status = _claim_status(support_cohorts, dissent_cohorts, insufficient_cohorts, abstain_cohorts)
+        claim = CouncilClaim(
+            claim_id=claim_id, claim_text=values[0].claim_text, status=status,
+            support_cohorts=support_cohorts, dissent_cohorts=dissent_cohorts,
+            insufficient_cohorts=insufficient_cohorts, abstain_cohorts=abstain_cohorts,
+            support_vessels=support_vessels, dissent_vessels=dissent_vessels,
+            evidence_ids=evidence_ids, assumptions=assumptions,
+            max_support_confidence=max((float(v.confidence) for v in values if v.stance == ClaimStance.SUPPORT), default=0.0),
+            max_dissent_confidence=max((float(v.confidence) for v in values if v.stance == ClaimStance.DISSENT), default=0.0),
+        )
+        claims.append(claim)
+        if support_cohorts and dissent_cohorts:
+            disputes.append(CouncilDispute(claim_id, support_cohorts, dissent_cohorts))
+
+    distinct_sources = len({
+        (cohort.provider_id, cohort.model_id, cohort.configuration_id)
+        for cohort in definition.cohorts
+    })
+    return CouncilAnalysis(
+        council_digest=council_digest(definition),
+        cohort_count=len(definition.cohorts),
+        distinct_model_sources=distinct_sources,
+        claims=tuple(claims), disputes=tuple(disputes), raw_observations=raw,
+    )
+
+
+def select_challenges(analysis: CouncilAnalysis) -> tuple[CouncilChallenge, ...]:
+    challenges: list[CouncilChallenge] = []
+    for claim in analysis.claims:
+        reason: str | None = None
+        if claim.status == ClaimStatus.DISPUTED:
+            reason = "material_dispute"
+        elif claim.status == ClaimStatus.MINORITY and max(
+            claim.max_support_confidence, claim.max_dissent_confidence
+        ) >= 0.90:
+            reason = "high_confidence_minority"
+        elif (
+            claim.status == ClaimStatus.CONVERGED
+            and claim.support_cohorts
+            and not claim.dissent_cohorts
+            and not claim.insufficient_cohorts
+            and not claim.abstain_cohorts
+            and not claim.evidence_ids
+        ):
+            reason = "unsupported_unanimity"
+        if reason is not None:
+            challenges.append(CouncilChallenge(
+                claim_id=claim.claim_id, reason=reason,
+                support_cohorts=claim.support_cohorts,
+                dissent_cohorts=claim.dissent_cohorts,
+                evidence_ids=claim.evidence_ids,
+            ))
+    return tuple(challenges)
