@@ -38,6 +38,20 @@ def _directory(value: Any, *, label: str) -> Path:
     return path
 
 
+def canonical_execution_target_root(value: Any) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise AuthorityViolation("MODEL_TARGET_ROOT_MISSING")
+    try:
+        path = Path(value).expanduser().resolve(strict=True)
+    except FileNotFoundError as exc:
+        raise AuthorityViolation("MODEL_TARGET_ROOT_NOT_FOUND") from exc
+    except (RuntimeError, OSError) as exc:
+        raise AuthorityViolation("MODEL_TARGET_ROOT_UNAVAILABLE") from exc
+    if not path.is_dir():
+        raise AuthorityViolation("MODEL_TARGET_ROOT_NOT_DIRECTORY")
+    return str(path)
+
+
 def _bool(value: Any, name: str) -> bool:
     if not isinstance(value, bool):
         raise AuthorityViolation(f"AUTHORITY_FLAG_MUST_BE_BOOLEAN:{name}")

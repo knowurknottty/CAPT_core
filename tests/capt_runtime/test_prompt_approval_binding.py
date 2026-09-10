@@ -92,13 +92,15 @@ def test_unapproved_and_stale_or_wrong_digest_receipts_fail_closed(tmp_path):
 def test_runtime_planner_builds_prompt_approval_receipt_for_exact_model_assembly(tmp_path):
     store = EventStore(str(tmp_path / "ledger.db"))
     svc = RuntimeService(store)
+    target = tmp_path / "project"
+    target.mkdir()
     intent = {
         "requestId": "r-model-1",
         "missionId": "m-model-1",
         "taskId": "t-model-1",
         "driverRunId": "dr-model-1",
         "objective": "Inspect the repository and report concrete findings.",
-        "targetRoot": "/tmp/project",
+        "targetRoot": str(target),
         "provider": "ollama",
         "model": "qwen",
         "responseMode": "SPOCK",

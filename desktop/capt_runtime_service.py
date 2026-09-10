@@ -55,6 +55,7 @@ from capt_runtime.composition import RuntimeComposition, create_runtime
 from capt_runtime.provider_endpoint import credential_required
 from capt_runtime.model_authority import (
     assert_provider_network_allowed,
+    canonical_execution_target_root,
     normalize_model_authority,
     revalidate_normalized_model_authority,
 )
@@ -797,7 +798,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
         {
             "provider": "ollama",
             "model": "qwen3.5-defiant-fable:latest",
-            "targetRoot": str(Path.home() / "CAPT_core"),
+            "targetRoot": "",
             "promptIntelligence": "AUTO",
         },
     )
@@ -868,9 +869,10 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 """Validate and freeze every deterministic dispatch input."""
                 payload = command.get("payload", {})
                 objective = payload.get("objective")
-                target_root = payload.get("targetRoot")
-                if not objective or not target_root:
+                raw_target_root = payload.get("targetRoot")
+                if not objective or not raw_target_root:
                     raise ValueError("MODEL_TASK_OBJECTIVE_OR_TARGET_MISSING")
+                target_root = canonical_execution_target_root(raw_target_root)
                 # All deterministic execution inputs are frozen before CAPT consumes
                 # the one-use approval. Authored skill bytes are independently
                 # re-verified here, then carried in the immutable prepared object;

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 
@@ -42,7 +43,7 @@ def approval_intent(**overrides):
         "taskId": "t-security-1",
         "driverRunId": "dr-security-1",
         "objective": "Inspect the repository and report bounded findings.",
-        "targetRoot": "/tmp/security-project",
+        "targetRoot": "/tmp",
         "provider": "",
         "model": "hermes",
         "responseMode": "SPOCK",
@@ -127,7 +128,7 @@ def test_approval_digest_binds_every_execution_relevant_operator_input(tmp_path)
         "model": "qwen3.5:9b",
         "requestedContextBudget": 96_000,
         "humanVerificationRequired": False,
-        "targetRoot": "/tmp/other-project",
+        "targetRoot": "/",
         "missionId": "m-security-2",
         "taskId": "t-security-2",
         "driverRunId": "dr-security-2",
@@ -156,7 +157,7 @@ def test_planner_persists_one_use_execution_binding_and_exact_dispatch_digest(tm
         assert binding["missionId"] == "m-security-1"
         assert binding["taskId"] == "t-security-1"
         assert binding["driverRunId"] == "dr-security-1"
-        assert binding["targetRoot"] == "/tmp/security-project"
+        assert binding["targetRoot"] == str(Path("/tmp").resolve())
         assert binding["executable"] == "/opt/hermes/bin/hermes"
         assert binding["dispatchPromptDigest"] == result["dispatchPromptDigest"]
         assert result["dispatchPromptDigest"].startswith("sha256:")
@@ -212,7 +213,7 @@ def test_approved_request_is_rejected_after_expiry_at_use_time(tmp_path):
                 mission_id="m-security-1",
                 task_id="t-security-1",
                 driver_run_id="dr-security-1",
-                resource="/tmp/security-project",
+                resource=str(Path("/tmp").resolve()),
                 use_id="run-expired",
                 now="2026-08-17T00:00:00Z",
                 metadata=meta(
@@ -308,7 +309,7 @@ def test_authoritative_admission_binds_ids_and_consumes_once(tmp_path):
                 mission_id="m-wrong",
                 task_id="t-security-1",
                 driver_run_id="dr-security-1",
-                resource="/tmp/security-project",
+                resource=str(Path("/tmp").resolve()),
                 use_id="run-use-wrong",
                 now="2026-08-16T00:00:02Z",
                 metadata=meta(
@@ -326,7 +327,7 @@ def test_authoritative_admission_binds_ids_and_consumes_once(tmp_path):
             mission_id="m-security-1",
             task_id="t-security-1",
             driver_run_id="dr-security-1",
-            resource="/tmp/security-project",
+            resource=str(Path("/tmp").resolve()),
             use_id="run-use-1",
             now="2026-08-16T00:00:02Z",
             metadata=meta(
@@ -347,7 +348,7 @@ def test_authoritative_admission_binds_ids_and_consumes_once(tmp_path):
             mission_id="m-security-1",
             task_id="t-security-1",
             driver_run_id="dr-security-1",
-            resource="/tmp/security-project",
+            resource=str(Path("/tmp").resolve()),
             use_id="run-use-1",
             now="2026-08-16T00:00:03Z",
             metadata=meta(
@@ -368,7 +369,7 @@ def test_authoritative_admission_binds_ids_and_consumes_once(tmp_path):
                 mission_id="m-security-1",
                 task_id="t-security-1",
                 driver_run_id="dr-security-1",
-                resource="/tmp/security-project",
+                resource=str(Path("/tmp").resolve()),
                 use_id="run-use-2",
                 now="2026-08-16T00:00:04Z",
                 metadata=meta(

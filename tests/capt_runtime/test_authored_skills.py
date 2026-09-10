@@ -199,12 +199,14 @@ def test_prompt_approval_binds_verified_authored_skill_provenance(tmp_path, monk
     from capt_runtime.store import EventStore
 
     root, lock = _make_pack(tmp_path)
+    target = tmp_path / "project"
+    target.mkdir()
     monkeypatch.setattr(authored, "load_capt_skills_lock", lambda _path=None: lock)
     store = EventStore(str(tmp_path / "approval-skill.db"))
     try:
         result = request_model_prompt_approval(
             RuntimeService(store),
-            {"objective": "Review UI", "targetRoot": "/tmp/project",
+            {"objective": "Review UI", "targetRoot": str(target),
              "provider": "local-openai", "model": "qwen",
              "skillPackRoot": str(root), "skillNames": ["inversion-interface-craft"]},
             _approval_meta("skill"),
@@ -226,6 +228,8 @@ def test_prompt_approval_skill_tamper_fails_before_authority_mutation(tmp_path, 
     from capt_runtime.store import EventStore
 
     root, lock = _make_pack(tmp_path)
+    target = tmp_path / "project"
+    target.mkdir()
     monkeypatch.setattr(authored, "load_capt_skills_lock", lambda _path=None: lock)
     skill_file = root / lock["skills"][0]["path"]
     skill_file.write_text(skill_file.read_text() + "\nTAMPER_BEFORE_APPROVAL\n")
@@ -234,7 +238,7 @@ def test_prompt_approval_skill_tamper_fails_before_authority_mutation(tmp_path, 
         with pytest.raises(AuthoredSkillPackViolation):
             request_model_prompt_approval(
                 RuntimeService(store),
-                {"objective": "Review UI", "targetRoot": "/tmp/project",
+                {"objective": "Review UI", "targetRoot": str(target),
                  "skillPackRoot": str(root), "skillNames": ["inversion-interface-craft"]},
                 _approval_meta("tamper"),
             )
@@ -260,12 +264,14 @@ def test_prompt_approval_auto_selects_managed_default_pack(tmp_path):
             f"---\nname: {name}\ndescription: >\n  {desc}\nversion: 1.0.0\n---\n\n# {name}\n"
         )
     import_managed_skill_pack(source, tmp_path / "skills" / "ultimate", pack_name="ultimate")
+    target = tmp_path / "project"
+    target.mkdir()
     store = EventStore(str(tmp_path / "approval-managed.db"))
     try:
         result = request_model_prompt_approval(
             RuntimeService(store),
             {"objective": "Proceed and ship this release candidate once mergeable",
-             "targetRoot": "/tmp/project", "provider": "local-openai", "model": "qwen"},
+             "targetRoot": str(target), "provider": "local-openai", "model": "qwen"},
             _approval_meta("managed-auto"),
         )
         assert result["skillNames"][:2] == ["inversion-execute-now", "inversion-release-closure"]

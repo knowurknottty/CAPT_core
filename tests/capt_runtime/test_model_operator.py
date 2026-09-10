@@ -12,6 +12,7 @@ from capt_runtime.composition import create_runtime
 from capt_runtime.drivers.hermes import DESCRIPTOR as HERMES_DESCRIPTOR
 from capt_runtime.drivers.hermes import HermesDriver, build_prompt
 from capt_runtime.prepared_execution import PreparedApprovedModelExecution, freeze
+from capt_runtime.model_authority import canonical_execution_target_root
 from capt_runtime.task_resolver import TaskResolver
 from desktop.m1_command_service import RuntimeCommandService
 
@@ -91,7 +92,7 @@ class _PreparedRunner:
             prompt_assembly_digest=approval["promptAssemblyDigest"],
             dispatch_prompt_digest="sha256:" + "a" * 64,
             mission_id=payload["missionId"], task_id=payload["taskId"],
-            driver_run_id=payload["driverRunId"], resource=payload["targetRoot"],
+            driver_run_id=payload["driverRunId"], resource=canonical_execution_target_root(payload["targetRoot"]),
             objective=payload["objective"], provider_id=None, provider_model=None,
             executable=None, data=freeze({}),
         )

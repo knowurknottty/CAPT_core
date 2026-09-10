@@ -16,7 +16,7 @@ from . import commands
 from .authored_skills import prepare_runtime_skill_context, summarize_skill_context
 from .contracts import require
 from .errors import AuthorityViolation
-from .model_authority import normalize_model_authority
+from .model_authority import canonical_execution_target_root, normalize_model_authority
 from .model_approval_binding import (
     build_bound_model_operator_approval,
     staging_root_for_ledger,
@@ -53,9 +53,10 @@ def request_model_prompt_approval(
         raise AuthorityViolation("MODEL_PROMPT_APPROVAL_MUST_BE_HUMAN_AUTHORED")
 
     objective = str(intent.get("objective", "")).strip()
-    target_root = str(intent.get("targetRoot", "")).strip()
-    if not objective or not target_root:
+    raw_target_root = str(intent.get("targetRoot", "")).strip()
+    if not objective or not raw_target_root:
         raise AuthorityViolation("MODEL_PROMPT_APPROVAL_OBJECTIVE_OR_TARGET_MISSING")
+    target_root = canonical_execution_target_root(raw_target_root)
 
     suffix = _attempt_suffix(operator_metadata["idempotencyKey"])
     request_id = str(intent.get("requestId") or ("approval-model-" + suffix))

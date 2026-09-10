@@ -31,7 +31,7 @@ def test_command_relay_creates_then_decides_exact_prompt_approval(tmp_path):
     )
     intent = {
         "objective": "Inspect the repository and report concrete findings.",
-        "targetRoot": "/tmp/project",
+        "targetRoot": "/tmp",
         "provider": "ollama",
         "model": "qwen",
         "responseMode": "SPOCK",

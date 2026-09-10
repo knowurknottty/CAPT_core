@@ -71,15 +71,16 @@ class OperatorControlStore:
             raise ValueError("MODEL_MISSING")
         if prompt_intelligence not in ALLOWED_PROMPT_INTELLIGENCE:
             raise ValueError("PROMPT_INTELLIGENCE_INVALID")
-        if not target_root:
-            raise ValueError("TARGET_ROOT_MISSING")
-        root = Path(target_root).expanduser().resolve(strict=False)
-        if not root.exists() or not root.is_dir():
-            raise ValueError("TARGET_ROOT_NOT_DIRECTORY")
+        normalized_target = ""
+        if target_root:
+            root = Path(target_root).expanduser().resolve(strict=False)
+            if not root.exists() or not root.is_dir():
+                raise ValueError("TARGET_ROOT_NOT_DIRECTORY")
+            normalized_target = str(root)
         config = {
             "provider": provider,
             "model": model,
-            "targetRoot": str(root),
+            "targetRoot": normalized_target,
             "promptIntelligence": prompt_intelligence,
         }
         if self._validate_external is not None:
