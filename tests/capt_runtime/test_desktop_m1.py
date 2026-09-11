@@ -196,3 +196,73 @@ def test_reconnect_reconstructs_state(client):
     # State reconstructed without duplicates.
     state = project_authoritative_state(client)
     assert sum(1 for m in state["missions"] if m["missionId"] == mid) == 1
+
+
+def _tia_payload(risk="observe", **patch):
+    value = {
+        "interactionId": "tia-e2e-" + uuid.uuid4().hex[:8],
+        "actionDigest": "sha256:" + "1" * 64,
+        "technology": "browser",
+        "targetDigest": "sha256:" + "2" * 64,
+        "capabilities": ["dom.read", "page.click"],
+        "observationScope": {"targetId": "target-1", "frameId": "main"},
+        "riskClass": risk,
+        "authorizationAttemptId": "attempt-1",
+    }
+    value.update(patch)
+    return value
+
+
+def test_tia_runtime_commands_are_advertised_and_bound(client):
+    caps = client.capabilities()
+    assert "authorize_technology_interaction" in caps["commandOperations"]
+    assert "record_technology_interaction_outcome" in caps["commandOperations"]
+
+    action = _tia_payload()
+    response = client.command("authorize_technology_interaction", action)
+    assert response["status"] == "accepted", response
+    permit = response["result"]["permit"]
+    assert permit["operatorId"] == client.operator_id
+    assert permit["sessionId"] == client.session_id
+
+
+def test_tia_consequential_round_trip_uses_existing_human_approval(client):
+    action = _tia_payload("external_write")
+    first = client.command(
+        "authorize_technology_interaction", action, idempotency_key="idem-tia-e2e-1"
+    )
+    assert first["status"] == "accepted", first
+    assert first["result"]["status"] == "approval_required"
+    request_id = first["result"]["requestId"]
+
+    approved = client.command(
+        "submit_approval_decision",
+        {"requestId": request_id, "decision": "approve"},
+        idempotency_key="idem-tia-e2e-approve",
+    )
+    assert approved["status"] == "accepted", approved
+
+    second = client.command(
+        "authorize_technology_interaction",
+        {**action, "authorizationAttemptId": "attempt-2"},
+        idempotency_key="idem-tia-e2e-2",
+    )
+    assert second["status"] == "accepted", second
+    permit = second["result"]["permit"]
+    assert permit["approvalRequestId"] == request_id
+
+    attempted = client.command(
+        "record_technology_interaction_outcome",
+        {
+            "permitId": permit["permitId"],
+            "interactionId": action["interactionId"],
+            "actionDigest": action["actionDigest"],
+            "targetDigest": action["targetDigest"],
+            "phase": "attempted",
+            "outcomeDigest": "sha256:" + "3" * 64,
+        },
+        idempotency_key="idem-tia-e2e-attempted",
+    )
+    assert attempted["status"] == "accepted", attempted
+    assert attempted["result"]["phase"] == "attempted"
+    assert attempted["result"]["remainingUses"] == 0

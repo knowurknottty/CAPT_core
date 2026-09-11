@@ -28,6 +28,7 @@ from capt_runtime.store import EventStore
 from capt_runtime.tool_broker import ToolBrokerError, ToolUnavailable
 from capt_runtime.tools.registry import UnknownToolId
 from desktop.operator_control import OperatorControlStale, OperatorControlStore
+from desktop.technology_interaction import TechnologyInteractionAuthority
 
 CONTRACT_SCHEMA_VERSION = "1.0.0"
 
@@ -67,6 +68,8 @@ _VALID_OPS = (
     "run_tool",
     "install_managed_skill",
     "create_managed_skill",
+    "authorize_technology_interaction",
+    "record_technology_interaction_outcome",
 )
 
 
@@ -98,6 +101,12 @@ class RuntimeCommandService:
         self.tool_broker = tool_broker
         self.prompt_compiler = prompt_compiler or PromptCompiler()
         self.operator_control = operator_control
+        self.technology_interaction = TechnologyInteractionAuthority(
+            store,
+            self.svc,
+            operator_id=operator_id,
+            session_id=session_id,
+        )
         self.fixed_openharness_runner = None
         self.approved_hermes_runner: Any = None
         self.runtime_checkpoint_runner = None
@@ -337,6 +346,28 @@ class RuntimeCommandService:
                     cmd, status="accepted", classification="accepted",
                     result={"control": bound, "approval": approval},
                     stream_id="human_approval-" + str(approval["requestId"]),
+                )
+
+            if op == "authorize_technology_interaction":
+                result = self.technology_interaction.authorize(cmd["payload"], meta)
+                stream_id = None
+                if result.get("requestId"):
+                    stream_id = "human_approval-" + str(result["requestId"])
+                return self._receipt(
+                    cmd,
+                    status="accepted",
+                    classification="accepted",
+                    result=result,
+                    stream_id=stream_id,
+                )
+
+            if op == "record_technology_interaction_outcome":
+                result = self.technology_interaction.record_outcome(cmd["payload"], meta)
+                return self._receipt(
+                    cmd,
+                    status="accepted",
+                    classification="accepted",
+                    result=result,
                 )
 
             if op == "install_managed_skill":
