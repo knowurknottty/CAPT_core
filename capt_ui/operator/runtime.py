@@ -16,6 +16,7 @@ from .epistemics import project_epistemic_ladder
 from .leases import project_capability_leases
 
 from .cohort_chamber import project_cohort_chamber
+from .council_chamber import project_council_chamber
 from .contract import (
     ApproxRequest,
     Dashboard,
@@ -136,6 +137,13 @@ class Operator:
         if not state:
             raise OperatorError("Cohort %s not found" % cohort_id)
         return project_cohort_chamber(state)
+
+    def council_chamber(self, council_id: str, vessel_preview_limit: int = 64) -> Dict[str, Any]:
+        """Project one authoritative Model Council aggregate for operator inspection."""
+        state = self._client.get_state("council-" + str(council_id))
+        if not state:
+            raise OperatorError("Council %s not found" % council_id)
+        return project_council_chamber(state, vessel_preview_limit=vessel_preview_limit)
 
     def capability_leases(self, now: Optional[str] = None) -> List[Dict[str, Any]]:
         """Project current authoritative capability/lease states for display."""

@@ -78,6 +78,12 @@ def cmd_status(args) -> int:
     return 0
 
 
+def cmd_council(args) -> int:
+    op = _op()
+    _out(op.council_chamber(args.council_id, args.preview), args.json)
+    return 0
+
+
 def cmd_dashboard(args) -> int:
     op = _op()
     d = op.dashboard()
@@ -184,6 +190,11 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     s = sub.add_parser("status")
     s.add_argument("--json", action="store_true")
+    c = sub.add_parser("council")
+    c.add_argument("council_id")
+    c.add_argument("--preview", type=int, default=64)
+    c.add_argument("--json", action="store_true")
+
     d = sub.add_parser("dashboard")
     d.add_argument("--json", action="store_true")
 
@@ -216,7 +227,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     args = p.parse_args(argv)
     handlers = {
-        "status": cmd_status, "dashboard": cmd_dashboard,
+        "status": cmd_status, "council": cmd_council, "dashboard": cmd_dashboard,
         "providers": cmd_providers, "capabilities": cmd_capabilities,
         "models": cmd_models,
         "verbosity": cmd_verbosity, "memory": cmd_memory, "onramp": cmd_onramp,
