@@ -1,63 +1,63 @@
-"""CAPT-SOMA strategy arena.
-
-Compares reducers using preservation-first metrics.
-"""
-
+"""CAPT-SOMA strategy arena."""
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
-from typing import Callable, List, Sequence
+from typing import Callable, List, Optional, Sequence
 
-from .trajectory import CodingTrajectory
+from .reducer import ReducerResult
+from .scoring import utility_density
+from .trajectory import CRITICAL_IMPORTANCE, CodingTrajectory, event_key
 
 
 @dataclass(frozen=True)
 class ArenaEntry:
     name: str
-    reducer: Callable[[CodingTrajectory], object]
+    reducer: Callable[[CodingTrajectory], ReducerResult]
 
 
 @dataclass(frozen=True)
 class ArenaScore:
     name: str
     retained_events: int
-    critical_preservation: float
-    utility_density: float = 0.0
-
-
-def _event_key(event: object) -> str:
-    if isinstance(event, dict):
-        return str(event.get("event_id", event.get("kind", "")))
-    return str(getattr(event, "kind", ""))
+    critical_preservation: Optional[float]
+    utility_density: float
 
 
 def evaluate(
     trajectory: CodingTrajectory,
     entries: Sequence[ArenaEntry],
 ) -> List[ArenaScore]:
-    """Evaluate reducers without requiring a specific compression backend."""
-    critical = {
-        _event_key(event)
+    """Evaluate reducers through the explicit SOMA result contract."""
+    critical = Counter(
+        event_key(event)
         for event in trajectory.events
-        if event.importance >= 0.8
-    }
+        if event.importance >= CRITICAL_IMPORTANCE
+    )
+    critical_total = sum(critical.values())
     scores: List[ArenaScore] = []
 
     for entry in entries:
         result = entry.reducer(trajectory)
-        retained = getattr(result, "retained", None)
-        if retained is None:
-            retained = getattr(result, "events", [])
-
-        retained_keys = {_event_key(event) for event in retained}
-        denominator = max(1, len(critical))
-
+        if not isinstance(result, ReducerResult):
+            raise TypeError("arena reducer must return a ReducerResult")
+        retained = CodingTrajectory(list(result.events))
+        retained_counts = Counter(event_key(event) for event in retained.events)
+        preserved = sum(
+            min(count, retained_counts.get(key, 0))
+            for key, count in critical.items()
+        )
+        tokens = retained.token_count()
+        utility = retained.utility_score()
         scores.append(
             ArenaScore(
                 name=entry.name,
-                retained_events=len(retained),
-                critical_preservation=len(retained_keys & critical) / denominator,
+                retained_events=len(retained.events),
+                critical_preservation=(preserved / critical_total) if critical_total else None,
+                utility_density=utility_density(
+                    retained_utility=utility,
+                    retained_tokens=tokens,
+                ),
             )
         )
-
     return scores
