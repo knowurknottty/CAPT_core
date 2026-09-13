@@ -890,6 +890,46 @@ class RuntimeQueryService:
             "checkpoints": entries,
         }
 
+    def security_rejections(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        """Read the security audit trail.
+
+        Recording a refusal without a way to read it back leaves the audit trail
+        write-only, which is the same 'commandable but not inspectable' gap the
+        other projections close. Only digests of identities are stored, so this
+        surface cannot leak the identifiers it protects.
+        """
+        wanted_kind = request.get("kind")
+        limit = int(request.get("limit", 100))
+        include_details = bool(request.get("detail", True))
+
+        entries: List[Dict[str, Any]] = []
+        by_kind: Dict[str, int] = {}
+        for row in self.store.list_security_rejections(limit=limit):
+            kind = row.get("rejectionKind")
+            by_kind[str(kind)] = by_kind.get(str(kind), 0) + 1
+            if wanted_kind and kind != wanted_kind:
+                continue
+            entry = {
+                "rejectionId": row.get("rejectionId"),
+                "timestamp": row.get("timestamp"),
+                "rejectionKind": kind,
+                "actorId": row.get("actorId"),
+                "sourceIp": row.get("sourceIp"),
+            }
+            if include_details:
+                entry["details"] = row.get("details")
+            entries.append(entry)
+        return {
+            "schemaVersion": CONTRACT_SCHEMA_VERSION,
+            "count": len(entries),
+            "countsByKind": by_kind,
+            "note": ("Identities are recorded as digests only; `actorId` is a digest, "
+                     "never a raw operator or session identifier. The store's "
+                     "rejection_kind column is unconstrained TEXT, so treat "
+                     "countsByKind as observed values, not a closed enumeration."),
+            "rejections": entries,
+        }
+
     def handle(self, request: Dict[str, Any]) -> Dict[str, Any]:
         op = request.get("op")
         try:
@@ -898,7 +938,7 @@ class RuntimeQueryService:
             if op == "capabilities":
                 return {"ok": True, "result": {
                     "schemaVersion": CONTRACT_SCHEMA_VERSION,
-                    "queryOperations": ["identity", "capabilities", "list_aggregates", "approvals", "missions", "tasks", "checkpoints", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers", "managed_skills", "operator_control_snapshot", "operator_session_get", "operator_proposal_get", "operator_execution_state"],
+                    "queryOperations": ["identity", "capabilities", "list_aggregates", "approvals", "missions", "tasks", "checkpoints", "security_rejections", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers", "managed_skills", "operator_control_snapshot", "operator_session_get", "operator_proposal_get", "operator_execution_state"],
                     "commandOperations": ["create_mission", "operator_chat_new", "operator_execution_config_set", "operator_prompt_submit", "operator_proposal_select", "compile_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "submit_provider_result_review", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool", "install_managed_skill", "create_managed_skill"],
                     "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True, "toolRegistry": True, "toolBroker": True, "mcpClient": self.mcp_manager is not None, "promptCompiler": True},
                     "lifecycleOperations": {"checkpoint": True, "shutdown": True, "resume": True},
@@ -923,6 +963,8 @@ class RuntimeQueryService:
                 return {"ok": True, "result": self.tasks(request)}
             if op == "checkpoints":
                 return {"ok": True, "result": self.checkpoints(request)}
+            if op == "security_rejections":
+                return {"ok": True, "result": self.security_rejections(request)}
             if op == "get_state":
                 st = self.get_state(request["streamId"])
                 if st is None:

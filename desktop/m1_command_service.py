@@ -8,7 +8,9 @@ runtime modules/services.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import secrets
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -119,6 +121,54 @@ class RuntimeCommandService:
             return "unauthorized"
         return None
 
+    def _record_identity_rejection(self, cmd: Dict[str, Any]) -> None:
+        """Record an envelope-identity refusal in the security audit trail.
+
+        A command whose envelope carries a foreign operatorId/sessionId is
+        refused as ``unauthorized`` — but that refusal previously left NO audit
+        trace, so the most security-relevant refusal class was the invisible one
+        while a merely missing session token was recorded.
+
+        Only DIGESTS of the identifiers are written. The audit trail must prove
+        that a mismatch occurred without itself becoming a store of the
+        identifiers it exists to protect.
+
+        A failure here must never change the outcome: the command is already
+        refused, and an audit write must not be able to turn a refusal into a
+        crash or an accept.
+        """
+        def digest(value: Any) -> Optional[str]:
+            if not isinstance(value, str) or not value:
+                return None
+            return "sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()[:32]
+
+        mismatched = []
+        if cmd.get("operatorId") != self.operator_id:
+            mismatched.append("operatorId")
+        if cmd.get("sessionId") != self.session_id:
+            mismatched.append("sessionId")
+
+        op = cmd.get("op")
+        command_id = cmd.get("commandId")
+        try:
+            self.store.record_security_rejection(
+                rejection_id="rej-identity-" + secrets.token_hex(8),
+                rejection_kind="unauthorized_envelope_identity",
+                details={
+                    "reason": "envelope_identity_not_bound_to_session",
+                    "mismatchedFields": mismatched,
+                    "presentedOperatorDigest": digest(cmd.get("operatorId")),
+                    "presentedSessionDigest": digest(cmd.get("sessionId")),
+                    "boundOperatorDigest": digest(self.operator_id),
+                    "boundSessionDigest": digest(self.session_id),
+                    "op": op if isinstance(op, str) else None,
+                    "commandId": command_id if isinstance(command_id, str) else None,
+                },
+                actor_id=digest(cmd.get("operatorId")),
+            )
+        except Exception:  # noqa: BLE001 - auditing must never alter the refusal
+            pass
+
     def _mission_context_usage(self, payload: Dict[str, Any]) -> Any:
         from capt_runtime.memory.accounting import ContextUsage, estimate_tokens
 
@@ -203,6 +253,10 @@ class RuntimeCommandService:
     def execute(self, cmd: Dict[str, Any]) -> Dict[str, Any]:
         envelope_err = self._validate_envelope(cmd)
         if envelope_err:
+            if envelope_err == "unauthorized":
+                # Identity refusals are the most security-relevant class and were
+                # the only one with no durable trace. Record before returning.
+                self._record_identity_rejection(cmd)
             return self._receipt(
                 cmd,
                 status="rejected",
