@@ -5,8 +5,17 @@ provenance/invalidation identity over ContextPack components; it does not
 replace ``contextPackDigest`` and it does not imply provider prompt-cache hits.
 Prompt prefix planning is modeled separately because provider caches depend on
 exact serialized prefixes, not Merkle identity alone.
+
+UNSHIPPED (verified 2026-09-13): no live path calls this module either. Nothing
+under ``capt_runtime/`` or ``desktop/`` imports it — only tests and
+``scripts/context_merkle_probe.py`` do. It is an experiment, not a substrate for
+cache invalidation or ContextPack identity. The ``SHIPPED`` marker below is
+asserted by ``tests/capt_runtime/test_dead_context_paths.py``.
 """
 from __future__ import annotations
+
+# False until a live path calls this module. See the module docstring.
+SHIPPED = False
 
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
