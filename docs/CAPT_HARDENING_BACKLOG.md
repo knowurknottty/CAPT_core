@@ -233,6 +233,18 @@ not use it. Anyone integrating "CAPT's context pipeline" integrates a corpse.
 `experimental/` with a docstring saying it is unshipped. The current state — a
 well-documented dead path — is the worst option because it reads as load-bearing.
 
+**DONE** — labelled rather than moved. Moving modules breaks imports for the two
+test files and the probe script for zero functional gain, so the unshipped status
+is now explicit and machine-checked instead: `capt_runtime/context_pipeline.py`
+carries an `UNSHIPPED` docstring paragraph and a module-level `SHIPPED = False`
+marker, and `tests/capt_runtime/test_dead_context_paths.py` asserts the marker
+*and* scans every `.py` under `capt_runtime/` and `desktop/` for an import of the
+module. The guard was falsified end-to-end (a scratch file importing
+`context_pipeline` tripped it; removing it restored a clean scan), and a
+falsifiability test proves the detector matches real import forms while ignoring
+lookalikes like `context_pipeline_digest`. Flipping `SHIPPED` without wiring now
+requires deliberately editing the test.
+
 ### H-10 [V] `context_merkle` is unused and self-declared non-authoritative
 **Symptom.** No runtime caller (same search); the module declares
 `authority='provenance_only'`, `replacesContextPackDigest=False`,
@@ -241,6 +253,13 @@ well-documented dead path — is the worst option because it reads as load-beari
 for any live path. Fine as a tool, dangerous as an assumption.
 **Enhancement.** Same as H-9: wire or quarantine. If it is intended to localize
 change for cache invalidation, add the benchmark that proves it does.
+
+**DONE** — same treatment as H-9: `UNSHIPPED` docstring paragraph plus
+`SHIPPED = False`, asserted by `tests/capt_runtime/test_dead_context_paths.py`
+(which scans production dirs for imports of it, same as the pipeline). The
+benchmark question is left open deliberately: it stays an experiment, and the
+module already declares itself non-authoritative
+(`replacesContextPackDigest: False`).
 
 ### H-11 [R] Three memory-policy fields are declared and never referenced
 **Symptom.** `trust_threshold` and `project_scope` are declared on
