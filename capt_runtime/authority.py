@@ -32,6 +32,24 @@ _PERMITTED: Dict[str, FrozenSet[str]] = {
     "prepare_tool_execution": frozenset({EXECUTION, SYSTEM}),
     "transition_tool_execution": frozenset({EXECUTION, SYSTEM}),
     "create_mission": frozenset({HUMAN, SYSTEM}),
+    # Mission and driver-run lifecycle were previously UNGATED: the service
+    # methods validated CommandMetadata but called require_authority() for no
+    # act, so any authenticated actor could move a mission or a driver run.
+    # Permitted kinds are DERIVED from actual call sites, not invented:
+    #   create_driver_run / transition_driver_run -> execution_plane at every
+    #     production and recovery call site (SYSTEM covers reconcile paths)
+    #   transition_mission -> no production caller at all; the only caller is a
+    #     test using actor_kind="human" (SYSTEM covers lifecycle advancement)
+    # Review these three if a governance/cognition caller is ever added.
+    "transition_mission": frozenset({HUMAN, SYSTEM}),
+    "create_driver_run": frozenset({EXECUTION, SYSTEM}),
+    # HUMAN is required here even though every DIRECT caller is execution_plane:
+    # cancel_driver_run permits {EXECUTION, HUMAN, SYSTEM} and DELEGATES to this
+    # act to write the 'cancelled' transition, and the M1 operator surface issues
+    # commands as actor_kind="human". An internal transition reachable from a
+    # public act must permit at least the union of its callers' permitted kinds,
+    # or the operator-facing cancel is refused one layer down.
+    "transition_driver_run": frozenset({EXECUTION, HUMAN, SYSTEM}),
     "plan_tasks": frozenset({COGNITION, SYSTEM}),
     "transition_task": frozenset({EXECUTION, SYSTEM}),
     "submit_result": frozenset({EXECUTION, SYSTEM}),
