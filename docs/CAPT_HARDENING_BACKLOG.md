@@ -189,6 +189,31 @@ unconstrained TEXT with no CHECK.
 digests, never raw. Also constrain `rejection_kind` to a known set so the audit
 surface is queryable.
 
+**DONE (partly)** — `RuntimeCommandService.execute` now records a
+`unauthorized_envelope_identity` row when `_validate_envelope` returns
+`unauthorized`, via `_record_identity_rejection` in `desktop/m1_command_service.py`.
+Covered by `tests/capt_runtime/test_security_identity_audit.py` (11 tests).
+
+Two properties are enforced and tested, not just intended:
+
+- **Digests only.** Presented and bound `operatorId`/`sessionId` are stored as
+  truncated sha256, so the audit trail cannot become a store of the identifiers it
+  exists to protect. A test asserts the raw values never appear in the row, in the
+  read projection, or anywhere in the serialised audit surface.
+- **Audit failure cannot change the outcome.** The write is wrapped so a failing
+  audit store leaves the command *refused* — never a crash and never an accept.
+  Pinned by a test that monkeypatches the writer to raise.
+
+Plus a `security_rejections` query op (`desktop/capt_runtime_service.py`), because
+recording a refusal with no way to read it back leaves the trail write-only — the
+same "commandable but not inspectable" gap as H-2/H-3. It reports `countsByKind`,
+filters by kind, and can omit details.
+
+**STILL OPEN:** `rejection_kind` remains unconstrained TEXT. Adding a CHECK means
+rebuilding the table on a live ledger, so the read projection instead labels
+`countsByKind` as *observed* rather than a closed enumeration. Constraining it
+properly is a migration decision, deliberately not taken here.
+
 ---
 
 ## C. Context + memory — inert machinery
