@@ -155,6 +155,25 @@ authenticated actor.
 `transition_driver_run`) to the authority table with the intended actor kinds. This
 is a small, high-value hardening change.
 
+**DONE** — three acts added to `capt_runtime/authority.py` and enforced in
+`capt_runtime/services.py`; covered by
+`tests/capt_runtime/test_authority_gates_mission_driverrun.py`.
+
+Permitted kinds were DERIVED from call sites, not invented:
+`create_driver_run` / `transition_driver_run` are called with `execution_plane` at
+every production and recovery site; `transition_mission` has no production caller
+at all (only a test using `human`). SYSTEM is included for reconcile/lifecycle paths.
+
+**A first attempt at this was wrong and the suite caught it.** Restricting
+`transition_driver_run` to `{execution_plane, system}` broke the operator-facing
+cancel: `cancel_driver_run` permits `{execution_plane, human, system}` and
+*delegates* to `transition_driver_run` to write the `cancelled` transition, and the
+M1 operator surface issues commands as `actor_kind="human"`. Two tests failed
+(`test_cancel_driver_run`, `test_duplicate_cancellation`) — a real regression, not a
+test artifact. The derived rule is therefore: **an internal transition reachable from
+a public act must permit at least the union of its callers' permitted kinds.** HUMAN
+is now included and the delegation is pinned by a test.
+
 ### H-8 [R] `security_rejections` misses the refusal class that matters most
 **Symptom.** Exactly two producers exist in-repo:
 `unauthenticated_ipc_attempt` and `provider_spend_threshold_alert`. An operator
