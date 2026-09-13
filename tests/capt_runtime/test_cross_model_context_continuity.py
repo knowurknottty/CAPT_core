@@ -89,13 +89,26 @@ def test_red02_prepared_execution_binds_context_pack_digest():
 # RED-03: context selected at admission == context shown (no post-approval swap)
 # ---------------------------------------------------------------------------
 def test_red03_prompt_assembly_rejects_placeholder_context():
-    """The semantic placeholder 'not-selected-at-admission' must be eliminated."""
-    from capt_runtime.operator_provenance import _MODEL_OPERATOR_CONTEXT_REFERENCE
-    # The placeholder digest must not be the wired default for continuation runs.
-    assert _MODEL_OPERATOR_CONTEXT_REFERENCE is not None
-    # GREEN assertion: build_prompt_assembly must accept a real context_pack_digest
-    # and a continuation_context list, and the rendered prompt must include it.
-    from capt_runtime.operator_provenance import build_prompt_assembly
+    """The semantic placeholder 'not-selected-at-admission' must be eliminated.
+
+    ENFORCED, not merely named. The constant previously held
+    ``digest({"context": "not-selected-at-admission"})`` — a sentinel hashed into
+    digest form, which in the rendered provenance is indistinguishable from a
+    real governed-pack digest. The original form of this test asserted only
+    ``is not None``, so it passed against exactly the defect it describes.
+    """
+    from capt_runtime.operator_provenance import (
+        _MODEL_OPERATOR_CONTEXT_REFERENCE,
+        build_model_operator_prompt_assembly,
+        build_prompt_assembly,
+    )
+    # Absence must never be expressed as something that looks like a digest.
+    assert not str(_MODEL_OPERATOR_CONTEXT_REFERENCE).startswith("sha256:"), \
+        "a hashed sentinel is indistinguishable from a real governed-pack digest"
+    assert "not-selected-at-admission" in _MODEL_OPERATOR_CONTEXT_REFERENCE
+
+    # A real context_pack_digest and a continuation_context are accepted and
+    # rendered.
     cont = [{
         "recordId": "rec-1", "kind": "prior_model_evidence", "trust": "unverified",
         "content": "CAPT-CONTINUITY-A-TEST", "provenance": {"source": "driverrun-dr-a",
@@ -110,6 +123,17 @@ def test_red03_prompt_assembly_rejects_placeholder_context():
     assert "CAPT-CONTINUITY-A-TEST" in rendered, "continuation context not rendered"
     assert "PRIOR UNVERIFIED" in rendered, "trust label missing"
     assert asm["contextPackDigest"] == "sha256:dddd"
+
+    # With NO digest supplied, the canonical assembly must state the absence
+    # rather than render a digest of a sentinel.
+    absent = build_model_operator_prompt_assembly(
+        human_prompt="continue", response_mode="SPOCK", enhancement_engine="OFF",
+    )
+    rendered_absent = absent["modelVisiblePrompt"]
+    assert "ContextPackDigest: sha256:" not in rendered_absent, \
+        "absence was rendered as a digest"
+    assert "not-selected-at-admission" in rendered_absent
+    assert absent["contextPackDigest"] == _MODEL_OPERATOR_CONTEXT_REFERENCE
 
 
 # ---------------------------------------------------------------------------
