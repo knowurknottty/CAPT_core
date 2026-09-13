@@ -298,6 +298,33 @@ entirely.
 **Enhancement.** Rename one of them (`continuationDigest`) and, where both exist,
 record both. This is a one-line-per-site fix with outsized clarity benefit.
 
+**DONE (partly) — and the real defect was worse than reported.**
+`tests/capt_runtime/test_cross_model_context_continuity.py` already carried a test
+named `test_red03_prompt_assembly_rejects_placeholder_context` whose docstring said
+the placeholder "must be eliminated" — but it asserted only
+`_MODEL_OPERATOR_CONTEXT_REFERENCE is not None`, so it **passed against exactly the
+defect it described**. The constant held
+`digest({"context": "not-selected-at-admission"})`: a sentinel string hashed into
+digest form. In rendered provenance that is indistinguishable from a real
+governed-pack digest — the prompt showed `ContextPackDigest: sha256:…` while
+addressing nothing. Absence was being laundered into the appearance of evidence.
+
+Fixed in `capt_runtime/operator_provenance.py`: the constant is now the explicit
+non-digest marker `none:not-selected-at-admission`, so `build_model_operator_prompt_assembly`
+without a digest states the absence instead of fabricating a digest. The test now
+actually enforces the requirement (asserts the constant is not digest-shaped, and
+that the rendered prompt contains no `ContextPackDigest: sha256:` when none was
+supplied).
+
+The **rename** was deliberately NOT done: `contextPackDigest` is a key in the
+assembly dict consumed by approval/evidence contracts (`prepared_execution.py`,
+`prompt_approval.py`), so renaming it is a contract break, not a clarity fix. The
+naming ambiguity between the memory-engine pack digest and the continuation-selection
+digest therefore remains — documented, not silently renamed.
+
+**Also noted (H-16 territory):** `prepared_execution.py:54` still defaults
+`context_pack_digest` to `"sha256:" + "0" * 64` — a zero digest used as an address.
+
 ### H-15 [R] Salience is a 4-value trust rank, and record digests omit fields
 **Symptom.** Scoring is a trust rank only — no embeddings, no recency decay, no
 class weighting — and it does not reorder candidates (order is fixed by
