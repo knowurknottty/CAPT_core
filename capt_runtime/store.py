@@ -639,6 +639,28 @@ class EventStore(object):
             row["manifest_json"], table="checkpoints", column="manifest_json", key=row["checkpoint_id"]
         ) if row else None
 
+    def list_checkpoints(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Summarise checkpoints newest-first, from the table's own columns.
+
+        Only the indexed columns are read here. ``createdAt`` and
+        ``recoveryState`` live inside the sealed manifest, so a caller that needs
+        them must load the manifest explicitly — this method never opens one.
+        Ordered exactly as :meth:`latest_checkpoint`.
+        """
+        rows = self._conn.execute(
+            "SELECT checkpoint_id, integrity_digest, global_sequence "
+            "FROM checkpoints ORDER BY global_sequence DESC, rowid DESC LIMIT ?",
+            (max(0, int(limit)),),
+        ).fetchall()
+        return [
+            {
+                "checkpointId": row["checkpoint_id"],
+                "integrityDigest": row["integrity_digest"],
+                "globalSequence": row["global_sequence"],
+            }
+            for row in rows
+        ]
+
     def record_security_rejection(
         self,
         rejection_id: str,
