@@ -485,6 +485,7 @@ class RuntimeService(object):
         expected_version: Optional[int] = None,
     ) -> Dict[str, Any]:
         require("CommandMetadata", metadata)
+        require_authority("transition_mission", metadata["actor"]["kind"])
         stream = MissionAggregate.stream_id(mission_id)
         actual = self.store.aggregate_version(stream)
         expected = actual if expected_version is None else expected_version
@@ -925,6 +926,7 @@ class RuntimeService(object):
     ) -> Dict[str, Any]:
         require("DriverRun", run)
         require("CommandMetadata", metadata)
+        require_authority("create_driver_run", metadata["actor"]["kind"])
 
         stream = DriverRunAggregate.stream_id(run["driverRunId"])
         expected = self.store.aggregate_version(stream)
@@ -949,6 +951,7 @@ class RuntimeService(object):
         self, driver_run_id: str, to_state: str, metadata: Dict[str, Any]
     ) -> Dict[str, Any]:
         require("CommandMetadata", metadata)
+        require_authority("transition_driver_run", metadata["actor"]["kind"])
         stream = DriverRunAggregate.stream_id(driver_run_id)
         expected = self.store.aggregate_version(stream)
         current = self.store.require_state(stream)

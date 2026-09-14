@@ -15,9 +15,22 @@ Stages (per workflow Gate 7):
     -> ContextPack packaging           (package_context_pack)
 
 No driver receives raw memory outside the authorized ContextPack slice.
+
+UNSHIPPED (verified 2026-09-13): no live path calls this module. The stages above
+are the documented architecture (ADR-DT-PLANE-CONV, Gate 7), but the live
+ContextPack producer is ``MemoryTriggerEngine._fire_retrieval`` in
+``capt_runtime/memory/``, and nothing under ``capt_runtime/`` or ``desktop/``
+imports from here — only tests and ``scripts/context_merkle_probe.py`` do. Treat
+this as a design that has not been wired, NOT as load-bearing code. The
+``SHIPPED`` marker below is asserted by
+``tests/capt_runtime/test_dead_context_paths.py``.
 """
 
 from __future__ import annotations
+
+# False until a live path calls this module. Flipping it without wiring the
+# pipeline is a lie that tests/capt_runtime/test_dead_context_paths.py catches.
+SHIPPED = False
 
 import hashlib
 import json

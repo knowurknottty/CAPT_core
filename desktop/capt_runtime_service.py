@@ -39,7 +39,11 @@ from typing import Any, Dict, List, Optional
 
 import capt_runtime
 from capt_runtime import commands, contracts
-from capt_runtime.checkpoint import create_checkpoint
+from capt_runtime.checkpoint import (
+    can_dispatch_consequential,
+    create_checkpoint,
+    verify_checkpoint,
+)
 from capt_runtime.driver_host import tree_digest
 from capt_runtime.errors import AuthorityViolation
 from capt_runtime.store import EventStore
@@ -654,6 +658,278 @@ class RuntimeQueryService:
             return {"status": {"kind": "failed"}, "error": str(exc)[:200],
                     "trust": "capt_authoritative", "committed": False, "advisory": True}
 
+    # ------------------------------------------------------------------
+    # Read projections.
+    #
+    # CAPT accepts ~26 command ops that create and transition governed state,
+    # but before these ops there was almost no way to READ that state: an
+    # operator could command a mission, approval or checkpoint and then not
+    # inspect it (and confirming a checkpoint persisted meant opening the
+    # ledger file directly, which the runtime is supposed to own).
+    #
+    # Every projection below is DERIVED from authoritative store state and
+    # never rewrites it. The stored ``state`` is reported verbatim; any
+    # refinement arrives in an explicitly-named derived field. Nothing here can
+    # invent a transition the runtime did not actually take.
+    # ------------------------------------------------------------------
+
+    def _aggregate_states(self, kind: str) -> List[Dict[str, Any]]:
+        """Load every aggregate of one kind. States come from the store as-is.
+
+        The kind filter is applied BEFORE ``load_state`` so only matching
+        aggregates are unsealed.
+        """
+        out: List[Dict[str, Any]] = []
+        for stream_id, agg_kind, _version in self.store.all_aggregates():
+            if agg_kind != kind:
+                continue
+            state = self.store.load_state(stream_id)
+            if isinstance(state, dict):
+                out.append({"streamId": stream_id, **state})
+        return out
+
+    @staticmethod
+    def _derive_expiry(expires_at: Optional[str]) -> Dict[str, Any]:
+        """Derive expiry WITHOUT claiming the runtime took the transition.
+
+        CAPT never drives ``expired`` (HumanApprovalAggregate.mark_expired has
+        no caller), so a past-due approval still reads ``approved`` in state.
+        Callers therefore get the stored state verbatim plus this derived view,
+        and are told which is which.
+        """
+        if not expires_at:
+            return {"expiresAt": None, "expired": None, "expiresInSeconds": None}
+        try:
+            when = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+        except ValueError:
+            return {"expiresAt": expires_at, "expired": None,
+                    "expiresInSeconds": None, "expiryUnparseable": True}
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        delta = int((when - datetime.now(timezone.utc)).total_seconds())
+        return {"expiresAt": expires_at, "expired": delta <= 0,
+                "expiresInSeconds": delta}
+
+    def approvals(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        """Read approvals, with expiry DERIVED rather than asserted."""
+        wanted_state = request.get("state")
+        mission_id = request.get("missionId")
+        actionable_only = bool(request.get("actionableOnly", False))
+        limit = int(request.get("limit", 50))
+
+        entries: List[Dict[str, Any]] = []
+        by_state: Dict[str, int] = {}
+        for agg in self._aggregate_states("human_approval"):
+            state = agg.get("state")
+            by_state[str(state)] = by_state.get(str(state), 0) + 1
+            if wanted_state and state != wanted_state:
+                continue
+            if mission_id and agg.get("missionId") != mission_id:
+                continue
+            expiration = self._derive_expiry(agg.get("expiresAt"))
+            awaiting_decision = state == "requested"
+            awaiting_consumption = state == "approved"
+            entries.append({
+                "requestId": agg.get("requestId"),
+                "missionId": agg.get("missionId"),
+                "taskId": agg.get("taskId"),
+                "state": state,                       # verbatim, authoritative
+                "decision": agg.get("decision"),
+                "operation": agg.get("operation"),
+                "requestedCapability": agg.get("requestedCapability"),
+                "riskClassification": agg.get("riskClassification"),
+                "resource": agg.get("resource"),
+                "requestedBy": agg.get("requestedBy"),
+                "operatorId": agg.get("operatorId"),
+                "createdAt": agg.get("createdAt"),
+                "decidedAt": agg.get("decidedAt"),
+                "consumedAt": agg.get("consumedAt"),
+                "remainingUses": agg.get("remainingUses"),
+                "policyReason": agg.get("policyReason"),
+                **expiration,
+                "awaitingDecision": awaiting_decision,        # derived
+                "awaitingConsumption": awaiting_consumption,  # derived
+                # Stale: the runtime still says approved but the window passed.
+                "derivedStale": bool(awaiting_consumption and expiration["expired"]),
+            })
+            if actionable_only and not (awaiting_decision or awaiting_consumption):
+                entries.pop()
+        entries.sort(key=lambda e: str(e.get("createdAt") or ""), reverse=True)
+        return {
+            "schemaVersion": CONTRACT_SCHEMA_VERSION,
+            "count": len(entries),
+            "totalAggregates": sum(by_state.values()),
+            "countsByStoredState": by_state,
+            "awaitingDecision": sum(1 for e in entries if e["awaitingDecision"]),
+            "awaitingConsumption": sum(1 for e in entries if e["awaitingConsumption"]),
+            "derivedStale": sum(1 for e in entries if e["derivedStale"]),
+            "note": ("`state` is the stored value. CAPT never drives the `expired` "
+                     "transition, so a past-due approval still reads 'approved'; "
+                     "`expired`/`derivedStale` are computed here and are NOT state."),
+            "approvals": entries[:limit],
+        }
+
+    def missions(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        """Read missions with derived task counts."""
+        wanted_state = request.get("state")
+        limit = int(request.get("limit", 50))
+        task_counts: Dict[str, int] = {}
+        task_states: Dict[str, Dict[str, int]] = {}
+        for task in self._aggregate_states("task"):
+            mid = task.get("missionId")
+            if not mid:
+                continue
+            task_counts[mid] = task_counts.get(mid, 0) + 1
+            bucket = task_states.setdefault(mid, {})
+            tstate = str(task.get("state"))
+            bucket[tstate] = bucket.get(tstate, 0) + 1
+        by_state: Dict[str, int] = {}
+        entries: List[Dict[str, Any]] = []
+        for agg in self._aggregate_states("mission"):
+            state = agg.get("state")
+            by_state[str(state)] = by_state.get(str(state), 0) + 1
+            if wanted_state and state != wanted_state:
+                continue
+            mid = agg.get("missionId")
+            entries.append({
+                "missionId": mid,
+                "state": state,
+                "objectives": agg.get("objectives") or [],
+                "successCriteria": agg.get("successCriteria") or [],
+                "terminationCriteria": agg.get("terminationCriteria") or [],
+                "policyDecisionIds": agg.get("policyDecisionIds") or [],
+                "taskGraphId": agg.get("taskGraphId"),
+                "taskCount": task_counts.get(mid, 0),           # derived
+                "taskStates": task_states.get(mid, {}),         # derived
+            })
+        entries.sort(key=lambda e: str(e.get("missionId")))
+        return {
+            "schemaVersion": CONTRACT_SCHEMA_VERSION,
+            "count": len(entries),
+            "countsByState": by_state,
+            "note": ("Mission state carries no timestamp, so entries are ordered by "
+                     "missionId, not recency."),
+            "missions": entries[:limit],
+        }
+
+    def tasks(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        """Read tasks, optionally scoped to a mission or a state."""
+        wanted_state = request.get("state")
+        mission_id = request.get("missionId")
+        limit = int(request.get("limit", 100))
+        by_state: Dict[str, int] = {}
+        entries: List[Dict[str, Any]] = []
+        for agg in self._aggregate_states("task"):
+            state = agg.get("state")
+            by_state[str(state)] = by_state.get(str(state), 0) + 1
+            if wanted_state and state != wanted_state:
+                continue
+            if mission_id and agg.get("missionId") != mission_id:
+                continue
+            entries.append({
+                "taskId": agg.get("taskId"),
+                "missionId": agg.get("missionId"),
+                "title": agg.get("title"),
+                "state": state,
+                "consequential": agg.get("consequential"),
+                "attempt": agg.get("attempt"),
+                "maxAttempts": agg.get("maxAttempts"),
+                "recoveryState": agg.get("recoveryState"),
+                "assignedDriverId": agg.get("assignedDriverId"),
+                "dependencyCount": len(agg.get("dependencies") or []),
+                "capabilityRequirementCount": len(agg.get("capabilityRequirements") or []),
+                "resultRefCount": len(agg.get("resultRefs") or []),
+            })
+        entries.sort(key=lambda e: str(e.get("taskId")))
+        return {
+            "schemaVersion": CONTRACT_SCHEMA_VERSION,
+            "count": len(entries),
+            "countsByState": by_state,
+            "tasks": entries[:limit],
+        }
+
+    def checkpoints(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        """Read checkpoints: the recovery surface that had no read op.
+
+        Column data comes from ``EventStore.list_checkpoints``; ``createdAt``,
+        ``recoveryState`` and ``canDispatchConsequential`` require the sealed
+        manifest and are therefore loaded per row. Integrity is re-verified
+        rather than trusted from the stored digest.
+        """
+        limit = int(request.get("limit", 20))
+        include_manifest_detail = bool(request.get("detail", True))
+        entries: List[Dict[str, Any]] = []
+        for row in self.store.list_checkpoints(limit):
+            entry: Dict[str, Any] = dict(row)
+            if include_manifest_detail:
+                try:
+                    manifest = self.store.load_checkpoint(row["checkpointId"])
+                    entry["createdAt"] = manifest.get("createdAt")
+                    entry["runtimeVersion"] = manifest.get("runtimeVersion")
+                    recovery = manifest.get("recoveryState") or {}
+                    entry["recoveryState"] = recovery.get("kind")
+                    entry["openReservations"] = recovery.get("openReservationIds") or []
+                    entry["canDispatchConsequential"] = can_dispatch_consequential(manifest)
+                    try:
+                        verify_checkpoint(manifest)
+                        entry["integrityVerified"] = True
+                    except Exception as exc:  # noqa: BLE001
+                        entry["integrityVerified"] = False
+                        entry["integrityError"] = ("%s: %s"
+                                                   % (type(exc).__name__, exc))[:200]
+                except Exception as exc:  # noqa: BLE001
+                    entry["manifestUnreadable"] = ("%s: %s"
+                                                   % (type(exc).__name__, exc))[:200]
+            entries.append(entry)
+        return {
+            "schemaVersion": CONTRACT_SCHEMA_VERSION,
+            "count": len(entries),
+            "note": ("A checkpoint binds the ledger head at write time; the write "
+                     "does NOT advance the head. `integrityVerified` is recomputed "
+                     "here, not read from the stored digest."),
+            "checkpoints": entries,
+        }
+
+    def security_rejections(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        """Read the security audit trail.
+
+        Recording a refusal without a way to read it back leaves the audit trail
+        write-only, which is the same 'commandable but not inspectable' gap the
+        other projections close. Only digests of identities are stored, so this
+        surface cannot leak the identifiers it protects.
+        """
+        wanted_kind = request.get("kind")
+        limit = int(request.get("limit", 100))
+        include_details = bool(request.get("detail", True))
+
+        entries: List[Dict[str, Any]] = []
+        by_kind: Dict[str, int] = {}
+        for row in self.store.list_security_rejections(limit=limit):
+            kind = row.get("rejectionKind")
+            by_kind[str(kind)] = by_kind.get(str(kind), 0) + 1
+            if wanted_kind and kind != wanted_kind:
+                continue
+            entry = {
+                "rejectionId": row.get("rejectionId"),
+                "timestamp": row.get("timestamp"),
+                "rejectionKind": kind,
+                "actorId": row.get("actorId"),
+                "sourceIp": row.get("sourceIp"),
+            }
+            if include_details:
+                entry["details"] = row.get("details")
+            entries.append(entry)
+        return {
+            "schemaVersion": CONTRACT_SCHEMA_VERSION,
+            "count": len(entries),
+            "countsByKind": by_kind,
+            "note": ("Identities are recorded as digests only; `actorId` is a digest, "
+                     "never a raw operator or session identifier. The store's "
+                     "rejection_kind column is unconstrained TEXT, so treat "
+                     "countsByKind as observed values, not a closed enumeration."),
+            "rejections": entries,
+        }
+
     def handle(self, request: Dict[str, Any]) -> Dict[str, Any]:
         op = request.get("op")
         try:
@@ -662,7 +938,7 @@ class RuntimeQueryService:
             if op == "capabilities":
                 return {"ok": True, "result": {
                     "schemaVersion": CONTRACT_SCHEMA_VERSION,
-                    "queryOperations": ["identity", "capabilities", "list_aggregates", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers", "managed_skills", "operator_control_snapshot", "operator_session_get", "operator_proposal_get", "operator_execution_state"],
+                    "queryOperations": ["identity", "capabilities", "list_aggregates", "approvals", "missions", "tasks", "checkpoints", "security_rejections", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers", "managed_skills", "operator_control_snapshot", "operator_session_get", "operator_proposal_get", "operator_execution_state"],
                     "commandOperations": ["create_mission", "operator_chat_new", "operator_execution_config_set", "operator_prompt_submit", "operator_proposal_select", "compile_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "submit_provider_result_review", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool", "install_managed_skill", "create_managed_skill"],
                     "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True, "toolRegistry": True, "toolBroker": True, "mcpClient": self.mcp_manager is not None, "promptCompiler": True},
                     "lifecycleOperations": {"checkpoint": True, "shutdown": True, "resume": True},
@@ -679,6 +955,16 @@ class RuntimeQueryService:
                 return {"ok": True, "result": self.managed_skills()}
             if op == "list_aggregates":
                 return {"ok": True, "result": self.list_aggregates()}
+            if op == "approvals":
+                return {"ok": True, "result": self.approvals(request)}
+            if op == "missions":
+                return {"ok": True, "result": self.missions(request)}
+            if op == "tasks":
+                return {"ok": True, "result": self.tasks(request)}
+            if op == "checkpoints":
+                return {"ok": True, "result": self.checkpoints(request)}
+            if op == "security_rejections":
+                return {"ok": True, "result": self.security_rejections(request)}
             if op == "get_state":
                 st = self.get_state(request["streamId"])
                 if st is None:

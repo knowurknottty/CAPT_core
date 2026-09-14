@@ -13,7 +13,11 @@ from .contracts import digest
 RESPONSE_MODES = ("MAX", "SPOCK", "CAVE CAPT", "MIN")
 ENHANCEMENT_ENGINES = ("OFF", "AUTO", "OMNI", "META", "FORGE", "SIGMA")
 CONTEXT_BUDGETS = tuple(range(32_000, 256_001, 32_000))
-_MODEL_OPERATOR_CONTEXT_REFERENCE = digest({"context": "not-selected-at-admission"})
+# A refused/absent context reference must NOT be rendered as a digest. Hashing a
+# sentinel string yields a value indistinguishable from a real governed-pack
+# digest, so provenance reads as authoritative while addressing nothing. Absence
+# is stated explicitly instead. (RED-03)
+_MODEL_OPERATOR_CONTEXT_REFERENCE = "none:not-selected-at-admission"
 _MODEL_OPERATOR_TOOL_SCHEMA = digest(
     {"operations": ["RepositoryRead", "FilesystemRead", "ArtifactCreate", "AnalysisOnly"]}
 )
