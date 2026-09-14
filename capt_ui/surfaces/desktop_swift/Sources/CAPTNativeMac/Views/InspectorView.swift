@@ -48,6 +48,10 @@ struct InspectorView: View {
                 InversionDivider()
                 InversionKeyValueRow("connection", value: store.connectionLabel, tone: runtimeTone)
                 InversionKeyValueRow(
+                    "state root", value: store.runtimeStateDirectory,
+                    tone: .cyan, monospaced: true
+                )
+                InversionKeyValueRow(
                     "task",
                     value: store.taskState == "—" ? "idle" : store.taskState,
                     monospaced: true

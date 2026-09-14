@@ -115,15 +115,12 @@ public final class CAPTEncryptedSessionStore: @unchecked Sendable {
     }
 
     public static func defaultFileURL() -> URL {
-        let env = ProcessInfo.processInfo.environment
-        let root: URL
-        if let override = env["CAPT_STATE_DIR"] ?? env["CAPT_SOLO_HOME"], !override.isEmpty {
-            root = URL(fileURLWithPath: NSString(string: override).expandingTildeInPath)
-        } else {
-            root = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent(".capt", isDirectory: true)
-        }
-        return root.appendingPathComponent("ui", isDirectory: true)
+        defaultFileURL(profile: CAPTRuntimeProfile.current())
+    }
+
+    public static func defaultFileURL(profile: CAPTRuntimeProfile) -> URL {
+        URL(fileURLWithPath: profile.stateDirectory)
+            .appendingPathComponent("ui", isDirectory: true)
             .appendingPathComponent("classic_native_sessions.enc")
     }
 
