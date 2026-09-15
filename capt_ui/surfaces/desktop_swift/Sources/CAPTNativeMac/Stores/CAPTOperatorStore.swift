@@ -344,6 +344,7 @@ final class CAPTOperatorStore: ObservableObject {
                         text: result.text,
                         taskState: result.taskState,
                         driverRunID: result.driverRunID,
+                        executionDetailsJSON: result.executionDetailsJSON,
                         for: sessionID
                     )
                 }

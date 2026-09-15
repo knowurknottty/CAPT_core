@@ -4,11 +4,16 @@ public struct CAPTExecutionResult: Equatable, Sendable {
     public let text: String
     public let taskState: String
     public let driverRunID: String
+    public let executionDetailsJSON: String?
 
-    public init(text: String, taskState: String, driverRunID: String) {
+    public init(
+        text: String, taskState: String, driverRunID: String,
+        executionDetailsJSON: String? = nil
+    ) {
         self.text = text
         self.taskState = taskState
         self.driverRunID = driverRunID
+        self.executionDetailsJSON = executionDetailsJSON
     }
 }
 
@@ -227,6 +232,7 @@ public final class CAPTChatCoordinator {
         try Self.ensureAcceptedOrApplied(run)
 
         let text = Self.extractAssistantText(run)
+        let executionDetailsJSON = Self.prettyExecutionDetails(run)
         do {
             let taskResponse = try client.query(
                 op: "get_state",
@@ -235,13 +241,15 @@ public final class CAPTChatCoordinator {
             return CAPTExecutionResult(
                 text: text,
                 taskState: Self.extractTaskState(taskResponse),
-                driverRunID: pending.driverRunID
+                driverRunID: pending.driverRunID,
+                executionDetailsJSON: executionDetailsJSON
             )
         } catch {
             return CAPTExecutionResult(
                 text: text,
                 taskState: "indeterminate",
-                driverRunID: pending.driverRunID
+                driverRunID: pending.driverRunID,
+                executionDetailsJSON: executionDetailsJSON
             )
         }
     }
@@ -324,27 +332,37 @@ public final class CAPTChatCoordinator {
     }
 
     private static func extractAssistantText(_ response: [String: Any]) -> String {
+        func observationText(_ observation: [String: Any]?) -> String? {
+            guard let observation else { return nil }
+            for key in ["content", "summary"] {
+                if let value = observation[key] as? String {
+                    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !trimmed.isEmpty { return trimmed }
+                }
+            }
+            return nil
+        }
+
         if let observations = response["observations"] as? [[String: Any]],
-           let first = observations.first,
-           let content = first["content"] as? String,
-           !content.isEmpty {
-            return content
+           let text = observationText(observations.first) {
+            return text
         }
         if let result = response["result"] as? [String: Any] {
             if let text = result["text"] as? String, !text.isEmpty { return text }
             if let content = result["content"] as? String, !content.isEmpty { return content }
             if let observations = result["observations"] as? [[String: Any]],
-               let content = observations.first?["content"] as? String,
-               !content.isEmpty {
-                return content
+               let text = observationText(observations.first) {
+                return text
             }
         }
-        if let data = try? JSONSerialization.data(
-            withJSONObject: response,
-            options: [.prettyPrinted, .sortedKeys]
-        ), let text = String(data: data, encoding: .utf8) {
-            return text
-        }
         return "CAPT returned a result without renderable text."
+    }
+
+    private static func prettyExecutionDetails(_ response: [String: Any]) -> String? {
+        guard JSONSerialization.isValidJSONObject(response),
+              let data = try? JSONSerialization.data(
+                withJSONObject: response, options: [.prettyPrinted, .sortedKeys]
+              ) else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 }

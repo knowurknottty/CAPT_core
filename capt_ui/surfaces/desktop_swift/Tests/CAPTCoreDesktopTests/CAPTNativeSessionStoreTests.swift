@@ -249,6 +249,7 @@ extension CAPTNativeSessionStoreTests {
 
         XCTAssertEqual(restored.first?.messages.first?.text, "CAPT_MAC_FALLBACK_GOLDEN")
         XCTAssertEqual(restored.first?.messages.first?.authorityState, "awaiting_verification")
+        XCTAssertEqual(restored.first?.messages.first?.executionDetailsJSON, receipt)
     }
 
     func testArbitraryAssistantJSONIsNotRewrittenByReceiptMigration() throws {

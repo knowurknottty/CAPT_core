@@ -457,10 +457,15 @@ extension CAPTNativeChatWorkspaceTests {
             text: "provider result",
             taskState: "awaiting_verification",
             driverRunID: "dr-review-1",
+            executionDetailsJSON: "{\"status\":\"accepted\"}",
             for: id
         )
 
         XCTAssertEqual(workspace.session(id)?.verificationDriverRunID, "dr-review-1")
+        XCTAssertEqual(
+            workspace.session(id)?.messages.last?.executionDetailsJSON,
+            "{\"status\":\"accepted\"}"
+        )
         XCTAssertEqual(workspace.flow(for: id).phase, .awaitingVerification)
 
         workspace.completeVerification(accepted: true, for: id)

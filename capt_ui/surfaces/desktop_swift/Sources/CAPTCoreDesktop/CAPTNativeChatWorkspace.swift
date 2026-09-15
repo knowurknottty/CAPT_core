@@ -272,6 +272,7 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         text: String,
         taskState: String,
         driverRunID: String? = nil,
+        executionDetailsJSON: String? = nil,
         for id: UUID
     ) {
         guard let index = index(of: id) else { return }
@@ -281,7 +282,8 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         sessions[index].messages.append(CAPTChatMessage(
             role: .assistant,
             text: text,
-            authorityState: taskState
+            authorityState: taskState,
+            executionDetailsJSON: executionDetailsJSON
         ))
         sessions[index].updatedAt = Date()
         var currentFlow = flow(for: id)

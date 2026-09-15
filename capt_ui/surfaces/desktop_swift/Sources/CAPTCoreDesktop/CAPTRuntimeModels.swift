@@ -30,19 +30,22 @@ public struct CAPTChatMessage: Identifiable, Codable, Equatable, Sendable {
     public let text: String
     public let timestamp: Date
     public let authorityState: String?
+    public let executionDetailsJSON: String?
 
     public init(
         id: UUID = UUID(),
         role: CAPTMessageRole,
         text: String,
         timestamp: Date = Date(),
-        authorityState: String? = nil
+        authorityState: String? = nil,
+        executionDetailsJSON: String? = nil
     ) {
         self.id = id
         self.role = role
         self.text = text
         self.timestamp = timestamp
         self.authorityState = authorityState
+        self.executionDetailsJSON = executionDetailsJSON
     }
 }
 

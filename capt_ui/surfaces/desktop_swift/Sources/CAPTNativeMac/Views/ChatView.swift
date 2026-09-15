@@ -248,6 +248,7 @@ private struct ChatContextRail: View {
 
 private struct MessageRow: View {
     let message: CAPTChatMessage
+    @State private var showsExecutionDetails = false
 
     var body: some View {
         if message.role == .system {
@@ -287,6 +288,20 @@ private struct MessageRow: View {
                     .textSelection(.enabled)
                     .font(.body)
                     .lineSpacing(2)
+                if let details = message.executionDetailsJSON, !details.isEmpty {
+                    DisclosureGroup("Execution details", isExpanded: $showsExecutionDetails) {
+                        ScrollView([.vertical, .horizontal]) {
+                            Text(details)
+                                .font(.caption.monospaced())
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.top, 6)
+                        }
+                        .frame(maxHeight: 320)
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
             }
             .padding(14)
             if message.role == .user {

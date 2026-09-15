@@ -172,7 +172,8 @@ public final class CAPTEncryptedSessionStore: @unchecked Sendable {
                     role: message.role,
                     text: summary,
                     timestamp: message.timestamp,
-                    authorityState: message.authorityState
+                    authorityState: message.authorityState,
+                    executionDetailsJSON: message.text
                 )
                 changed = true
             }

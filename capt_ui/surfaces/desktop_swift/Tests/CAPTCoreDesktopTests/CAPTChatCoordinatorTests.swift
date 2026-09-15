@@ -114,6 +114,37 @@ final class CAPTChatCoordinatorTests: XCTestCase {
         ])
     }
 
+
+    func testApproveAndRunExtractsObservationSummaryAndPreservesExecutionDetails() throws {
+        let client = MockRuntimeClient()
+        client.responses["request_model_prompt_approval"] = approvalResponse()
+        client.responses["submit_approval_decision"] = ["status": "accepted"]
+        client.responses["run_approved_hermes_inspection"] = [
+            "status": "accepted",
+            "classification": "accepted",
+            "commandId": "cmd-qwen",
+            "result": [
+                "driverRunId": "run-1",
+                "observations": [["summary": "# SOMA Competition Readiness Audit\n\nNOT READY"]]
+            ]
+        ]
+        client.responses["query:get_state"] = [
+            "ok": true, "result": ["state": "awaiting_verification"]
+        ]
+        let coordinator = CAPTChatCoordinator(client: client)
+        let pending = try coordinator.requestApproval(
+            objective: "audit SOMA", targetRoot: "/repo",
+            provider: "llamacpp", model: "qwen"
+        )
+
+        let result = try coordinator.approveAndRun(pending)
+
+        XCTAssertEqual(result.text, "# SOMA Competition Readiness Audit\n\nNOT READY")
+        let details = try XCTUnwrap(result.executionDetailsJSON)
+        XCTAssertTrue(details.contains("\"commandId\" : \"cmd-qwen\""))
+        XCTAssertTrue(details.contains("SOMA Competition Readiness Audit"))
+    }
+
     func testApproveRunsExactBoundExecutionAndExtractsObservation() throws {
         let client = MockRuntimeClient()
         client.responses["request_model_prompt_approval"] = approvalResponse()
