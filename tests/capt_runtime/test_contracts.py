@@ -110,3 +110,23 @@ def test_version_visible_in_both_languages():
     assert capt_contracts.CONTRACT_SCHEMA_VERSION == "1.0.0"
     version_ts = (GEN_TS / "src" / "version.ts").read_text()
     assert "1.0.0" in version_ts
+
+
+def test_context_slice_accepts_governed_model_context_budget() -> None:
+    from capt_runtime.context_slice import build_context_slice
+
+    ctx = build_context_slice(
+        lease={
+            "leaseId": "lease-context-budget",
+            "operations": ["repository.read"],
+            "scope": {"kind": "filesystem", "rootPath": "/tmp", "recursive": True},
+            "validFrom": "2026-09-15T00:00:00Z",
+            "validUntil": "2030-01-01T00:00:00Z",
+        },
+        filesystem_policy={"rootPath": "/tmp", "writesAllowed": False, "allowedPaths": ["/tmp"]},
+        permitted_tools=["terminal"],
+        budgets={"maxSeconds": 600, "maxArtifacts": 1, "maxObservations": 10, "maxTokens": 32000},
+        expected_artifacts=[],
+        termination_conditions={"onUnexpectedWrite": "fail"},
+    )
+    assert ctx["budgets"]["maxTokens"] == 32000

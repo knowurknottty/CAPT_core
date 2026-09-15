@@ -92,6 +92,43 @@ def test_transport_uses_strict_schema_and_capability_guard(monkeypatch):
     assert "markdown" in system.lower()
 
 
+
+def test_prompt_compiler_timeout_defaults_follow_endpoint_class():
+    from desktop.prompt_compiler_provider import (
+        OpenAICompatiblePromptCompilerTransport, PromptCompilerSelection,
+    )
+
+    local = OpenAICompatiblePromptCompilerTransport(
+        PromptCompilerSelection(
+            "mtplx", "local-model", "http://127.0.0.1:18085/v1", "local"
+        )
+    )
+    remote = OpenAICompatiblePromptCompilerTransport(
+        PromptCompilerSelection(
+            "openrouter", "remote/model", "https://openrouter.ai/api/v1",
+            "remote", "OPENROUTER_API_KEY", True,
+        ),
+        api_key="synthetic-test-key",
+    )
+
+    assert local.timeout_seconds == 600
+    assert remote.timeout_seconds == 120
+
+
+def test_prompt_compiler_rejects_nonpositive_explicit_timeout():
+    from desktop.prompt_compiler_provider import (
+        LocalPromptCompilerSelection, OpenAICompatiblePromptCompilerTransport,
+    )
+    import pytest
+
+    with pytest.raises(ValueError, match="timeout must be positive"):
+        OpenAICompatiblePromptCompilerTransport(
+            LocalPromptCompilerSelection(
+                "mtplx", "local-model", "http://127.0.0.1:18085/v1"
+            ),
+            timeout_seconds=0,
+        )
+
 def test_transport_rejects_non_object_model_content(monkeypatch):
     from desktop.prompt_compiler_provider import (
         LocalPromptCompilerSelection,

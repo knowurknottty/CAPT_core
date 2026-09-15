@@ -267,7 +267,11 @@ class ProviderManager:
         p.authenticated = result.get("authenticated")
         p.model_list_ok = result.get("model_list_ok", False)
         p.latency_ms = result.get("latency_ms")
-        p.models = list(result.get("models", []))
+        # A failed/unavailable probe is health evidence, not evidence that the
+        # provider has no models. Preserve the last-known-good index unless a
+        # model-list request actually succeeded.
+        if result.get("model_list_ok"):
+            p.models = list(result.get("models", []))
         if result.get("health") == ProviderHealth.GREEN.value:
             p.last_success_at = _now()
         self.save()
@@ -322,6 +326,30 @@ class ProviderManager:
         }
 
     # -- discovery ---------------------------------------------------------
+    def refresh_local(self) -> List[Provider]:
+        """Refresh every configured local model endpoint without touching cloud.
+
+        Custom loopback OpenAI-compatible providers are included; failed probes
+        retain their last-known-good model index via :meth:`test`.
+        """
+        from capt_runtime.provider_endpoint import endpoint_class
+
+        refreshed: List[Provider] = []
+        for provider in list(self._providers.values()):
+            if not provider.enabled or provider.kind != ProviderKind.LOCAL:
+                continue
+            if provider.transport == "openai_compatible":
+                if not provider.base_url or endpoint_class(provider.base_url) != "local":
+                    continue
+            elif provider.transport == "ollama":
+                if not provider.base_url or endpoint_class(provider.base_url) != "local":
+                    continue
+            else:
+                # Native/subprocess transports do not expose a model index here.
+                continue
+            refreshed.append(self.test(provider.id))
+        return refreshed
+
     def discover_local(self) -> List[str]:
         """Return ids of local providers whose transport adapter detected a
         reachable service. Uses the correct adapter per provider - never forces

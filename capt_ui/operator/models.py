@@ -130,11 +130,28 @@ class ModelManager:
         )
 
     # -- setters ----------------------------------------------------------
+    def _validate_selection(self, provider_id: str, model_id: str) -> None:
+        provider = self._providers.get(provider_id)
+        if provider is None:
+            raise ValueError("unknown provider: %s" % provider_id)
+        if not provider.enabled:
+            raise ValueError("provider is disabled: %s" % provider_id)
+        if model_id not in (provider.models or []):
+            raise ValueError(
+                "model %s is not indexed for provider %s" % (model_id, provider_id)
+            )
+
     def set_default(self, provider_id: str, model_id: str) -> None:
+        self._validate_selection(provider_id, model_id)
+        # The global default is a provider/model tuple. Keep ProviderManager's
+        # selected bit aligned with the same tuple so GUI and CLI projections
+        # cannot disagree about which provider owns the active model.
+        self._providers.activate(provider_id)
         self._state["default"] = {"provider": provider_id, "model": model_id}
         self.save()
 
     def set_mission_override(self, mission_id: str, provider_id: str, model_id: str) -> None:
+        self._validate_selection(provider_id, model_id)
         self._state["mission_override"] = {
             "mission": mission_id, "provider": provider_id, "model": model_id,
         }
@@ -145,6 +162,7 @@ class ModelManager:
         self.save()
 
     def set_temporary(self, provider_id: str, model_id: str) -> None:
+        self._validate_selection(provider_id, model_id)
         self._state["temporary_override"] = {"provider": provider_id, "model": model_id}
         self.save()
 
@@ -153,6 +171,7 @@ class ModelManager:
         self.save()
 
     def set_workflow(self, workflow_id: str, provider_id: str, model_id: str) -> None:
+        self._validate_selection(provider_id, model_id)
         self._state["workflow"][workflow_id] = {"provider": provider_id, "model": model_id}
         self.save()
 
