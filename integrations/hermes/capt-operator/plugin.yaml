@@ -1,0 +1,38 @@
+name: capt-operator
+label: CAPT Operator
+description: >
+  CAPT operator surface for Hermes. The model keeps inference and reasoning;
+  CAPT supplies governance, presentation, and durability. Wires the canonical
+  CAPT response modes (MAX / SPOCK / CAVE CAPT / MIN) into a live Hermes
+  session, injects the capt-governance + response-mode prompt sections that
+  CAPT's own build_prompt_assembly() defines, enforces the mode on the final
+  response, and logs milestones as governed checkpoints to the CAPT runtime
+  ledger.
+version: 1.3.1
+icon: 🏛
+kind: standalone
+entry: __init__.py
+toolset: capt
+provides_tools:
+  - capt_mode
+  - capt_ledger
+  - capt_govern
+provides_hooks:
+  - on_session_start
+  - pre_llm_call
+  - transform_llm_output
+  - post_api_request
+  - pre_verify
+  - on_session_end
+  - on_session_finalize
+tab: null
+# Registered surface (deliberately small — every tool is sent on every API call):
+#   tools:  capt_mode, capt_ledger, capt_govern
+#   hooks:  on_session_start, pre_llm_call, transform_llm_output,
+#           post_api_request, pre_verify, on_session_end, on_session_finalize
+#   cli:    hermes capt status|mode|checkpoint|recover
+#
+# Authoritative sources this plugin READS rather than duplicates:
+#   response mode + context budget  -> ~/.capt/ui/prompt-preferences.json
+#   mode instructions               -> CAPT_core/capt_runtime/operator_provenance.py
+#   ledger                          -> ~/.capt/runtime.sock (RuntimeService only)
