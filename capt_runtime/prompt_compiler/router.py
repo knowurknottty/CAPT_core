@@ -24,8 +24,10 @@ def _underspecified(prompt: str) -> bool:
         return True
     lower = prompt.lower()
     signals = (
-        "answer", "build", "code", "file", "fix", "implement", "plan",
-        "report", "research", "review", "test", "write",
+        "answer", "analyze", "audit", "build", "check", "code", "compare",
+        "evaluate", "explain", "file", "find", "fix", "identify", "implement",
+        "inspect", "list", "map", "match", "plan", "rank", "report", "research",
+        "review", "show", "summarize", "test", "write",
     )
     return not any(signal in lower for signal in signals)
 

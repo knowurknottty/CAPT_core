@@ -34,6 +34,41 @@ def test_auto_routes_substantive_work_through_omni_then_meta():
     assert "substantive" in route.rationale.lower()
 
 
+def test_auto_runs_prompt_intelligence_for_list_and_match_research_request():
+    seen = []
+
+    def transport(payload):
+        seen.append(payload)
+        return {
+            "stage": payload["stage"],
+            "outcome": "subnet-to-project match",
+            "scope": "current Bittensor subnets and Inversion Labs projects",
+            "inputs": ["operator prompt"],
+            "outputs": ["current subnet inventory", "project match matrix"],
+            "constraints": ["preserve requested project emphasis"],
+            "successCriteria": ["all current subnets are considered"],
+            "ambiguities": [],
+            "requestedCapabilities": [],
+        }
+
+    proposal = PromptCompiler(
+        runner=BoundedPromptCompilerRunner(transport),
+        provider=CompilerProvider("llamacpp", "local-qwen", "local"),
+    ).compile(_request(
+        original_prompt=(
+            "llist all the current bittensor subnets and match any of inversion labs "
+            "projects especially within biocapt, capt, capt mcp, capt tia, the capt "
+            "hermes plugin etc"
+        ),
+        requested_capabilities=(),
+    ))
+
+    assert proposal.status == "ready_for_approval"
+    assert proposal.proposed_prompt != proposal.original_prompt
+    assert seen
+    assert all(record.execution_enabled for record in proposal.stage_records)
+
+
 def test_underspecified_request_requires_clarification_without_inventing_intent():
     proposal = PromptCompiler().compile(_request(original_prompt="help"))
 
