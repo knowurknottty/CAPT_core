@@ -2,7 +2,7 @@
 
 CAPT is local-first and fail-closed where its contracts require it, but local execution is not automatically high-assurance security.
 
-Snapshot date: **2026-08-27**.
+Snapshot date: **2026-09-15**. Source reviewed: `1e85bac5d17cde342a1ae55e6ee3da5fa681ff61`.
 
 ## Threat model
 
@@ -10,14 +10,14 @@ The current public Core primarily assumes one trusted local OS user. The host OS
 
 ## Integrated controls on merged `main`
 
-Current `main` includes:
+The reviewed merged source includes:
 
 - authenticated local RuntimeService socket/token access;
 - bounded production JSON framing and malformed/oversized-frame rejection;
 - capability/lease/governance boundaries and governed revoke;
 - ordered EventStore history and integrity checks;
 - covered security-rejection auditing;
-- restrictive permissions for covered runtime state files;
+- permission-hardening attempts for covered runtime state files, subject to the chmod-failure limitation below;
 - request/token/cost resource ceilings at governed provider admission;
 - prompt/context/provider injection-assurance regressions;
 - durable idempotency/checkpoint/recovery and indeterminate-dispatch handling;
@@ -30,6 +30,23 @@ Current `main` includes:
 - authored-skill provenance, exact approval binding, and execution-time anti-drift checks.
 
 These implementation facts do **not** automatically mark corresponding release controls PASS. SecurityGate requires the evidence class specified for each exact source identity.
+
+## September merged authority and observability boundaries
+
+PR #148 and the subsequent semantic operator-control merge `42a6cd290a45a2154cb18f6c3d111057db2ec407` add prompt proposals, approval-bound execution, and shared operator configuration/session coordination. `desktop/operator_control.py` is explicitly non-authoritative: its durable state does not replace EventStore approval, execution, evidence, verification, ClaimGuard, task, or mission state.
+
+PR #155 (`5812a0cf2c7b58badf83262b78a57da47961f995`) adds:
+
+- lifecycle authority gates in `capt_runtime/authority.py` and `services.py`: mission transitions require human/system authority, driver-run creation requires execution-plane/system authority, and driver-run transitions also permit human authority to preserve governed operator cancellation;
+- envelope-identity refusal auditing as `unauthorized_envelope_identity`, using digests of presented/bound identifiers rather than raw identifiers; refusal survives an audit-write failure;
+- approval, mission, task, checkpoint, and security-rejection read projections in `desktop/capt_runtime_service.py`. These expose recorded state for observability; they do not grant authority, authorize execution, or prove completion;
+- provenance honesty in `capt_runtime/operator_provenance.py`: an absent context reference is `none:not-selected-at-admission`, not a hashed sentinel presented as a governed-pack digest. The `contextPackDigest` naming ambiguity remains; this is not universal provenance closure.
+
+Focused repository coverage is in `tests/capt_runtime/test_authority_gates_mission_driverrun.py`, `test_security_identity_audit.py`, `test_read_projections.py`, and `test_cross_model_context_continuity.py`. Test source presence is not an exact-HEAD release-security receipt.
+
+`capt_runtime/context_pipeline.py` and `capt_runtime/context_merkle.py` are explicitly **UNSHIPPED** (`SHIPPED = False`). Neither is a live runtime dependency; `test_dead_context_paths.py` guards their markers and absence of production imports. The live ContextPack producer is `MemoryTriggerEngine._fire_retrieval`. The experimental pipeline/Merkle modules must not be cited as active security controls or cache guarantees.
+
+Merged Model Council alpha (PR #153) persists plans and analysis through governed EventStore commands; agreement does not create Verification or ClaimGuard acceptance. SOMA M0 (PR #156) provides local compression receipts, not runtime evidence admission or release authorization. Native change `d33a5e4` separates the model answer from execution details; the research-routing change `1e85bac` changes prompt classification. Neither elevates model text into authoritative completion.
 
 ## Tool execution security boundary
 
@@ -67,9 +84,9 @@ Security authorization is bound to the exact source SHA evaluated.
 - Historical merged PR #117 head `570babeef113943860c1268722200a48639e406d` remains **Release Security FAIL** on run `32440329043`.
 - Release-security closure baseline `2199c036aa22af33fb3eb0700f63f820a35aa55a` passed hosted run `32617740908` with **21 PASS / 0 FAIL / 0 NOT_VERIFIED / 26 NOT_APPLICABLE** and no blockers. M0-A run `32617740848` also passed on that SHA.
 - ToolBroker PR #126 exact head `b21ed6e7ff3996d48c756e342b278b69af0d666f` passed hosted M0-A and Release Security before squash merge. The squash merge `bcfdff9d43b35b5b192cc998b68ce16cc73b9985` is tree-identical but a different commit SHA; the PR-head receipt is not relabeled.
-- At audit start, literal `main` `3aee7370bac880aed99ce3c9ecfaa6d9ff48101e` had an M0-A push run where Python 3.12, contract drift, and TypeScript parity passed but Python 3.10 failed because a Docker availability probe timed out during test collection. The failed job was retried during this audit.
+- Historically, at the **2026-08-27** audit start, literal `main` `3aee7370bac880aed99ce3c9ecfaa6d9ff48101e` had an M0-A push run where Python 3.12, contract drift, and TypeScript parity passed but Python 3.10 failed because a Docker availability probe timed out during test collection. The failed job was retried during that historical audit; this review establishes no retry outcome.
 
-Do not call `3aee737…` release-authorized merely because it descends from an authorized source. A later SHA needs its own evidence.
+The August 27 observation and retry are historical, not September HEAD status. Do not call `3aee737…` release-authorized merely because it descends from an authorized source. Current HEAD `1e85bac5d17cde342a1ae55e6ee3da5fa681ff61` has **no inherited release authorization**. This review establishes no current-HEAD Release Security run or authorization; each later SHA needs its own evidence.
 
 For a public artifact release, rebuild and hash the wheel/sdist/native artifacts from the exact authorized source, then complete any required signing, notarization, and distribution proof.
 
@@ -77,9 +94,9 @@ For a public artifact release, rebuild and hash the wheel/sdist/native artifacts
 
 Covered sensitive EventStore JSON payload/state/receipt/checkpoint/security-detail fields and MemoryStore content use authenticated encryption. Legacy plaintext rows are migrated on open, and wrong keys or modified ciphertext fail closed.
 
-On macOS, the runtime state key is stored in Keychain when available. CI/tests may provide an explicit key; other supported hosts can use a user-private key file. SQLite DB/WAL/SHM files are owner-private, but CAPT does not chmod caller-owned pre-existing parent directories.
+On macOS, the runtime state key is stored in Keychain when available. CI/tests may provide an explicit key; other supported hosts can use a user-private key file. For covered runtime SQLite DB/WAL/SHM files, the implementation attempts owner-only permissions (`0600`), but its hardening helpers suppress `OSError`; restrictive permissions are therefore not guaranteed when chmod fails. CAPT does not chmod caller-owned pre-existing parent directories.
 
-This is field-level protection for covered persisted content, not whole-disk encryption. Some metadata, digests, identifiers, and non-SQLite artifacts remain outside that encrypted-content boundary. Host full-disk/filesystem protection is still relevant.
+This is field-level protection for covered persisted content, not whole-disk encryption. The runtime `capt_runtime.memory.store.MemoryStore` is distinct from `capt_solo.memory.engine.MemoryEngine`: the latter writes standalone Solo memory content as plaintext SQLite values and does not inherit this encryption claim. Some metadata, digests, identifiers, and non-SQLite artifacts remain outside that encrypted-content boundary. Host full-disk/filesystem protection is still relevant.
 
 ## Provider secrets and remote execution
 

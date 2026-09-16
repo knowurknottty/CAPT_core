@@ -44,6 +44,8 @@ Subsystem references such as ClaimGuard, Foundry, Knowledge Bubbles, CTP/KHSB, r
 
 ## Current merged milestones
 
+Snapshot: 2026-09-15, source HEAD `1e85bac5d17cde342a1ae55e6ee3da5fa681ff61`; package `capt-solo 0.5.0`.
+
 The public documentation should assume the following are already merged into Core `main`, while keeping their proof boundaries separate:
 
 - PR #117 — provider/native/UPG-001→019/MCP convergence;
@@ -51,19 +53,27 @@ The public documentation should assume the following are already merged into Cor
 - PR #128 — owner-approved public-release design + implementation plans preserved on current main as documentation authority only;
 - PR #129 — managed-local Agent Skills import/verify, contextual selection, approval binding, anti-drift, and native visibility.
 
+- **PR #146** — CAPT-UPG-020→024 benchmark/probe and cognitive-debt convergence, merge `cefc885`; empirical effectiveness and provider-cache claims remain separate proof obligations.
+- **PR #148** — native macOS control center, Prompt Intelligence proposals/approval binding, and model/tool authority work, merge `5709380`; semantic operator-control API subsequently merged at `42a6cd2`, with revision/digest-bound configuration and prompt selection subordinate to RuntimeService/EventStore.
+- **PR #153** — Model Council alpha, merge `542f820`: tier geometry, logical Vessel expansion, launch interlocks, dissent-preserving analysis, durable admission/replay/checkpoints, and read-only Chamber projection; live provider execution, native Council GUI, and release proof remain separate.
+- **PR #155** — hardening tiers 1–5, merge `5812a0c`: read projections, mission/DriverRun authority gates, identity-refusal auditing, honest absent-context provenance, and explicit unshipped labels for `context_pipeline` / `context_merkle`.
+- **PR #156** — SOMA M0 contract closure, merge `4f1c0a1`: trajectory/reducer contracts, compression receipts, and local benchmark/reconstruction primitives; this does not establish live runtime integration or competition readiness.
+- **`d33a5e4`** — native model-answer rendering separated from the execution receipt, with retained disclosure/persistence of execution details.
+- **`1e85bac`** — expands AUTO routing signals to include list/match and other actionable requests; the four-word minimum and operator-selected engine/mode still apply. This is routing, not proof of a Search/Deep Research product surface.
+
 Do not regress current docs to the old PR #44/#46/#47/#48/#49 “active integration stack.” Those branches are historical implementation lineage, not the present Core topology.
 
-## Current open Core work
+## Merged UPG lane and remaining proof
 
-As of 2026-08-27, the open Core PR lane is CAPT-UPG-020→024:
+CAPT-UPG-020→024 source was reconciled into Core through **PR #146 (`cefc885`)**. The earlier #89/#91/#93/#95/#97 lane is historical implementation lineage, not a list of pending Core merges.
 
-- #89 reciprocal-review benchmark;
-- #91 sparse symbol-index probe;
-- #93 Tree-sitter structural-hash probe;
-- #95 FastCDC/content-defined chunk probe;
-- #97 cognitive-debt cockpit.
+- CAPT-UPG-020: reciprocal-review scorer/harness; empirical effectiveness requires observed trial evidence.
+- CAPT-UPG-021: read-only sparse symbol index over Discovery/SEAL-admitted candidates; real-repository performance requires benchmark evidence.
+- CAPT-UPG-022: Tree-sitter structural-hash probe; grammar/runtime and semantic-equivalence claims are separate.
+- CAPT-UPG-023: chunk-stability/FastCDC probe; chunk reuse does not prove provider prefix-cache reuse.
+- CAPT-UPG-024: cognitive-debt projection and `capt-debt` surface; absence of reported debt does not prove correctness.
 
-The Inversion Labs/Forge line is a separate edition/history lineage rather than an open Core-main stack. The approved public-release design/plans are now present on `main` through #128, but their product features remain implementation work until separately proven.
+The Inversion Labs/Forge line is a separate edition/history lineage rather than an open Core-main stack. The approved public-release design/plans are now present on `main` through #128, but the complete product remains implementation work. Later source implements Model Council alpha (#153) and native answer/receipt separation (`d33a5e4`), without completing those plans.
 
 ## Historical records
 

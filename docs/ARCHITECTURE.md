@@ -32,6 +32,8 @@ history               approvals        + ContextPack
 replaceable AI   bounded effects
 ```
 
+This diagram describes governed runtime operations. Standalone `capt memory` commands call Solo MemoryEngine directly; they do not establish EventStore admission or model continuation.
+
 No presentation surface, MCP client, external model, Hermes client, Cohort coordinator, discovery scanner, authored-skill pack, prompt enhancer, provider manager, tool adapter, or security checker becomes a parallel runtime.
 
 ## Merged convergence architecture
@@ -39,7 +41,10 @@ No presentation surface, MCP client, external model, Hermes client, Cohort coord
 PR #117 reconciled the formerly stacked runtime, provider, native, security, authored-skill, and UPG-001→019 lines on `main`. Later merges extend the same authority spine rather than creating new ones:
 
 - **PR #126** adds durable ToolExecution state and ToolBroker with local/SSH/Docker terminal plus file/code adapters;
-- **PR #129** adds managed-local Agent Skills import/verify, contextual selection, exact approval binding, anti-drift enforcement, and native skill visibility.
+- **PR #129** adds managed-local Agent Skills import/verify, contextual selection, exact approval binding, anti-drift enforcement, and native skill visibility;
+- **PR #146** merges UPG-020–024: reciprocal-review scoring, admitted-candidate symbol indexing, structural-hash/chunk-stability probes, and the cognitive-debt projection/`capt-debt` surface. Empirical effectiveness and provider-cache reuse remain separate proof obligations;
+- **PR #148** merges governed Settings/Skills/model/filesystem/shell/provider controls and the native/TUI golden authority tranche;
+- **`42a6cd2`** merges the semantic operator-control API; **PR #153** merges Model Council alpha; **PR #155** adds read projections and further authority hardening.
 
 Key integrated properties:
 
@@ -56,6 +61,12 @@ Key integrated properties:
 
 ## Durable layers
 
+### Operator control and read projections
+
+`desktop/operator_control.py` persists revisioned configuration/session coordination. The semantic API binds provider, model, canonical workspace root, prompt-intelligence mode, and proposal/approval cursors; stale revisions are rejected. This coordination state is non-authoritative: execution, evidence, verification, claims, and completion still come from RuntimeService/EventStore.
+
+Runtime queries expose `approvals`, `missions`, `tasks`, and `checkpoints`, including derived approval staleness and checkpoint integrity reporting. A read projection does not grant authority or mutate an approval into a new state.
+
 ### EventStore
 
 Authoritative ordered runtime history, replay, sequence identity, stream versions, and integrity chain.
@@ -66,7 +77,7 @@ Operational transaction/recovery journal; it does not replace EventStore authori
 
 ### Durable memory / ContextPack
 
-Durable knowledge storage and governed bounded model context are separate layers. Context selection/provenance is frozen at the approval/execution boundary where required.
+Runtime-owned `capt_runtime.memory.store.MemoryStore` and governed bounded model context are separate layers; the standalone `capt_solo.memory.engine.MemoryEngine` is a distinct store and is not automatically bridged into them. Context selection/provenance is frozen at the approval/execution boundary where required. The live ContextPack producer is `MemoryTriggerEngine._fire_retrieval`; `context_pipeline.py` and `context_merkle.py` are explicitly unshipped, unwired design/experiment modules.
 
 ### KHSB
 
@@ -76,9 +87,15 @@ In-process coordination and compatibility substrate. It remains non-authoritativ
 
 Merged `main` includes durable Cohort persistence/reconstruction, evidence admission, governed steering, epoch handling, and Chamber projection. Cohort majority/quorum is not verification and cannot bypass RuntimeService authority.
 
+### Model Council alpha
+
+Merged alpha source includes topology/launch contracts, deterministic claim analysis, durable Council state, and Council Chamber projection. Declared vessel counts are not measured provider concurrency or evidence of model quality; Council consensus cannot manufacture verification. This alpha does not establish a live Council provider scheduler, native Council UI, or release proof.
+
 ## Governed model execution
 
 RuntimeService admits commands under explicit authority. DriverHost executes bounded model work. A provider/model result yields observations/artifact candidates and leaves verification, ClaimGuard, task completion, and mission completion distinct.
+
+Prompt proposals are durable, revisioned review material bound into human approval. The merged compiler supports OMNI/META and bounded FORGE repository analysis/SIGMA reconciliation. AUTO routing recognizes actionable research prompts; routing and compiler output do not authorize execution.
 
 ## Governed tool execution
 
@@ -99,11 +116,11 @@ Explicit pinned selection outranks contextual managed-local selection. Skill con
 
 ## Provider layer
 
-The convergence provider spine includes Ollama plus local/authenticated OpenAI-compatible execution, endpoint provenance, resource ceilings, bounded prewarm, and coherent global/session provider selection. The generic direct native MLX placeholder is not represented as a working adapter unless materially configured.
+The convergence provider spine includes Ollama plus local/authenticated OpenAI-compatible execution, endpoint provenance, resource ceilings, bounded prewarm, and coherent global/session provider selection. The generic direct native MLX placeholder remains unregistered; configured MLX/MTPLX services use the OpenAI-compatible adapter, not a direct native `mlx_lm` adapter.
 
 ## Native macOS layer
 
-`CAPTNativeMac` is a real executable target, not merely a Swift contract package. It remains a thin RuntimeService client with typed projections, governed approvals, selected-skill visibility, encrypted session-cache persistence, and session-isolated async configuration updates.
+`CAPTNativeMac` is a real executable target, not merely a Swift contract package. It remains a thin RuntimeService client with typed projections, governed approvals, selected-skill visibility, encrypted session-cache persistence, and session-isolated async configuration updates. Governed Settings and Skills controls bind execution scope and selected context into approval. Native chat renders model-answer text separately from the expandable execution receipt; neither rendering establishes verification or completion.
 
 ## Security layer
 

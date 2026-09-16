@@ -2,7 +2,9 @@
 
 CAPT keeps evidence scoped to the claim it actually supports. Historical evidence is not rewritten into current proof, and ordinary test success does not become a security-control attestation.
 
-Snapshot date: **2026-08-27**.
+Snapshot date: **2026-09-15**. Source reviewed: `1e85bac5d17cde342a1ae55e6ee3da5fa681ff61`.
+
+Current HEAD has **no inherited release authorization**. The historical receipts below remain bound to their original identities. This repository review establishes merged source and focused test coverage, not a current-HEAD hosted Release Security run or public artifact release.
 
 ## Historical v0.5 evidence
 
@@ -60,7 +62,7 @@ PR #128 merged nine documentation files at `54ac314294fb456cb2d9089615996b31dfec
 
 Evidence claim: the approved documents are present on current `main` without stale runtime ancestry.
 
-Non-claim: Secure Intake/Quarantine, Projects, human-first results, composer palette, Search/Deep Research governance, and Cohort Council are not thereby implemented.
+Non-claim: those design documents alone did not implement Secure Intake/Quarantine, Projects, human-first results, composer palette, Search/Deep Research governance, or Cohort Council. Later implementation must be assessed separately; merged Model Council alpha is bounded below.
 
 ## Managed authored skills evidence — PR #129
 
@@ -78,16 +80,48 @@ The PR records:
 
 Known bounded limitation: four imported skills exceeded the current 32,768-character inline contract and remained installed/integrity-verified but non-inlineable rather than truncated.
 
-## Current-main M0-A observation at audit start
+## Historical M0-A observation — 2026-08-27 audit start
 
-For `main` `3aee7370bac880aed99ce3c9ecfaa6d9ff48101e`, push run `32958741310` completed with:
+For then-`main` `3aee7370bac880aed99ce3c9ecfaa6d9ff48101e`, push run `32958741310` completed with:
 
 - Python 3.12 conformance/full regression/build/install: **PASS**;
 - contract binding drift/generation: **PASS**;
 - TypeScript build + parity: **PASS**;
 - Python 3.10: **FAIL during collection**, because the Docker-daemon availability probe timed out after five seconds while trying `docker --context desktop-linux info`.
 
-That failure is evidence of a CI/test-harness/environment interaction, not proof that the ToolBroker implementation itself failed. It is still a real red hosted run and must not be omitted from current status. The failed job was retried during the 2026-08-27 documentation audit; the retry result is a separate hosted fact.
+That failure is evidence of a CI/test-harness/environment interaction, not proof that the ToolBroker implementation itself failed. It is still a real red hosted run and must remain in this historical record; it is not the status of September HEAD. The failed job was retried during the 2026-08-27 documentation audit; the retry result is a separate hosted fact.
+
+## September reconciliation: merged source and focused coverage
+
+These are repository source/test facts on the reviewed HEAD ancestry. The test files identify bounded coverage, not newly executed tests, hosted run receipts, installed-runtime acceptance, or release-security authorization. No September hosted run IDs or test totals are asserted here.
+
+### PR #146 convergence and operator control
+
+PR #146 merged on August 28 at `cefc885e0b7f42acdc86c5d9e230d20677d85468`: CAPT-UPG-020–024 are merged source, not an active integration stack. Source includes the reciprocal-review harness (`benchmarks/reciprocal_review.py`), discovery symbol index (`capt_runtime/discovery/symbol_index.py`), structural-hash and chunk-stability probes, and cognitive-debt projection (`capt_ui/operator/cognitive_debt.py`). Corresponding `tests/test_reciprocal_review_benchmark.py`, `test_discovery_symbol_index.py`, `test_tree_sitter_hashing_probe.py`, `test_chunk_stability_probe.py`, and `test_cognitive_debt_projection.py` cover their bounded contracts. This does not establish empirical reciprocal-review benefit, context sufficiency, semantic equivalence, FastCDC/provider-cache gains, or absence-of-debt correctness.
+
+PR #148 merged at `5709380a914467ea7c51c1b41e118b45ce6efb31`; semantic operator control subsequently merged at `42a6cd290a45a2154cb18f6c3d111057db2ec407`. `capt_runtime/prompt_proposals.py`, `desktop/operator_control.py`, and `desktop/m1_command_service.py` supply proposal and shared operator-control paths. `tests/capt_runtime/test_prompt_proposal_commands.py`, `test_operator_control.py`, and `test_operator_control_runtime.py` cover approval binding, configuration/session coordination, and stale-revision rejection. Operator-control persistence does not replace authoritative runtime state.
+
+### PR #153 Model Council alpha
+
+Merge `542f8206049b6bb2d1ffb2d4ec6dc43141c05800` contains `capt_runtime/council.py`, `aggregates/council_state.py`, governed admission/analysis commands, checkpoint/replay integration, and `capt_ui/operator/council_chamber.py`.
+
+`tests/capt_runtime/test_council_alpha.py`, `test_council_claims.py`, `test_council_durability.py`, and `tests/capt_ui/test_council_chamber.py` cover topology, digest-bound launch interlocks, dissent/challenge analysis, idempotency, restart/replay, and read-only projection. The maximum 24,000 logical Vessels is structural expansion, not measured concurrent provider execution. Persisted analysis remains unverified; majority agreement is neither Verification nor ClaimGuard acceptance. This alpha is not proof of a live end-to-end Council provider scheduler or paid-provider scale acceptance.
+
+### PR #155 hardening
+
+Merge `5812a0cf2c7b58badf83262b78a57da47961f995` adds lifecycle authority gates, identity-refusal auditing, read projections, honest absent-context provenance, and explicit UNSHIPPED context-module labels. Source and focused tests are identified in [`SECURITY.md`](SECURITY.md#september-merged-authority-and-observability-boundaries). These close specific source gaps, not all hardening backlog items or exact-HEAD release-security controls.
+
+### PR #156 SOMA M0
+
+Merge `4f1c0a144f96ad001d998fe3b5d4ecbb4da217b4` incorporates the clean SOMA M0 contract closure, superseding the historical PR #154 branch lineage. `capt_runtime/soma/` provides canonical trajectory types, the explicit `ReducerResult` contract, deterministic event-budget reduction, and compression receipts binding policy, budget, input, retained, and removed content.
+
+`tests/soma/test_contract_closure.py` covers local adapter/reducer/arena/reconstruction/benchmark composition, input validation, receipt sensitivity, duplicate-critical-event accounting, and an explicitly undefined preservation ratio for an empty critical set. The other `tests/soma/` files cover trajectory, corpus, reducer, and benchmark primitives. These are local contract tests, not live RuntimeService context integration, semantic reconstruction quality, external competition readiness, or measured model/token-cost benefit. Compression receipts are not CAPT Verification records.
+
+### September 15 presentation and routing fixes
+
+`d33a5e43cb63e79edb58ec180d4b860e066a33e9` separates renderable model answer text from execution-details JSON in the native client. `capt_ui/surfaces/desktop_swift/Tests/CAPTCoreDesktopTests/CAPTChatCoordinatorTests.swift` covers observation-summary extraction and receipt preservation; workspace/session tests cover propagation and persistence. This is source-level client coverage, not a newly run Swift suite or installed-app acceptance.
+
+`1e85bac5d17cde342a1ae55e6ee3da5fa681ff61` expands actionable-prompt signals in `capt_runtime/prompt_compiler/router.py`; `tests/capt_runtime/test_prompt_compiler.py` adds a list-and-match research-request regression through AUTO's OMNI/META path using controlled transport. Routing is not evidence that current external research was performed or that an answer is verified.
 
 ## Cross-surface authority acceptance
 

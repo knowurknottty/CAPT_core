@@ -1,8 +1,10 @@
 # CAPT Installation
 
-This guide distinguishes the protected `main` install from the terminal PR #117 convergence candidate. See [`CURRENT_STATE.md`](CURRENT_STATE.md) before treating advanced functionality as released.
+This guide covers merged Core source as of 2026-09-15, including PR #117 and later operator integrations. See [`CURRENT_STATE.md`](CURRENT_STATE.md) before treating advanced functionality as released.
 
 ## Development/evaluation install
+
+Use a Python environment compatible with the resolved dependencies. The repository's Linux CI matrix targets Python 3.10 and 3.12; the package's declared `>=3.8` minimum alone is not proof that the current dependency set installs on Python 3.8.
 
 ```zsh
 git clone https://github.com/knowurknottty/CAPT_core.git
@@ -32,14 +34,14 @@ capt status
 capt memory store "CAPT is alive"
 capt evidence
 capt checkpoint
-capt-ui dashboard
+capt tui
 ```
 
-Default local state is `~/.capt`, overridable with `$CAPT_STATE_DIR`. The canonical runtime uses the local `runtime.sock` / `runtime.token` layout.
+Default runtime state is `~/.capt`, overridable with `$CAPT_STATE_DIR`. The canonical runtime uses the local `runtime.sock` / `runtime.token` layout. The standalone `capt memory store` command above instead writes Solo memory under `~/.capt-solo` (`CAPT_SOLO_HOME` overrides it); it does not seed runtime memory or establish a completed inference. `capt-ui dashboard` prints a summary rather than launching the interactive TUI.
 
-## Native macOS candidate
+## Native macOS application
 
-On the terminal convergence branch:
+From the merged source checkout, on macOS 13 or later with a Swift 5.9-compatible or newer toolchain:
 
 ```zsh
 cd capt_ui/surfaces/desktop_swift
@@ -47,13 +49,13 @@ swift test
 swift build --product CAPTNativeMac
 ```
 
-`CAPTNativeMac` is a real application target, not merely a contract library. Fresh candidate verification includes normal Swift, strict concurrency/warnings-as-errors, and ThreadSanitizer passes.
+`CAPTNativeMac` is a real application target, not merely a contract library. Historical convergence verification includes normal Swift, strict concurrency/warnings-as-errors, and ThreadSanitizer passes; those results do not certify a later checkout. Merged source now includes governed Settings/Skills/authority controls and separate model-answer/execution-receipt rendering.
 
 That is source/build evidence—not signing, notarization, distribution, or release-security authorization.
 
 ## Provider note
 
-The convergence line supports governed Ollama and configured local/authenticated OpenAI-compatible execution. A configured/healthy provider is not automatically proof of a completed governed mission. The generic direct native MLX placeholder is intentionally unregistered unless a real adapter/configuration exists.
+Merged Core supports governed Ollama and configured local/authenticated OpenAI-compatible execution. Provider configuration/health proves neither completed inference nor a completed governed mission. The generic direct native MLX placeholder remains unregistered; a configured MLX/MTPLX OpenAI-compatible service uses a separate supported adapter path.
 
 ## Platform note
 

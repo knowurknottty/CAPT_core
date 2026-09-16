@@ -54,6 +54,10 @@ Without `--state-dir`, the CLI uses the same canonical CAPT runtime state-root r
 
 Import copies/normalizes the accepted source into CAPT-managed state and records immutable manifest/content/tree digests. Later source-directory edits do not silently rewrite the installed pack.
 
+## Native/operator controls
+
+Later merged source adds the metadata-only `managed_skills` query and governed `install_managed_skill` / `create_managed_skill` commands. Native Skills exposes install, authoring, and selection over these runtime operations; successful installation does not authorize model execution.
+
 ## Selection precedence
 
 A governed model request can explicitly select the pinned external pack:
@@ -67,9 +71,9 @@ A governed model request can explicitly select the pinned external pack:
 }
 ```
 
-Explicit `skillPackRoot` / `skillNames` selection has higher precedence than managed-local contextual selection.
+Explicit `skillPackRoot` / `skillNames` selection has higher precedence than managed-local contextual selection. `managedSkillNames` selects exact names from the verified managed pack. Combining it with pinned external selection is rejected with `SKILL_SELECTION_CONFLICT`.
 
-When there is no explicit selection, CAPT may select from the verified default managed pack using the request objective. Contextual auto-selection can be disabled with `autoSelectSkills: false`; `skillLimit` bounds the selected set and defaults to 4.
+When there is no explicit pinned or managed selection, CAPT may select from the verified default managed pack using the request objective. Contextual auto-selection can be disabled with `autoSelectSkills: false`; `skillLimit` bounds the selected set and defaults to 4.
 
 Selection is deterministic for the same verified pack and objective under the same implementation.
 
@@ -108,6 +112,6 @@ A skill can advise a model. CAPT decides what the model is allowed to do.
 
 A new `CAPT_Skills` release is a supply-chain change, not an ambient update. Publish/stamp the external pack first, update the CAPT lock to the new immutable commit/tree/digests, and run authored-skill, contract, full-runtime, package, and installed-artifact gates.
 
-Managed-local packs likewise require an explicit import to change their governed snapshot. Do not treat a moving source folder as the installed truth.
+Managed-local packs likewise require an explicit import or governed install/create operation to change their snapshot. Do not treat a moving source folder as the installed truth.
 
 Promotion of executable/procedural knowledge remains a separate governed Foundry lifecycle.

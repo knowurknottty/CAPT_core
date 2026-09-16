@@ -39,11 +39,12 @@ def test_toolbroker_receipt_is_not_relabelled_as_squash_merge_sha():
     assert "different" in canonical.lower() and "sha" in canonical.lower()
 
 
-def test_open_core_lane_is_upg_020_through_024():
+def test_upg_020_through_024_is_merged_not_an_open_core_lane():
     for pr in (89, 91, 93, 95, 97):
         assert f"#{pr}" in TOPOLOGY
-    assert "current open Core PR lane" in TOPOLOGY
+    assert "current open Core PR lane" not in TOPOLOGY
     assert "not an open Core-main lane" in TOPOLOGY
+    assert "PR #146" in "\n".join((CURRENT, TOPOLOGY, README, ROADMAP, CAPABILITY))
 
 
 def test_public_release_design_is_present_but_not_implemented_by_merge():
