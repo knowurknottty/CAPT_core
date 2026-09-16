@@ -317,7 +317,12 @@ class OpenAICompatiblePromptCompilerTransport:
             raise OSError("prompt compiler response stream interrupted") from exc
         if len(raw) > _MAX_RESPONSE_BYTES:
             raise ValueError("prompt compiler response exceeded byte limit")
-        envelope = json.loads(raw.decode("utf-8"))
+        try:
+            envelope = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            if self.selection.endpoint_class == "remote":
+                raise OSError("prompt compiler response envelope interrupted") from exc
+            raise ValueError("prompt compiler returned malformed response envelope") from exc
         choices = envelope.get("choices") if isinstance(envelope, dict) else None
         first_choice = (choices or [{}])[0] if isinstance(choices, list) else {}
         if isinstance(first_choice, dict) and first_choice.get("finish_reason") == "length":
