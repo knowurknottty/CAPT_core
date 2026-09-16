@@ -273,3 +273,51 @@ def test_remote_prompt_compiler_reasoning_effort_is_selected_and_transmitted(tmp
         "responseSchema": {"type": "object"}, "currentPrompt": "x",
     })
     assert seen["body"]["reasoning"] == {"effort": "xhigh"}
+
+
+def test_prompt_compiler_explicit_output_token_limit_is_transmitted(monkeypatch):
+    from desktop.prompt_compiler_provider import PromptCompilerSelection, OpenAICompatiblePromptCompilerTransport
+    seen = {}
+    def fake_urlopen(request, timeout):
+        seen["body"] = json.loads(request.data.decode("utf-8"))
+        content = json.dumps(_stage("OMNI"))
+        return _Response(json.dumps({"choices": [{"finish_reason": "stop", "message": {"content": content}}]}).encode("utf-8"))
+    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen", fake_urlopen)
+    selection = PromptCompilerSelection(
+        "openrouter", "deepseek/deepseek-v4.1-flash",
+        "https://openrouter.ai/api/v1", "remote", "keychain:test", True, "max"
+    )
+    transport = OpenAICompatiblePromptCompilerTransport(
+        selection, api_key="synthetic-test-key", max_output_tokens=8192
+    )
+    transport({
+        "stage": "OMNI", "allowedCapabilities": [],
+        "responseSchema": {"type": "object"}, "currentPrompt": "x",
+    })
+    assert seen["body"]["max_tokens"] == 8192
+
+
+def test_prompt_compiler_truncation_is_typed(monkeypatch):
+    from desktop.prompt_compiler_provider import PromptCompilerSelection, OpenAICompatiblePromptCompilerTransport
+
+    def fake_urlopen(request, timeout):
+        payload = {
+            "choices": [{
+                "finish_reason": "length",
+                "message": {"content": '{"revisedPrompt":"'}
+            }]
+        }
+        return _Response(json.dumps(payload).encode("utf-8"))
+
+    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen", fake_urlopen)
+    selection = PromptCompilerSelection(
+        "openrouter", "deepseek/deepseek-v4.1-flash",
+        "https://openrouter.ai/api/v1", "remote", "keychain:test", True, "max"
+    )
+    transport = OpenAICompatiblePromptCompilerTransport(selection, api_key="synthetic-test-key")
+    import pytest
+    with pytest.raises(ValueError, match="structured response truncated"):
+        transport({
+            "stage": "OMNI", "allowedCapabilities": [],
+            "responseSchema": {"type": "object"}, "currentPrompt": "x",
+        })

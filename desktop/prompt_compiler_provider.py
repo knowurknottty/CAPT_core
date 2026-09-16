@@ -196,6 +196,7 @@ class OpenAICompatiblePromptCompilerTransport:
         *,
         api_key: str = "",
         timeout_seconds: int | None = None,
+        max_output_tokens: int = 4096,
     ):
         actual = endpoint_class(selection.base_url)
         if selection.endpoint_class == "local" and actual != "local":
@@ -216,6 +217,9 @@ class OpenAICompatiblePromptCompilerTransport:
         self.timeout_seconds = int(default_timeout if timeout_seconds is None else timeout_seconds)
         if self.timeout_seconds <= 0:
             raise ValueError("prompt compiler timeout must be positive")
+        self.max_output_tokens = int(max_output_tokens)
+        if self.max_output_tokens <= 0 or self.max_output_tokens > 16384:
+            raise ValueError("prompt compiler output token limit must be between 1 and 16384")
         self._resolved_model: Optional[str] = None
 
     @staticmethod
@@ -288,7 +292,7 @@ class OpenAICompatiblePromptCompilerTransport:
             ],
             "stream": False,
             "temperature": 0,
-            "max_tokens": 4096,
+            "max_tokens": self.max_output_tokens,
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {"name": "capt_prompt_stage", "strict": True, "schema": dict(response_schema)},
@@ -311,7 +315,10 @@ class OpenAICompatiblePromptCompilerTransport:
             raise ValueError("prompt compiler response exceeded byte limit")
         envelope = json.loads(raw.decode("utf-8"))
         choices = envelope.get("choices") if isinstance(envelope, dict) else None
-        content = (choices or [{}])[0].get("message", {}).get("content") if isinstance(choices, list) else None
+        first_choice = (choices or [{}])[0] if isinstance(choices, list) else {}
+        if isinstance(first_choice, dict) and first_choice.get("finish_reason") == "length":
+            raise ValueError("prompt compiler structured response truncated at output token limit")
+        content = first_choice.get("message", {}).get("content") if isinstance(first_choice, dict) else None
         if not isinstance(content, str) or not content.strip():
             raise ValueError("prompt compiler returned no structured content")
         result = json.loads(content)
