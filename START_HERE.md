@@ -4,7 +4,7 @@
 
 > The model is an inference component. CAPT keeps durable state, memory, authority, evidence, and recovery outside the model session.
 
-Before evaluating advanced features, read [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md). PR #117 is now merged into `main`; merged integration, the historical `0.5.0` package line, and release authorization are intentionally different states.
+Before evaluating advanced features, read [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md). The 2026-09-15 source snapshot is `1e85bac5d17cde342a1ae55e6ee3da5fa681ff61`: PR #146, #148 plus the semantic operator-control API, #153 Model Council alpha, #155 hardening, and #156 SOMA M0 are merged. Merged integration, the `0.5.0` package line, and release authorization are intentionally different states; older exact-SHA security receipts do not authorize this HEAD.
 
 ## Install the CLI and TUI
 
@@ -38,12 +38,14 @@ capt evidence
 capt checkpoint
 ```
 
+`capt memory store/search` use the local CAPT Solo MemoryEngine directly, while `capt start/status/evidence/checkpoint` use RuntimeService. A successful memory search does not prove EventStore admission or model-visible continuation context.
+
 Evidence, verification, ClaimGuard, task completion, and mission completion are distinct authority states.
 
 ## Launch the operator console
 
 ```zsh
-capt-ui dashboard
+capt tui
 ```
 
 The TUI is a RuntimeService projection/control surface; it does not own the ledger or bypass governance.
@@ -58,7 +60,7 @@ swift test
 swift build --product CAPTNativeMac
 ```
 
-The native target is real and integration-tested, but signing/notarization/distribution and release-security authorization remain separate gates.
+The native target and integration tests are present in source. PR #148 adds the control center and Prompt Intelligence; `42a6cd2` adds the semantic operator-control API. `d33a5e4` separates model answers from retained execution details, and `1e85bac` expands AUTO routing signals for actionable requests, including list/match; the four-word minimum and operator-selected engine/mode still apply. These fixes do not complete the human-first results layer or Search/Deep Research product. Signing/notarization/distribution and exact-HEAD release-security authorization remain separate gates.
 
 ## Restart continuity
 
@@ -70,7 +72,7 @@ capt resume --idempotency-key first-resume
 capt status
 ```
 
-Continuity belongs to CAPT state rather than a model transcript.
+This exercises runtime checkpoint/restart/resume. It does not by itself prove restored workload contents, no-repeat external effects, or cross-model continuation; those require a workload and matching evidence across the restart.
 
 ## Next
 

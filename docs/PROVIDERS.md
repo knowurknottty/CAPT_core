@@ -24,6 +24,8 @@ PR #118 is closed unmerged; its provider/model-coherence semantics were reconcil
 
 This prevents an impossible state such as globally displaying MTPLX while `models.json` still binds the same model to Ollama.
 
+Later merged native/TUI authority controls bind provider-network policy and filesystem/shell scope into model approval. The semantic operator-control API binds provider/model/workspace/prompt-intelligence configuration by revision and digest, rejecting stale submissions. Prompt compiler provider selection is separate from the execution model default; compiler success does not establish execution-provider quality.
+
 ## MLX naming boundary
 
 The dormant generic native `MLX / mlx_lm` placeholder had no real model-list, health, or execution adapter and is therefore retired/unregistered by default. It must not be displayed as a working second MLX server.

@@ -10,16 +10,16 @@ The model is an inference component. Tools are effect adapters. **RuntimeService
 
 ---
 
-## Current repository status — 2026-08-27
+## Current repository status — 2026-09-15
 
 CAPT Core deliberately distinguishes source state from proof state:
 
 1. **Numbered package:** `pyproject.toml` still declares `capt-solo 0.5.0`; preserved `release_evidence/v0.5/` is historical.
-2. **Merged Core `main`:** current audit-start head `3aee7370bac880aed99ce3c9ecfaa6d9ff48101e` includes the August 21 convergence plus governed ToolBroker (#126), approved public-release design/plan convergence (#128), and managed authored skills R1 (#129).
+2. **Merged Core `main`:** reconciled HEAD `1e85bac5d17cde342a1ae55e6ee3da5fa681ff61` includes the prior convergence plus PR #146 (UPG-020→024), #148 and the semantic operator-control API, #153 (Model Council alpha), #155 (hardening), #156 (SOMA M0), and the September 15 answer/receipt and research-routing fixes.
 3. **Release/security evidence:** authorization is exact-SHA. Historical #117 remains a failed security receipt; `2199c036…` has an exact hosted Release Security PASS; ToolBroker PR #126 head `b21ed6e…` also had hosted M0-A + Release Security PASS before squash merge. Those receipts do not automatically transfer to later SHAs.
-4. **Current open Core work:** CAPT-UPG-020→024 (#89/#91/#93/#95/#97). The old Labs/Forge and #111/#116 design PRs are no longer the open Core queue.
+4. **Topology:** CAPT-UPG-020→024 merged through PR #146; #89/#91/#93/#95/#97 are historical lineage. Labs/Forge remains a separate edition/history line; public plans remain plans except for source-proven implementation.
 
-At audit start, M0-A push run `32958741310` for `3aee737…` had Python 3.12, contract drift, and TypeScript parity PASS while Python 3.10 failed because the Docker availability probe timed out during test collection. The failed job was retried during this documentation audit; do not infer a green exact-head state from older receipts.
+Historical August 27 audit: `3aee737…` had a mixed M0-A push run (`32958741310`): Python 3.12, contract drift, and TypeScript parity passed; Python 3.10 failed during the Docker availability probe. A retry was recorded by that audit; no retry outcome or current-HEAD CI result is established here. This is historical evidence, not status for `1e85bac…`.
 
 See [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md), [`docs/PR_TOPOLOGY.md`](docs/PR_TOPOLOGY.md), [`docs/FUNCTIONALITY_MATRIX.md`](docs/FUNCTIONALITY_MATRIX.md), and [`docs/RELEASE_EVIDENCE.md`](docs/RELEASE_EVIDENCE.md).
 
@@ -53,10 +53,10 @@ capt checkpoint
 Launch the TUI:
 
 ```zsh
-capt-ui dashboard
+capt tui
 ```
 
-Then prove restart continuity:
+Then exercise runtime checkpoint/restart:
 
 ```zsh
 capt stop
@@ -65,11 +65,23 @@ capt resume
 capt status
 ```
 
+`capt memory store/search` use the local CAPT Solo MemoryEngine directly; the runtime lifecycle commands use RuntimeService. This smoke sequence does not prove that a memory record was restored through EventStore or delivered to a model after restart.
+
 For the guided path, use [`START_HERE.md`](START_HERE.md).
 
 ---
 
 ## What is merged on `main`
+
+### Source convergence through September
+
+- **PR #146** — CAPT-UPG-020→024 benchmark/probe and cognitive-debt convergence, merge `cefc885`; empirical effectiveness and provider-cache claims remain separate proof obligations.
+- **PR #148** — native macOS control center, Prompt Intelligence proposals/approval binding, and model/tool authority work, merge `5709380`; semantic operator-control API subsequently merged at `42a6cd2`, with revision/digest-bound configuration and prompt selection subordinate to RuntimeService/EventStore.
+- **PR #153** — Model Council alpha, merge `542f820`: tier geometry, logical Vessel expansion, launch interlocks, dissent-preserving analysis, durable admission/replay/checkpoints, and read-only Chamber projection; live provider execution, native Council GUI, and release proof remain separate.
+- **PR #155** — hardening tiers 1–5, merge `5812a0c`: read projections, mission/DriverRun authority gates, identity-refusal auditing, honest absent-context provenance, and explicit unshipped labels for `context_pipeline` / `context_merkle`.
+- **PR #156** — SOMA M0 contract closure, merge `4f1c0a1`: trajectory/reducer contracts, compression receipts, and local benchmark/reconstruction primitives; this does not establish live runtime integration or competition readiness.
+- **`d33a5e4`** — native model-answer rendering separated from the execution receipt, with retained disclosure/persistence of execution details.
+- **`1e85bac`** — expands AUTO routing signals to include list/match and other actionable requests; the four-word minimum and operator-selected engine/mode still apply. This is routing, not proof of a Search/Deep Research product surface.
 
 ### Governed runtime and continuity
 
@@ -145,9 +157,9 @@ See [`docs/AUTHORED_SKILLS.md`](docs/AUTHORED_SKILLS.md).
 | CaveCAPT Minimal/Normal/Detailed/Diagnostic | **MERGED** |
 | first-run onboarding | **MERGED** |
 | Tk desktop operator | **OPERATOR MVP / reference fallback** |
-| native SwiftUI `CAPTNativeMac` | **MERGED / BUILDABLE APPLICATION** |
+| native SwiftUI `CAPTNativeMac` | **MERGED APPLICATION TARGET; CURRENT-HEAD BUILD PROOF SEPARATE** |
 | ToolBroker local/SSH/Docker terminal execution | **MERGED** |
-| true process-boundary cross-model continuation | **MERGED / INTEGRATED; RELEASE PROOF SEPARATE** |
+| true process-boundary cross-model continuation | **MERGED SOURCE; HISTORICAL INTEGRATION EVIDENCE; CURRENT-HEAD RELEASE PROOF SEPARATE** |
 
 The UI is deliberately thin. **CLI, TUI, desktop, MCP, providers, and tool adapters do not become alternate runtimes.**
 
@@ -163,17 +175,19 @@ Still implementation-gated unless later source proves otherwise:
 
 - Secure Intake / Quarantine;
 - Projects and project-context eligibility;
-- human-first results layer;
+- complete human-first results layer; native answer/receipt separation is present at `d33a5e4`;
 - composer capability palette;
 - Search / Deep Research governed surfaces.
 
-**Model Council alpha:** `feature/model-council-alpha` supersedes the August 10-Cohort / 111-Vessel Council limits with owner-approved Small (2x3), Medium (4x6), Large (12x9), and Extreme (24x18-1000) tiers. The branch implements deterministic logical Vessel expansion, digest-bound launch interlocks, dissent-preserving claim analysis, durable Council admission/replay/checkpoint state, and a read-only Council Chamber projection. It does **not** by itself prove live provider execution, native GUI integration, paid-provider behavior, or release authorization.
+**Model Council alpha:** merged PR #153 (`542f820`) supersedes the August 10-Cohort / 111-Vessel Council limits with owner-approved Small (2x3), Medium (4x6), Large (12x9), and Extreme (24x18-1000) tiers. The merged alpha implements deterministic logical Vessel expansion, digest-bound launch interlocks, dissent-preserving claim analysis, durable Council admission/replay/checkpoint state, and a read-only Council Chamber projection. It does **not** by itself prove live provider execution, native GUI integration, paid-provider behavior, or release authorization.
 
 Merged low-level Cohorts remain distinct from the higher-level Model Council protocol.
 
 ---
 
 ## Architecture at a glance
+
+Governed runtime path (the direct local MemoryEngine commands above are separate):
 
 ```text
 Human / Application / Agent Host
@@ -223,7 +237,7 @@ runtime history     grants/leases    durable memory
 
 Merged `main` supports governed Ollama and local/authenticated OpenAI-compatible execution with endpoint/model provenance, resource ceilings, and bounded local prewarm.
 
-The generic direct native `MLX / mlx_lm` placeholder is not represented as a working adapter unless materially configured. A real local OpenAI-compatible MLX/MTPLX service is a supported path through the OpenAI-compatible boundary.
+The generic direct native `MLX / mlx_lm` adapter is unimplemented and retired/unregistered by default; configuration alone does not make it executable. A configured local OpenAI-compatible MLX/MTPLX service is a supported path through the separate OpenAI-compatible boundary.
 
 Provider health/model discovery is not itself governed-execution proof, and controlled execution proves authority/transport—not model quality.
 
@@ -245,17 +259,15 @@ Read [`docs/SECURITY.md`](docs/SECURITY.md).
 
 ---
 
-## Current open Core lane
+## CAPT-UPG-020→024 — merged
 
-As of 2026-08-27, the open Core PR lane is:
+CAPT-UPG-020→024 source was reconciled into Core through **PR #146 (`cefc885`)**. The earlier #89/#91/#93/#95/#97 lane is historical implementation lineage, not a list of pending Core merges.
 
-- #89 — CAPT-UPG-020 reciprocal-review benchmark;
-- #91 — CAPT-UPG-021 sparse symbol-index probe;
-- #93 — CAPT-UPG-022 Tree-sitter structural-hash probe;
-- #95 — CAPT-UPG-023 FastCDC/content-defined chunk probe;
-- #97 — CAPT-UPG-024 cognitive-debt cockpit.
-
-Treat those as separate benchmark/probe work until semantically reconciled and proven against current `main`.
+- CAPT-UPG-020: reciprocal-review scorer/harness; empirical effectiveness requires observed trial evidence.
+- CAPT-UPG-021: read-only sparse symbol index over Discovery/SEAL-admitted candidates; real-repository performance requires benchmark evidence.
+- CAPT-UPG-022: Tree-sitter structural-hash probe; grammar/runtime and semantic-equivalence claims are separate.
+- CAPT-UPG-023: chunk-stability/FastCDC probe; chunk reuse does not prove provider prefix-cache reuse.
+- CAPT-UPG-024: cognitive-debt projection and `capt-debt` surface; absence of reported debt does not prove correctness.
 
 The Inversion Labs/Forge branch lineage is separate edition/history work, not the current open Core-main queue.
 

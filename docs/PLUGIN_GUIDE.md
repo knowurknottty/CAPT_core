@@ -14,11 +14,13 @@ Use installed `capt harness --help` as the exact command authority. The harness 
 
 ## UI/operator integration
 
-A client may project runtime/mission/memory/provider/approval/evidence state and submit operator intent through the shared operator/runtime boundary. It must not write SQLite/EventStore directly or promote model output to authoritative completion.
+A client may project runtime/mission/memory/provider/approval/evidence state and submit operator intent through the shared operator/runtime boundary. The semantic API includes `operator_control_snapshot`, `operator_session_get`, `operator_proposal_get`, and `operator_execution_state` queries plus `operator_chat_new`, `operator_execution_config_set`, `operator_prompt_submit`, and `operator_proposal_select` commands. Preserve revision/configuration-digest checks and exact proposal approval binding. Operator coordination state is non-authoritative.
+
+Read projections include `approvals`, `missions`, `tasks`, and `checkpoints`. Native/TUI golden authority controls and managed Skills install/create remain clients of governed operations. Clients must not write SQLite/EventStore directly or promote model output to authoritative completion.
 
 ## Provider integration
 
-Protected `main` contains provider registry/discovery/model-selection foundations. Terminal convergence PR #117 reconciles the formerly stacked provider path into bounded Ollama and local/authenticated OpenAI-compatible generation with provenance/digests, resource ceilings, secret scrubbing, conservative reconciliation, and PR #118 provider/model coherence.
+Merged `main` includes provider registry/discovery/model-selection and PR #117 reconciled the formerly stacked provider path into bounded Ollama and local/authenticated OpenAI-compatible generation with provenance/digests, resource ceilings, secret scrubbing, conservative reconciliation, and PR #118 provider/model coherence.
 
 Do not label a provider operational merely because it registers or returns a model list.
 
@@ -27,7 +29,7 @@ Do not label a provider operational merely because it registers or returns a mod
 The current evidence story has multiple layers:
 
 - historical v0.5 installed-wheel bounded Hermes proof;
-- terminal PR #117 lifecycle/provider/replay hardening;
+- merged PR #117 lifecycle/provider/replay hardening;
 - operator-supplied LOCAL-002 metadata for `evidence/hermes-local-002-r6` at `5c8cbf5ec1dfc0034ba7fa0931e21c88fe0cfc04`.
 
 Terra could not retrieve the LOCAL-002 branch, commit, or named report from the current GitHub remote/API. Its `HERMES_LOCAL_002_COMPLETE`, 98/0/0, 174/0/2, and no-blocker statements are therefore **currently unverified** and must not be used to certify a compatibility client. Destructive external-provider/tool-kill rollback remains separately unproven.

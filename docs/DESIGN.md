@@ -28,15 +28,15 @@ Idempotency and checkpointing reduce repeated work, but external side effects ca
 
 ### Operator surfaces remain thin
 
-CLI, TUI, and desktop clients should provide excellent control and visibility without duplicating runtime authority.
+CLI, TUI, and desktop clients provide control and visibility without duplicating runtime authority. The merged semantic operator-control API coordinates revisioned configuration and session/proposal cursors; EventStore remains the authority for execution and completion. Read projections report that state without granting authority.
 
 ### Prompt intelligence remains subordinate to governance
 
-The active prompt-enhancement/cognitive-provenance layer may improve and explain a request, but it may not mint capability, bypass human review, fabricate evidence, or redefine mission state.
+The merged prompt-proposal/intelligence layer may improve and explain a request, but it may not mint capability, bypass human review, fabricate evidence, or redefine mission state.
 
 ### Multi-perspective cognition does not imply multi-runtime authority
 
-Cohorts may coordinate competing perspectives, quorum, dissent, and cognitive debt while RuntimeService/EventStore remain authoritative.
+Cohorts may coordinate competing perspectives, quorum, and dissent while RuntimeService/EventStore remain authoritative. The merged Model Council alpha adds logical topology, launch contracts, and deterministic claim analysis; UPG-024 separately adds cognitive-debt projection. None of those source surfaces establishes live model quality, achieved provider concurrency, or full product-plan completion.
 
 ### Local-first is a deployment property, not a security proof
 

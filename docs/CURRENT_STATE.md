@@ -2,7 +2,7 @@
 
 This is the concise public status source for the repository. It separates package version, merged source state, exact-head engineering evidence, release-security authorization, and independent work.
 
-Snapshot date: **2026-08-27**. Literal `main` at audit start: `3aee7370bac880aed99ce3c9ecfaa6d9ff48101e`.
+Snapshot date: **2026-09-15**. Reconciled source HEAD: `1e85bac5d17cde342a1ae55e6ee3da5fa681ff61`.
 
 ## Truth classes
 
@@ -12,12 +12,20 @@ Snapshot date: **2026-08-27**. Literal `main` at audit start: `3aee7370bac880aed
 
 ### 2. Merged `main`
 
-Current `main` contains the August 21 convergence plus three material later merges:
+The pinned source contains the August convergence and subsequent merged work:
 
 - **PR #117** — terminal native/provider/UPG/MCP convergence, merge `4a654a74083cf341f8557983ce256949198a02e7`;
 - **PR #126** — governed ToolBroker and durable ToolExecution with local, SSH, Docker, file, and code adapters, squash merge `bcfdff9d43b35b5b192cc998b68ce16cc73b9985`;
 - **PR #128** — exact-byte convergence of the owner-approved public-release design and executable plans onto current Core, merge `54ac314294fb456cb2d9089615996b31dfeca753`; this is documentation authority, not implementation completion;
 - **PR #129** — governed managed authored skills R1, merge `3aee7370bac880aed99ce3c9ecfaa6d9ff48101e`.
+
+- **PR #146** — CAPT-UPG-020→024 benchmark/probe and cognitive-debt convergence, merge `cefc885`; empirical effectiveness and provider-cache claims remain separate proof obligations.
+- **PR #148** — native macOS control center, Prompt Intelligence proposals/approval binding, and model/tool authority work, merge `5709380`; semantic operator-control API subsequently merged at `42a6cd2`, with revision/digest-bound configuration and prompt selection subordinate to RuntimeService/EventStore.
+- **PR #153** — Model Council alpha, merge `542f820`: tier geometry, logical Vessel expansion, launch interlocks, dissent-preserving analysis, durable admission/replay/checkpoints, and read-only Chamber projection; live provider execution, native Council GUI, and release proof remain separate.
+- **PR #155** — hardening tiers 1–5, merge `5812a0c`: read projections, mission/DriverRun authority gates, identity-refusal auditing, honest absent-context provenance, and explicit unshipped labels for `context_pipeline` / `context_merkle`.
+- **PR #156** — SOMA M0 contract closure, merge `4f1c0a1`: trajectory/reducer contracts, compression receipts, and local benchmark/reconstruction primitives; this does not establish live runtime integration or competition readiness.
+- **`d33a5e4`** — native model-answer rendering separated from the execution receipt, with retained disclosure/persistence of execution details.
+- **`1e85bac`** — expands AUTO routing signals to include list/match and other actionable requests; the four-word minimum and operator-selected engine/mode still apply. This is routing, not proof of a Search/Deep Research product surface.
 
 Merged runtime capabilities therefore include:
 
@@ -39,23 +47,23 @@ Historical facts remain historical:
 - release-security closure baseline `2199c036aa22af33fb3eb0700f63f820a35aa55a`: hosted Release Security run `32617740908` **PASS**, **21 PASS / 0 FAIL / 0 NOT_VERIFIED / 26 NOT_APPLICABLE**, and M0-A run `32617740848` PASS;
 - ToolBroker PR #126 exact head `b21ed6e7ff3996d48c756e342b278b69af0d666f`: hosted M0-A and Release Security both PASS; its squash merge `bcfdff9…` is tree-identical but is a different commit SHA, so the PR-head security receipt is not relabeled as a merge-SHA receipt.
 
-At audit start, literal `main` `3aee737…` had an M0-A push run where Python 3.12, contract drift, and TypeScript parity passed while Python 3.10 failed because the Docker-daemon availability probe timed out during test collection. That failed job was retried during this documentation audit; do not infer the retry result until the hosted run completes.
+Historical August 27 audit: `3aee737…` had a mixed M0-A push run (`32958741310`): Python 3.12, contract drift, and TypeScript parity passed; Python 3.10 failed during the Docker availability probe. A retry was recorded by that audit; no retry outcome or current-HEAD CI result is established here. This is historical evidence, not status for `1e85bac…`.
 
 A descendant of an authorized SHA is not automatically release-security authorized. Final public artifacts must be rebuilt and re-hashed from the exact source commit selected for release, with signing/notarization/distribution evidence handled separately.
 
-### 4. Independent work
+### 4. Merged upgrade and product-plan boundaries
 
-The current open Core PR queue is the CAPT-UPG-020→024 benchmark/probe lane:
+CAPT-UPG-020→024 source was reconciled into Core through **PR #146 (`cefc885`)**. The earlier #89/#91/#93/#95/#97 lane is historical implementation lineage, not a list of pending Core merges.
 
-- #89 reciprocal-review benchmark;
-- #91 sparse symbol-index probe;
-- #93 Tree-sitter structural-hash probe;
-- #95 FastCDC/content-defined chunk probe;
-- #97 cognitive-debt cockpit.
+- CAPT-UPG-020: reciprocal-review scorer/harness; empirical effectiveness requires observed trial evidence.
+- CAPT-UPG-021: read-only sparse symbol index over Discovery/SEAL-admitted candidates; real-repository performance requires benchmark evidence.
+- CAPT-UPG-022: Tree-sitter structural-hash probe; grammar/runtime and semantic-equivalence claims are separate.
+- CAPT-UPG-023: chunk-stability/FastCDC probe; chunk reuse does not prove provider prefix-cache reuse.
+- CAPT-UPG-024: cognitive-debt projection and `capt-debt` surface; absence of reported debt does not prove correctness.
 
 The former Inversion Labs/Forge PR line is not an open Core-main queue. It remains a separate edition/history lineage; for example #104 is closed unmerged and #119 merged into its separate Labs integration base, not Core `main`.
 
-The owner-approved public-release design (#111) and plans (#116) were preserved on current `main` through PR #128. Secure Intake/Quarantine, Projects, human-first results, composer context palette, Search/Deep Research governance, and Cohort Council remain implementation work unless separately proven in source.
+The owner-approved public-release design (#111) and plans (#116) were preserved on current `main` through PR #128. Secure Intake/Quarantine, Projects, the full human-first results layer, composer context palette, and Search/Deep Research product governance remain plans unless separately proven in source. Model Council alpha is merged via #153; native answer/receipt separation is present at `d33a5e4`. Neither closes the entire public-release plan.
 
 See [`PR_TOPOLOGY.md`](PR_TOPOLOGY.md) for the routing map.
 
@@ -76,9 +84,11 @@ Explicit pinned selection outranks contextual managed-local auto-selection. Skil
 
 ## Native macOS status
 
-`CAPTNativeMac` is a real buildable Swift application target with governed chat, approvals, runtime/provider controls, session persistence, authored-skill visibility, and cross-surface tests. A source-buildable app is not the same evidence class as a signed/notarized/distributed public release.
+`CAPTNativeMac` is a merged Swift application target with governed chat, approvals, runtime/provider controls, session persistence, authored-skill visibility, and cross-surface test source. Historical build/test results in [`DESKTOP.md`](DESKTOP.md) do not establish a build of this HEAD or a signed/notarized/distributed public release.
 
 ## Authority invariant
+
+The governed runtime path is shown below. The standalone `capt memory` commands use the local CAPT Solo MemoryEngine directly; their success does not establish EventStore admission or model continuation.
 
 ```text
 Operator surfaces

@@ -64,14 +64,18 @@ Models may reason, generate, inspect, summarize, or propose actions. Their outpu
 
 ## Operator surfaces
 
-The Textual TUI, CLI, Tk operator surface, native `CAPTNativeMac`, and MCP compatibility client all preserve the same operator/runtime boundary. Terminal PR #117 reconciles the cockpit/provider/provenance projections without creating a second authority plane.
+The Textual TUI, CLI, Tk operator surface, native `CAPTNativeMac`, and MCP compatibility client all preserve the same operator/runtime boundary. Merged PR #117 and later native/TUI golden authority work provide cockpit/provider/provenance and governed Settings/Skills/scope controls without creating a second authority plane. The semantic operator-control API coordinates revisioned configuration and prompt review; read projections expose runtime state. Native model-answer text and execution receipts remain separate.
 
 ## Cohorts
 
-The terminal convergence Cohort layer now includes durable EventStore persistence/reconstruction, evidence admission, governed steering, epoch handling, and Chamber projection. It is still not a second runtime; quorum or consensus cannot manufacture verification or capability.
+The merged Cohort layer includes durable EventStore persistence/reconstruction, evidence admission, governed steering, epoch handling, and Chamber projection. It is still not a second runtime; quorum or consensus cannot manufacture verification or capability.
+
+Model Council alpha adds durable Council state, launch contracts, deterministic claim analysis, and Chamber projection. Neither Council consensus nor declared topology proves verification, live-provider quality, or achieved concurrency.
+
+Prompt intelligence produces reviewable proposals; it cannot authorize its own execution. `context_pipeline` and `context_merkle` remain unshipped experiments/design paths, not live context authority.
 
 ## Security gate
 
-The terminal convergence SecurityGate/Security Closure Cockpit evaluates the 47-control catalog fail-closed. It does not grant capabilities or self-authorize release; current release-security status remains BLOCKED until applicable exact-head evidence closes.
+The merged SecurityGate/Security Closure Cockpit evaluates the 47-control catalog fail-closed. It does not grant capabilities or self-authorize release; release authorization requires applicable exact-head evidence; historical receipts do not authorize the current HEAD.
 
 For exact state classifications, use [`CURRENT_STATE.md`](CURRENT_STATE.md).
