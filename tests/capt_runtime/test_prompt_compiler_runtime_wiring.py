@@ -288,13 +288,13 @@ def test_prompt_compiler_explicit_output_token_limit_is_transmitted(monkeypatch)
         "https://openrouter.ai/api/v1", "remote", "keychain:test", True, "max"
     )
     transport = OpenAICompatiblePromptCompilerTransport(
-        selection, api_key="synthetic-test-key", max_output_tokens=8192
+        selection, api_key="synthetic-test-key", max_output_tokens=32768
     )
     transport({
         "stage": "OMNI", "allowedCapabilities": [],
         "responseSchema": {"type": "object"}, "currentPrompt": "x",
     })
-    assert seen["body"]["max_tokens"] == 8192
+    assert seen["body"]["max_tokens"] == 32768
 
 
 def test_prompt_compiler_truncation_is_typed(monkeypatch):

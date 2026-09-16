@@ -218,8 +218,8 @@ class OpenAICompatiblePromptCompilerTransport:
         if self.timeout_seconds <= 0:
             raise ValueError("prompt compiler timeout must be positive")
         self.max_output_tokens = int(max_output_tokens)
-        if self.max_output_tokens <= 0 or self.max_output_tokens > 16384:
-            raise ValueError("prompt compiler output token limit must be between 1 and 16384")
+        if self.max_output_tokens <= 0:
+            raise ValueError("prompt compiler output token limit must be positive")
         self._resolved_model: Optional[str] = None
 
     @staticmethod
