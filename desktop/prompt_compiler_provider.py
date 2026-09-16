@@ -28,6 +28,7 @@ class PromptCompilerSelection:
     endpoint_class: str = "local"
     key_ref: str = ""
     remote_authorized: bool = False
+    reasoning_effort: str = ""
 
 
 # Backward-compatible name used by the existing local transport tests.
@@ -44,7 +45,7 @@ def _load_providers(ui: Path) -> list[Any]:
 
 
 def _selection(
-    providers: list[Any], provider_id: str, model: str, *, remote_authorized: bool = False
+    providers: list[Any], provider_id: str, model: str, *, remote_authorized: bool = False, reasoning_effort: str = ""
 ) -> Optional[PromptCompilerSelection]:
     if not provider_id or not model:
         return None
@@ -60,9 +61,9 @@ def _selection(
         if isinstance(models, list) and models and model not in [str(item) for item in models]:
             return None
         if kind == "local" and eclass == "local":
-            return PromptCompilerSelection(provider_id, model, base_url, "local", str(provider.get("key_ref") or ""), False)
+            return PromptCompilerSelection(provider_id, model, base_url, "local", str(provider.get("key_ref") or ""), False, reasoning_effort)
         if kind == "cloud" and eclass == "cloud" and remote_authorized:
-            return PromptCompilerSelection(provider_id, model, base_url, "remote", str(provider.get("key_ref") or ""), True)
+            return PromptCompilerSelection(provider_id, model, base_url, "remote", str(provider.get("key_ref") or ""), True, reasoning_effort)
         return None
     return None
 
@@ -156,6 +157,7 @@ def select_prompt_compiler_preferences(ui_config_dir: Path) -> list[PromptCompil
                     str(pref.get("provider") or ""),
                     str(pref.get("model") or ""),
                     remote_authorized=remote_authorized,
+                    reasoning_effort=str(pref.get("reasoningEffort") or ""),
                 )
                 if candidate is None:
                     continue
@@ -171,6 +173,7 @@ def select_prompt_compiler_preferences(ui_config_dir: Path) -> list[PromptCompil
                 str(explicit.get("provider") or ""),
                 str(explicit.get("model") or ""),
                 remote_authorized=remote_authorized,
+                reasoning_effort=str(explicit.get("reasoningEffort") or ""),
             )
             if candidate is not None:
                 return [candidate]
@@ -291,6 +294,8 @@ class OpenAICompatiblePromptCompilerTransport:
                 "json_schema": {"name": "capt_prompt_stage", "strict": True, "schema": dict(response_schema)},
             },
         }
+        if self.selection.reasoning_effort:
+            body["reasoning"] = {"effort": self.selection.reasoning_effort}
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
         if self.api_key:
             headers["Authorization"] = "Bearer " + self.api_key

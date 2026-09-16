@@ -234,3 +234,42 @@ def test_transport_resolves_unambiguous_local_model_alias(monkeypatch):
     })
 
     assert seen["body"]["model"] == "Youssofal/Qwen3.8-27B-MTPLX-Optimized-Speed"
+
+
+def test_remote_prompt_compiler_reasoning_effort_is_selected_and_transmitted(tmp_path, monkeypatch):
+    from desktop.prompt_compiler_provider import (
+        OpenAICompatiblePromptCompilerTransport, select_prompt_compiler_preferences,
+    )
+
+    ui = _write_config(tmp_path, {
+        "id": "openrouter", "kind": "cloud", "transport": "openai_compatible",
+        "base_url": "https://openrouter.ai/api/v1", "enabled": True,
+        "models": ["deepseek/deepseek-v4.1-flash"], "key_ref": "keychain:test",
+    }, "deepseek/deepseek-v4.1-flash")
+    (ui / "prompt-compiler.json").write_text(json.dumps({
+        "remoteCompilationAuthorized": True,
+        "preferences": [{
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4.1-flash",
+            "reasoningEffort": "xhigh",
+        }],
+    }))
+
+    selections = select_prompt_compiler_preferences(ui)
+    assert len(selections) == 1
+    assert selections[0].reasoning_effort == "xhigh"
+
+    seen = {}
+    def fake_urlopen(request, timeout):
+        assert timeout > 0
+        seen["body"] = json.loads(request.data.decode("utf-8"))
+        content = json.dumps(_stage("OMNI"))
+        return _Response(json.dumps({"choices": [{"message": {"content": content}}]}).encode("utf-8"))
+
+    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen", fake_urlopen)
+    transport = OpenAICompatiblePromptCompilerTransport(selections[0], api_key="synthetic-test-key")
+    transport({
+        "stage": "OMNI", "allowedCapabilities": [],
+        "responseSchema": {"type": "object"}, "currentPrompt": "x",
+    })
+    assert seen["body"]["reasoning"] == {"effort": "xhigh"}
