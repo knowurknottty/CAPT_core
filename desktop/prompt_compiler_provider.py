@@ -6,6 +6,7 @@ compiler may enhance a prompt before a different provider/model executes it.
 from __future__ import annotations
 
 import json
+import http.client
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -309,8 +310,11 @@ class OpenAICompatiblePromptCompilerTransport:
             headers=headers,
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
-            raw = response.read(_MAX_RESPONSE_BYTES + 1)
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                raw = response.read(_MAX_RESPONSE_BYTES + 1)
+        except http.client.IncompleteRead as exc:
+            raise OSError("prompt compiler response stream interrupted") from exc
         if len(raw) > _MAX_RESPONSE_BYTES:
             raise ValueError("prompt compiler response exceeded byte limit")
         envelope = json.loads(raw.decode("utf-8"))

@@ -321,3 +321,29 @@ def test_prompt_compiler_truncation_is_typed(monkeypatch):
             "stage": "OMNI", "allowedCapabilities": [],
             "responseSchema": {"type": "object"}, "currentPrompt": "x",
         })
+
+
+def test_prompt_compiler_incomplete_http_body_is_typed(monkeypatch):
+    import http.client
+    import pytest
+    from desktop.prompt_compiler_provider import PromptCompilerSelection, OpenAICompatiblePromptCompilerTransport
+
+    class InterruptedResponse:
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return False
+        def read(self, _limit=-1):
+            raise http.client.IncompleteRead(b"partial", 100)
+
+    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen", lambda request, timeout: InterruptedResponse())
+    selection = PromptCompilerSelection(
+        "openrouter", "deepseek/deepseek-v4.1-flash",
+        "https://openrouter.ai/api/v1", "remote", "keychain:test", True, "max"
+    )
+    transport = OpenAICompatiblePromptCompilerTransport(selection, api_key="synthetic-test-key")
+    with pytest.raises(OSError, match="prompt compiler response stream interrupted"):
+        transport({
+            "stage": "OMNI", "allowedCapabilities": [],
+            "responseSchema": {"type": "object"}, "currentPrompt": "x",
+        })
