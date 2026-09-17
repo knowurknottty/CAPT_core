@@ -153,7 +153,8 @@ def test_runtime_composition_owns_slice_a_registry_and_broker(tmp_path: Path) ->
     runtime = create_runtime(str(tmp_path / "rt.db"))
     try:
         assert [d["toolId"] for d in runtime.tool_registry.list_descriptors()] == [
-            "code.execution", "file.operations", "terminal.docker", "terminal.local", "terminal.ssh"
+            "code.execution", "file.operations", "sandbox.inversion", "terminal.cloudflare",
+            "terminal.docker", "terminal.inversion_sandbox", "terminal.local", "terminal.ssh"
         ]
         assert all(
             runtime.tool_registry.readiness(tool_id)["status"] == "available"
@@ -165,6 +166,15 @@ def test_runtime_composition_owns_slice_a_registry_and_broker(tmp_path: Path) ->
         docker_readiness = runtime.tool_registry.readiness("terminal.docker")
         assert docker_readiness["status"] == "unavailable"
         assert "no named Docker profiles" in docker_readiness["reason"]
+        inversion_readiness = runtime.tool_registry.readiness("terminal.inversion_sandbox")
+        assert inversion_readiness["status"] == "unavailable"
+        assert "no named InversionSandbox profiles" in inversion_readiness["reason"]
+        lifecycle_readiness = runtime.tool_registry.readiness("sandbox.inversion")
+        assert lifecycle_readiness["status"] == "unavailable"
+        assert "no named InversionSandbox profiles" in lifecycle_readiness["reason"]
+        cloudflare_readiness = runtime.tool_registry.readiness("terminal.cloudflare")
+        assert cloudflare_readiness["status"] == "unavailable"
+        assert "no Cloudflare Sandbox profiles" in cloudflare_readiness["reason"]
         relay = runtime.command_service("operator-test", "sess-test")
         assert relay.tool_broker is runtime.tool_broker
     finally:
@@ -707,5 +717,55 @@ def test_predispatch_atomic_settlement_rolls_back_after_first_append_is_staged(t
         assert capability["usesConsumed"] == 0
         assert runtime.store.head_sequence() == head_before
         assert target.read_text(encoding="utf-8") == "before"
+    finally:
+        runtime.close()
+
+
+def test_authenticated_run_tool_executes_cloudflare_sandbox(tmp_path: Path, monkeypatch) -> None:
+    import json
+
+    from capt_runtime.tools.backends.cloudflare import CloudflareSandboxProfile
+
+    monkeypatch.setenv("CAPT_CF_TEST_KEY", "bridge-secret")
+    profile = CloudflareSandboxProfile(
+        profile_id="cf-test", api_url="http://127.0.0.1:8787",
+        api_key_env="CAPT_CF_TEST_KEY", allowed_remote_roots=("/workspace",),
+    )
+    runtime = create_runtime(str(tmp_path / "rt.db"), cloudflare_profiles=[profile])
+    try:
+        class Bridge:
+            def create_sandbox(self, profile, token):
+                return "sbx-toolbroker"
+            def exec(self, profile, token, sandbox_id, **kwargs):
+                return {"exitCode": 0, "stdout": "CF_OK\n", "stderr": "",
+                        "stdoutTotalBytes": 6, "stderrTotalBytes": 0,
+                        "stdoutTruncated": False, "stderrTruncated": False}
+            def destroy_sandbox(self, profile, token, sandbox_id):
+                return None
+
+        runtime.tool_registry.adapter("terminal.cloudflare").backend.bridge = Bridge()
+        grant, lease = _seed_authority(runtime, Path("/workspace"), "terminal.exec", suffix="cloudflare")
+        request = _tool_request(
+            root=Path("/workspace"), tool_id="terminal.cloudflare", operation="terminal.exec",
+            arguments=[
+                {"kind": "string", "name": "argv", "value": json.dumps(["python", "-V"])},
+                {"kind": "path", "name": "cwd", "value": "/workspace"},
+                {"kind": "integer", "name": "timeout_ms", "value": 10_000},
+            ],
+            grant_id=grant, lease_id=lease, idem="tool-cloudflare-1", consequential=True,
+            target_identity="cf-test",
+        )
+        request["backendId"] = "cloudflare"
+        request["operationFingerprint"] = tool_request_fingerprint(request)
+        receipt = runtime.command_service("operator-test", "sess-test").execute(_envelope(request))
+        assert receipt["status"] == "accepted"
+        assert receipt["result"]["status"] == "succeeded"
+        tool_result = receipt["result"]["result"]
+        assert tool_result["status"] == "succeeded"
+        stdout = next(x["value"] for x in tool_result["output"] if x["name"] == "stdout")
+        assert stdout == "CF_OK\n"
+        identity = tool_result["sideEffectIdentity"]
+        assert "sbx-toolbroker" in identity
+        assert "bridge-secret" not in identity
     finally:
         runtime.close()

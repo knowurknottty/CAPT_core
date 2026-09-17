@@ -20,7 +20,9 @@
     "replay.schema.json",
     "prompt.schema.json",
     "council.schema.json",
+    "bot.schema.json",
     "event.schema.json",
-    "checkpoint.schema.json"
+    "checkpoint.schema.json",
+    "sandbox.schema.json"
   ]
 }

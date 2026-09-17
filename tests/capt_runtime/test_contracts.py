@@ -110,3 +110,66 @@ def test_version_visible_in_both_languages():
     assert capt_contracts.CONTRACT_SCHEMA_VERSION == "1.0.0"
     version_ts = (GEN_TS / "src" / "version.ts").read_text()
     assert "1.0.0" in version_ts
+
+
+from capt_runtime.contracts import require
+from capt_runtime.errors import ContractViolation
+from tests.capt_runtime.test_sandbox_lease_aggregate import (
+    DIGEST_FIELDS,
+    OBJECT_FIELDS,
+    sandbox_lease_fixture,
+)
+
+
+def test_sandbox_lease_stream_prefix():
+    require("StreamId", "sandbox_lease-sandbox-1")
+
+
+@pytest.mark.parametrize("state", ["reserved", "created", "running", "closing", "closed", "indeterminate"])
+def test_sandbox_lease_contract_valid(state):
+    require("SandboxLease", sandbox_lease_fixture(state))
+
+
+@pytest.mark.parametrize("field", ["leaseId", "grantId", "scope", "remainingUses", "capability"])
+def test_sandbox_lease_contract_separates_resource_from_capability_authority(field):
+    lease = sandbox_lease_fixture()
+    require("SandboxLease", lease)
+    lease[field] = "capability-lease-must-not-live-here"
+    with pytest.raises(ContractViolation):
+        require("SandboxLease", lease)
+
+
+@pytest.mark.parametrize("ttl", [0, -1, 86401, 1.5, True])
+def test_sandbox_lease_contract_rejects_invalid_ttl(ttl):
+    lease = sandbox_lease_fixture()
+    require("SandboxLease", lease)
+    lease["ttlSeconds"] = ttl
+    with pytest.raises(ContractViolation):
+        require("SandboxLease", lease)
+
+
+@pytest.mark.parametrize("field", DIGEST_FIELDS)
+def test_sandbox_lease_contract_requires_immutable_digests(field):
+    lease = sandbox_lease_fixture()
+    require("SandboxLease", lease)
+    del lease[field]
+    with pytest.raises(ContractViolation):
+        require("SandboxLease", lease)
+
+
+def test_sandbox_lease_contract_rejects_unknown_state():
+    lease = sandbox_lease_fixture()
+    require("SandboxLease", lease)
+    lease["state"] = "ready"
+    with pytest.raises(ContractViolation):
+        require("SandboxLease", lease)
+
+
+@pytest.mark.parametrize("field", OBJECT_FIELDS)
+@pytest.mark.parametrize("value", ["container-name", "a" * 12, "A" * 64, "a" * 65, "sha256:" + "a" * 64])
+def test_sandbox_lease_contract_requires_exact_docker_ids(field, value):
+    lease = sandbox_lease_fixture("created")
+    require("SandboxLease", lease)
+    lease[field] = value
+    with pytest.raises(ContractViolation):
+        require("SandboxLease", lease)
