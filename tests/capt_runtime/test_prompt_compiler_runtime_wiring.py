@@ -92,6 +92,43 @@ def test_transport_uses_strict_schema_and_capability_guard(monkeypatch):
     assert "markdown" in system.lower()
 
 
+
+def test_prompt_compiler_timeout_defaults_follow_endpoint_class():
+    from desktop.prompt_compiler_provider import (
+        OpenAICompatiblePromptCompilerTransport, PromptCompilerSelection,
+    )
+
+    local = OpenAICompatiblePromptCompilerTransport(
+        PromptCompilerSelection(
+            "mtplx", "local-model", "http://127.0.0.1:18085/v1", "local"
+        )
+    )
+    remote = OpenAICompatiblePromptCompilerTransport(
+        PromptCompilerSelection(
+            "openrouter", "remote/model", "https://openrouter.ai/api/v1",
+            "remote", "OPENROUTER_API_KEY", True,
+        ),
+        api_key="synthetic-test-key",
+    )
+
+    assert local.timeout_seconds == 600
+    assert remote.timeout_seconds == 120
+
+
+def test_prompt_compiler_rejects_nonpositive_explicit_timeout():
+    from desktop.prompt_compiler_provider import (
+        LocalPromptCompilerSelection, OpenAICompatiblePromptCompilerTransport,
+    )
+    import pytest
+
+    with pytest.raises(ValueError, match="timeout must be positive"):
+        OpenAICompatiblePromptCompilerTransport(
+            LocalPromptCompilerSelection(
+                "mtplx", "local-model", "http://127.0.0.1:18085/v1"
+            ),
+            timeout_seconds=0,
+        )
+
 def test_transport_rejects_non_object_model_content(monkeypatch):
     from desktop.prompt_compiler_provider import (
         LocalPromptCompilerSelection,
@@ -197,3 +234,144 @@ def test_transport_resolves_unambiguous_local_model_alias(monkeypatch):
     })
 
     assert seen["body"]["model"] == "Youssofal/Qwen3.8-27B-MTPLX-Optimized-Speed"
+
+
+def test_remote_prompt_compiler_reasoning_effort_is_selected_and_transmitted(tmp_path, monkeypatch):
+    from desktop.prompt_compiler_provider import (
+        OpenAICompatiblePromptCompilerTransport, select_prompt_compiler_preferences,
+    )
+
+    ui = _write_config(tmp_path, {
+        "id": "openrouter", "kind": "cloud", "transport": "openai_compatible",
+        "base_url": "https://openrouter.ai/api/v1", "enabled": True,
+        "models": ["deepseek/deepseek-v4.1-flash"], "key_ref": "keychain:test",
+    }, "deepseek/deepseek-v4.1-flash")
+    (ui / "prompt-compiler.json").write_text(json.dumps({
+        "remoteCompilationAuthorized": True,
+        "preferences": [{
+            "provider": "openrouter",
+            "model": "deepseek/deepseek-v4.1-flash",
+            "reasoningEffort": "xhigh",
+        }],
+    }))
+
+    selections = select_prompt_compiler_preferences(ui)
+    assert len(selections) == 1
+    assert selections[0].reasoning_effort == "xhigh"
+
+    seen = {}
+    def fake_urlopen(request, timeout):
+        assert timeout > 0
+        seen["body"] = json.loads(request.data.decode("utf-8"))
+        content = json.dumps(_stage("OMNI"))
+        return _Response(json.dumps({"choices": [{"message": {"content": content}}]}).encode("utf-8"))
+
+    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen", fake_urlopen)
+    transport = OpenAICompatiblePromptCompilerTransport(selections[0], api_key="synthetic-test-key")
+    transport({
+        "stage": "OMNI", "allowedCapabilities": [],
+        "responseSchema": {"type": "object"}, "currentPrompt": "x",
+    })
+    assert seen["body"]["reasoning"] == {"effort": "xhigh"}
+
+
+def test_prompt_compiler_explicit_output_token_limit_is_transmitted(monkeypatch):
+    from desktop.prompt_compiler_provider import PromptCompilerSelection, OpenAICompatiblePromptCompilerTransport
+    seen = {}
+    def fake_urlopen(request, timeout):
+        seen["body"] = json.loads(request.data.decode("utf-8"))
+        content = json.dumps(_stage("OMNI"))
+        return _Response(json.dumps({"choices": [{"finish_reason": "stop", "message": {"content": content}}]}).encode("utf-8"))
+    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen", fake_urlopen)
+    selection = PromptCompilerSelection(
+        "openrouter", "deepseek/deepseek-v4.1-flash",
+        "https://openrouter.ai/api/v1", "remote", "keychain:test", True, "max"
+    )
+    transport = OpenAICompatiblePromptCompilerTransport(
+        selection, api_key="synthetic-test-key", max_output_tokens=32768
+    )
+    transport({
+        "stage": "OMNI", "allowedCapabilities": [],
+        "responseSchema": {"type": "object"}, "currentPrompt": "x",
+    })
+    assert seen["body"]["max_tokens"] == 32768
+
+
+def test_prompt_compiler_truncation_is_typed(monkeypatch):
+    from desktop.prompt_compiler_provider import PromptCompilerSelection, OpenAICompatiblePromptCompilerTransport
+
+    def fake_urlopen(request, timeout):
+        payload = {
+            "choices": [{
+                "finish_reason": "length",
+                "message": {"content": '{"revisedPrompt":"'}
+            }]
+        }
+        return _Response(json.dumps(payload).encode("utf-8"))
+
+    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen", fake_urlopen)
+    selection = PromptCompilerSelection(
+        "openrouter", "deepseek/deepseek-v4.1-flash",
+        "https://openrouter.ai/api/v1", "remote", "keychain:test", True, "max"
+    )
+    transport = OpenAICompatiblePromptCompilerTransport(selection, api_key="synthetic-test-key")
+    import pytest
+    with pytest.raises(ValueError, match="structured response truncated"):
+        transport({
+            "stage": "OMNI", "allowedCapabilities": [],
+            "responseSchema": {"type": "object"}, "currentPrompt": "x",
+        })
+
+
+def test_prompt_compiler_incomplete_http_body_is_typed(monkeypatch):
+    import http.client
+    import pytest
+    from desktop.prompt_compiler_provider import PromptCompilerSelection, OpenAICompatiblePromptCompilerTransport
+
+    class InterruptedResponse:
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return False
+        def read(self, _limit=-1):
+            raise http.client.IncompleteRead(b"partial", 100)
+
+    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen", lambda request, timeout: InterruptedResponse())
+    selection = PromptCompilerSelection(
+        "openrouter", "deepseek/deepseek-v4.1-flash",
+        "https://openrouter.ai/api/v1", "remote", "keychain:test", True, "max"
+    )
+    transport = OpenAICompatiblePromptCompilerTransport(selection, api_key="synthetic-test-key")
+    with pytest.raises(OSError, match="prompt compiler response stream interrupted"):
+        transport({
+            "stage": "OMNI", "allowedCapabilities": [],
+            "responseSchema": {"type": "object"}, "currentPrompt": "x",
+        })
+
+
+def test_remote_prompt_compiler_malformed_envelope_is_typed_transport_failure(monkeypatch):
+    import pytest
+    from desktop.prompt_compiler_provider import PromptCompilerSelection, OpenAICompatiblePromptCompilerTransport
+
+    class MalformedResponse:
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return False
+        def read(self, _limit=-1):
+            return b'{"choices":[{"message":{"content":"partial"}}]\n'
+
+    monkeypatch.setattr(
+        "desktop.prompt_compiler_provider.urllib.request.urlopen",
+        lambda request, timeout: MalformedResponse(),
+    )
+    selection = PromptCompilerSelection(
+        "openrouter", "deepseek/deepseek-v4.1-flash",
+        "https://openrouter.ai/api/v1", "remote", "keychain:test", True, "max"
+    )
+    transport = OpenAICompatiblePromptCompilerTransport(selection, api_key="synthetic-test-key")
+    with pytest.raises(OSError, match="prompt compiler response envelope interrupted"):
+        transport({
+            "stage": "OMNI", "allowedCapabilities": [],
+            "responseSchema": {"type": "object"}, "currentPrompt": "x",
+        })
