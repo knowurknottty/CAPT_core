@@ -6,6 +6,7 @@ compiler may enhance a prompt before a different provider/model executes it.
 from __future__ import annotations
 
 import json
+import http.client
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -28,6 +29,7 @@ class PromptCompilerSelection:
     endpoint_class: str = "local"
     key_ref: str = ""
     remote_authorized: bool = False
+    reasoning_effort: str = ""
 
 
 # Backward-compatible name used by the existing local transport tests.
@@ -44,7 +46,7 @@ def _load_providers(ui: Path) -> list[Any]:
 
 
 def _selection(
-    providers: list[Any], provider_id: str, model: str, *, remote_authorized: bool = False
+    providers: list[Any], provider_id: str, model: str, *, remote_authorized: bool = False, reasoning_effort: str = ""
 ) -> Optional[PromptCompilerSelection]:
     if not provider_id or not model:
         return None
@@ -60,9 +62,9 @@ def _selection(
         if isinstance(models, list) and models and model not in [str(item) for item in models]:
             return None
         if kind == "local" and eclass == "local":
-            return PromptCompilerSelection(provider_id, model, base_url, "local", str(provider.get("key_ref") or ""), False)
+            return PromptCompilerSelection(provider_id, model, base_url, "local", str(provider.get("key_ref") or ""), False, reasoning_effort)
         if kind == "cloud" and eclass == "cloud" and remote_authorized:
-            return PromptCompilerSelection(provider_id, model, base_url, "remote", str(provider.get("key_ref") or ""), True)
+            return PromptCompilerSelection(provider_id, model, base_url, "remote", str(provider.get("key_ref") or ""), True, reasoning_effort)
         return None
     return None
 
@@ -156,6 +158,7 @@ def select_prompt_compiler_preferences(ui_config_dir: Path) -> list[PromptCompil
                     str(pref.get("provider") or ""),
                     str(pref.get("model") or ""),
                     remote_authorized=remote_authorized,
+                    reasoning_effort=str(pref.get("reasoningEffort") or ""),
                 )
                 if candidate is None:
                     continue
@@ -171,6 +174,7 @@ def select_prompt_compiler_preferences(ui_config_dir: Path) -> list[PromptCompil
                 str(explicit.get("provider") or ""),
                 str(explicit.get("model") or ""),
                 remote_authorized=remote_authorized,
+                reasoning_effort=str(explicit.get("reasoningEffort") or ""),
             )
             if candidate is not None:
                 return [candidate]
@@ -193,6 +197,7 @@ class OpenAICompatiblePromptCompilerTransport:
         *,
         api_key: str = "",
         timeout_seconds: int | None = None,
+        max_output_tokens: int = 4096,
     ):
         actual = endpoint_class(selection.base_url)
         if selection.endpoint_class == "local" and actual != "local":
@@ -213,6 +218,9 @@ class OpenAICompatiblePromptCompilerTransport:
         self.timeout_seconds = int(default_timeout if timeout_seconds is None else timeout_seconds)
         if self.timeout_seconds <= 0:
             raise ValueError("prompt compiler timeout must be positive")
+        self.max_output_tokens = int(max_output_tokens)
+        if self.max_output_tokens <= 0:
+            raise ValueError("prompt compiler output token limit must be positive")
         self._resolved_model: Optional[str] = None
 
     @staticmethod
@@ -285,12 +293,14 @@ class OpenAICompatiblePromptCompilerTransport:
             ],
             "stream": False,
             "temperature": 0,
-            "max_tokens": 4096,
+            "max_tokens": self.max_output_tokens,
             "response_format": {
                 "type": "json_schema",
                 "json_schema": {"name": "capt_prompt_stage", "strict": True, "schema": dict(response_schema)},
             },
         }
+        if self.selection.reasoning_effort:
+            body["reasoning"] = {"effort": self.selection.reasoning_effort}
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
         if self.api_key:
             headers["Authorization"] = "Bearer " + self.api_key
@@ -300,13 +310,24 @@ class OpenAICompatiblePromptCompilerTransport:
             headers=headers,
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
-            raw = response.read(_MAX_RESPONSE_BYTES + 1)
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+                raw = response.read(_MAX_RESPONSE_BYTES + 1)
+        except http.client.IncompleteRead as exc:
+            raise OSError("prompt compiler response stream interrupted") from exc
         if len(raw) > _MAX_RESPONSE_BYTES:
             raise ValueError("prompt compiler response exceeded byte limit")
-        envelope = json.loads(raw.decode("utf-8"))
+        try:
+            envelope = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            if self.selection.endpoint_class == "remote":
+                raise OSError("prompt compiler response envelope interrupted") from exc
+            raise ValueError("prompt compiler returned malformed response envelope") from exc
         choices = envelope.get("choices") if isinstance(envelope, dict) else None
-        content = (choices or [{}])[0].get("message", {}).get("content") if isinstance(choices, list) else None
+        first_choice = (choices or [{}])[0] if isinstance(choices, list) else {}
+        if isinstance(first_choice, dict) and first_choice.get("finish_reason") == "length":
+            raise ValueError("prompt compiler structured response truncated at output token limit")
+        content = first_choice.get("message", {}).get("content") if isinstance(first_choice, dict) else None
         if not isinstance(content, str) or not content.strip():
             raise ValueError("prompt compiler returned no structured content")
         result = json.loads(content)
