@@ -139,3 +139,58 @@ def test_real_service_restart_reconciles_without_redispatch(tmp_path: Path) -> N
                 proc.wait(timeout=2)
     assert proc.returncode == 0
     assert not marker.exists()
+
+
+def test_runtime_restart_preserves_unproven_reserved_sandbox_when_docker_is_unavailable(tmp_path: Path) -> None:
+    from capt_runtime import commands
+    from capt_runtime.contracts import digest
+
+    ledger = tmp_path / "sandbox-restart.db"
+    first = create_runtime(str(ledger))
+    try:
+        lease = {
+            "schemaVersion": "1.0.0",
+            "sandboxLeaseId": "sandbox-restart-unproven",
+            "profileId": "missing-profile",
+            "operatorId": "operator-process",
+            "sessionId": "session-process",
+            "executionContextId": "ctx-process",
+            "creationToolExecutionId": "create-process",
+            "profileDigest": digest({"profile": "missing"}),
+            "imageId": "sha256:" + "a" * 64,
+            "securityProfileDigest": digest({"security": "missing"}),
+            "networkPolicyDigest": digest({"network": "missing"}),
+            "filesystemScopeDigest": digest({"fs": "missing"}),
+            "persistentEntrypointDigest": digest({"entry": "missing"}),
+            "daemonIdentityDigest": digest({"daemon": "missing"}),
+            "dockerEndpoint": "unix:///definitely/missing/capt-docker.sock",
+            "createdAt": NOW,
+            "expiresAt": "2030-01-01T00:00:00Z",
+            "ttlSeconds": 1800,
+            "state": "reserved",
+        }
+        meta = commands.command(
+            command_id="sandbox-restart-reserve",
+            idempotency_key="sandbox-restart-reserve",
+            operation_fingerprint=commands.fingerprint("sandbox-restart-reserve", {"lease": "sandbox-restart-unproven"}),
+            correlation_id="corr-sandbox-restart",
+            actor_id="exec-process",
+            actor_kind="execution_plane",
+            issued_at=NOW,
+        )
+        first.service.reserve_sandbox_lease(lease, meta)
+    finally:
+        first.close()
+
+    restarted = create_runtime(str(ledger))
+    try:
+        state = restarted.store.require_state("sandbox_lease-sandbox-restart-unproven")
+        assert state["state"] == "reserved"
+        assert restarted.sandbox_reconciliation_report
+        item = next(
+            row for row in restarted.sandbox_reconciliation_report
+            if row.get("sandboxLeaseId") == "sandbox-restart-unproven"
+        )
+        assert item["status"] == "unproven"
+    finally:
+        restarted.close()

@@ -29,11 +29,16 @@ MAX_DOCKER_CAPTURE_BYTES = 4 * 1024 * 1024
 MAX_DOCKER_CONTROL_BYTES = 4 * 1024 * 1024
 MIN_MEMORY_BYTES = 64 * 1024 * 1024
 MAX_MEMORY_BYTES = 128 * 1024 * 1024 * 1024
+MIN_TMPFS_BYTES = 1 * 1024 * 1024
+MAX_TMPFS_BYTES = 1 * 1024 * 1024 * 1024
 _PROFILE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _CONTEXT_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _ENV_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
 _CONTAINER_ID_RE = re.compile(r"^[0-9a-f]{12,64}$")
 _IMAGE_ID_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+_INTERNAL_NETWORK_RE = re.compile(r"^capt_inv_[0-9a-f]{12}$")
+_USER_RE = re.compile(r"^[0-9]{1,10}:[0-9]{1,10}$")
+_CAP_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 
 
 def _safe_cli_env() -> dict[str, str]:
@@ -150,6 +155,37 @@ class DockerMount:
 
 
 @dataclass(frozen=True)
+class DockerTmpfsMount:
+    path: str
+    size_bytes: int
+    noexec: bool = True
+    nosuid: bool = True
+    nodev: bool = True
+
+    def __post_init__(self) -> None:
+        path = _container_path(self.path, "Docker tmpfs path")
+        if path == "/":
+            raise ValueError("Docker tmpfs path must not be root")
+        if isinstance(self.size_bytes, bool) or not isinstance(self.size_bytes, int) or not (MIN_TMPFS_BYTES <= self.size_bytes <= MAX_TMPFS_BYTES):
+            raise ValueError(f"Docker tmpfs size must be in [{MIN_TMPFS_BYTES}, {MAX_TMPFS_BYTES}]")
+        for name in ("noexec", "nosuid", "nodev"):
+            if not isinstance(getattr(self, name), bool):
+                raise TypeError(f"Docker tmpfs {name} must be boolean")
+        object.__setattr__(self, "path", path)
+
+    def spec(self) -> str:
+        options = ["rw"]
+        if self.nosuid:
+            options.append("nosuid")
+        if self.nodev:
+            options.append("nodev")
+        if self.noexec:
+            options.append("noexec")
+        options.append(f"size={self.size_bytes}")
+        return f"{self.path}:{','.join(options)}"
+
+
+@dataclass(frozen=True)
 class DockerNetworkPolicy:
     mode: str = "none"
     unrestricted_egress: bool = False
@@ -179,6 +215,10 @@ class DockerProfile:
     network_policy: DockerNetworkPolicy = DockerNetworkPolicy()
     cleanup_policy: str = "always"
     read_only_rootfs: bool = False
+    user: str | None = None
+    cap_drop: tuple[str, ...] = ()
+    no_new_privileges: bool = False
+    tmpfs: tuple[DockerTmpfsMount, ...] = ()
     log_max_bytes: int = 8 * 1024 * 1024
 
     def __post_init__(self) -> None:
@@ -239,6 +279,22 @@ class DockerProfile:
             raise ValueError("initial Docker cleanup_policy must be always")
         if not isinstance(self.read_only_rootfs, bool):
             raise ValueError("Docker read_only_rootfs must be boolean")
+        if self.user is not None and (not isinstance(self.user, str) or not _USER_RE.fullmatch(self.user)):
+            raise ValueError("Docker user must be numeric UID:GID")
+        seen_caps: set[str] = set()
+        for cap in self.cap_drop:
+            if not isinstance(cap, str) or not _CAP_RE.fullmatch(cap):
+                raise ValueError(f"invalid Docker capability drop: {cap!r}")
+            if cap in seen_caps:
+                raise ValueError(f"duplicate Docker capability drop: {cap}")
+            seen_caps.add(cap)
+        if not isinstance(self.no_new_privileges, bool):
+            raise TypeError("Docker no_new_privileges must be boolean")
+        seen_tmpfs: set[str] = set()
+        for mount in self.tmpfs:
+            if mount.path in seen_tmpfs:
+                raise ValueError(f"duplicate Docker tmpfs path: {mount.path}")
+            seen_tmpfs.add(mount.path)
         if not isinstance(self.log_max_bytes, int) or not (1024 * 1024 <= self.log_max_bytes <= 64 * 1024 * 1024):
             raise ValueError("Docker log_max_bytes must be in [1 MiB, 64 MiB]")
 
@@ -333,6 +389,63 @@ def _validate_process_request(
         if value < 0 or value > MAX_DOCKER_CAPTURE_BYTES:
             raise ValueError(f"{name} must be in [0, {MAX_DOCKER_CAPTURE_BYTES}]")
     return root, cwd
+
+
+def _docker_create_args(
+    profile: DockerProfile,
+    prepared: DockerPreparedTarget,
+    cwd: str,
+    argv: tuple[str, ...],
+    *,
+    network_mode_override: str | None = None,
+    labels: tuple[tuple[str, str], ...] = (),
+) -> list[str]:
+    network_mode = profile.network_policy.mode
+    if network_mode_override is not None:
+        if not _INTERNAL_NETWORK_RE.fullmatch(network_mode_override):
+            raise AuthorityViolation("Docker internal network override must be a CAPT-owned capt_inv_<12hex> name")
+        if profile.network_policy.mode != "none":
+            raise AuthorityViolation("Docker internal network override requires a no-network profile")
+        network_mode = network_mode_override
+    args: list[str] = [
+        "create", "--pull", "never", "--network", network_mode,
+        "--cpus", str(float(profile.cpus)), "--memory", str(profile.memory_bytes),
+        "--pids-limit", str(profile.pids_limit), "--log-driver", "json-file",
+        "--log-opt", f"max-size={profile.log_max_bytes}", "--log-opt", "max-file=1",
+        "--workdir", cwd,
+    ]
+    if profile.read_only_rootfs:
+        args.append("--read-only")
+    if profile.user is not None:
+        args.extend(("--user", profile.user))
+    for capability in profile.cap_drop:
+        args.extend(("--cap-drop", capability))
+    if profile.no_new_privileges:
+        args.extend(("--security-opt", "no-new-privileges:true"))
+    for tmpfs in profile.tmpfs:
+        args.extend(("--tmpfs", tmpfs.spec()))
+    for key, value in profile.environment_overrides:
+        args.extend(("--env", f"{key}={value}"))
+    for mount in profile.mounts:
+        mount_spec = f"type=bind,src={mount.host_path},dst={mount.container_path}" + (",readonly" if mount.mode == "ro" else "")
+        args.extend(("--mount", mount_spec))
+    seen_labels: set[str] = set()
+    for key, value in labels:
+        if (
+            not isinstance(key, str)
+            or not key
+            or len(key) > 128
+            or any(ch.isspace() or ord(ch) < 32 or ch == "=" for ch in key)
+            or key in seen_labels
+        ):
+            raise ValueError(f"invalid Docker label key: {key!r}")
+        if not isinstance(value, str) or len(value) > 4096 or "\x00" in value or "\n" in value or "\r" in value:
+            raise ValueError(f"invalid Docker label value for {key}")
+        seen_labels.add(key)
+        args.extend(("--label", f"{key}={value}"))
+    args.append(prepared.image_id)
+    args.extend(argv)
+    return args
 
 
 class DockerProcessBackend:
@@ -462,6 +575,88 @@ class DockerProcessBackend:
             repo_digest=repo_digest,
         )
 
+    def _create_stopped(
+        self,
+        prepared: DockerPreparedTarget,
+        cwd: str,
+        argv: tuple[str, ...],
+        *,
+        network_mode_override: str | None = None,
+        labels: tuple[tuple[str, str], ...] = (),
+    ):
+        create_args = _docker_create_args(
+            prepared.profile,
+            prepared,
+            cwd,
+            argv,
+            network_mode_override=network_mode_override,
+            labels=labels,
+        )
+        created = self._run_endpoint(
+            prepared.context_endpoint,
+            tuple(create_args),
+            timeout_seconds=15.0,
+            stdout_limit_bytes=4096,
+            stderr_limit_bytes=64 * 1024,
+        )
+        if created.exit_code != 0 or created.timed_out:
+            return "", created
+        container_id = created.stdout.strip()
+        if not _CONTAINER_ID_RE.fullmatch(container_id):
+            raise RuntimeError("docker create returned invalid container identity")
+        return container_id, created
+
+    def _inspect_exact(self, endpoint: str, container_id: str) -> dict:
+        inspected = self._run_endpoint(
+            endpoint,
+            ("inspect", container_id),
+            timeout_seconds=5.0,
+            stdout_limit_bytes=MAX_DOCKER_CONTROL_BYTES,
+            stderr_limit_bytes=16 * 1024,
+        )
+        if inspected.exit_code != 0 or inspected.timed_out:
+            raise RuntimeError("Docker exact container inspect failed")
+        try:
+            record = json.loads(inspected.stdout)[0]
+        except (json.JSONDecodeError, IndexError, TypeError) as exc:
+            raise RuntimeError("Docker exact container inspect returned invalid JSON") from exc
+        if record.get("Id") != container_id:
+            raise RuntimeError("Docker exact container inspect returned a different identity")
+        return record
+
+    def _start_exact(self, endpoint: str, container_id: str) -> None:
+        started = self._run_endpoint(
+            endpoint,
+            ("start", container_id),
+            timeout_seconds=10.0,
+            stdout_limit_bytes=4096,
+            stderr_limit_bytes=64 * 1024,
+        )
+        if started.exit_code != 0 or started.timed_out:
+            raise RuntimeError(
+                "docker start failed: " + (started.stderr or started.stdout or "unknown")[:2048]
+            )
+
+    def _exec_exact(
+        self,
+        endpoint: str,
+        container_id: str,
+        *,
+        user: str,
+        cwd: str,
+        argv: tuple[str, ...],
+        timeout_seconds: float,
+        stdout_limit_bytes: int,
+        stderr_limit_bytes: int,
+    ):
+        return self._run_endpoint(
+            endpoint,
+            ("exec", "--user", user, "--workdir", cwd, container_id, *argv),
+            timeout_seconds=timeout_seconds,
+            stdout_limit_bytes=stdout_limit_bytes,
+            stderr_limit_bytes=stderr_limit_bytes,
+        )
+
     def effect_identity(
         self, prepared: DockerPreparedTarget, container_id: str, cwd: str
     ) -> str:
@@ -497,6 +692,7 @@ class DockerProcessBackend:
         *,
         prepared: DockerPreparedTarget | None = None,
         observe_effect: Callable[[str], None] | None = None,
+        network_mode_override: str | None = None,
     ) -> DockerProcessResult:
         prepared = prepared or self.preflight(request)
         profile = prepared.profile
@@ -507,46 +703,11 @@ class DockerProcessBackend:
         if current_endpoint != prepared.context_endpoint:
             raise RuntimeError("Docker context endpoint changed after preflight")
 
-        create_args: list[str] = [
-            "create",
-            "--pull",
-            "never",
-            "--network",
-            profile.network_policy.mode,
-            "--cpus",
-            str(float(profile.cpus)),
-            "--memory",
-            str(profile.memory_bytes),
-            "--pids-limit",
-            str(profile.pids_limit),
-            "--log-driver",
-            "json-file",
-            "--log-opt",
-            f"max-size={profile.log_max_bytes}",
-            "--log-opt",
-            "max-file=1",
-            "--workdir",
+        container_id, created = self._create_stopped(
+            prepared,
             cwd,
-        ]
-        if profile.read_only_rootfs:
-            create_args.append("--read-only")
-        for key, value in profile.environment_overrides:
-            create_args.extend(("--env", f"{key}={value}"))
-        for mount in profile.mounts:
-            mount_spec = (
-                f"type=bind,src={mount.host_path},dst={mount.container_path}"
-                + (",readonly" if mount.mode == "ro" else "")
-            )
-            create_args.extend(("--mount", mount_spec))
-        create_args.append(prepared.image_id)
-        create_args.extend(request.argv)
-
-        created = self._run_endpoint(
-            prepared.context_endpoint,
-            tuple(create_args),
-            timeout_seconds=15.0,
-            stdout_limit_bytes=4096,
-            stderr_limit_bytes=64 * 1024,
+            request.argv,
+            network_mode_override=network_mode_override,
         )
         if created.exit_code != 0 or created.timed_out:
             return DockerProcessResult(
@@ -566,30 +727,12 @@ class DockerProcessBackend:
                 cleanup_succeeded=True,
                 control_error="docker create failed before container identity was returned",
             )
-        container_id = created.stdout.strip()
-        if not _CONTAINER_ID_RE.fullmatch(container_id):
-            raise RuntimeError("docker create returned invalid container identity")
-
-        created_inspect = self._run_endpoint(
-            prepared.context_endpoint,
-            ("inspect", container_id),
-            timeout_seconds=5.0,
-            stdout_limit_bytes=MAX_DOCKER_CONTROL_BYTES,
-            stderr_limit_bytes=16 * 1024,
-        )
-        if created_inspect.exit_code != 0 or created_inspect.timed_out:
-            cleanup_ok, cleanup_error = self._cleanup(prepared.context_endpoint, container_id)
-            raise RuntimeError(
-                "Docker could not verify created container identity before start; cleanup="
-                f"{cleanup_ok} {cleanup_error}"
-            )
         try:
-            created_record = json.loads(created_inspect.stdout)[0]
-        except (json.JSONDecodeError, IndexError, TypeError) as exc:
+            created_record = self._inspect_exact(prepared.context_endpoint, container_id)
+        except RuntimeError as exc:
             cleanup_ok, cleanup_error = self._cleanup(prepared.context_endpoint, container_id)
             raise RuntimeError(
-                "Docker created-container inspect returned invalid JSON; cleanup="
-                f"{cleanup_ok} {cleanup_error}"
+                f"{exc}; cleanup={cleanup_ok} {cleanup_error}"
             ) from exc
         if created_record.get("Id") != container_id or created_record.get("Image") != prepared.image_id:
             cleanup_ok, cleanup_error = self._cleanup(prepared.context_endpoint, container_id)

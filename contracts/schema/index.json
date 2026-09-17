@@ -18,7 +18,9 @@
     "driver.schema.json",
     "upgrade.schema.json",
     "replay.schema.json",
+    "bot.schema.json",
     "event.schema.json",
-    "checkpoint.schema.json"
+    "checkpoint.schema.json",
+    "sandbox.schema.json"
   ]
 }

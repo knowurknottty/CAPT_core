@@ -21,6 +21,7 @@ from .aggregates import (
     HumanApprovalAggregate,
     MissionAggregate,
     ReplayForkAggregate,
+    SandboxLeaseAggregate,
     TaskAggregate,
     ToolExecutionAggregate,
 )
@@ -915,6 +916,660 @@ class RuntimeService(object):
                     tool_state,
                 ),
             ],
+            metadata,
+        )
+
+    # -- persistent InversionSandbox resource lifecycle ----------------------
+
+    def _sandbox_transition_event(
+        self,
+        current: dict[str, Any],
+        state: dict[str, Any],
+        metadata: dict[str, Any],
+        suffix: str = "sandbox",
+    ) -> dict[str, Any]:
+        return commands.envelope(
+            event_id=metadata["commandId"] + "-" + suffix,
+            stream_id=SandboxLeaseAggregate.stream_id(state["sandboxLeaseId"]),
+            event_type="SandboxLeaseTransitioned",
+            payload={
+                "eventType": "SandboxLeaseTransitioned",
+                "sandboxLeaseId": state["sandboxLeaseId"],
+                "fromState": current["state"],
+                "toState": state["state"],
+                "lease": state,
+            },
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+        )
+
+    def reserve_sandbox_lease(
+        self, lease: dict[str, Any], metadata: dict[str, Any]
+    ) -> dict[str, Any]:
+        require("SandboxLease", lease)
+        require("CommandMetadata", metadata)
+        require_authority("reserve_sandbox_lease", metadata["actor"]["kind"])
+        if self.store.find_idempotent(metadata["idempotencyKey"]) is not None:
+            return self._commit([], metadata)
+        stream = SandboxLeaseAggregate.stream_id(lease["sandboxLeaseId"])
+        if self.store.aggregate_version(stream) != 0:
+            raise AuthorityViolation("SANDBOX_LEASE_ID_ALREADY_EXISTS")
+        state = SandboxLeaseAggregate.reserve(lease)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-sandbox",
+            stream_id=stream,
+            event_type="SandboxLeaseReserved",
+            payload={"eventType": "SandboxLeaseReserved", "lease": state},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+        )
+        return self._commit(
+            [AppendRequest(stream, SandboxLeaseAggregate.KIND, 0, event, state)],
+            metadata,
+        )
+
+    def observe_sandbox_create_effect(
+        self,
+        tool_execution_id: str,
+        sandbox_lease_id: str,
+        side_effect_identity: str,
+        created_patch: dict[str, Any],
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        require("CommandMetadata", metadata)
+        require_authority("transition_tool_execution", metadata["actor"]["kind"])
+        require_authority("transition_sandbox_lease", metadata["actor"]["kind"])
+        if self.store.find_idempotent(metadata["idempotencyKey"]) is not None:
+            return self._commit([], metadata)
+        tool_stream = ToolExecutionAggregate.stream_id(tool_execution_id)
+        sandbox_stream = SandboxLeaseAggregate.stream_id(sandbox_lease_id)
+        tool_expected = self.store.aggregate_version(tool_stream)
+        sandbox_expected = self.store.aggregate_version(sandbox_stream)
+        tool_current = self.store.require_state(tool_stream)
+        sandbox_current = self.store.require_state(sandbox_stream)
+        if tool_current["state"] != "dispatching" or tool_current["dispatchBoundary"] != "started":
+            raise AuthorityViolation("SANDBOX_CREATE_EFFECT_REQUIRES_DISPATCHING_TOOL")
+        if sandbox_current["state"] != "reserved":
+            raise AuthorityViolation("SANDBOX_CREATE_EFFECT_REQUIRES_RESERVED_LEASE")
+        if sandbox_current["creationToolExecutionId"] != tool_execution_id:
+            raise AuthorityViolation("SANDBOX_CREATE_TOOL_IDENTITY_MISMATCH")
+        if (
+            sandbox_current["operatorId"] != tool_current["operatorId"]
+            or sandbox_current["sessionId"] != tool_current["sessionId"]
+            or sandbox_current["executionContextId"] == ""
+        ):
+            raise AuthorityViolation("SANDBOX_CREATE_OWNER_IDENTITY_MISMATCH")
+        patch = dict(created_patch)
+        if patch.get("sideEffectIdentity") not in (None, side_effect_identity):
+            raise AuthorityViolation("SANDBOX_CREATE_SIDE_EFFECT_IDENTITY_MISMATCH")
+        patch["sideEffectIdentity"] = side_effect_identity
+        patch.setdefault("updatedAt", metadata["issuedAt"])
+        sandbox_state = SandboxLeaseAggregate.record_created(sandbox_current, patch)
+        tool_state = ToolExecutionAggregate.transition(
+            tool_current,
+            "effect_observed",
+            {
+                "sideEffectIdentity": side_effect_identity,
+                "dispatchBoundary": "effect_observed",
+                "updatedAt": metadata["issuedAt"],
+            },
+        )
+        tool_event = commands.envelope(
+            event_id=metadata["commandId"] + "-tool",
+            stream_id=tool_stream,
+            event_type="ToolExecutionEffectObserved",
+            payload={"eventType": "ToolExecutionEffectObserved", "execution": tool_state},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+        )
+        sandbox_event = self._sandbox_transition_event(
+            sandbox_current, sandbox_state, metadata, "sandbox"
+        )
+        return self._commit(
+            [
+                AppendRequest(
+                    tool_stream, ToolExecutionAggregate.KIND, tool_expected, tool_event, tool_state
+                ),
+                AppendRequest(
+                    sandbox_stream,
+                    SandboxLeaseAggregate.KIND,
+                    sandbox_expected,
+                    sandbox_event,
+                    sandbox_state,
+                ),
+            ],
+            metadata,
+        )
+
+    def settle_sandbox_create(
+        self,
+        grant_id: str,
+        consumption: dict[str, Any],
+        tool_execution_id: str,
+        sandbox_lease_id: str,
+        result: dict[str, Any],
+        running_patch: dict[str, Any],
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        require("CapabilityConsumptionRecord", consumption)
+        require("ToolResult", result)
+        require("CommandMetadata", metadata)
+        require_authority("finalize_use", metadata["actor"]["kind"])
+        require_authority("transition_tool_execution", metadata["actor"]["kind"])
+        require_authority("transition_sandbox_lease", metadata["actor"]["kind"])
+        if self.store.find_idempotent(metadata["idempotencyKey"]) is not None:
+            return self._commit([], metadata)
+        capability_stream = CapabilityAggregate.stream_id(grant_id)
+        tool_stream = ToolExecutionAggregate.stream_id(tool_execution_id)
+        sandbox_stream = SandboxLeaseAggregate.stream_id(sandbox_lease_id)
+        capability_expected = self.store.aggregate_version(capability_stream)
+        tool_expected = self.store.aggregate_version(tool_stream)
+        sandbox_expected = self.store.aggregate_version(sandbox_stream)
+        capability_current = self.store.require_state(capability_stream)
+        tool_current = self.store.require_state(tool_stream)
+        sandbox_current = self.store.load_state(sandbox_stream)
+        if sandbox_current is None:
+            raise AuthorityViolation("SANDBOX_CREATE_LEASE_NOT_FOUND")
+        observed_path = (
+            tool_current["state"] == "effect_observed"
+            and sandbox_current["state"] == "created"
+        )
+        unobserved_path = (
+            tool_current["state"] == "dispatching"
+            and tool_current["dispatchBoundary"] == "started"
+            and sandbox_current["state"] == "reserved"
+        )
+        if not observed_path and not unobserved_path:
+            raise AuthorityViolation("SANDBOX_CREATE_SETTLEMENT_STATE_MISMATCH")
+        if tool_current.get("grantId") != grant_id:
+            raise AuthorityViolation("SANDBOX_CREATE_GRANT_MISMATCH")
+        if tool_current.get("leaseId") != consumption["leaseId"]:
+            raise AuthorityViolation("SANDBOX_CREATE_CAPABILITY_LEASE_MISMATCH")
+        if sandbox_current["creationToolExecutionId"] != tool_execution_id:
+            raise AuthorityViolation("SANDBOX_CREATE_TOOL_IDENTITY_MISMATCH")
+        if (
+            sandbox_current["operatorId"] != tool_current["operatorId"]
+            or sandbox_current["sessionId"] != tool_current["sessionId"]
+        ):
+            raise AuthorityViolation("SANDBOX_CREATE_OWNER_IDENTITY_MISMATCH")
+        reservation = next(
+            (
+                item
+                for item in capability_current.get("reservations", [])
+                if item.get("reservationId") == consumption["reservationId"]
+            ),
+            None,
+        )
+        if reservation is None or reservation.get("leaseId") != consumption["leaseId"]:
+            raise AuthorityViolation("SANDBOX_CREATE_RESERVATION_MISMATCH")
+        observed = sandbox_current.get("sideEffectIdentity")
+        if observed_path:
+            if (
+                not observed
+                or tool_current.get("sideEffectIdentity") != observed
+                or result.get("sideEffectIdentity") != observed
+                or consumption.get("sideEffectIdentity") != observed
+            ):
+                raise AuthorityViolation("SANDBOX_CREATE_SIDE_EFFECT_IDENTITY_MISMATCH")
+            if result["status"] not in {"succeeded", "indeterminate"}:
+                raise AuthorityViolation("SANDBOX_CREATE_OBSERVED_EFFECT_CANNOT_SETTLE_AS_FAILED")
+        else:
+            if (
+                result["status"] != "indeterminate"
+                or tool_current.get("sideEffectIdentity") is not None
+                or result.get("sideEffectIdentity") is not None
+                or consumption.get("sideEffectIdentity") is not None
+            ):
+                raise AuthorityViolation("SANDBOX_CREATE_UNOBSERVED_EFFECT_MUST_BE_INDETERMINATE")
+            observed = None
+        expected_outcome = "succeeded" if result["status"] == "succeeded" else "indeterminate"
+        if consumption["outcome"] != expected_outcome:
+            raise AuthorityViolation("SANDBOX_CREATE_RESULT_CONSUMPTION_MISMATCH")
+        capability_state = CapabilityAggregate.finalize(capability_current, consumption)
+        result_digest = digest(result)
+        if result["status"] == "succeeded":
+            sandbox_patch = dict(running_patch)
+            sandbox_patch.setdefault("updatedAt", metadata["issuedAt"])
+            sandbox_state = SandboxLeaseAggregate.record_running(
+                sandbox_current, sandbox_patch
+            )
+            settling = ToolExecutionAggregate.transition(
+                tool_current,
+                "settling",
+                {
+                    "result": result,
+                    "resultDigest": result_digest,
+                    "sideEffectIdentity": observed,
+                    "settlementStatus": "settling",
+                    "dispatchBoundary": "response_completed",
+                    "updatedAt": metadata["issuedAt"],
+                },
+            )
+            tool_state = ToolExecutionAggregate.transition(
+                settling,
+                "completed",
+                {
+                    "result": result,
+                    "resultDigest": result_digest,
+                    "sideEffectIdentity": observed,
+                    "settlementStatus": "settled",
+                    "reconciliationReason": None,
+                    "dispatchBoundary": "response_completed",
+                    "updatedAt": metadata["issuedAt"],
+                },
+            )
+        else:
+            reason = str(running_patch.get("reconciliationReason") or "sandbox create outcome indeterminate")
+            sandbox_patch = dict(running_patch)
+            sandbox_patch["reconciliationReason"] = reason
+            sandbox_patch.setdefault("updatedAt", metadata["issuedAt"])
+            sandbox_state = SandboxLeaseAggregate.mark_indeterminate(
+                sandbox_current, sandbox_patch
+            )
+            tool_state = ToolExecutionAggregate.transition(
+                tool_current,
+                "indeterminate",
+                {
+                    "result": result,
+                    "resultDigest": result_digest,
+                    "sideEffectIdentity": observed,
+                    "settlementStatus": "reconciliation_required",
+                    "reconciliationReason": reason,
+                    "dispatchBoundary": "response_completed",
+                    "updatedAt": metadata["issuedAt"],
+                },
+            )
+        capability_event = commands.envelope(
+            event_id=metadata["commandId"] + "-capability",
+            stream_id=capability_stream,
+            event_type="CapabilityUseFinalized",
+            payload={"eventType": "CapabilityUseFinalized", "consumption": consumption},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+        )
+        tool_event = commands.envelope(
+            event_id=metadata["commandId"] + "-tool",
+            stream_id=tool_stream,
+            event_type="ToolExecutionTerminated",
+            payload={"eventType": "ToolExecutionTerminated", "execution": tool_state},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+        )
+        sandbox_event = self._sandbox_transition_event(
+            sandbox_current, sandbox_state, metadata, "sandbox"
+        )
+        return self._commit(
+            [
+                AppendRequest(
+                    capability_stream,
+                    CapabilityAggregate.KIND,
+                    capability_expected,
+                    capability_event,
+                    capability_state,
+                ),
+                AppendRequest(
+                    tool_stream, ToolExecutionAggregate.KIND, tool_expected, tool_event, tool_state
+                ),
+                AppendRequest(
+                    sandbox_stream,
+                    SandboxLeaseAggregate.KIND,
+                    sandbox_expected,
+                    sandbox_event,
+                    sandbox_state,
+                ),
+            ],
+            metadata,
+        )
+
+    def settle_sandbox_exec_indeterminate(
+        self,
+        grant_id: str,
+        consumption: dict[str, Any],
+        tool_execution_id: str,
+        sandbox_lease_id: str,
+        result: dict[str, Any],
+        terminal_patch: dict[str, Any],
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Atomically quarantine a persistent sandbox after unknown exec termination."""
+        require("CapabilityConsumptionRecord", consumption)
+        require("ToolResult", result)
+        require("CommandMetadata", metadata)
+        require_authority("finalize_use", metadata["actor"]["kind"])
+        require_authority("transition_tool_execution", metadata["actor"]["kind"])
+        require_authority("transition_sandbox_lease", metadata["actor"]["kind"])
+        if self.store.find_idempotent(metadata["idempotencyKey"]) is not None:
+            return self._commit([], metadata)
+        capability_stream = CapabilityAggregate.stream_id(grant_id)
+        tool_stream = ToolExecutionAggregate.stream_id(tool_execution_id)
+        sandbox_stream = SandboxLeaseAggregate.stream_id(sandbox_lease_id)
+        capability_expected = self.store.aggregate_version(capability_stream)
+        tool_expected = self.store.aggregate_version(tool_stream)
+        sandbox_expected = self.store.aggregate_version(sandbox_stream)
+        capability_current = self.store.require_state(capability_stream)
+        tool_current = self.store.require_state(tool_stream)
+        sandbox_current = self.store.require_state(sandbox_stream)
+        if tool_current["state"] != "effect_observed":
+            raise AuthorityViolation("SANDBOX_EXEC_QUARANTINE_REQUIRES_OBSERVED_EFFECT")
+        if sandbox_current["state"] != "running":
+            raise AuthorityViolation("SANDBOX_EXEC_QUARANTINE_REQUIRES_RUNNING_LEASE")
+        if tool_current.get("grantId") != grant_id or tool_current.get("leaseId") != consumption["leaseId"]:
+            raise AuthorityViolation("SANDBOX_EXEC_CAPABILITY_MISMATCH")
+        if (
+            sandbox_current["operatorId"] != tool_current["operatorId"]
+            or sandbox_current["sessionId"] != tool_current["sessionId"]
+        ):
+            raise AuthorityViolation("SANDBOX_EXEC_OWNER_IDENTITY_MISMATCH")
+        reservation = next(
+            (
+                item for item in capability_current.get("reservations", [])
+                if item.get("reservationId") == consumption["reservationId"]
+            ),
+            None,
+        )
+        if reservation is None or reservation.get("leaseId") != consumption["leaseId"]:
+            raise AuthorityViolation("SANDBOX_EXEC_RESERVATION_MISMATCH")
+        observed = tool_current.get("sideEffectIdentity")
+        if (
+            not observed
+            or result.get("sideEffectIdentity") != observed
+            or consumption.get("sideEffectIdentity") != observed
+        ):
+            raise AuthorityViolation("SANDBOX_EXEC_SIDE_EFFECT_IDENTITY_MISMATCH")
+        if result["status"] != "indeterminate" or consumption["outcome"] != "indeterminate":
+            raise AuthorityViolation("SANDBOX_EXEC_QUARANTINE_REQUIRES_INDETERMINATE_OUTCOME")
+        reason = str(terminal_patch.get("reconciliationReason") or "persistent_exec_indeterminate")
+        patch = dict(terminal_patch)
+        patch["reconciliationReason"] = reason
+        patch.setdefault("updatedAt", metadata["issuedAt"])
+        capability_state = CapabilityAggregate.finalize(capability_current, consumption)
+        sandbox_state = SandboxLeaseAggregate.mark_indeterminate(sandbox_current, patch)
+        tool_state = ToolExecutionAggregate.transition(
+            tool_current,
+            "indeterminate",
+            {
+                "result": result,
+                "resultDigest": digest(result),
+                "sideEffectIdentity": observed,
+                "settlementStatus": "reconciliation_required",
+                "reconciliationReason": reason,
+                "dispatchBoundary": "response_completed",
+                "updatedAt": metadata["issuedAt"],
+            },
+        )
+        capability_event = commands.envelope(
+            event_id=metadata["commandId"] + "-capability",
+            stream_id=capability_stream,
+            event_type="CapabilityUseFinalized",
+            payload={"eventType": "CapabilityUseFinalized", "consumption": consumption},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+        )
+        tool_event = commands.envelope(
+            event_id=metadata["commandId"] + "-tool",
+            stream_id=tool_stream,
+            event_type="ToolExecutionTerminated",
+            payload={"eventType": "ToolExecutionTerminated", "execution": tool_state},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+        )
+        sandbox_event = self._sandbox_transition_event(
+            sandbox_current, sandbox_state, metadata, "sandbox"
+        )
+        return self._commit(
+            [
+                AppendRequest(
+                    capability_stream, CapabilityAggregate.KIND, capability_expected,
+                    capability_event, capability_state,
+                ),
+                AppendRequest(
+                    tool_stream, ToolExecutionAggregate.KIND, tool_expected,
+                    tool_event, tool_state,
+                ),
+                AppendRequest(
+                    sandbox_stream, SandboxLeaseAggregate.KIND, sandbox_expected,
+                    sandbox_event, sandbox_state,
+                ),
+            ],
+            metadata,
+        )
+
+    def settle_sandbox_close(
+        self,
+        grant_id: str,
+        consumption: dict[str, Any],
+        tool_execution_id: str,
+        sandbox_lease_id: str,
+        result: dict[str, Any],
+        terminal_patch: dict[str, Any],
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Atomically settle capability + ToolExecution + persistent sandbox close truth."""
+        require("CapabilityConsumptionRecord", consumption)
+        require("ToolResult", result)
+        require("CommandMetadata", metadata)
+        require_authority("finalize_use", metadata["actor"]["kind"])
+        require_authority("transition_tool_execution", metadata["actor"]["kind"])
+        require_authority("transition_sandbox_lease", metadata["actor"]["kind"])
+        if self.store.find_idempotent(metadata["idempotencyKey"]) is not None:
+            return self._commit([], metadata)
+        capability_stream = CapabilityAggregate.stream_id(grant_id)
+        tool_stream = ToolExecutionAggregate.stream_id(tool_execution_id)
+        sandbox_stream = SandboxLeaseAggregate.stream_id(sandbox_lease_id)
+        capability_expected = self.store.aggregate_version(capability_stream)
+        tool_expected = self.store.aggregate_version(tool_stream)
+        sandbox_expected = self.store.aggregate_version(sandbox_stream)
+        capability_current = self.store.require_state(capability_stream)
+        tool_current = self.store.require_state(tool_stream)
+        sandbox_current = self.store.load_state(sandbox_stream)
+        if sandbox_current is None:
+            raise AuthorityViolation("SANDBOX_CLOSE_LEASE_NOT_FOUND")
+        if tool_current["state"] not in {"dispatching", "effect_observed"}:
+            raise AuthorityViolation("SANDBOX_CLOSE_SETTLEMENT_STATE_MISMATCH")
+        if sandbox_current["state"] not in {"closing", "closed"}:
+            raise AuthorityViolation("SANDBOX_CLOSE_RESOURCE_STATE_MISMATCH")
+        if tool_current.get("grantId") != grant_id or tool_current.get("leaseId") != consumption["leaseId"]:
+            raise AuthorityViolation("SANDBOX_CLOSE_CAPABILITY_MISMATCH")
+        if (
+            sandbox_current["operatorId"] != tool_current["operatorId"]
+            or sandbox_current["sessionId"] != tool_current["sessionId"]
+        ):
+            raise AuthorityViolation("SANDBOX_CLOSE_OWNER_IDENTITY_MISMATCH")
+        reservation = next(
+            (
+                item for item in capability_current.get("reservations", [])
+                if item.get("reservationId") == consumption["reservationId"]
+            ),
+            None,
+        )
+        if reservation is None or reservation.get("leaseId") != consumption["leaseId"]:
+            raise AuthorityViolation("SANDBOX_CLOSE_RESERVATION_MISMATCH")
+        observed = tool_current.get("sideEffectIdentity")
+        if tool_current["state"] == "effect_observed":
+            if (
+                not observed
+                or result.get("sideEffectIdentity") != observed
+                or consumption.get("sideEffectIdentity") != observed
+            ):
+                raise AuthorityViolation("SANDBOX_CLOSE_SIDE_EFFECT_IDENTITY_MISMATCH")
+        elif result.get("sideEffectIdentity") is not None or consumption.get("sideEffectIdentity") is not None:
+            raise AuthorityViolation("SANDBOX_CLOSE_UNOBSERVED_EFFECT_IDENTITY_FORBIDDEN")
+        if result["status"] not in {"succeeded", "indeterminate"}:
+            raise AuthorityViolation("SANDBOX_CLOSE_RESULT_STATUS_INVALID")
+        expected_outcome = "succeeded" if result["status"] == "succeeded" else "indeterminate"
+        if consumption["outcome"] != expected_outcome:
+            raise AuthorityViolation("SANDBOX_CLOSE_RESULT_CONSUMPTION_MISMATCH")
+        if sandbox_current["state"] == "closed" and result["status"] != "succeeded":
+            raise AuthorityViolation("SANDBOX_CLOSE_ALREADY_CLOSED_MUST_SUCCEED")
+        capability_state = CapabilityAggregate.finalize(capability_current, consumption)
+        result_digest = digest(result)
+        if result["status"] == "indeterminate":
+            reason = str(terminal_patch.get("reconciliationReason") or "sandbox close outcome indeterminate")
+            patch = dict(terminal_patch)
+            patch["reconciliationReason"] = reason
+            patch.setdefault("updatedAt", metadata["issuedAt"])
+            sandbox_state = SandboxLeaseAggregate.mark_indeterminate(sandbox_current, patch)
+            tool_state = ToolExecutionAggregate.transition(
+                tool_current,
+                "indeterminate",
+                {
+                    "result": result,
+                    "resultDigest": result_digest,
+                    "sideEffectIdentity": observed,
+                    "settlementStatus": "reconciliation_required",
+                    "reconciliationReason": reason,
+                    "dispatchBoundary": "response_completed",
+                    "updatedAt": metadata["issuedAt"],
+                },
+            )
+        else:
+            if sandbox_current["state"] == "closed":
+                sandbox_state = sandbox_current
+            else:
+                patch = dict(terminal_patch)
+                patch.setdefault("closedAt", metadata["issuedAt"])
+                patch.setdefault("updatedAt", metadata["issuedAt"])
+                sandbox_state = SandboxLeaseAggregate.record_closed(sandbox_current, patch)
+            settling = ToolExecutionAggregate.transition(
+                tool_current,
+                "settling",
+                {
+                    "result": result,
+                    "resultDigest": result_digest,
+                    "sideEffectIdentity": observed,
+                    "settlementStatus": "settling",
+                    "dispatchBoundary": "response_completed",
+                    "updatedAt": metadata["issuedAt"],
+                },
+            )
+            tool_state = ToolExecutionAggregate.transition(
+                settling,
+                "completed",
+                {
+                    "result": result,
+                    "resultDigest": result_digest,
+                    "sideEffectIdentity": observed,
+                    "settlementStatus": "settled",
+                    "reconciliationReason": None,
+                    "dispatchBoundary": "response_completed",
+                    "updatedAt": metadata["issuedAt"],
+                },
+            )
+        capability_event = commands.envelope(
+            event_id=metadata["commandId"] + "-capability",
+            stream_id=capability_stream,
+            event_type="CapabilityUseFinalized",
+            payload={"eventType": "CapabilityUseFinalized", "consumption": consumption},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+        )
+        tool_event = commands.envelope(
+            event_id=metadata["commandId"] + "-tool",
+            stream_id=tool_stream,
+            event_type="ToolExecutionTerminated",
+            payload={"eventType": "ToolExecutionTerminated", "execution": tool_state},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+        )
+        appends = [
+            AppendRequest(
+                capability_stream, CapabilityAggregate.KIND, capability_expected,
+                capability_event, capability_state,
+            ),
+            AppendRequest(
+                tool_stream, ToolExecutionAggregate.KIND, tool_expected,
+                tool_event, tool_state,
+            ),
+        ]
+        if sandbox_state is not sandbox_current:
+            sandbox_event = self._sandbox_transition_event(
+                sandbox_current, sandbox_state, metadata, "sandbox"
+            )
+            appends.append(
+                AppendRequest(
+                    sandbox_stream, SandboxLeaseAggregate.KIND, sandbox_expected,
+                    sandbox_event, sandbox_state,
+                )
+            )
+        return self._commit(appends, metadata)
+
+    def _transition_sandbox_lease(
+        self,
+        sandbox_lease_id: str,
+        transition,
+        patch: dict[str, Any],
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        require("CommandMetadata", metadata)
+        require_authority("transition_sandbox_lease", metadata["actor"]["kind"])
+        if self.store.find_idempotent(metadata["idempotencyKey"]) is not None:
+            return self._commit([], metadata)
+        stream = SandboxLeaseAggregate.stream_id(sandbox_lease_id)
+        expected = self.store.aggregate_version(stream)
+        current = self.store.require_state(stream)
+        effective = dict(patch)
+        effective.setdefault("updatedAt", metadata["issuedAt"])
+        state = transition(current, effective)
+        event = self._sandbox_transition_event(current, state, metadata)
+        return self._commit(
+            [AppendRequest(stream, SandboxLeaseAggregate.KIND, expected, event, state)], metadata
+        )
+
+    def recover_reserved_sandbox_created(
+        self, sandbox_lease_id: str, patch: dict[str, Any], metadata: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Record positively rediscovered stopped resources after a create crash."""
+        return self._transition_sandbox_lease(
+            sandbox_lease_id, SandboxLeaseAggregate.record_created, patch, metadata
+        )
+
+    def record_sandbox_running(
+        self, sandbox_lease_id: str, patch: dict[str, Any], metadata: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Record positive keeper-running evidence without recreating resources."""
+        return self._transition_sandbox_lease(
+            sandbox_lease_id, SandboxLeaseAggregate.record_running, patch, metadata
+        )
+
+    def begin_sandbox_close(
+        self, sandbox_lease_id: str, patch: dict[str, Any], metadata: dict[str, Any]
+    ) -> dict[str, Any]:
+        def begin_or_reconcile(current: dict[str, Any], effective: dict[str, Any]) -> dict[str, Any]:
+            if current["state"] == "indeterminate":
+                return SandboxLeaseAggregate.reconcile(current, "closing", effective)
+            return SandboxLeaseAggregate.begin_close(current, effective)
+
+        return self._transition_sandbox_lease(
+            sandbox_lease_id, begin_or_reconcile, patch, metadata
+        )
+
+    def record_sandbox_closed(
+        self, sandbox_lease_id: str, patch: dict[str, Any], metadata: dict[str, Any]
+    ) -> dict[str, Any]:
+        return self._transition_sandbox_lease(
+            sandbox_lease_id, SandboxLeaseAggregate.record_closed, patch, metadata
+        )
+
+    def mark_sandbox_indeterminate(
+        self, sandbox_lease_id: str, patch: dict[str, Any], metadata: dict[str, Any]
+    ) -> dict[str, Any]:
+        return self._transition_sandbox_lease(
+            sandbox_lease_id, SandboxLeaseAggregate.mark_indeterminate, patch, metadata
+        )
+
+    def reconcile_sandbox_lease(
+        self,
+        sandbox_lease_id: str,
+        target_state: str,
+        patch: dict[str, Any],
+        metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        return self._transition_sandbox_lease(
+            sandbox_lease_id,
+            lambda current, effective: SandboxLeaseAggregate.reconcile(
+                current, target_state, effective
+            ),
+            patch,
             metadata,
         )
 
