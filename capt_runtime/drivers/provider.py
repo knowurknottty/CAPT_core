@@ -5,6 +5,7 @@ import asyncio
 import hashlib
 import json
 import threading
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -55,6 +56,7 @@ class ProviderDriver:
         self.governor = governor or TokenCostGovernor()
         self.tool_bridge = tool_bridge
         self.runs: Dict[str, Dict[str, Any]] = {}
+        self._request_deadlines: Dict[str, float] = {}
         self._lock = threading.RLock()
 
     def describe(self):
@@ -70,7 +72,10 @@ class ProviderDriver:
                 "cancelRequested": False,
                 "dispatchBoundary": "prepared",
             }
-        return await asyncio.to_thread(self._execute, rid, work_order)
+        try:
+            return await asyncio.to_thread(self._execute, rid, work_order)
+        finally:
+            self._request_deadlines.pop(rid, None)
 
     async def inspect(self, rid):
         with self._lock:
@@ -122,6 +127,39 @@ class ProviderDriver:
             "anomalies": [],
         }
 
+    @staticmethod
+    def _work_order_timeout_seconds(work_order: dict[str, Any]) -> float:
+        """Bind provider I/O to the governed DriverRun wall-clock budget."""
+        context = work_order.get("contextSlice")
+        budgets = context.get("budgets") if isinstance(context, dict) else None
+        value = budgets.get("maxSeconds") if isinstance(budgets, dict) else None
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+            return 120.0
+        return min(float(value), 3600.0)
+
+    def _remaining_request_timeout(self, rid: str) -> float:
+        deadline = self._request_deadlines.get(rid)
+        if deadline is None:
+            return 120.0
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("provider DriverRun wall-clock budget exhausted")
+        return max(0.001, remaining)
+
+    @staticmethod
+    def _work_order_context_budget_tokens(work_order: dict[str, Any]) -> int | None:
+        context = work_order.get("contextSlice")
+        budgets = context.get("budgets") if isinstance(context, dict) else None
+        value = budgets.get("maxTokens") if isinstance(budgets, dict) else None
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            return None
+        return value
+
+    def _final_answer_reserve_tokens(self, context_budget: int) -> int:
+        reserve = max(1024, context_budget // 3)
+        reserve = min(reserve, int(self.governor.max_output_tokens_per_request))
+        return min(reserve, max(1, context_budget - 1))
+
     def _post_json(self, rid: str, url: str, body: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
         try:
             req = urllib.request.Request(
@@ -129,7 +167,7 @@ class ProviderDriver:
             )
             with self._lock:
                 self.runs[rid]["dispatchBoundary"] = "request_started"
-            with urllib.request.urlopen(req, timeout=120) as response:
+            with urllib.request.urlopen(req, timeout=self._remaining_request_timeout(rid)) as response:
                 with self._lock:
                     self.runs[rid]["dispatchBoundary"] = "response_started"
                 data = json.loads(response.read().decode())
@@ -170,6 +208,7 @@ class ProviderDriver:
         rid: str,
         prompt: str,
         headers: dict[str, str],
+        context_budget_tokens: int | None = None,
     ) -> tuple[str, int, int, float, int]:
         """Run a bounded OpenAI-compatible function-calling loop through ToolBroker."""
         messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
@@ -178,7 +217,9 @@ class ProviderDriver:
         prompt_tokens_total = 0
         completion_tokens_total = 0
         cost_total = 0.0
-        max_tool_rounds = 8
+        max_tool_rounds = int(self.tool_bridge.max_calls)
+        if max_tool_rounds <= 0:
+            raise ProviderDriverFailure("provider tool capability budget is invalid")
         url = self.base_url + "/chat/completions"
 
         for round_index in range(max_tool_rounds + 1):
@@ -211,10 +252,29 @@ class ProviderDriver:
                     cost_total,
                     tool_call_count,
                 )
-            if round_index >= max_tool_rounds:
-                raise ProviderDriverFailure("provider tool-call round limit exceeded")
             if not isinstance(tool_calls, list):
                 raise ProviderDriverFailure("provider returned malformed tool_calls")
+
+            if context_budget_tokens is not None and p_tokens is not None:
+                reserve = self._final_answer_reserve_tokens(context_budget_tokens)
+                if p_tokens >= context_budget_tokens - reserve:
+                    with self._lock:
+                        self.runs[rid]["toolClosureReason"] = "context_headroom"
+                        self.runs[rid]["contextBudgetTokens"] = context_budget_tokens
+                        self.runs[rid]["finalAnswerReserveTokens"] = reserve
+                    return self._openai_finalize_after_tool_budget(
+                        rid, url, headers, messages, prompt_tokens_total,
+                        completion_tokens_total, cost_total, tool_call_count,
+                        reason="context headroom reserve reached",
+                    )
+
+            remaining_calls = max_tool_rounds - tool_call_count
+            if round_index >= max_tool_rounds or len(tool_calls) > remaining_calls:
+                return self._openai_finalize_after_tool_budget(
+                    rid, url, headers, messages, prompt_tokens_total,
+                    completion_tokens_total, cost_total, tool_call_count,
+                    reason="tool authority budget is exhausted",
+                )
 
             messages.append({
                 "role": "assistant",
@@ -233,8 +293,6 @@ class ProviderDriver:
                     raise ProviderDriverFailure("provider tool call missing id")
                 if not isinstance(name, str) or not name:
                     raise ProviderDriverFailure("provider tool call missing function name")
-                if tool_call_count >= self.tool_bridge.max_calls:
-                    raise ProviderDriverFailure("provider tool-call count limit exceeded")
                 tool_result = self.tool_bridge.execute_call(
                     name,
                     function.get("arguments", "{}"),
@@ -247,7 +305,58 @@ class ProviderDriver:
                     "name": name,
                     "content": json.dumps(tool_result, sort_keys=True, separators=(",", ":")),
                 })
+            if tool_call_count >= max_tool_rounds:
+                return self._openai_finalize_after_tool_budget(
+                    rid, url, headers, messages, prompt_tokens_total,
+                    completion_tokens_total, cost_total, tool_call_count,
+                    reason="tool authority budget is exhausted",
+                )
         raise ProviderDriverFailure("provider tool-call loop did not terminate")
+
+    def _openai_finalize_after_tool_budget(
+        self,
+        rid: str,
+        url: str,
+        headers: dict[str, str],
+        messages: list[dict[str, Any]],
+        prompt_tokens_total: int,
+        completion_tokens_total: int,
+        cost_total: float,
+        tool_call_count: int,
+        reason: str = "tool authority budget is exhausted",
+    ) -> tuple[str, int, int, float, int]:
+        """Close tool authority and require one evidence-bounded final answer."""
+        final_messages = list(messages)
+        final_messages.append({
+            "role": "user",
+            "content": (
+                "CAPT tool access is now closed because " + reason + ". Do not request or assume "
+                "additional tool access. Produce the best final answer now using only "
+                "evidence already present in this conversation. Preserve uncertainty "
+                "and mark unresolved claims BLOCKED or UNVERIFIED."
+            ),
+        })
+        body = {
+            "model": self.model,
+            "messages": final_messages,
+            "stream": False,
+            "max_tokens": self.governor.max_output_tokens_per_request,
+        }
+        data = self._post_json(rid, url, body, headers)
+        p_tokens, c_tokens, cost = self._usage_from(data)
+        prompt_tokens_total += p_tokens or 0
+        completion_tokens_total += c_tokens or 0
+        cost_total += cost
+        choices = data.get("choices") or []
+        message = choices[0].get("message", {}) if choices and isinstance(choices[0], dict) else {}
+        if not isinstance(message, dict):
+            raise ProviderDriverFailure("provider returned malformed final assistant message")
+        text = message.get("content") or ""
+        if not isinstance(text, str) or not text:
+            raise ProviderDriverFailure("provider returned no content after tool budget closure")
+        return (
+            text, prompt_tokens_total, completion_tokens_total, cost_total, tool_call_count,
+        )
 
     def _ollama_with_tools(
         self,
@@ -261,7 +370,9 @@ class ProviderDriver:
         tool_call_count = 0
         prompt_tokens_total = 0
         completion_tokens_total = 0
-        max_tool_rounds = 8
+        max_tool_rounds = int(self.tool_bridge.max_calls)
+        if max_tool_rounds <= 0:
+            raise ProviderDriverFailure("provider tool capability budget is invalid")
         url = self.base_url.replace("/v1", "") + "/api/chat"
 
         for round_index in range(max_tool_rounds + 1):
@@ -331,6 +442,10 @@ class ProviderDriver:
         raise ProviderDriverFailure("provider tool-call loop did not terminate")
 
     def _execute(self, rid, wo):
+        timeout_seconds = self._work_order_timeout_seconds(wo)
+        self._request_deadlines[rid] = time.monotonic() + timeout_seconds
+        with self._lock:
+            self.runs[rid]["requestTimeoutBudgetSeconds"] = timeout_seconds
         prompt = self.dispatch_prompt or (
             self.task_resolver.resolve_for_execution(
                 mission_id=wo["missionId"], task_id=wo["taskId"]
@@ -356,13 +471,14 @@ class ProviderDriver:
             headers["Authorization"] = "Bearer " + self.api_key
 
         tool_call_count = 0
+        context_budget_tokens = self._work_order_context_budget_tokens(wo)
         if self.provider_id == "ollama" and self.tool_bridge is not None:
             text, prompt_tokens, completion_tokens, cost_usd, tool_call_count = self._ollama_with_tools(
                 rid, prompt, headers
             )
         elif self.tool_bridge is not None:
             text, prompt_tokens, completion_tokens, cost_usd, tool_call_count = self._openai_with_tools(
-                rid, prompt, headers
+                rid, prompt, headers, context_budget_tokens
             )
         else:
             if self.provider_id == "ollama":
@@ -465,6 +581,9 @@ class ProviderDriver:
                 "dispatchBoundary": dispatch_boundary,
                 "cancelRequested": cancel_requested,
                 "toolCallCount": tool_call_count,
+                "toolClosureReason": self.runs[rid].get("toolClosureReason"),
+                "contextBudgetTokens": context_budget_tokens,
+                "finalAnswerReserveTokens": self.runs[rid].get("finalAnswerReserveTokens"),
                 "resourceUsage": resource_receipt,
             },
         }

@@ -151,6 +151,7 @@ def test_runtime_dispatches_credentialless_local_openai_provider(tmp_path: Path,
         assert run["status"] == "accepted", run
         assert run["result"]["observations"][0]["summary"] == "CAPT_LOCAL_NOAUTH_OK"
         assert run["result"]["providerProvenance"]["endpointClass"] == "local"
+        assert run["result"]["providerProvenance"]["contextBudgetTokens"] == 32_000
         authored = run["result"]["authoredSkills"]
         assert authored["sourceCommit"] == skill_lock["commit"]
         assert authored["skills"][0]["name"] == "inversion-interface-craft"

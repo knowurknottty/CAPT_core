@@ -89,6 +89,11 @@ def cmd_dashboard(args) -> int:
 
 def cmd_providers(args) -> int:
     pm = ProviderManager(_cfg())
+    if args.refresh_local:
+        pm.refresh_local()
+        from .secrets import safe_to_dict
+        _out([safe_to_dict(p) for p in pm.list()], args.json)
+        return 0
     if args.key_ref:
         p = pm.update(args.key_ref[0], {"key_ref": args.key_ref[1]})
         _out({"provider": p.id if p else "", "key_ref": "configured" if p else ""}, args.json)
@@ -191,6 +196,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     pr.add_argument("--test")
     pr.add_argument("--prewarm")
     pr.add_argument("--model")
+    pr.add_argument("--refresh-local", action="store_true")
     pr.add_argument("--activate")
     pr.add_argument("--key-ref", nargs=2, metavar=("PROVIDER", "REF"))
     pr.add_argument("--json", action="store_true")

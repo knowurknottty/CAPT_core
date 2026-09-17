@@ -32,8 +32,12 @@ def test_provider_activation_updates_global_model_tuple(tmp_path: Path, monkeypa
 
     pm = ProviderManager(config_dir)
     pm.activate("ollama")
-    ModelManager(config_dir, providers=pm).set_default(
-        "ollama", "qwen3.8-27b-mtplx"
+    # Simulate a tuple persisted by a legacy build that did not validate model
+    # ownership. Current public setters must reject creating this state.
+    (config_dir / "models.json").write_text(
+        '{"favorites":[],"default":{"provider":"ollama",'
+        '"model":"qwen3.8-27b-mtplx"},"mission_override":null,'
+        '"temporary_override":null,"workflow":{}}'
     )
 
     assert operator_main([

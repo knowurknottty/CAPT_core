@@ -1551,11 +1551,14 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     )
                 if skill_context is not None:
                     host.bind_prepared_authored_skills(skill_context, skill_names)
+                driver_budgets = {"maxSeconds": 600, "maxArtifacts": 1, "maxObservations": 10}
+                if isinstance(effective_budget, int) and not isinstance(effective_budget, bool) and effective_budget > 0:
+                    driver_budgets["maxTokens"] = effective_budget
                 ctx = host.build_context(
                     {"leaseId": lease["leaseId"], "operations": lease["operations"],
                      "scope": lease["scope"], "validFrom": lease["validFrom"],
                      "validUntil": lease["validUntil"]},
-                    ["terminal"], {"maxSeconds": 600, "maxArtifacts": 1, "maxObservations": 10},
+                    ["terminal"], driver_budgets,
                     [{"artifactPath": str(staging / "model-analysis.md"), "artifactKind": "report"}],
                     {"onUnexpectedWrite": "fail"},
                     skill_names=skill_names or None,

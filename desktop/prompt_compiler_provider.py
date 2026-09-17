@@ -192,7 +192,7 @@ class OpenAICompatiblePromptCompilerTransport:
         selection: PromptCompilerSelection,
         *,
         api_key: str = "",
-        timeout_seconds: int = 120,
+        timeout_seconds: int | None = None,
     ):
         actual = endpoint_class(selection.base_url)
         if selection.endpoint_class == "local" and actual != "local":
@@ -205,7 +205,14 @@ class OpenAICompatiblePromptCompilerTransport:
             raise ValueError("remote prompt compiler credential unavailable")
         self.selection = selection
         self.api_key = api_key
-        self.timeout_seconds = int(timeout_seconds)
+        # Local compiler inference on large prompts can legitimately exceed a
+        # cloud-style 120 s response window. Keep the transport bounded, but
+        # select the ceiling from the endpoint class rather than applying one
+        # timeout to unlike execution environments.
+        default_timeout = 600 if selection.endpoint_class == "local" else 120
+        self.timeout_seconds = int(default_timeout if timeout_seconds is None else timeout_seconds)
+        if self.timeout_seconds <= 0:
+            raise ValueError("prompt compiler timeout must be positive")
         self._resolved_model: Optional[str] = None
 
     @staticmethod
