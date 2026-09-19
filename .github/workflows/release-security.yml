@@ -25,7 +25,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install test and audit tooling
-        run: python -m pip install --upgrade pip pytest jsonschema build pip-audit
+        run: python -m pip install --upgrade pip pytest jsonschema build pip-audit pyyaml
       - name: Build wheel (no editable install before wheel proof)
         run: python -m build --wheel
       - name: Install wheel

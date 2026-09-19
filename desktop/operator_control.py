@@ -9,7 +9,7 @@ import copy
 import os
 import threading
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -41,7 +41,7 @@ class OperatorControlStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._validate_external = validate_configuration
         self._now = now or (
-            lambda: datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+            lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         )
         self._lock = threading.RLock()
         if self.path.exists():
