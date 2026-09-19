@@ -302,7 +302,9 @@
       "enum": [
         "local",
         "ssh",
-        "docker"
+        "docker",
+        "cloudflare",
+        "inversion_sandbox"
       ]
     },
     "ToolReadinessStatus": {

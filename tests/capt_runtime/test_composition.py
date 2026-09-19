@@ -32,3 +32,13 @@ def test_openharness_host_uses_composition_registry_once(tmp_path: Path) -> None
         assert first.memory_engine is runtime.memory_engine
     finally:
         runtime.close()
+
+
+def test_composition_exposes_non_destructive_sandbox_reconciliation(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "ledger-reconcile.db"))
+    try:
+        assert runtime.sandbox_reconciler is not None
+        assert runtime.sandbox_reconciliation_report == []
+        assert runtime.reconcile_sandbox_leases() == []
+    finally:
+        runtime.close()

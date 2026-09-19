@@ -50,7 +50,20 @@
         "ToolExecutionDispatching",
         "ToolExecutionEffectObserved",
         "ToolExecutionSettling",
-        "ToolExecutionTerminated"
+        "ToolExecutionTerminated",
+        "BotRegistered",
+        "CognitiveCandidateProposed",
+        "CognitiveCandidateDecided",
+        "SkillCandidateCreated",
+        "SkillCandidateTransitioned",
+        "LabBoardItemCreated",
+        "LabBoardItemTransitioned",
+        "DelegateAssigned",
+        "DelegateAssignmentTransitioned",
+        "CloudflareResourceAdoptionApprovalConsumed",
+        "CloudflareResourceBindingCreated",
+        "SandboxLeaseReserved",
+        "SandboxLeaseTransitioned"
       ]
     },
     "EventPayload": {
@@ -904,6 +917,337 @@
             },
             "cancellation": {
               "$ref": "prompt.schema.json#/$defs/PromptProposalCancellation"
+            }
+          }
+        },
+        {
+          "title": "BotRegisteredPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "bot"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "BotRegistered"
+            },
+            "bot": {
+              "$ref": "bot.schema.json#/$defs/BotManifest"
+            }
+          }
+        },
+        {
+          "title": "CognitiveCandidateProposedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "candidate"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "CognitiveCandidateProposed"
+            },
+            "candidate": {
+              "$ref": "bot.schema.json#/$defs/CognitiveCandidate"
+            }
+          }
+        },
+        {
+          "title": "CognitiveCandidateDecidedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "candidateId",
+            "decision",
+            "decidedBy",
+            "decidedAt"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "CognitiveCandidateDecided"
+            },
+            "candidateId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "decision": {
+              "type": "string",
+              "enum": [
+                "promote",
+                "reject",
+                "revoke"
+              ]
+            },
+            "decidedBy": {
+              "$ref": "common.schema.json#/$defs/ActorRef"
+            },
+            "decidedAt": {
+              "$ref": "common.schema.json#/$defs/Timestamp"
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 2048
+            }
+          }
+        },
+        {
+          "title": "SkillCandidateCreatedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "candidate"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "SkillCandidateCreated"
+            },
+            "candidate": {
+              "$ref": "bot.schema.json#/$defs/SkillCandidate"
+            }
+          }
+        },
+        {
+          "title": "SkillCandidateTransitionedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "skillId",
+            "fromState",
+            "toState",
+            "actor"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "SkillCandidateTransitioned"
+            },
+            "skillId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "fromState": {
+              "$ref": "bot.schema.json#/$defs/SkillLifecycleState"
+            },
+            "toState": {
+              "$ref": "bot.schema.json#/$defs/SkillLifecycleState"
+            },
+            "actor": {
+              "$ref": "common.schema.json#/$defs/ActorRef"
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 2048
+            }
+          }
+        },
+        {
+          "title": "LabBoardItemCreatedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "item"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "LabBoardItemCreated"
+            },
+            "item": {
+              "$ref": "bot.schema.json#/$defs/LabBoardItem"
+            }
+          }
+        },
+        {
+          "title": "LabBoardItemTransitionedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "itemId",
+            "fromState",
+            "toState",
+            "actor"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "LabBoardItemTransitioned"
+            },
+            "itemId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "fromState": {
+              "$ref": "bot.schema.json#/$defs/LabBoardState"
+            },
+            "toState": {
+              "$ref": "bot.schema.json#/$defs/LabBoardState"
+            },
+            "actor": {
+              "$ref": "common.schema.json#/$defs/ActorRef"
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 2048
+            }
+          }
+        },
+        {
+          "title": "DelegateAssignedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "assignment"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "DelegateAssigned"
+            },
+            "assignment": {
+              "$ref": "bot.schema.json#/$defs/DelegateAssignment"
+            }
+          }
+        },
+        {
+          "title": "DelegateAssignmentTransitionedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "assignmentId",
+            "fromState",
+            "toState",
+            "actor",
+            "transitionedAt"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "DelegateAssignmentTransitioned"
+            },
+            "assignmentId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "fromState": {
+              "$ref": "bot.schema.json#/$defs/DelegateAssignmentState"
+            },
+            "toState": {
+              "$ref": "bot.schema.json#/$defs/DelegateAssignmentState"
+            },
+            "actor": {
+              "$ref": "common.schema.json#/$defs/ActorRef"
+            },
+            "reason": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 2048
+            },
+            "transitionedAt": {
+              "$ref": "common.schema.json#/$defs/Timestamp"
+            }
+          }
+        },
+        {
+          "title": "CloudflareResourceAdoptionApprovalConsumedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "consumption"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "CloudflareResourceAdoptionApprovalConsumed"
+            },
+            "consumption": {
+              "$ref": "common.schema.json#/$defs/CloudflareResourceAdoptionConsumption"
+            }
+          }
+        },
+        {
+          "title": "CloudflareResourceBindingCreatedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "binding"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "CloudflareResourceBindingCreated"
+            },
+            "binding": {
+              "$ref": "common.schema.json#/$defs/CloudflareResourceBinding"
+            }
+          }
+        },
+        {
+          "title": "SandboxLeaseReservedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "lease"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "SandboxLeaseReserved"
+            },
+            "lease": {
+              "$ref": "sandbox.schema.json#/$defs/SandboxLease"
+            }
+          }
+        },
+        {
+          "title": "SandboxLeaseTransitionedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "sandboxLeaseId",
+            "fromState",
+            "toState",
+            "lease"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "SandboxLeaseTransitioned"
+            },
+            "sandboxLeaseId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "fromState": {
+              "$ref": "sandbox.schema.json#/$defs/SandboxLeaseState"
+            },
+            "toState": {
+              "$ref": "sandbox.schema.json#/$defs/SandboxLeaseState"
+            },
+            "lease": {
+              "$ref": "sandbox.schema.json#/$defs/SandboxLease"
             }
           }
         }

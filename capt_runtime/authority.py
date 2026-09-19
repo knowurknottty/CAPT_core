@@ -31,6 +31,8 @@ _PERMITTED: Dict[str, FrozenSet[str]] = {
     "finalize_use": frozenset({EXECUTION}),
     "prepare_tool_execution": frozenset({EXECUTION, SYSTEM}),
     "transition_tool_execution": frozenset({EXECUTION, SYSTEM}),
+    "reserve_sandbox_lease": frozenset({EXECUTION, SYSTEM}),
+    "transition_sandbox_lease": frozenset({EXECUTION, SYSTEM}),
     "create_mission": frozenset({HUMAN, SYSTEM}),
     # Mission and driver-run lifecycle were previously UNGATED: the service
     # methods validated CommandMetadata but called require_authority() for no
@@ -76,6 +78,16 @@ _PERMITTED: Dict[str, FrozenSet[str]] = {
     "record_council_analysis": frozenset({COGNITION, SYSTEM}),
     "steer_cohort": frozenset({HUMAN}),
     "create_replay_fork": frozenset({HUMAN}),
+    "register_bot": frozenset({HUMAN, SYSTEM}),
+    "propose_cognitive_candidate": frozenset({COGNITION, SYSTEM}),
+    "decide_cognitive_candidate": frozenset({HUMAN, GOVERNANCE}),
+    "create_skill_candidate": frozenset({COGNITION, HUMAN, SYSTEM}),
+    "transition_skill_candidate": frozenset({COGNITION, HUMAN, GOVERNANCE, SYSTEM}),
+    "create_lab_board_item": frozenset({COGNITION, EXECUTION, HUMAN, SYSTEM}),
+    "transition_lab_board_item": frozenset({COGNITION, EXECUTION, HUMAN, GOVERNANCE, SYSTEM}),
+    "assign_delegate": frozenset({COGNITION, HUMAN, SYSTEM}),
+    "transition_delegate_assignment": frozenset({COGNITION, HUMAN, GOVERNANCE, SYSTEM}),
+    "bind_cloudflare_resource_adoption": frozenset({EXECUTION, SYSTEM}),
 }
 
 

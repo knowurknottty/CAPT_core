@@ -65,6 +65,67 @@ TERMINAL_DOCKER_DESCRIPTOR = {
     ],
 }
 
+TERMINAL_INVERSION_SANDBOX_DESCRIPTOR = {
+    "schemaVersion": "1.0.0",
+    "toolId": "terminal.inversion_sandbox",
+    "displayName": "Inversion Sandbox Terminal",
+    "family": "terminal",
+    "operations": ["terminal.exec"],
+    "requiredCapabilities": ["terminal.exec"],
+    "operationEffects": [{"operation": "terminal.exec", "effectClass": "durable_local"}],
+    "terminalBackends": ["inversion_sandbox"],
+    "platforms": ["macos", "linux"],
+    "supportsTimeout": True,
+    "supportsCancellation": False,
+    "idempotencySupport": "broker_settled_replay",
+    "artifactOutputs": ["stdout", "stderr", "exit_code", "container_id", "image_id",
+        "security_profile_digest", "network_policy_digest", "filesystem_scope_digest",
+        "attestation_digest", "cleanup_status"],
+}
+
+SANDBOX_INVERSION_DESCRIPTOR = {
+    "schemaVersion": "1.0.0",
+    "toolId": "sandbox.inversion",
+    "displayName": "Inversion Sandbox Lifecycle",
+    "family": "sandbox",
+    "operations": ["sandbox.create", "sandbox.inspect", "sandbox.close"],
+    "requiredCapabilities": ["sandbox.create", "sandbox.inspect", "sandbox.close"],
+    "operationEffects": [
+        {"operation": "sandbox.create", "effectClass": "resource_creation"},
+        {"operation": "sandbox.inspect", "effectClass": "pure_read_only"},
+        {"operation": "sandbox.close", "effectClass": "durable_local"},
+    ],
+    "terminalBackends": ["inversion_sandbox"],
+    "platforms": ["macos", "linux"],
+    "supportsTimeout": False,
+    "supportsCancellation": False,
+    "idempotencySupport": "broker_settled_replay",
+    "artifactOutputs": [
+        "sandbox_lease_id", "state", "container_id", "identity_digest",
+        "closure_receipt_digest", "observation"
+    ],
+}
+
+TERMINAL_CLOUDFLARE_DESCRIPTOR = {
+    "schemaVersion": "1.0.0",
+    "toolId": "terminal.cloudflare",
+    "displayName": "Cloudflare Sandbox Terminal",
+    "family": "terminal",
+    "operations": ["terminal.exec"],
+    "requiredCapabilities": ["terminal.exec"],
+    "operationEffects": [
+        {"operation": "terminal.exec", "effectClass": "durable_remote"},
+    ],
+    "terminalBackends": ["cloudflare"],
+    "platforms": ["linux"],
+    "supportsTimeout": True,
+    "supportsCancellation": False,
+    "idempotencySupport": "broker_settled_replay",
+    "artifactOutputs": [
+        "stdout", "stderr", "exit_code", "sandbox_id", "profile_id", "remote_cwd", "cleanup_status"
+    ],
+}
+
 FILE_OPERATIONS_DESCRIPTOR = {
     "schemaVersion": "1.0.0",
     "toolId": "file.operations",

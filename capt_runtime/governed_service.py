@@ -9,11 +9,23 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 
 from . import commands
 from .aggregates.artifact_promotion import ArtifactPromotionAggregate
+from .aggregates.bot import BotAggregate
 from .aggregates.claim_driver import ClaimAggregate
+from .aggregates.cloudflare_resource_binding import CloudflareResourceBindingAggregate
+from .aggregates.cognitive_candidate import CognitiveCandidateAggregate
 from .aggregates.cohort_state import CohortAggregate
 from .aggregates.council_state import CouncilAggregate
+from .aggregates.delegate_assignment import DelegateAssignmentAggregate
+from .aggregates.human_approval import HumanApprovalAggregate
+from .aggregates.lab_board import LabBoardAggregate
+from .aggregates.mission_task import MissionAggregate, TaskAggregate
+from .aggregates.skill_candidate import SkillCandidateAggregate
 from .artifact_workspace import atomic_adopt_verified_artifact, file_digest
 from .authority import require_authority
+from .cloudflare_resource_adoption import (
+    CloudflareResourceAdoptionProposal,
+    build_cloudflare_resource_binding,
+)
 from .contracts import digest, require
 from .council import (
     CouncilAnalysis, CouncilDefinition, CouncilLaunchAuthorization, authorize_launch,
@@ -26,6 +38,471 @@ from .store import AppendRequest
 
 class GovernedRuntimeService(RuntimeService):
     """RuntimeService plus explicitly governed Sol-Reconciliation transactions."""
+
+    def _idempotent_projection(
+        self, stream: str, label: str, metadata: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        if self.store.find_idempotent(metadata["idempotencyKey"]) is None:
+            return None
+        result = dict(self._commit([], metadata))
+        result[label] = self.store.load_state(stream)
+        return result
+
+    # -- Cloudflare resource adoption -------------------------------------
+
+    def bind_cloudflare_resource_adoption(
+        self,
+        proposal: CloudflareResourceAdoptionProposal,
+        *,
+        request_id: str,
+        binding_id: str,
+        use_id: str,
+        now: str,
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        require("CommandMetadata", metadata)
+        require_authority("bind_cloudflare_resource_adoption", metadata["actor"]["kind"])
+        if not isinstance(proposal, CloudflareResourceAdoptionProposal):
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_ADOPTION_PROPOSAL_TYPE_INVALID")
+        binding_stream = CloudflareResourceBindingAggregate.stream_id(binding_id)
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            existing_binding = self.store.load_state(binding_stream)
+            if existing_binding is None:
+                raise IntegrityViolation("CLOUDFLARE_RESOURCE_ADOPTION_IDEMPOTENCY_WITHOUT_BINDING")
+            return {"status": "idempotent", "binding": existing_binding}
+
+        approval_stream = HumanApprovalAggregate.stream_id(request_id)
+        current = self.store.load_state(approval_stream)
+        if current is None or current.get("state") != "approved":
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_ADOPTION_NOT_APPROVED")
+        if current.get("operation") != "CloudflareResourceAdoption":
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_ADOPTION_OPERATION_MISMATCH")
+        if current.get("requestedCapability") != "cloudflare.resource.adopt":
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_ADOPTION_CAPABILITY_MISMATCH")
+        if current.get("missionId") != proposal.mission_id:
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_ADOPTION_MISSION_MISMATCH")
+        if current.get("taskId") != proposal.task_id:
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_ADOPTION_TASK_MISMATCH")
+        if current.get("resource") != proposal.resource_uri():
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_ADOPTION_RESOURCE_MISMATCH")
+        if now > str(current.get("expiresAt") or ""):
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_ADOPTION_APPROVAL_EXPIRED")
+        if current.get("remainingUses") != 1:
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_ADOPTION_ONE_USE_REQUIRED")
+
+        offered = proposal.approval_binding()
+        approved = (current.get("scope") or {}).get("adoptionBinding")
+        if not isinstance(approved, Mapping):
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_ADOPTION_SCOPE_MISSING")
+        checks = (
+            ("proposalDigest", "CLOUDFLARE_RESOURCE_ADOPTION_PROPOSAL_DIGEST_MISMATCH"),
+            ("inventoryDigest", "CLOUDFLARE_RESOURCE_ADOPTION_INVENTORY_DIGEST_MISMATCH"),
+            ("proposalId", "CLOUDFLARE_RESOURCE_ADOPTION_PROPOSAL_ID_MISMATCH"),
+            ("accountId", "CLOUDFLARE_RESOURCE_ADOPTION_ACCOUNT_MISMATCH"),
+            ("resourceKind", "CLOUDFLARE_RESOURCE_ADOPTION_KIND_MISMATCH"),
+            ("resourceId", "CLOUDFLARE_RESOURCE_ADOPTION_RESOURCE_ID_MISMATCH"),
+            ("resourceName", "CLOUDFLARE_RESOURCE_ADOPTION_RESOURCE_NAME_MISMATCH"),
+            ("targetAlias", "CLOUDFLARE_RESOURCE_ADOPTION_ALIAS_MISMATCH"),
+            ("inventoryFetchedAt", "CLOUDFLARE_RESOURCE_ADOPTION_INVENTORY_TIME_MISMATCH"),
+            ("targetEndpoint", "CLOUDFLARE_RESOURCE_ADOPTION_ENDPOINT_MISMATCH"),
+        )
+        for key, code in checks:
+            if approved.get(key) != offered.get(key):
+                raise AuthorityViolation(code)
+
+        if self.store.aggregate_version(binding_stream) != 0:
+            raise AuthorityViolation("CLOUDFLARE_RESOURCE_BINDING_ID_ALREADY_EXISTS")
+        for stream_id, kind, _version in self.store.all_aggregates():
+            if kind != CloudflareResourceBindingAggregate.KIND:
+                continue
+            existing = self.store.load_state(stream_id)
+            if not existing or existing.get("state") != "active":
+                continue
+            if (
+                existing.get("accountId") == proposal.account_id
+                and existing.get("resourceKind") == proposal.resource_kind.value
+                and existing.get("targetAlias") == proposal.target_alias
+            ):
+                raise AuthorityViolation("CLOUDFLARE_RESOURCE_BINDING_ALIAS_ALREADY_ACTIVE")
+
+        binding = build_cloudflare_resource_binding(
+            proposal,
+            binding_id=binding_id,
+            approval_request_id=request_id,
+            approved_by=str(current.get("operatorId") or ""),
+            approved_at=str(current.get("decidedAt") or ""),
+            bound_at=now,
+        )
+        require("CloudflareResourceBinding", binding)
+        binding_state = CloudflareResourceBindingAggregate.create(binding)
+        approval_expected = self.store.aggregate_version(approval_stream)
+        approval_state = HumanApprovalAggregate.consume(current, use_id, now)
+        consumption = {
+            "schemaVersion": "1.0.0",
+            "requestId": request_id,
+            "useId": use_id,
+            "consumedAt": now,
+            "missionId": proposal.mission_id,
+            "taskId": proposal.task_id,
+            "bindingId": binding_id,
+            "proposalDigest": proposal.proposal_digest,
+            "inventoryDigest": proposal.inventory_digest,
+        }
+        require("CloudflareResourceAdoptionConsumption", consumption)
+        approval_event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1",
+            stream_id=approval_stream,
+            event_type="CloudflareResourceAdoptionApprovalConsumed",
+            payload={
+                "eventType": "CloudflareResourceAdoptionApprovalConsumed",
+                "consumption": consumption,
+            },
+            metadata=metadata,
+            occurred_at=now,
+            mission_id=proposal.mission_id,
+            task_id=proposal.task_id,
+        )
+        binding_event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev2",
+            stream_id=binding_stream,
+            event_type="CloudflareResourceBindingCreated",
+            payload={"eventType": "CloudflareResourceBindingCreated", "binding": binding},
+            metadata=metadata,
+            occurred_at=now,
+            mission_id=proposal.mission_id,
+            task_id=proposal.task_id,
+        )
+        result = self._commit(
+            [
+                AppendRequest(approval_stream, HumanApprovalAggregate.KIND, approval_expected, approval_event, approval_state),
+                AppendRequest(binding_stream, CloudflareResourceBindingAggregate.KIND, 0, binding_event, binding_state),
+            ],
+            metadata,
+        )
+        return {**result, "binding": binding_state}
+
+    # -- CAPT Bot foundation ---------------------------------------------
+
+    def register_bot(
+        self, manifest: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        require("BotManifest", manifest)
+        require("CommandMetadata", metadata)
+        require_authority("register_bot", metadata["actor"]["kind"])
+        stream = BotAggregate.stream_id(manifest["botId"])
+        replay = self._idempotent_projection(stream, "bot", metadata)
+        if replay is not None:
+            return replay
+        if self.store.aggregate_version(stream) != 0:
+            raise AuthorityViolation("BOT_ID_ALREADY_EXISTS")
+        if manifest.get("roleKind") == "delegate":
+            mission_id = str(manifest.get("missionId") or "")
+            if self.store.load_state(MissionAggregate.stream_id(mission_id)) is None:
+                raise AuthorityViolation("DELEGATE_MISSION_NOT_FOUND")
+        state = BotAggregate.create(manifest)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type="BotRegistered",
+            payload={"eventType": "BotRegistered", "bot": manifest},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+            mission_id=manifest.get("missionId"),
+        )
+        result = self._commit([AppendRequest(stream, BotAggregate.KIND, 0, event, state)], metadata)
+        return {**result, "bot": state}
+
+    def propose_cognitive_candidate(
+        self, candidate: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        require("CognitiveCandidate", candidate)
+        require("CommandMetadata", metadata)
+        require_authority("propose_cognitive_candidate", metadata["actor"]["kind"])
+        stream = CognitiveCandidateAggregate.stream_id(candidate["candidateId"])
+        replay = self._idempotent_projection(stream, "candidate", metadata)
+        if replay is not None:
+            return replay
+        if self.store.aggregate_version(stream) != 0:
+            raise AuthorityViolation("COGNITIVE_CANDIDATE_ID_ALREADY_EXISTS")
+        bot = self.store.load_state(BotAggregate.stream_id(str(candidate["botId"])))
+        if bot is None:
+            raise AuthorityViolation("COGNITIVE_CANDIDATE_BOT_NOT_FOUND")
+        if candidate["promotionMode"] != bot["cognitionPolicy"].get("promotionMode"):
+            raise AuthorityViolation("COGNITIVE_PROMOTION_MODE_MISMATCH")
+        state = CognitiveCandidateAggregate.create(candidate)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type="CognitiveCandidateProposed",
+            payload={"eventType": "CognitiveCandidateProposed", "candidate": candidate},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+        )
+        result = self._commit(
+            [AppendRequest(stream, CognitiveCandidateAggregate.KIND, 0, event, state)], metadata
+        )
+        return {**result, "candidate": state}
+
+    def decide_cognitive_candidate(
+        self, candidate_id: str, decision: str, reason: Optional[str],
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        require("CommandMetadata", metadata)
+        require_authority("decide_cognitive_candidate", metadata["actor"]["kind"])
+        stream = CognitiveCandidateAggregate.stream_id(candidate_id)
+        replay = self._idempotent_projection(stream, "candidate", metadata)
+        if replay is not None:
+            return replay
+        expected = self.store.aggregate_version(stream)
+        current = self.store.require_state(stream)
+        state = CognitiveCandidateAggregate.decide(
+            current, decision, metadata["actor"], metadata["issuedAt"], reason
+        )
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type="CognitiveCandidateDecided",
+            payload={"eventType": "CognitiveCandidateDecided", "candidateId": candidate_id,
+                     "decision": decision, "decidedBy": metadata["actor"],
+                     "decidedAt": metadata["issuedAt"], "reason": reason},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+        )
+        result = self._commit(
+            [AppendRequest(stream, CognitiveCandidateAggregate.KIND, expected, event, state)], metadata
+        )
+        return {**result, "candidate": state}
+
+    def create_skill_candidate(
+        self, candidate: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        require("SkillCandidate", candidate)
+        require("CommandMetadata", metadata)
+        require_authority("create_skill_candidate", metadata["actor"]["kind"])
+        stream = SkillCandidateAggregate.stream_id(candidate["skillId"])
+        replay = self._idempotent_projection(stream, "candidate", metadata)
+        if replay is not None:
+            return replay
+        if self.store.aggregate_version(stream) != 0:
+            raise AuthorityViolation("SKILL_CANDIDATE_ID_ALREADY_EXISTS")
+        if self.store.load_state(BotAggregate.stream_id(str(candidate["botId"]))) is None:
+            raise AuthorityViolation("SKILL_CANDIDATE_BOT_NOT_FOUND")
+        state = SkillCandidateAggregate.create(candidate)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type="SkillCandidateCreated",
+            payload={"eventType": "SkillCandidateCreated", "candidate": candidate},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+        )
+        result = self._commit(
+            [AppendRequest(stream, SkillCandidateAggregate.KIND, 0, event, state)], metadata
+        )
+        return {**result, "candidate": state}
+
+    def transition_skill_candidate(
+        self, skill_id: str, to_state: str, reason: Optional[str],
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        require("CommandMetadata", metadata)
+        require_authority("transition_skill_candidate", metadata["actor"]["kind"])
+        stream = SkillCandidateAggregate.stream_id(skill_id)
+        replay = self._idempotent_projection(stream, "candidate", metadata)
+        if replay is not None:
+            return replay
+        expected = self.store.aggregate_version(stream)
+        current = self.store.require_state(stream)
+        state = SkillCandidateAggregate.transition(current, to_state, metadata["actor"], reason)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type="SkillCandidateTransitioned",
+            payload={"eventType": "SkillCandidateTransitioned", "skillId": skill_id,
+                     "fromState": current["lifecycleState"], "toState": to_state,
+                     "actor": metadata["actor"], "reason": reason},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+        )
+        result = self._commit(
+            [AppendRequest(stream, SkillCandidateAggregate.KIND, expected, event, state)], metadata
+        )
+        return {**result, "candidate": state}
+
+    def create_lab_board_item(
+        self, item: Dict[str, Any], metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        require("LabBoardItem", item)
+        require("CommandMetadata", metadata)
+        require_authority("create_lab_board_item", metadata["actor"]["kind"])
+        stream = LabBoardAggregate.stream_id(item["itemId"])
+        replay = self._idempotent_projection(stream, "item", metadata)
+        if replay is not None:
+            return replay
+        if self.store.aggregate_version(stream) != 0:
+            raise AuthorityViolation("LAB_BOARD_ITEM_ID_ALREADY_EXISTS")
+        mission_id = item.get("missionId")
+        if mission_id is not None and self.store.load_state(MissionAggregate.stream_id(str(mission_id))) is None:
+            raise AuthorityViolation("LAB_BOARD_MISSION_NOT_FOUND")
+        state = LabBoardAggregate.create(item)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type="LabBoardItemCreated",
+            payload={"eventType": "LabBoardItemCreated", "item": item},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+            mission_id=item.get("missionId"),
+        )
+        result = self._commit(
+            [AppendRequest(stream, LabBoardAggregate.KIND, 0, event, state)], metadata
+        )
+        return {**result, "item": state}
+
+    def transition_lab_board_item(
+        self, item_id: str, to_state: str, reason: Optional[str],
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        require("CommandMetadata", metadata)
+        require_authority("transition_lab_board_item", metadata["actor"]["kind"])
+        stream = LabBoardAggregate.stream_id(item_id)
+        replay = self._idempotent_projection(stream, "item", metadata)
+        if replay is not None:
+            return replay
+        expected = self.store.aggregate_version(stream)
+        current = self.store.require_state(stream)
+        state = LabBoardAggregate.transition(
+            current, to_state, metadata["actor"], reason, metadata["issuedAt"]
+        )
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type="LabBoardItemTransitioned",
+            payload={"eventType": "LabBoardItemTransitioned", "itemId": item_id,
+                     "fromState": current["state"], "toState": to_state,
+                     "actor": metadata["actor"], "reason": reason},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+            mission_id=current.get("missionId"),
+        )
+        result = self._commit(
+            [AppendRequest(stream, LabBoardAggregate.KIND, expected, event, state)], metadata
+        )
+        return {**result, "item": state}
+
+    def _active_assignment_for_delegate(self, bot_id: str, mission_id: str, at: str):
+        matches = []
+        for sid, kind, _ver in self.store.all_aggregates():
+            if kind != DelegateAssignmentAggregate.KIND:
+                continue
+            state = self.store.load_state(sid)
+            if not state or state.get("state") != "active":
+                continue
+            if state.get("delegateBotId") != bot_id or state.get("missionId") != mission_id:
+                continue
+            if str(state.get("expiresAt")) <= at:
+                continue
+            matches.append(state)
+        if len(matches) > 1:
+            raise AuthorityViolation("DELEGATE_PARENT_ASSIGNMENT_AMBIGUOUS")
+        return matches[0] if matches else None
+
+    def _delegation_depth_limit(self, parent: Dict[str, Any], mission_id: str, at: str):
+        limits = [int(parent.get("collaboration", {}).get("maxSpawnDepth", 0))]
+        if parent.get("roleKind") == "crew":
+            return 1, min(limits)
+        seen = {str(parent["botId"])}
+        parent_assignment = self._active_assignment_for_delegate(str(parent["botId"]), mission_id, at)
+        if parent_assignment is None:
+            raise AuthorityViolation("DELEGATE_PARENT_ASSIGNMENT_NOT_ACTIVE")
+        expected_depth = int(parent_assignment["depth"]) + 1
+        ancestor_id = str(parent_assignment["parentBotId"])
+        while True:
+            if ancestor_id in seen:
+                raise AuthorityViolation("DELEGATE_PARENT_CHAIN_CYCLE")
+            seen.add(ancestor_id)
+            ancestor = self.store.load_state(BotAggregate.stream_id(ancestor_id))
+            if ancestor is None:
+                raise AuthorityViolation("DELEGATE_ANCESTOR_BOT_NOT_FOUND")
+            limits.append(int(ancestor.get("collaboration", {}).get("maxSpawnDepth", 0)))
+            if ancestor.get("roleKind") == "crew":
+                break
+            ancestor_assignment = self._active_assignment_for_delegate(ancestor_id, mission_id, at)
+            if ancestor_assignment is None:
+                raise AuthorityViolation("DELEGATE_PARENT_ASSIGNMENT_NOT_ACTIVE")
+            ancestor_id = str(ancestor_assignment["parentBotId"])
+        return expected_depth, min(limits)
+
+    def assign_delegate(self, assignment: Dict[str, Any], metadata: Dict[str, Any]) -> Dict[str, Any]:
+        require("DelegateAssignment", assignment)
+        require("CommandMetadata", metadata)
+        require_authority("assign_delegate", metadata["actor"]["kind"])
+        stream = DelegateAssignmentAggregate.stream_id(assignment["assignmentId"])
+        replay = self._idempotent_projection(stream, "assignment", metadata)
+        if replay is not None:
+            return replay
+        if self.store.aggregate_version(stream) != 0:
+            raise AuthorityViolation("DELEGATE_ASSIGNMENT_ID_ALREADY_EXISTS")
+        if assignment["createdAt"] != metadata["issuedAt"] or assignment["lastTransitionAt"] != metadata["issuedAt"]:
+            raise AuthorityViolation("DELEGATE_ASSIGNMENT_METADATA_MISMATCH")
+        if assignment.get("createdBy") != metadata.get("actor") or assignment.get("transitionReason") is not None:
+            raise AuthorityViolation("DELEGATE_ASSIGNMENT_METADATA_MISMATCH")
+        parent = self.store.load_state(BotAggregate.stream_id(str(assignment["parentBotId"])))
+        delegate = self.store.load_state(BotAggregate.stream_id(str(assignment["delegateBotId"])))
+        if parent is None:
+            raise AuthorityViolation("PARENT_BOT_NOT_FOUND")
+        if delegate is None:
+            raise AuthorityViolation("DELEGATE_BOT_NOT_FOUND")
+        if parent["botId"] == delegate["botId"]:
+            raise AuthorityViolation("DELEGATE_SELF_ASSIGNMENT_FORBIDDEN")
+        if delegate.get("roleKind") != "delegate":
+            raise AuthorityViolation("ASSIGNEE_MUST_BE_DELEGATE")
+        if not parent.get("collaboration", {}).get("mayDelegate", False):
+            raise AuthorityViolation("PARENT_DELEGATION_FORBIDDEN")
+        mission_id = str(assignment["missionId"])
+        if delegate.get("missionId") != mission_id:
+            raise AuthorityViolation("DELEGATE_ASSIGNMENT_MISSION_MISMATCH")
+        if self.store.load_state(MissionAggregate.stream_id(mission_id)) is None:
+            raise AuthorityViolation("DELEGATE_ASSIGNMENT_MISSION_NOT_FOUND")
+        existing_assignment = self._active_assignment_for_delegate(
+            str(delegate["botId"]), mission_id, str(assignment["createdAt"])
+        )
+        if existing_assignment is not None:
+            raise AuthorityViolation("DELEGATE_ALREADY_ACTIVE")
+        depth = int(assignment["depth"])
+        expected_depth, effective_max_depth = self._delegation_depth_limit(
+            parent, mission_id, str(assignment["createdAt"])
+        )
+        if depth != expected_depth or depth > effective_max_depth:
+            raise AuthorityViolation("DELEGATE_DEPTH_INVALID")
+        task_id = assignment.get("taskId")
+        if task_id is not None:
+            task = self.store.load_state(TaskAggregate.stream_id(str(task_id)))
+            if task is None or task.get("missionId") != mission_id:
+                raise AuthorityViolation("DELEGATE_TASK_BINDING_INVALID")
+        state = DelegateAssignmentAggregate.create(assignment)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type="DelegateAssigned",
+            payload={"eventType": "DelegateAssigned", "assignment": assignment},
+            metadata=metadata, occurred_at=metadata["issuedAt"], mission_id=mission_id,
+            task_id=task_id,
+        )
+        result = self._commit([AppendRequest(stream, DelegateAssignmentAggregate.KIND, 0, event, state)], metadata)
+        return {**result, "assignment": state}
+
+    def transition_delegate_assignment(self, assignment_id: str, to_state: str, reason: Optional[str], metadata: Dict[str, Any]) -> Dict[str, Any]:
+        require("CommandMetadata", metadata)
+        require_authority("transition_delegate_assignment", metadata["actor"]["kind"])
+        stream = DelegateAssignmentAggregate.stream_id(assignment_id)
+        replay = self._idempotent_projection(stream, "assignment", metadata)
+        if replay is not None:
+            return replay
+        expected = self.store.aggregate_version(stream)
+        current = self.store.require_state(stream)
+        if metadata["issuedAt"] >= current["expiresAt"] and to_state != "expired":
+            raise AuthorityViolation("DELEGATE_ASSIGNMENT_EXPIRED")
+        if to_state == "expired" and metadata["issuedAt"] < current["expiresAt"]:
+            raise AuthorityViolation("DELEGATE_ASSIGNMENT_NOT_YET_EXPIRED")
+        state = DelegateAssignmentAggregate.transition(current, to_state, metadata["actor"], reason, metadata["issuedAt"])
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1", stream_id=stream,
+            event_type="DelegateAssignmentTransitioned",
+            payload={"eventType": "DelegateAssignmentTransitioned", "assignmentId": assignment_id,
+                     "fromState": current["state"], "toState": to_state, "actor": metadata["actor"],
+                     "reason": reason, "transitionedAt": metadata["issuedAt"]},
+            metadata=metadata, occurred_at=metadata["issuedAt"],
+            mission_id=current["missionId"], task_id=current.get("taskId"),
+        )
+        result = self._commit([AppendRequest(stream, DelegateAssignmentAggregate.KIND, expected, event, state)], metadata)
+        return {**result, "assignment": state}
 
     def _event_by_identity(
         self, event_type: str, identity_key: str, identity_value: str

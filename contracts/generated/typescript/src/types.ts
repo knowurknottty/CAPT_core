@@ -4,13 +4,203 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:4b9fada4ef30a0e55430286420a2d6e26fade04f6ed2bcf7d978557e87563e99
+// source digest:  sha256:dd93a01c09cc25a0571b1bb8a664807f0436efa19c7489f3baba8ac1ae3d35ed
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
 
 export const CONTRACT_SCHEMA_VERSION = "1.0.0" as const;
 export const RUNTIME_VERSION = "0.1.0" as const;
+
+/** BotCognitionPolicy */
+export interface BotCognitionPolicy {
+  readonly promotionMode: PromotionMode;
+}
+
+/** BotCollaborationPolicy */
+export interface BotCollaborationPolicy {
+  readonly maxSpawnDepth: number;
+  readonly mayDelegate: boolean;
+}
+
+/** BotLocalityPolicy */
+export interface BotLocalityPolicy {
+  readonly defaultRuntime: string;
+  readonly privateData: string;
+}
+
+/** Persistent Bot identity and policy composition. Live credentials and capability leases are intentionally absent. */
+export interface BotManifest {
+  readonly botId: Identifier;
+  readonly cognitionPolicy: BotCognitionPolicy;
+  readonly collaboration: BotCollaborationPolicy;
+  readonly createdAt: Timestamp;
+  readonly createdBy: ActorRef;
+  readonly displayName: string;
+  readonly localityPolicy: BotLocalityPolicy;
+  readonly modelStrategy: BotModelStrategy;
+  readonly role: string;
+  readonly roleKind: BotRoleKind;
+  readonly schemaVersion: SchemaVersion;
+  readonly authorityTemplateRef?: Identifier | null;
+  readonly missionId?: Identifier | null;
+}
+
+/** BotModelStrategy */
+export interface BotModelStrategy {
+  readonly fallbacks: readonly string[];
+  readonly primary: string | null;
+}
+
+/** BotRoleKind */
+export type BotRoleKind = "crew" | "delegate";
+export const BotRoleKindValues = [
+  "crew",
+  "delegate",
+] as const;
+
+/** CognitiveCandidate */
+export interface CognitiveCandidate {
+  readonly botId: Identifier;
+  readonly candidateId: Identifier;
+  readonly confidence: number;
+  readonly content: string;
+  readonly kind: CognitiveKind;
+  readonly promotionMode: PromotionMode;
+  readonly proposedAt: Timestamp;
+  readonly proposedBy: ActorRef;
+  readonly provenance: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly sensitivity: string;
+  readonly sourceRefs: readonly string[];
+  readonly state: CognitiveCandidateState;
+  readonly decidedAt?: Timestamp | null;
+  readonly decidedBy?: ActorRef | null;
+  readonly decisionReason?: string | null;
+}
+
+/** CognitiveCandidateState */
+export type CognitiveCandidateState = "proposed" | "promoted" | "rejected" | "revoked";
+export const CognitiveCandidateStateValues = [
+  "proposed",
+  "promoted",
+  "rejected",
+  "revoked",
+] as const;
+
+/** CognitiveKind */
+export type CognitiveKind = "observation" | "user_fact" | "derived_fact" | "preference" | "decision" | "hypothesis" | "belief" | "contradiction" | "open_question" | "procedure" | "skill" | "relationship";
+export const CognitiveKindValues = [
+  "observation",
+  "user_fact",
+  "derived_fact",
+  "preference",
+  "decision",
+  "hypothesis",
+  "belief",
+  "contradiction",
+  "open_question",
+  "procedure",
+  "skill",
+  "relationship",
+] as const;
+
+/** Durable coordination binding for a transient delegate. Grants no capability authority. */
+export interface DelegateAssignment {
+  readonly assignmentId: Identifier;
+  readonly createdAt: Timestamp;
+  readonly createdBy: ActorRef;
+  readonly delegateBotId: Identifier;
+  readonly depth: number;
+  readonly expiresAt: Timestamp;
+  readonly lastTransitionAt: Timestamp;
+  readonly missionId: Identifier;
+  readonly parentBotId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly state: DelegateAssignmentState;
+  readonly taskId?: Identifier | null;
+  readonly transitionReason?: string | null;
+}
+
+/** DelegateAssignmentState */
+export type DelegateAssignmentState = "active" | "completed" | "revoked" | "expired";
+export const DelegateAssignmentStateValues = [
+  "active",
+  "completed",
+  "revoked",
+  "expired",
+] as const;
+
+/** LabBoardItem */
+export interface LabBoardItem {
+  readonly createdAt: Timestamp;
+  readonly createdBy: ActorRef;
+  readonly evidenceRefs: readonly string[];
+  readonly itemId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly state: LabBoardState;
+  readonly title: string;
+  readonly updatedAt: Timestamp;
+  readonly blockerReason?: string | null;
+  readonly humanRequest?: string | null;
+  readonly missionId?: Identifier | null;
+  readonly ownerRef?: string | null;
+}
+
+/** LabBoardState */
+export type LabBoardState = "inbox" | "ready" | "active" | "verifying" | "waiting_agent" | "waiting_human" | "human_task" | "blocked_human" | "done";
+export const LabBoardStateValues = [
+  "inbox",
+  "ready",
+  "active",
+  "verifying",
+  "waiting_agent",
+  "waiting_human",
+  "human_task",
+  "blocked_human",
+  "done",
+] as const;
+
+/** PromotionMode */
+export type PromotionMode = "locked" | "governed" | "autonomous";
+export const PromotionModeValues = [
+  "locked",
+  "governed",
+  "autonomous",
+] as const;
+
+/** SkillCandidate */
+export interface SkillCandidate {
+  readonly botId: Identifier;
+  readonly createdAt: Timestamp;
+  readonly createdBy: ActorRef;
+  readonly lifecycleState: SkillLifecycleState;
+  readonly name: string;
+  readonly provenanceRefs: readonly string[];
+  readonly requiredAuthority: readonly string[];
+  readonly revision: number;
+  readonly schemaVersion: SchemaVersion;
+  readonly skillId: Identifier;
+  readonly sourceKind: string;
+  readonly decisionReason?: string | null;
+}
+
+/** SkillLifecycleState */
+export type SkillLifecycleState = "idea" | "draft" | "review" | "sandbox" | "test" | "red_team" | "shadow" | "approved" | "active" | "rejected" | "revoked" | "superseded";
+export const SkillLifecycleStateValues = [
+  "idea",
+  "draft",
+  "review",
+  "sandbox",
+  "test",
+  "red_team",
+  "shadow",
+  "approved",
+  "active",
+  "rejected",
+  "revoked",
+  "superseded",
+] as const;
 
 /** Definition of what an operation permits. */
 export interface Capability {
@@ -419,6 +609,50 @@ export interface CapabilitySubject {
   readonly subjectId: Identifier;
   readonly subjectKind: string;
 }
+
+/** One-use human approval consumption bound to a specific Cloudflare resource adoption proposal and resulting binding. */
+export interface CloudflareResourceAdoptionConsumption {
+  readonly bindingId: Identifier;
+  readonly consumedAt: Timestamp;
+  readonly inventoryDigest: Digest;
+  readonly missionId: Identifier;
+  readonly proposalDigest: Digest;
+  readonly requestId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly taskId: Identifier;
+  readonly useId: Identifier;
+}
+
+/** A human-approved, provenance-bound adoption of one exact existing Cloudflare resource. Discovery alone cannot create this binding. */
+export interface CloudflareResourceBinding {
+  readonly accountId: Identifier;
+  readonly approvalRequestId: Identifier;
+  readonly approvedAt: Timestamp;
+  readonly approvedBy: Identifier;
+  readonly bindingDigest: Digest;
+  readonly bindingId: Identifier;
+  readonly boundAt: Timestamp;
+  readonly inventoryDigest: Digest;
+  readonly inventoryFetchedAt: Timestamp;
+  readonly proposalDigest: Digest;
+  readonly proposalId: Identifier;
+  readonly resourceId: string;
+  readonly resourceKind: CloudflareResourceKind;
+  readonly resourceName: string;
+  readonly schemaVersion: SchemaVersion;
+  readonly state: "active";
+  readonly targetAlias: Identifier;
+  readonly targetEndpoint: string | null;
+}
+
+/** CloudflareResourceKind */
+export type CloudflareResourceKind = "d1_database" | "queue" | "worker_script" | "workflow";
+export const CloudflareResourceKindValues = [
+  "d1_database",
+  "queue",
+  "worker_script",
+  "workflow",
+] as const;
 
 /** Mandatory envelope for every consequential command (ADR-0108). */
 export interface CommandMetadata {
@@ -1240,6 +1474,12 @@ export interface ArtifactPromotionPreparedPayload {
   readonly promotion: ArtifactPromotionState;
 }
 
+/** BotRegisteredPayload */
+export interface BotRegisteredPayload {
+  readonly bot: BotManifest;
+  readonly eventType: "BotRegistered";
+}
+
 /** CapabilityGrantRevokedPayload */
 export interface CapabilityGrantRevokedPayload {
   readonly eventType: "CapabilityGrantRevoked";
@@ -1301,6 +1541,34 @@ export interface ClaimVerifiedPayload {
   readonly verification: VerificationResult;
 }
 
+/** CloudflareResourceAdoptionApprovalConsumedPayload */
+export interface CloudflareResourceAdoptionApprovalConsumedPayload {
+  readonly consumption: CloudflareResourceAdoptionConsumption;
+  readonly eventType: "CloudflareResourceAdoptionApprovalConsumed";
+}
+
+/** CloudflareResourceBindingCreatedPayload */
+export interface CloudflareResourceBindingCreatedPayload {
+  readonly binding: CloudflareResourceBinding;
+  readonly eventType: "CloudflareResourceBindingCreated";
+}
+
+/** CognitiveCandidateDecidedPayload */
+export interface CognitiveCandidateDecidedPayload {
+  readonly candidateId: Identifier;
+  readonly decidedAt: Timestamp;
+  readonly decidedBy: ActorRef;
+  readonly decision: string;
+  readonly eventType: "CognitiveCandidateDecided";
+  readonly reason?: string | null;
+}
+
+/** CognitiveCandidateProposedPayload */
+export interface CognitiveCandidateProposedPayload {
+  readonly candidate: CognitiveCandidate;
+  readonly eventType: "CognitiveCandidateProposed";
+}
+
 /** CohortCreatedPayload */
 export interface CohortCreatedPayload {
   readonly eventType: "CohortCreated";
@@ -1330,6 +1598,23 @@ export interface CouncilAdmittedPayload {
 export interface CouncilAnalysisRecordedPayload {
   readonly analysis: CouncilAnalysisRecord;
   readonly eventType: "CouncilAnalysisRecorded";
+}
+
+/** DelegateAssignedPayload */
+export interface DelegateAssignedPayload {
+  readonly assignment: DelegateAssignment;
+  readonly eventType: "DelegateAssigned";
+}
+
+/** DelegateAssignmentTransitionedPayload */
+export interface DelegateAssignmentTransitionedPayload {
+  readonly actor: ActorRef;
+  readonly assignmentId: Identifier;
+  readonly eventType: "DelegateAssignmentTransitioned";
+  readonly fromState: DelegateAssignmentState;
+  readonly toState: DelegateAssignmentState;
+  readonly transitionedAt: Timestamp;
+  readonly reason?: string | null;
 }
 
 /** DriverRunCreatedPayload */
@@ -1410,10 +1695,23 @@ export type EventPayload =
   | ToolExecutionTerminatedPayload
   | PromptProposalCreatedPayload
   | PromptProposalRevisedPayload
-  | PromptProposalCancelledPayload;
+  | PromptProposalCancelledPayload
+  | BotRegisteredPayload
+  | CognitiveCandidateProposedPayload
+  | CognitiveCandidateDecidedPayload
+  | SkillCandidateCreatedPayload
+  | SkillCandidateTransitionedPayload
+  | LabBoardItemCreatedPayload
+  | LabBoardItemTransitionedPayload
+  | DelegateAssignedPayload
+  | DelegateAssignmentTransitionedPayload
+  | CloudflareResourceAdoptionApprovalConsumedPayload
+  | CloudflareResourceBindingCreatedPayload
+  | SandboxLeaseReservedPayload
+  | SandboxLeaseTransitionedPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "PromptProposalCreated" | "PromptProposalRevised" | "PromptProposalCancelled" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "CouncilAdmitted" | "CouncilAnalysisRecorded" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "PromptProposalCreated" | "PromptProposalRevised" | "PromptProposalCancelled" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "CouncilAdmitted" | "CouncilAnalysisRecorded" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated" | "BotRegistered" | "CognitiveCandidateProposed" | "CognitiveCandidateDecided" | "SkillCandidateCreated" | "SkillCandidateTransitioned" | "LabBoardItemCreated" | "LabBoardItemTransitioned" | "DelegateAssigned" | "DelegateAssignmentTransitioned" | "CloudflareResourceAdoptionApprovalConsumed" | "CloudflareResourceBindingCreated" | "SandboxLeaseReserved" | "SandboxLeaseTransitioned";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -1457,6 +1755,19 @@ export const EventTypeValues = [
   "ToolExecutionEffectObserved",
   "ToolExecutionSettling",
   "ToolExecutionTerminated",
+  "BotRegistered",
+  "CognitiveCandidateProposed",
+  "CognitiveCandidateDecided",
+  "SkillCandidateCreated",
+  "SkillCandidateTransitioned",
+  "LabBoardItemCreated",
+  "LabBoardItemTransitioned",
+  "DelegateAssigned",
+  "DelegateAssignmentTransitioned",
+  "CloudflareResourceAdoptionApprovalConsumed",
+  "CloudflareResourceBindingCreated",
+  "SandboxLeaseReserved",
+  "SandboxLeaseTransitioned",
 ] as const;
 
 /** EvidenceRecordedPayload */
@@ -1481,6 +1792,22 @@ export interface HumanApprovalDecidedPayload {
 export interface HumanApprovalRequestedPayload {
   readonly eventType: "HumanApprovalRequested";
   readonly request: HumanApprovalRequest;
+}
+
+/** LabBoardItemCreatedPayload */
+export interface LabBoardItemCreatedPayload {
+  readonly eventType: "LabBoardItemCreated";
+  readonly item: LabBoardItem;
+}
+
+/** LabBoardItemTransitionedPayload */
+export interface LabBoardItemTransitionedPayload {
+  readonly actor: ActorRef;
+  readonly eventType: "LabBoardItemTransitioned";
+  readonly fromState: LabBoardState;
+  readonly itemId: Identifier;
+  readonly toState: LabBoardState;
+  readonly reason?: string | null;
 }
 
 /** MissionCreatedPayload */
@@ -1532,6 +1859,37 @@ export interface PromptProposalRevisedPayload {
 export interface ReplayForkCreatedPayload {
   readonly eventType: "ReplayForkCreated";
   readonly fork: ReplayForkState;
+}
+
+/** SandboxLeaseReservedPayload */
+export interface SandboxLeaseReservedPayload {
+  readonly eventType: "SandboxLeaseReserved";
+  readonly lease: SandboxLease;
+}
+
+/** SandboxLeaseTransitionedPayload */
+export interface SandboxLeaseTransitionedPayload {
+  readonly eventType: "SandboxLeaseTransitioned";
+  readonly fromState: SandboxLeaseState;
+  readonly lease: SandboxLease;
+  readonly sandboxLeaseId: Identifier;
+  readonly toState: SandboxLeaseState;
+}
+
+/** SkillCandidateCreatedPayload */
+export interface SkillCandidateCreatedPayload {
+  readonly candidate: SkillCandidate;
+  readonly eventType: "SkillCandidateCreated";
+}
+
+/** SkillCandidateTransitionedPayload */
+export interface SkillCandidateTransitionedPayload {
+  readonly actor: ActorRef;
+  readonly eventType: "SkillCandidateTransitioned";
+  readonly fromState: SkillLifecycleState;
+  readonly skillId: Identifier;
+  readonly toState: SkillLifecycleState;
+  readonly reason?: string | null;
 }
 
 /** TaskCreatedPayload */
@@ -1930,6 +2288,57 @@ export interface ReplayForkState {
   readonly state: "created";
 }
 
+/** Exact full Docker object ID; names and abbreviated IDs are not identity. */
+export type SandboxDockerObjectId = string;
+
+/** Resource lifetime facts only; grants no capability authority. Identity fields are immutable once bound. Optional external identities are absent until observed. TTL default is 1800 seconds; callers materialize the profile-approved value. sideEffectIdentity is the canonical lifecycle identity digest. */
+export interface SandboxLease {
+  readonly createdAt: Timestamp;
+  readonly creationToolExecutionId: Identifier;
+  readonly daemonIdentityDigest: Digest;
+  readonly dockerEndpoint: string;
+  readonly executionContextId: Identifier;
+  readonly expiresAt: Timestamp;
+  readonly filesystemScopeDigest: Digest;
+  readonly imageId: Digest;
+  readonly networkPolicyDigest: Digest;
+  readonly operatorId: Identifier;
+  readonly persistentEntrypointDigest: Digest;
+  readonly profileDigest: Digest;
+  readonly profileId: Identifier;
+  readonly sandboxLeaseId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly securityProfileDigest: Digest;
+  readonly sessionId: Identifier;
+  readonly state: SandboxLeaseState;
+  readonly ttlSeconds: number;
+  readonly closeReason?: string;
+  readonly closedAt?: Timestamp;
+  readonly closureReceiptDigest?: Digest;
+  readonly containerId?: SandboxDockerObjectId;
+  readonly creationAttestationDigest?: Digest;
+  readonly guardianContainerId?: SandboxDockerObjectId;
+  readonly guardianImageId?: Digest;
+  readonly lastReconciledAt?: Timestamp;
+  readonly networkId?: SandboxDockerObjectId;
+  readonly networkName?: string;
+  readonly reconciliationEvidenceDigest?: Digest;
+  readonly reconciliationReason?: string;
+  readonly sideEffectIdentity?: Digest;
+  readonly updatedAt?: Timestamp;
+}
+
+/** SandboxLeaseState */
+export type SandboxLeaseState = "reserved" | "created" | "running" | "closing" | "closed" | "indeterminate";
+export const SandboxLeaseStateValues = [
+  "reserved",
+  "created",
+  "running",
+  "closing",
+  "closed",
+  "indeterminate",
+] as const;
+
 /** Spec 8: 'parallel' is NOT an edge type. Parallelism emerges when predecessor conditions are simultaneously satisfied. */
 export type DependencyCondition = "completed" | "succeeded" | "failed" | "verified" | "approved";
 export const DependencyConditionValues = [
@@ -2054,11 +2463,13 @@ export interface StringArgument {
 }
 
 /** TerminalBackendId */
-export type TerminalBackendId = "local" | "ssh" | "docker";
+export type TerminalBackendId = "local" | "ssh" | "docker" | "cloudflare" | "inversion_sandbox";
 export const TerminalBackendIdValues = [
   "local",
   "ssh",
   "docker",
+  "cloudflare",
+  "inversion_sandbox",
 ] as const;
 
 /** Typed argument. A generic map would allow injection of unvalidated parameters into a consequential call. */
