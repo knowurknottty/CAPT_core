@@ -23,6 +23,29 @@ Before council work:
 
 If a required reference is absent, do not silently call the result a full council.
 
+## Cohorts and vessels
+
+Each model invocation is one cohort. A cohort may use multiple internal vessels as
+reasoning perspectives without multiplying inference calls.
+
+For the Human Manual planning profile, use 11 vessels per cohort:
+
+1. architecture/integration;
+2. provenance/history;
+3. deterministic computation;
+4. schema/API compatibility;
+5. tests/golden vectors;
+6. epistemic safety/privacy;
+7. corpus/language quality;
+8. performance/offline-first;
+9. migration/rollback;
+10. adversarial failure analysis;
+11. enhancement/novelty.
+
+Vessels are parallel perspectives inside one model turn. They are not subagents,
+tool calls, or serialized additional inference requests. Each cohort should emit a
+compact vessel ledger before its cohort-level synthesis.
+
 ## Phase 1 — MoA Explore
 
 Every reference model independently receives the same:
