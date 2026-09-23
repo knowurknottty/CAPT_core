@@ -60,6 +60,7 @@ def build_bound_model_operator_approval(
     authored_skill_context: Optional[Dict[str, Any]] = None,
     proposal_binding: Optional[Dict[str, Any]] = None,
     authority_profile: Optional[Dict[str, Any]] = None,
+    reasoning_effort: str = "",
 ) -> Dict[str, Any]:
     """Return the model-visible assembly plus its execution admission binding."""
     assembly = build_model_operator_prompt_assembly(
@@ -101,6 +102,7 @@ def build_bound_model_operator_approval(
         "provider": provider_id,
         "model": model_id,
         "requestedContextBudget": int(requested_context_budget),
+        "reasoningEffort": str(reasoning_effort or ""),
         "humanVerificationRequired": bool(human_verification_required),
         "executable": executable_selector,
         "driverKind": driver_kind,

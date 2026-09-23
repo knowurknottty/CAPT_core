@@ -105,6 +105,7 @@ def test_runtime_planner_builds_prompt_approval_receipt_for_exact_model_assembly
         "model": "qwen",
         "responseMode": "SPOCK",
         "promptEnhancement": "OFF",
+        "reasoningEffort": "xhigh",
     }
     result = request_model_prompt_approval(
         svc,
@@ -122,6 +123,8 @@ def test_runtime_planner_builds_prompt_approval_receipt_for_exact_model_assembly
     assert state["state"] == "requested"
     assert state["operation"] == "ModelOperatorInspection"
     assert state["promptAssemblyDigest"] == result["promptAssemblyDigest"]
+    assert state["scope"]["approvalBinding"]["reasoningEffort"] == "xhigh"
+    assert result["reasoningEffort"] == "xhigh"
 
     approve(svc, "r-model-1")
     approved = svc.require_approved_prompt_assembly(

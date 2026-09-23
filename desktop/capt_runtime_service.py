@@ -49,6 +49,7 @@ from capt_runtime.errors import AuthorityViolation
 from capt_runtime.store import EventStore
 from capt_runtime.ipc_framing import FrameProtocolError, recv_json, send_json
 from capt_runtime.resource_governor import TokenCostGovernor
+from capt_runtime.reasoning import ReasoningConfigurationError, normalize_reasoning_effort
 from capt_runtime.replay import replay_to_sequence
 from capt_runtime.verification import (
     build_artifact_hash_evidence,
@@ -1154,7 +1155,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             def _prepare_approved_hermes(command: Dict[str, Any]) -> PreparedApprovedModelExecution:
                 """Validate and freeze every deterministic dispatch input."""
                 payload = command.get("payload", {})
-                objective = payload.get("objective")
+                objective = str(payload.get("objective", "")).strip()
                 raw_target_root = payload.get("targetRoot")
                 if not objective or not raw_target_root:
                     raise ValueError("MODEL_TASK_OBJECTIVE_OR_TARGET_MISSING")
@@ -1175,6 +1176,12 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 executable = payload.get("executable") or None
                 provider_id = payload.get("provider")
                 provider_model = payload.get("model")
+                try:
+                    reasoning_effort = normalize_reasoning_effort(payload.get("reasoningEffort"))
+                except ReasoningConfigurationError as exc:
+                    raise ValueError(str(exc)) from exc
+                if reasoning_effort and not provider_id:
+                    raise ValueError("REASONING_EFFORT_REQUIRES_PROVIDER")
                 provider = None
                 provider_key = ""
                 if provider_id:
@@ -1247,6 +1254,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     requested_context_budget=requested_context_budget,
                     human_verification_required=human_verification_required,
                     executable=str(executable or ""),
+                    reasoning_effort=reasoning_effort,
                     staging_root=staging_root_for_ledger(store.path, str(run_id)),
                     context_pack_digest=context_pack_digest,
                     continuation_context=continuation["records"],
@@ -1274,6 +1282,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         "grantId": str(grant_id), "leaseId": str(lease_id),
                         "claimId": str(claim_id), "policyDecisionId": str(policy_id),
                         "requestedContextBudget": requested_context_budget,
+                        "reasoningEffort": reasoning_effort,
                         "effectiveBudget": effective_budget,
                         "responseMode": response_mode,
                         "enhancementEngine": enhancement_engine,
@@ -1314,6 +1323,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     if provider is None or not provider_model:
                         raise ValueError("PROVIDER_OR_MODEL_UNAVAILABLE")
                 requested_context_budget = prepared.data["requestedContextBudget"]
+                reasoning_effort = str(prepared.data.get("reasoningEffort") or "")
                 effective_budget = prepared.data["effectiveBudget"]
                 human_verification_required = prepared.data["humanVerificationRequired"]
                 prompt_assembly = prepared.data["promptAssembly"]
@@ -1540,6 +1550,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         provider_id=provider.id, model=str(provider_model),
                         base_url=provider.base_url, api_key=provider_key,
                         dispatch_prompt=str(dispatch_prompt),
+                        reasoning_effort=reasoning_effort,
                         governor=provider_governor,
                         tool_bridge=tool_authority.bridge if tool_authority is not None else None,
                     )

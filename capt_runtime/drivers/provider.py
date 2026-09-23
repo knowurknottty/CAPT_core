@@ -14,12 +14,13 @@ from typing import Any, Dict, Optional
 from ..approval_dispatch import require_expected_prompt_digest
 from ..provider_endpoint import endpoint_class
 from ..resource_governor import BudgetCeilingExceeded, TokenCostGovernor
+from ..reasoning import normalize_reasoning_effort, openai_reasoning_fields
 
 DRIVER_ID = "provider"
 DESCRIPTOR = {
     "schemaVersion": "1.0.0",
     "driverId": DRIVER_ID,
-    "driverVersion": "0.1.1",
+    "driverVersion": "0.1.2",
     "supportedOperations": ["submit", "inspect", "cancel", "resume", "reconcile"],
     "writeCapable": False,
 }
@@ -42,6 +43,7 @@ class ProviderDriver:
         api_key: str = "",
         task_resolver=None,
         dispatch_prompt: str = "",
+        reasoning_effort: str = "",
         governor: Optional[TokenCostGovernor] = None,
         tool_bridge=None,
     ):
@@ -53,6 +55,10 @@ class ProviderDriver:
         self.api_key = api_key
         self.task_resolver = task_resolver
         self.dispatch_prompt = dispatch_prompt
+        self.reasoning_effort = normalize_reasoning_effort(reasoning_effort)
+        self._reasoning_fields = openai_reasoning_fields(
+            self.provider_id, self.base_url, self.reasoning_effort
+        )
         self.governor = governor or TokenCostGovernor()
         self.tool_bridge = tool_bridge
         self.runs: Dict[str, Dict[str, Any]] = {}
@@ -71,6 +77,7 @@ class ProviderDriver:
                 "state": "running",
                 "cancelRequested": False,
                 "dispatchBoundary": "prepared",
+                "reasoningEffort": self.reasoning_effort or None,
             }
         try:
             return await asyncio.to_thread(self._execute, rid, work_order)
@@ -229,6 +236,7 @@ class ProviderDriver:
                 "stream": False,
                 "max_tokens": self.governor.max_output_tokens_per_request,
                 "tools": tools,
+                **self._reasoning_fields,
             }
             data = self._post_json(rid, url, body, headers)
             p_tokens, c_tokens, cost = self._usage_from(data)
@@ -341,6 +349,7 @@ class ProviderDriver:
             "messages": final_messages,
             "stream": False,
             "max_tokens": self.governor.max_output_tokens_per_request,
+            **self._reasoning_fields,
         }
         data = self._post_json(rid, url, body, headers)
         p_tokens, c_tokens, cost = self._usage_from(data)
@@ -494,6 +503,7 @@ class ProviderDriver:
                     "messages": [{"role": "user", "content": prompt}],
                     "stream": False,
                     "max_tokens": self.governor.max_output_tokens_per_request,
+                    **self._reasoning_fields,
                 }
             data = self._post_json(rid, url, body, headers)
             text = (
@@ -527,12 +537,13 @@ class ProviderDriver:
         ep_class = endpoint_class(self.base_url)
         artifact = (
             "# CAPT Provider Observation\n\n"
-            "Provider: %s\nModel: %s\nEndpointClass: %s\nPromptDigest: %s\n"
+            "Provider: %s\nModel: %s\nEndpointClass: %s\nReasoningEffort: %s\nPromptDigest: %s\n"
             "ResponseDigest: %s\n\n%s\n"
             % (
                 self.provider_id,
                 self.model,
                 ep_class,
+                self.reasoning_effort or "provider-default",
                 prompt_digest,
                 response_digest,
                 text,
@@ -575,6 +586,7 @@ class ProviderDriver:
             "diagnostics": {
                 "provider": self.provider_id,
                 "model": self.model,
+                "reasoningEffort": self.reasoning_effort or None,
                 "endpointClass": ep_class,
                 "promptDigest": prompt_digest,
                 "responseDigest": response_digest,

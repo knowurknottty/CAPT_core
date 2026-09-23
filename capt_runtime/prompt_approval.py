@@ -17,6 +17,7 @@ from .authored_skills import prepare_runtime_skill_context, summarize_skill_cont
 from .contracts import require
 from .errors import AuthorityViolation
 from .model_authority import canonical_execution_target_root, normalize_model_authority
+from .reasoning import ReasoningConfigurationError, normalize_reasoning_effort
 from .model_approval_binding import (
     build_bound_model_operator_approval,
     staging_root_for_ledger,
@@ -70,6 +71,12 @@ def request_model_prompt_approval(
     enhancement_engine = str(intent.get("promptEnhancement", "OFF"))
     provider = str(intent.get("provider", "")).strip()
     model = str(intent.get("model", "")).strip()
+    try:
+        reasoning_effort = normalize_reasoning_effort(intent.get("reasoningEffort"))
+    except ReasoningConfigurationError as exc:
+        raise AuthorityViolation(str(exc)) from exc
+    if reasoning_effort and not provider:
+        raise AuthorityViolation("REASONING_EFFORT_REQUIRES_PROVIDER")
     requested_context_budget = int(intent.get("requestedContextBudget", 32_000))
     human_verification_required = bool(intent.get("humanVerificationRequired", True))
     executable = str(intent.get("executable", "") or "")
@@ -108,6 +115,7 @@ def request_model_prompt_approval(
         continuation_context=continuation["records"],
         authored_skill_context=skill_context,
         authority_profile=authority_profile,
+        reasoning_effort=reasoning_effort,
         proposal_binding={
             key: intent[key] for key in (
                 "proposalId", "proposalRevision", "proposalSnapshotDigest",
@@ -179,5 +187,6 @@ def request_model_prompt_approval(
         "authoredSkills": summarize_skill_context(skill_context),
         "skillNames": skill_names,
         "authorityProfile": authority_profile,
+        "reasoningEffort": reasoning_effort or None,
         "expiresAt": authoritative["expiresAt"],
     }
