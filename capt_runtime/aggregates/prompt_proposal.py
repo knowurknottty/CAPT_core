@@ -99,10 +99,13 @@ class PromptProposalAggregate(object):
             "effectiveContextBudget",
             "capabilityRequests",
             "verificationContract",
+            "compilationStatus",
+            "rationale",
+            "unresolvedQuestions",
         ):
             if field in revision:
                 value = revision[field]
-                if field in ("stageChain", "stageRecords", "capabilityRequests"):
+                if field in ("stageChain", "stageRecords", "capabilityRequests", "unresolvedQuestions"):
                     value = list(value)
                 elif field == "verificationContract":
                     value = dict(value)

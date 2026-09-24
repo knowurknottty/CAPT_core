@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:4b9fada4ef30a0e55430286420a2d6e26fade04f6ed2bcf7d978557e87563e99
+// source digest:  sha256:1a50b6afb54be4d05c97ab531694c0b2e1a4f90b2fc08e693c73e6fa4dede2c3
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -1831,10 +1831,13 @@ export interface PromptProposalRevision {
   readonly stageChain: readonly PromptStageName[];
   readonly stageRecords: readonly PromptStageRecord[];
   readonly verificationContract: PromptVerificationContract;
+  readonly compilationStatus?: PromptCompilationStatus;
   readonly effectiveContextBudget?: number;
   readonly model?: string | null;
   readonly provider?: string | null;
+  readonly rationale?: string;
   readonly requestedContextBudget?: number;
+  readonly unresolvedQuestions?: readonly string[];
 }
 
 /** Durable prompt proposal state. It is distinct from, and cannot authorize, a HumanApproval stream. */

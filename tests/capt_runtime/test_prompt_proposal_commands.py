@@ -111,6 +111,53 @@ def test_upgrade_original_and_edited_selections_bind_distinct_prompt_identity(tm
     store.close()
 
 
+def test_proposal_approval_binds_requested_execution_seconds(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "README.md").write_text("provider selection\n")
+    store = EventStore(str(tmp_path / "ledger.db"))
+    relay = RuntimeCommandService(
+        store, "operator", "session", runtime_service=RuntimeService(store), prompt_compiler=_compiler()
+    )
+    proposal = relay.execute(
+        _cmd("compile_prompt_proposal", _compile_payload(str(root)), "compile-duration")
+    )["result"]
+    approval = relay.execute(_cmd("request_prompt_proposal_approval", {
+        "proposalId": proposal["proposalId"],
+        "proposalRevision": proposal["revision"],
+        "selection": "original",
+        "requestedExecutionSeconds": 1800,
+    }, "approve-duration"))
+    assert approval["status"] == "accepted"
+    state = store.require_state("human_approval-" + approval["result"]["requestId"])
+    assert state["scope"]["approvalBinding"]["requestedExecutionSeconds"] == 1800
+    store.close()
+
+
+@pytest.mark.parametrize("seconds", [59, 3601])
+def test_proposal_approval_rejects_execution_seconds_outside_bound(tmp_path, seconds):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "README.md").write_text("provider selection\n")
+    store = EventStore(str(tmp_path / "ledger.db"))
+    relay = RuntimeCommandService(
+        store, "operator", "session", runtime_service=RuntimeService(store), prompt_compiler=_compiler()
+    )
+    proposal = relay.execute(
+        _cmd("compile_prompt_proposal", _compile_payload(str(root)), f"compile-duration-{seconds}")
+    )["result"]
+    approval = relay.execute(_cmd("request_prompt_proposal_approval", {
+        "proposalId": proposal["proposalId"],
+        "proposalRevision": proposal["revision"],
+        "selection": "original",
+        "requestedExecutionSeconds": seconds,
+    }, f"approve-duration-{seconds}"))
+    assert approval["status"] == "rejected"
+    detail = approval.get("detail") or approval.get("error", {}).get("code", "")
+    assert "EXECUTION_SECONDS_OUT_OF_RANGE" in str(detail)
+    store.close()
+
+
 def test_revision_invalidates_old_proposal_version_for_new_approval(tmp_path):
     root = tmp_path / "repo"
     root.mkdir()
@@ -397,4 +444,89 @@ def test_compile_persists_compiler_disposition_for_reconnect_and_replay(tmp_path
     assert state["unresolvedQuestions"] == result["unresolvedQuestions"]
     replayed = full_replay(store).aggregates["prompt_proposal-" + result["proposalId"]]
     assert replayed == state
+    store.close()
+
+def test_clarification_continues_same_proposal_with_replayable_lineage(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    original = "Build and test the application."
+    def transport(payload):
+        clarified = "Human clarification supplied for the blocking questions:" in payload["originalPrompt"]
+        blocking = (
+            ["Which deployment target is required?"]
+            if payload["stage"] == "OMNI" and not clarified else []
+        )
+        return {
+            "stage": payload["stage"],
+            "outcome": "build a tested application",
+            "scope": "approved repository",
+            "inputs": ["operator prompt"],
+            "outputs": ["working application"],
+            "constraints": ["preserve CAPT authority"],
+            "successCriteria": ["focused tests pass"],
+            "ambiguities": [],
+            "blockingQuestions": blocking,
+            "requestedCapabilities": [],
+        }
+    compiler = PromptCompiler(
+        runner=BoundedPromptCompilerRunner(transport),
+        provider=CompilerProvider("local", "compiler", "local"),
+    )
+    store = EventStore(str(tmp_path / "ledger.db"))
+    relay = RuntimeCommandService(
+        store, "operator", "session",
+        runtime_service=RuntimeService(store), prompt_compiler=compiler,
+    )
+    payload = _compile_payload(str(root))
+    payload.update({
+        "originalPrompt": original,
+        "promptIntelligence": "OFF",
+        "mode": "software-development",
+        "requestedCapabilities": [],
+    })
+    created = relay.execute(_cmd(
+        "compile_prompt_proposal", payload, "compile-clarify-lineage"
+    ))
+    assert created["status"] == "accepted"
+    first = created["result"]
+    assert first["status"] == "clarification_required"
+    assert first["revision"] == 0
+    assert first["unresolvedQuestions"] == ["Which deployment target is required?"]
+    original_digest = first["originalPromptDigest"]
+
+    continue_cmd = _cmd("continue_prompt_proposal", {
+        "proposalId": first["proposalId"],
+        "proposalRevision": 0,
+        "clarificationText": "Deploy as a local macOS desktop application.",
+        "promptIntelligence": "OFF",
+    }, "continue-clarify-lineage")
+    continued = relay.execute(continue_cmd)
+    assert continued["status"] == "accepted"
+    revised = continued["result"]
+    assert revised["compilationStatus"] == "ready_for_approval"
+    assert revised["revision"] == 1
+    assert revised["originalPrompt"] == original
+    assert revised["originalPromptDigest"] == original_digest
+    assert revised["unresolvedQuestions"] == []
+    assert revised["stageChain"] == ["OMNI", "META", "FORGE", "SIGMA"]
+    assert all(item["executionEnabled"] for item in revised["stageRecords"])
+
+    replayed = full_replay(store).aggregates[
+        "prompt_proposal-" + first["proposalId"]
+    ]
+    assert replayed == store.require_state(
+        "prompt_proposal-" + first["proposalId"]
+    )
+
+    duplicate = relay.execute(continue_cmd)
+    assert duplicate["status"] == "idempotent"
+
+    stale = relay.execute(_cmd("continue_prompt_proposal", {
+        "proposalId": first["proposalId"],
+        "proposalRevision": 0,
+        "clarificationText": "Another answer.",
+        "promptIntelligence": "OFF",
+    }, "continue-clarify-stale"))
+    assert stale["status"] == "rejected"
+    assert "REVISION" in (stale.get("detail") or "").upper()
     store.close()

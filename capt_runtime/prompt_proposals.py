@@ -113,6 +113,90 @@ def compile_prompt_proposal(service: Any, compiler: PromptCompiler,
     }
 
 
+def continue_prompt_proposal(service: Any, compiler: PromptCompiler,
+                             intent: Dict[str, Any], metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply human clarification and re-run compilation on the same proposal."""
+    _require_human(metadata)
+    proposal_id = str(intent.get("proposalId", ""))
+    stream = PromptProposalAggregate.stream_id(proposal_id)
+    if service.store.find_idempotent(metadata["idempotencyKey"]) is not None:
+        state = service.store.require_state(stream)
+        return {"status": "idempotent", **state}
+
+    current = service.store.require_state(stream)
+    if current.get("state") != "active":
+        raise AuthorityViolation("PROMPT_PROPOSAL_NOT_ACTIVE")
+    offered_revision = int(intent.get("proposalRevision", -1))
+    if offered_revision != int(current.get("revision", -1)):
+        raise AuthorityViolation("PROMPT_PROPOSAL_REVISION_MISMATCH")
+    if current.get("compilationStatus") != "clarification_required":
+        raise AuthorityViolation("PROMPT_PROPOSAL_CLARIFICATION_NOT_REQUIRED")
+
+    clarification = str(intent.get("clarificationText", "")).strip()
+    if not clarification:
+        raise AuthorityViolation("PROMPT_PROPOSAL_CLARIFICATION_MISSING")
+    if len(clarification) > 65_536:
+        raise AuthorityViolation("PROMPT_PROPOSAL_CLARIFICATION_TOO_LARGE")
+
+    questions = [str(item) for item in current.get("unresolvedQuestions", [])]
+    clarified_prompt = (
+        str(current["originalPrompt"])
+        + "\n\nHuman clarification supplied for the blocking questions:\n"
+        + clarification
+    )
+    if questions:
+        clarified_prompt += "\n\nQuestions being answered:\n- " + "\n- ".join(questions)
+
+    capabilities = tuple(
+        str(item.get("capability"))
+        for item in current.get("capabilityRequests", [])
+        if isinstance(item, dict) and item.get("capability")
+    )
+    request = PromptCompileRequest(
+        original_prompt=clarified_prompt,
+        target_root=str(current["targetRoot"]),
+        requested_engine=str(intent.get("promptIntelligence", "AUTO")),
+        mode=str(current.get("mode", "normal")),
+        requested_capabilities=capabilities,
+        execution_provider=str(current.get("provider") or ""),
+        execution_model=str(current.get("model") or ""),
+        requested_context_budget=int(current.get("requestedContextBudget", 32_000)),
+        remote_compilation_authorized=bool(intent.get("remoteCompilationAuthorized", False)),
+    )
+    compiled = compiler.compile(request)
+    revision = {
+        "proposedPrompt": compiled.proposed_prompt,
+        "stageChain": [stage.value for stage in compiled.stage_chain],
+        "stageRecords": [_stage_record(record, compiled) for record in compiled.stage_records],
+        "provider": current.get("provider"),
+        "model": current.get("model"),
+        "requestedContextBudget": int(current.get("requestedContextBudget", 32_000)),
+        "effectiveContextBudget": int(current.get("effectiveContextBudget", 32_000)),
+        "capabilityRequests": list(current.get("capabilityRequests", [])),
+        "verificationContract": {
+            "acceptanceCriteria": list(compiled.verification_contract.acceptance_criteria)
+        },
+        "compilationStatus": compiled.status,
+        "rationale": compiled.rationale,
+        "unresolvedQuestions": list(compiled.unresolved_questions),
+    }
+    state = PromptProposalAggregate.revise(current, revision)
+    require("PromptProposalSnapshot", state)
+    event = commands.envelope(
+        event_id=metadata["commandId"] + "-proposal",
+        stream_id=stream,
+        event_type="PromptProposalRevised",
+        payload={"eventType": "PromptProposalRevised", "revision": revision},
+        metadata=metadata,
+        occurred_at=metadata["issuedAt"],
+    )
+    service._commit([
+        AppendRequest(stream, PromptProposalAggregate.KIND,
+                      service.store.aggregate_version(stream), event, state)
+    ], metadata)
+    return {"status": compiled.status, **state}
+
+
 def revise_prompt_proposal(service: Any, intent: Dict[str, Any],
                            metadata: Dict[str, Any]) -> Dict[str, Any]:
     _require_human(metadata)
@@ -234,6 +318,7 @@ def request_prompt_proposal_approval(service: Any, intent: Dict[str, Any],
         "responseMode": str(intent.get("responseMode", "SPOCK")),
         "promptEnhancement": "OFF",
         "requestedContextBudget": int(proposal.get("requestedContextBudget", 32_000)),
+        "requestedExecutionSeconds": intent.get("requestedExecutionSeconds", 600),
         "humanVerificationRequired": bool(intent.get("humanVerificationRequired", True)),
         "executable": str(intent.get("executable", "") or ""),
     }

@@ -117,6 +117,7 @@ def test_runtime_dispatches_credentialless_local_openai_provider(tmp_path: Path,
             "skillPackRoot": str(skill_root),
             "skillNames": ["inversion-interface-craft"],
             "expiresAt": "2030-01-01T00:00:00Z",
+            "requestedExecutionSeconds": 1800,
         }, "local-noauth-approval")
         assert approval["status"] == "accepted"
         planned = approval["result"]
@@ -135,6 +136,7 @@ def test_runtime_dispatches_credentialless_local_openai_provider(tmp_path: Path,
             "missionId": planned["missionId"],
             "taskId": planned["taskId"],
             "driverRunId": planned["driverRunId"],
+            "requestedExecutionSeconds": 60,
         }
         skill_file = skill_root / skill_lock["skills"][0]["path"]
         approved_bytes = skill_file.read_text()
@@ -152,6 +154,9 @@ def test_runtime_dispatches_credentialless_local_openai_provider(tmp_path: Path,
         assert run["result"]["observations"][0]["summary"] == "CAPT_LOCAL_NOAUTH_OK"
         assert run["result"]["providerProvenance"]["endpointClass"] == "local"
         assert run["result"]["providerProvenance"]["contextBudgetTokens"] == 32_000
+        assert run["result"]["providerProvenance"]["requestTimeoutBudgetSeconds"] == 1800.0
+        mission_state = client.get_state("mission-" + planned["missionId"])
+        assert mission_state["state"] == "executing"
         authored = run["result"]["authoredSkills"]
         assert authored["sourceCommit"] == skill_lock["commit"]
         assert authored["skills"][0]["name"] == "inversion-interface-craft"

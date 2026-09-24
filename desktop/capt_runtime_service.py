@@ -939,7 +939,7 @@ class RuntimeQueryService:
                 return {"ok": True, "result": {
                     "schemaVersion": CONTRACT_SCHEMA_VERSION,
                     "queryOperations": ["identity", "capabilities", "list_aggregates", "approvals", "missions", "tasks", "checkpoints", "security_rejections", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers", "managed_skills", "operator_control_snapshot", "operator_session_get", "operator_proposal_get", "operator_execution_state"],
-                    "commandOperations": ["create_mission", "operator_chat_new", "operator_execution_config_set", "operator_prompt_submit", "operator_proposal_select", "compile_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "submit_provider_result_review", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool", "install_managed_skill", "create_managed_skill"],
+                    "commandOperations": ["create_mission", "operator_chat_new", "operator_execution_config_set", "operator_prompt_submit", "operator_prompt_clarify", "operator_proposal_select", "compile_prompt_proposal", "continue_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "submit_provider_result_review", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool", "install_managed_skill", "create_managed_skill"],
                     "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True, "toolRegistry": True, "toolBroker": True, "mcpClient": self.mcp_manager is not None, "promptCompiler": True},
                     "lifecycleOperations": {"checkpoint": True, "shutdown": True, "resume": True},
                 }}
@@ -1211,6 +1211,9 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 )
                 approval_scope = approval_state.get("scope") or {}
                 approval_binding = approval_scope.get("approvalBinding") or {}
+                requested_execution_seconds = int(approval_binding.get("requestedExecutionSeconds", 600))
+                if requested_execution_seconds < 60 or requested_execution_seconds > 3600:
+                    raise AuthorityViolation("MODEL_EXECUTION_SECONDS_OUT_OF_RANGE")
                 frozen_authority = approval_binding.get("authorityProfile")
                 authority_profile = (
                     revalidate_normalized_model_authority(
@@ -1245,6 +1248,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     task_id=str(task_id), driver_run_id=str(run_id), target_root=str(target_root),
                     provider=str(provider_id or ""), model=str(provider_model or ""),
                     requested_context_budget=requested_context_budget,
+                    requested_execution_seconds=requested_execution_seconds,
                     human_verification_required=human_verification_required,
                     executable=str(executable or ""),
                     staging_root=staging_root_for_ledger(store.path, str(run_id)),
@@ -1274,6 +1278,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         "grantId": str(grant_id), "leaseId": str(lease_id),
                         "claimId": str(claim_id), "policyDecisionId": str(policy_id),
                         "requestedContextBudget": requested_context_budget,
+                        "requestedExecutionSeconds": requested_execution_seconds,
                         "effectiveBudget": effective_budget,
                         "responseMode": response_mode,
                         "enhancementEngine": enhancement_engine,
@@ -1314,6 +1319,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     if provider is None or not provider_model:
                         raise ValueError("PROVIDER_OR_MODEL_UNAVAILABLE")
                 requested_context_budget = prepared.data["requestedContextBudget"]
+                requested_execution_seconds = prepared.data["requestedExecutionSeconds"]
                 effective_budget = prepared.data["effectiveBudget"]
                 human_verification_required = prepared.data["humanVerificationRequired"]
                 prompt_assembly = prepared.data["promptAssembly"]
@@ -1481,6 +1487,24 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     "decidedAt": now,
                 }
                 svc.evaluate_policy(policy, gk_meta("evaluate_policy"))
+                mission_state = store.require_state("mission-" + str(mission_id))
+                if mission_state.get("state") in {"authorized", "suspended"}:
+                    mission_meta = commands.command(
+                        command_id=command_id + ":mission-executing",
+                        idempotency_key=key + ":mission-executing",
+                        operation_fingerprint=commands.fingerprint(
+                            "transition_mission",
+                            {"missionId": mission_id, "toState": "executing"},
+                        ),
+                        correlation_id=correlation_id,
+                        actor_id="runtime", actor_kind="system",
+                        issued_at=now, replay_policy="never",
+                    )
+                    svc.transition_mission(
+                        mission_id, "executing",
+                        "governed model task entered execution",
+                        mission_meta,
+                    )
                 grant = {
                     "schemaVersion": "1.0.0", "grantId": grant_id,
                     "subject": {"actorId": "exec-1", "kind": "execution_plane"},
@@ -1551,7 +1575,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     )
                 if skill_context is not None:
                     host.bind_prepared_authored_skills(skill_context, skill_names)
-                driver_budgets = {"maxSeconds": 600, "maxArtifacts": 1, "maxObservations": 10}
+                driver_budgets = {"maxSeconds": requested_execution_seconds, "maxArtifacts": 1, "maxObservations": 10}
                 if isinstance(effective_budget, int) and not isinstance(effective_budget, bool) and effective_budget > 0:
                     driver_budgets["maxTokens"] = effective_budget
                 ctx = host.build_context(

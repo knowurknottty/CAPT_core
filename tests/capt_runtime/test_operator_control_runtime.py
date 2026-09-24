@@ -135,3 +135,91 @@ def test_stale_control_revision_rejects_prompt_before_proposal_creation(tmp_path
     assert rejected["error"]["code"] == "E_OPERATOR_CONTROL_STALE"
     assert after == before
     store.close()
+
+
+def test_developer_mode_overrides_prompt_intelligence_off_without_control_mismatch(tmp_path):
+    root, store, _control, relay, _query = _harness(tmp_path)
+    chat = relay.execute(_cmd("operator_chat_new", {"expectedRevision": 0}, "chat-dev"))["result"]
+    cfg = relay.execute(_cmd("operator_execution_config_set", {
+        "expectedRevision": chat["revision"], "promptIntelligence": "OFF",
+    }, "cfg-dev"))["result"]
+    submitted = relay.execute(_cmd("operator_prompt_submit", {
+        "text": "Build and test a small application.",
+        "mode": "software-development",
+        "controlRevision": cfg["revision"],
+        "configurationDigest": cfg["configurationDigest"],
+    }, "submit-dev"))
+    assert submitted["status"] == "accepted"
+    proposal = submitted["result"]["proposal"]
+    assert proposal["mode"] == "software-development"
+    assert proposal["stageChain"] == ["OMNI", "META", "FORGE", "SIGMA"]
+    assert submitted["result"]["control"]["proposalId"] == proposal["proposalId"]
+    store.close()
+
+def test_operator_developer_clarification_continues_bound_proposal(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    def transport(payload):
+        clarified = "Human clarification supplied for the blocking questions:" in payload["originalPrompt"]
+        return {
+            "stage": payload["stage"],
+            "outcome": "build the application",
+            "scope": "approved repository",
+            "inputs": ["operator prompt"],
+            "outputs": ["working app"],
+            "constraints": ["preserve authority"],
+            "successCriteria": ["tests pass"],
+            "ambiguities": [],
+            "blockingQuestions": (
+                ["Which deployment target is required?"]
+                if payload["stage"] == "OMNI" and not clarified else []
+            ),
+            "requestedCapabilities": [],
+        }
+    compiler = PromptCompiler(
+        runner=BoundedPromptCompilerRunner(transport),
+        provider=CompilerProvider("local", "compiler", "local"),
+    )
+    store = EventStore(str(tmp_path / "runtime.db"))
+    control = OperatorControlStore(tmp_path / "operator-control.json", {
+        "provider": "ollama", "model": "qwen",
+        "targetRoot": str(root), "promptIntelligence": "OFF",
+    })
+    relay = RuntimeCommandService(
+        store, "operator", "session",
+        runtime_service=RuntimeService(store),
+        prompt_compiler=compiler,
+        operator_control=control,
+    )
+    chat = relay.execute(_cmd(
+        "operator_chat_new", {"expectedRevision": 0}, "chat-dev-clarify"
+    ))["result"]
+    submitted = relay.execute(_cmd("operator_prompt_submit", {
+        "text": "Build the application.",
+        "mode": "software-development",
+        "controlRevision": chat["revision"],
+        "configurationDigest": chat["configurationDigest"],
+    }, "submit-dev-clarify"))
+    assert submitted["status"] == "accepted"
+    first = submitted["result"]["proposal"]
+    bound = submitted["result"]["control"]
+    assert first["status"] == "clarification_required"
+
+    clarified = relay.execute(_cmd("operator_prompt_clarify", {
+        "proposalId": first["proposalId"],
+        "proposalRevision": first["revision"],
+        "clarificationText": "Deploy as a local macOS application.",
+        "controlRevision": bound["revision"],
+        "configurationDigest": bound["configurationDigest"],
+    }, "clarify-dev"))
+    assert clarified["status"] == "accepted"
+    revised = clarified["result"]["proposal"]
+    rebound = clarified["result"]["control"]
+    assert revised["proposalId"] == first["proposalId"]
+    assert revised["revision"] == 1
+    assert revised["compilationStatus"] == "ready_for_approval"
+    assert revised["unresolvedQuestions"] == []
+    assert rebound["proposalId"] == first["proposalId"]
+    assert rebound["proposalRevision"] == 1
+    assert rebound["approvalRequestId"] is None
+    store.close()

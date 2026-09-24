@@ -16,7 +16,7 @@ from .models import (
 from .provider_runner import BoundedPromptCompilerRunner
 from .router import PromptRoute, route_stages
 from .stages import StructuredStageResult, render_execution_prompt
-from .repository_intelligence import stage_repository_context
+from .repository_intelligence import stage_repository_context, stage_sigma_context
 
 
 class PromptCompiler:
@@ -85,11 +85,16 @@ class PromptCompiler:
         records = []
         unresolved = []
         acceptance_criteria = ()
-        for stage in route:
+        for index, stage in enumerate(route):
             stage_context = None
-            if stage in (PromptStageName.FORGE, PromptStageName.SIGMA):
+            expectations = list(acceptance_criteria) or [request.original_prompt]
+            if stage == PromptStageName.FORGE:
                 stage_context = stage_repository_context(
-                    request.target_root, request.original_prompt, list(acceptance_criteria) or [request.original_prompt]
+                    request.target_root, request.original_prompt, expectations
+                )
+            elif stage == PromptStageName.SIGMA:
+                stage_context = stage_sigma_context(
+                    request.target_root, request.original_prompt, expectations
                 )
             result = self._runner.run(
                 stage, request, self._provider, current_prompt=current_prompt, stage_context=stage_context
@@ -98,13 +103,30 @@ class PromptCompiler:
             next_prompt = render_execution_prompt(request.original_prompt, result)
             records.append(self._record(stage, current_prompt, next_prompt, True))
             unresolved.extend(result.ambiguities)
+            unresolved.extend(result.blocking_questions)
             acceptance_criteria = result.success_criteria
+
+            if (
+                request.mode == "software-development"
+                and stage == PromptStageName.OMNI
+                and result.blocking_questions
+            ):
+                for pending in route.stage_chain[index + 1:]:
+                    records.append(self._record(pending, next_prompt, next_prompt, False))
+                return self._proposal(
+                    request,
+                    route,
+                    status="clarification_required",
+                    proposed_prompt=next_prompt,
+                    stage_records=tuple(records),
+                    requested_capabilities=(),
+                    unresolved_questions=tuple(result.blocking_questions),
+                )
+
             current_prompt = next_prompt
 
-        # Model-generated ambiguities are advisory review notes, not approval vetoes.
-        # True clarification blockers are handled before model execution by
-        # _requires_clarification(route), where CAPT can prove the operator
-        # objective/scope is too underspecified to bind safely.
+        # Non-blocking ambiguities remain review notes. In software-development
+        # mode OMNI alone may stop the chain, and only through blockingQuestions.
         status = "ready_for_approval"
         return self._proposal(
             request,

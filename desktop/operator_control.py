@@ -9,9 +9,9 @@ import copy
 import os
 import threading
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from capt_runtime.contracts import canonical_json, digest
 
@@ -27,7 +27,7 @@ class OperatorControlStale(RuntimeError):
         self.current_snapshot = current_snapshot
 
 
-ConfigValidator = Callable[[dict[str, str]], dict[str, str] | None]
+ConfigValidator = Callable[[dict[str, str]], Optional[dict[str, str]]]
 
 class OperatorControlStore:
     def __init__(
@@ -41,7 +41,7 @@ class OperatorControlStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._validate_external = validate_configuration
         self._now = now or (
-            lambda: datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+            lambda: datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         )
         self._lock = threading.RLock()
         if self.path.exists():
@@ -332,7 +332,10 @@ class OperatorControlStore:
                 raise ValueError("OPERATOR_CONTROL_PROPOSAL_PROVIDER_MISMATCH")
             if (proposal.get("model") or "") != self._state["model"]:
                 raise ValueError("OPERATOR_CONTROL_PROPOSAL_MODEL_MISMATCH")
-            if self._state["promptIntelligence"] == "OFF":
+            if (
+                self._state["promptIntelligence"] == "OFF"
+                and proposal.get("mode") != "software-development"
+            ):
                 if proposal.get("stageChain") or proposal.get("stageRecords"):
                     raise ValueError("OPERATOR_CONTROL_PROPOSAL_PI_MISMATCH")
             return self._update_active_session(expected_revision, {

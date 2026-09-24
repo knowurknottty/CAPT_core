@@ -49,8 +49,6 @@ def _reconciliation_work(prompt: str) -> bool:
 
 
 def route_stages(request: PromptCompileRequest) -> PromptRoute:
-    if request.requested_engine == "OFF":
-        return PromptRoute((), "Prompt Intelligence is disabled by operator policy.")
     if request.mode == "software-development":
         return PromptRoute(
             (
@@ -59,8 +57,10 @@ def route_stages(request: PromptCompileRequest) -> PromptRoute:
                 PromptStageName.FORGE,
                 PromptStageName.SIGMA,
             ),
-            "Software-development mode selects OMNI/META plus advisory FORGE/SIGMA routing metadata.",
+            "Software-development mode forces the full OMNI -> META -> FORGE -> SIGMA compilation chain.",
         )
+    if request.requested_engine == "OFF":
+        return PromptRoute((), "Prompt Intelligence is disabled by operator policy.")
     if request.requested_engine != "AUTO":
         stage = PromptStageName(request.requested_engine)
         return PromptRoute((stage,), "Stage selected explicitly by operator policy.")

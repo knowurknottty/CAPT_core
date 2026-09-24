@@ -17,6 +17,7 @@ class StructuredStageResult:
     constraints: Tuple[str, ...]
     success_criteria: Tuple[str, ...]
     ambiguities: Tuple[str, ...]
+    blocking_questions: Tuple[str, ...] = ()
     requested_capabilities: Tuple[str, ...] = ()
 
     @classmethod
@@ -25,12 +26,12 @@ class StructuredStageResult:
             raise ValueError("stage output must be an object")
         allowed = {
             "stage", "outcome", "scope", "inputs", "outputs", "constraints",
-            "successCriteria", "ambiguities", "requestedCapabilities",
+            "successCriteria", "ambiguities", "blockingQuestions", "requestedCapabilities",
         }
         unknown = set(output) - allowed
         if unknown:
             raise ValueError("unknown keys in stage output: %s" % ", ".join(sorted(unknown)))
-        required = allowed - {"requestedCapabilities"}
+        required = allowed - {"blockingQuestions", "requestedCapabilities"}
         missing = required - set(output)
         if missing:
             raise ValueError("missing stage output keys: %s" % ", ".join(sorted(missing)))
@@ -41,13 +42,19 @@ class StructuredStageResult:
             raise ValueError(f"unknown prompt stage: {raw_stage}") from exc
         return cls(
             stage=stage,
-            outcome=_bounded_text(output["outcome"], "outcome"),
+            outcome=_bounded_text(
+                output["outcome"], "outcome",
+                max_chars=32_768 if stage == PromptStageName.SIGMA else 2_048,
+            ),
             scope=_bounded_text(output["scope"], "scope"),
             inputs=_bounded_strings(output["inputs"], "inputs"),
             outputs=_bounded_strings(output["outputs"], "outputs"),
             constraints=_bounded_strings(output["constraints"], "constraints"),
             success_criteria=_bounded_strings(output["successCriteria"], "successCriteria"),
             ambiguities=_bounded_strings(output["ambiguities"], "ambiguities"),
+            blocking_questions=_bounded_strings(
+                output.get("blockingQuestions", ()), "blockingQuestions"
+            ),
             requested_capabilities=_bounded_strings(
                 output.get("requestedCapabilities", ()),
                 "requestedCapabilities",
@@ -72,7 +79,9 @@ def render_execution_prompt(original_prompt: str, result: StructuredStageResult)
 _STAGE_INSTRUCTIONS = {
     PromptStageName.OMNI: (
         "Resolve the user's outcome, scope, inputs, outputs, constraints, success criteria, "
-        "and ambiguities without changing the objective or inventing authority."
+        "and ambiguities without changing the objective or inventing authority. Put only questions "
+        "whose answers are required before a safe, complete execution contract can be authored into "
+        "blockingQuestions; optional preferences remain in ambiguities."
     ),
     PromptStageName.META: (
         "Convert resolved intent into an execution-grade prompt and verification criteria; "
@@ -84,7 +93,10 @@ _STAGE_INSTRUCTIONS = {
     ),
     PromptStageName.SIGMA: (
         "Reconcile the current execution contract with bounded repository evidence. Preserve contradictions, dissent, "
-        "unresolved tradeoffs, and verification debt; never claim authority, execution, or completion."
+        "unresolved tradeoffs, and verification debt; never claim authority, execution, or completion. In "
+        "software-development mode, outcome must be a complete software development record (SDR) covering mission, "
+        "non-goals, architecture, interfaces and user flows, data/contracts, implementation sequence, concrete file "
+        "changes, failure/security boundaries, test plan, acceptance criteria, verification evidence, and release/rollback."
     ),
 }
 
@@ -111,6 +123,7 @@ def stage_response_schema() -> dict[str, Any]:
             "constraints": string_array,
             "successCriteria": string_array,
             "ambiguities": string_array,
+            "blockingQuestions": string_array,
             "requestedCapabilities": string_array,
         },
     }

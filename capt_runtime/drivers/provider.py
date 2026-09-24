@@ -227,7 +227,11 @@ class ProviderDriver:
                 "model": self.model,
                 "messages": messages,
                 "stream": False,
-                "max_tokens": self.governor.max_output_tokens_per_request,
+                "max_tokens": (
+                    self._final_answer_reserve_tokens(context_budget_tokens)
+                    if context_budget_tokens is not None
+                    else self.governor.max_output_tokens_per_request
+                ),
                 "tools": tools,
             }
             data = self._post_json(rid, url, body, headers)
@@ -266,6 +270,7 @@ class ProviderDriver:
                         rid, url, headers, messages, prompt_tokens_total,
                         completion_tokens_total, cost_total, tool_call_count,
                         reason="context headroom reserve reached",
+                        context_budget_tokens=context_budget_tokens,
                     )
 
             remaining_calls = max_tool_rounds - tool_call_count
@@ -274,6 +279,7 @@ class ProviderDriver:
                     rid, url, headers, messages, prompt_tokens_total,
                     completion_tokens_total, cost_total, tool_call_count,
                     reason="tool authority budget is exhausted",
+                    context_budget_tokens=context_budget_tokens,
                 )
 
             messages.append({
@@ -310,6 +316,7 @@ class ProviderDriver:
                     rid, url, headers, messages, prompt_tokens_total,
                     completion_tokens_total, cost_total, tool_call_count,
                     reason="tool authority budget is exhausted",
+                    context_budget_tokens=context_budget_tokens,
                 )
         raise ProviderDriverFailure("provider tool-call loop did not terminate")
 
@@ -324,6 +331,7 @@ class ProviderDriver:
         cost_total: float,
         tool_call_count: int,
         reason: str = "tool authority budget is exhausted",
+        context_budget_tokens: int | None = None,
     ) -> tuple[str, int, int, float, int]:
         """Close tool authority and require one evidence-bounded final answer."""
         final_messages = list(messages)
@@ -340,7 +348,11 @@ class ProviderDriver:
             "model": self.model,
             "messages": final_messages,
             "stream": False,
-            "max_tokens": self.governor.max_output_tokens_per_request,
+            "max_tokens": (
+                self._final_answer_reserve_tokens(context_budget_tokens)
+                if context_budget_tokens is not None
+                else self.governor.max_output_tokens_per_request
+            ),
         }
         data = self._post_json(rid, url, body, headers)
         p_tokens, c_tokens, cost = self._usage_from(data)
@@ -583,6 +595,7 @@ class ProviderDriver:
                 "toolCallCount": tool_call_count,
                 "toolClosureReason": self.runs[rid].get("toolClosureReason"),
                 "contextBudgetTokens": context_budget_tokens,
+                "requestTimeoutBudgetSeconds": self.runs[rid].get("requestTimeoutBudgetSeconds"),
                 "finalAnswerReserveTokens": self.runs[rid].get("finalAnswerReserveTokens"),
                 "resourceUsage": resource_receipt,
             },

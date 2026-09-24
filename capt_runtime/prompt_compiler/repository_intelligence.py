@@ -412,3 +412,15 @@ def stage_repository_context(root: str, objective: str, expectations: List[str])
         }
     result = gap_analysis(Path(root), expectations or [objective])
     return result
+
+
+def stage_sigma_context(root: str, objective: str, expectations: List[str]) -> Dict[str, Any]:
+    if not root:
+        return {
+            "brief": "# SIGMA IMPLEMENTATION BRIEF\n\nNo target root was approved; repository observation was not performed.",
+            "repository": {"fileCount": 0, "bytesRead": 0, "files": [], "fileMetadata": [], "languages": {}, "excluded": [], "truncated": False},
+            "gaps": [],
+            "epistemicClass": "advisory",
+            "limitations": ["No target root was approved, so repository observation was not performed."],
+        }
+    return sigma_brief(Path(root), objective, expectations or [objective])

@@ -22,6 +22,7 @@ from capt_runtime.prompt_compiler import PromptCompiler
 from capt_runtime.prompt_proposals import (
     cancel_prompt_proposal,
     compile_prompt_proposal,
+    continue_prompt_proposal,
     request_prompt_proposal_approval,
     revise_prompt_proposal,
 )
@@ -50,8 +51,10 @@ _VALID_OPS = (
     "operator_chat_new",
     "operator_execution_config_set",
     "operator_prompt_submit",
+    "operator_prompt_clarify",
     "operator_proposal_select",
     "compile_prompt_proposal",
+    "continue_prompt_proposal",
     "revise_prompt_proposal",
     "cancel_prompt_proposal",
     "request_prompt_proposal_approval",
@@ -339,6 +342,54 @@ class RuntimeCommandService:
                     stream_id="prompt_proposal-" + str(proposal["proposalId"]),
                 )
 
+            if op == "operator_prompt_clarify":
+                payload = cmd["payload"]
+                prior = self.store.find_idempotent(cmd["idempotencyKey"])
+                if prior is not None:
+                    control = self._control().snapshot()
+                    proposal_id = control.get("proposalId")
+                    proposal = (
+                        self.store.load_state("prompt_proposal-" + str(proposal_id))
+                        if proposal_id else None
+                    )
+                    return self._receipt(
+                        cmd, status="idempotent", classification="duplicate",
+                        result={"control": control, "proposal": proposal or {}},
+                    )
+                control = self._control().require_current(
+                    expected_revision=self._control_revision(payload, "controlRevision"),
+                    configuration_digest=str(payload.get("configurationDigest") or ""),
+                )
+                proposal_id = str(payload.get("proposalId") or "")
+                if proposal_id != str(control.get("proposalId") or ""):
+                    raise OperatorControlStale(control)
+                current = self.store.require_state("prompt_proposal-" + proposal_id)
+                proposal = continue_prompt_proposal(
+                    self.svc, self.prompt_compiler,
+                    {
+                        "proposalId": proposal_id,
+                        "proposalRevision": int(payload.get(
+                            "proposalRevision", current.get("revision", -1)
+                        )),
+                        "clarificationText": str(payload.get("clarificationText") or ""),
+                        "promptIntelligence": control["promptIntelligence"],
+                        "remoteCompilationAuthorized": bool(
+                            payload.get("remoteCompilationAuthorized", False)
+                        ),
+                    },
+                    meta,
+                )
+                bound = self._control().bind_proposal(
+                    expected_revision=control["revision"],
+                    configuration_digest=control["configurationDigest"],
+                    proposal=proposal,
+                )
+                return self._receipt(
+                    cmd, status="accepted", classification="accepted",
+                    result={"control": bound, "proposal": proposal},
+                    stream_id="prompt_proposal-" + proposal_id,
+                )
+
             if op == "operator_proposal_select":
                 payload = cmd["payload"]
                 prior = self.store.find_idempotent(cmd["idempotencyKey"])
@@ -374,8 +425,9 @@ class RuntimeCommandService:
                     "humanVerificationRequired": bool(payload.get("humanVerificationRequired", True)),
                 }
                 for key in (
-                    "missionId", "managedSkillNames", "autoSelectSkills",
+                    "missionId", "taskId", "managedSkillNames", "autoSelectSkills",
                     "skillLimit", "authorityProfile", "executable",
+                    "requestedExecutionSeconds",
                 ):
                     if key in payload:
                         approval_payload[key] = payload[key]
@@ -472,6 +524,18 @@ class RuntimeCommandService:
 
             if op == "compile_prompt_proposal":
                 result = compile_prompt_proposal(
+                    self.svc, self.prompt_compiler, cmd["payload"], meta
+                )
+                status = "idempotent" if result.get("status") == "idempotent" else "accepted"
+                return self._receipt(
+                    cmd, status=status,
+                    classification="duplicate" if status == "idempotent" else "accepted",
+                    result=result,
+                    stream_id="prompt_proposal-" + str(result.get("proposalId", "")),
+                )
+
+            elif op == "continue_prompt_proposal":
+                result = continue_prompt_proposal(
                     self.svc, self.prompt_compiler, cmd["payload"], meta
                 )
                 status = "idempotent" if result.get("status") == "idempotent" else "accepted"

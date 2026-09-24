@@ -71,6 +71,9 @@ def request_model_prompt_approval(
     provider = str(intent.get("provider", "")).strip()
     model = str(intent.get("model", "")).strip()
     requested_context_budget = int(intent.get("requestedContextBudget", 32_000))
+    requested_execution_seconds = int(intent.get("requestedExecutionSeconds", 600))
+    if requested_execution_seconds < 60 or requested_execution_seconds > 3600:
+        raise AuthorityViolation("MODEL_EXECUTION_SECONDS_OUT_OF_RANGE")
     human_verification_required = bool(intent.get("humanVerificationRequired", True))
     executable = str(intent.get("executable", "") or "")
     authority_profile = normalize_model_authority(
@@ -101,6 +104,7 @@ def request_model_prompt_approval(
         provider=provider,
         model=model,
         requested_context_budget=requested_context_budget,
+        requested_execution_seconds=requested_execution_seconds,
         human_verification_required=human_verification_required,
         executable=executable,
         staging_root=staging_root_for_ledger(service.store.path, driver_run_id),

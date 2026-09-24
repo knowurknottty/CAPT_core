@@ -280,3 +280,82 @@ def test_model_ambiguities_are_advisory_and_do_not_block_approval():
     assert proposal.unresolved_questions == (
         "Optional preference: exact presentation format is unspecified",
     )
+
+
+def test_software_development_mode_forces_full_chain_even_when_prompt_intelligence_is_off():
+    route = route_stages(_request(mode="software-development", requested_engine="OFF"))
+    assert route.stage_chain == (
+        PromptStageName.OMNI,
+        PromptStageName.META,
+        PromptStageName.FORGE,
+        PromptStageName.SIGMA,
+    )
+
+
+def test_software_development_omni_blocking_questions_pause_before_forge(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    seen = []
+
+    def transport(payload):
+        seen.append(payload["stage"])
+        return {
+            "stage": payload["stage"], "outcome": "build the requested application",
+            "scope": "approved repository", "inputs": ["operator prompt"],
+            "outputs": ["working application"], "constraints": ["preserve authority"],
+            "successCriteria": ["tests pass"], "ambiguities": [],
+            "blockingQuestions": ["Which deployment target is required?"],
+            "requestedCapabilities": [],
+        }
+
+    proposal = PromptCompiler(
+        runner=BoundedPromptCompilerRunner(transport),
+        provider=CompilerProvider("local", "compiler", "local"),
+    ).compile(_request(
+        original_prompt="Build the application.",
+        target_root=str(root),
+        mode="software-development",
+        requested_engine="OFF",
+        requested_capabilities=(),
+    ))
+
+    assert proposal.status == "clarification_required"
+    assert proposal.unresolved_questions == ("Which deployment target is required?",)
+    assert seen == ["OMNI"]
+    assert [record.execution_enabled for record in proposal.stage_records] == [True, False, False, False]
+
+
+def test_software_development_sigma_receives_brief_and_can_emit_full_sdr(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "app.py").write_text("print('ok')\n", encoding="utf-8")
+    sigma_seen = {}
+
+    def transport(payload):
+        if payload["stage"] == "SIGMA":
+            sigma_seen.update(payload["stageContext"])
+            outcome = "# SDR\n" + ("implementation detail " * 220)
+        else:
+            outcome = "tested application"
+        return {
+            "stage": payload["stage"], "outcome": outcome,
+            "scope": "approved repository", "inputs": ["operator prompt"],
+            "outputs": ["working application"], "constraints": ["preserve authority"],
+            "successCriteria": ["tests pass"], "ambiguities": [],
+            "blockingQuestions": [], "requestedCapabilities": [],
+        }
+
+    proposal = PromptCompiler(
+        runner=BoundedPromptCompilerRunner(transport),
+        provider=CompilerProvider("local", "compiler", "local"),
+    ).compile(_request(
+        original_prompt="Implement and test the application.",
+        target_root=str(root),
+        mode="software-development",
+        requested_capabilities=(),
+    ))
+
+    assert proposal.status == "ready_for_approval"
+    assert sigma_seen["brief"].startswith("# SIGMA IMPLEMENTATION BRIEF")
+    assert "# SDR" in proposal.proposed_prompt
+    assert len(proposal.proposed_prompt) > 2_048

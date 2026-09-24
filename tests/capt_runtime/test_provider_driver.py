@@ -662,6 +662,8 @@ def test_openai_tool_loop_preserves_final_answer_context_headroom(tmp_path: Path
         assert out["diagnostics"]["toolClosureReason"] == "context_headroom"
         assert len(_ContextHeadroomServer.calls) == 2
         assert "tools" not in _ContextHeadroomServer.calls[-1]
+        assert _ContextHeadroomServer.calls[0]["max_tokens"] == 10666
+        assert _ContextHeadroomServer.calls[-1]["max_tokens"] == 10666
     finally:
         server.shutdown()
         server.server_close()
