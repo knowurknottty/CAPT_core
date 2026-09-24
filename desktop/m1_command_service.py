@@ -11,6 +11,8 @@ from __future__ import annotations
 import hashlib
 import json
 import secrets
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -18,6 +20,7 @@ from capt_runtime import commands
 from capt_runtime.errors import AuthorityViolation, CaptRuntimeError, IdempotencyConflict
 from capt_runtime.approval_dispatch import register_expected_prompt_digest
 from capt_runtime.prompt_approval import request_model_prompt_approval
+from capt_runtime.cohort_contract import MAX_COHORTS, normalize_cohort_spec
 from capt_runtime.prompt_compiler import PromptCompiler
 from capt_runtime.prompt_proposals import (
     cancel_prompt_proposal,
@@ -66,6 +69,7 @@ _VALID_OPS = (
     "update_memory_trigger_policy",
     "run_fixed_openharness_inspection",
     "run_approved_hermes_inspection",
+    "run_approved_council_inspection",
     "checkpoint_runtime",
     "shutdown",
     "resume_runtime",
@@ -767,6 +771,98 @@ class RuntimeCommandService:
                     cmd,
                     status=status,
                     classification="duplicate" if status == "idempotent" else "accepted",
+                    result=result,
+                )
+
+            elif op == "run_approved_council_inspection":
+                payload = cmd["payload"]
+                executions = payload.get("executions")
+                if not isinstance(executions, list) or not executions:
+                    raise ValueError("COUNCIL_EXECUTIONS_REQUIRED")
+                if len(executions) > MAX_COHORTS:
+                    raise ValueError("COUNCIL_COHORT_COUNT_RANGE")
+                normalized = []
+                cohort_ids = set()
+                vessel_counts = set()
+                for item in executions:
+                    if not isinstance(item, dict):
+                        raise ValueError("COUNCIL_EXECUTION_MUST_BE_OBJECT")
+                    spec = normalize_cohort_spec(item.get("cohortSpec"))
+                    if spec is None:
+                        raise ValueError("COUNCIL_COHORT_SPEC_REQUIRED")
+                    cohort_id = spec["cohortId"]
+                    if cohort_id in cohort_ids:
+                        raise ValueError("COUNCIL_DUPLICATE_COHORT_ID")
+                    cohort_ids.add(cohort_id)
+                    vessel_counts.add(spec["vesselsPerCohort"])
+                    normalized.append((spec, dict(item)))
+                if len(vessel_counts) != 1:
+                    raise ValueError("COUNCIL_VESSEL_COUNT_MISMATCH")
+                raw_limit = payload.get("maxConcurrentCohorts", len(normalized))
+                if isinstance(raw_limit, bool) or not isinstance(raw_limit, int):
+                    raise ValueError("COUNCIL_CONCURRENCY_INVALID")
+                if not 1 <= raw_limit <= MAX_COHORTS:
+                    raise ValueError("COUNCIL_CONCURRENCY_RANGE")
+
+                lock = threading.Lock()
+                active = 0
+                peak = 0
+
+                def run_one(index: int, spec: Dict[str, Any], item: Dict[str, Any]):
+                    nonlocal active, peak
+                    sub = {
+                        "commandId": "%s:cohort:%02d" % (cmd["commandId"], index + 1),
+                        "operatorId": cmd["operatorId"],
+                        "sessionId": cmd["sessionId"],
+                        "schemaVersion": cmd["schemaVersion"],
+                        "correlationId": cmd["correlationId"],
+                        "idempotencyKey": "%s:cohort:%s" % (
+                            cmd["idempotencyKey"], spec["cohortId"]
+                        ),
+                        "timestamp": cmd["timestamp"],
+                        "op": "run_approved_hermes_inspection",
+                        "payload": item,
+                    }
+                    with lock:
+                        active += 1
+                        peak = max(peak, active)
+                    try:
+                        return spec["cohortId"], self.execute(sub)
+                    finally:
+                        with lock:
+                            active -= 1
+
+                results = {}
+                with ThreadPoolExecutor(
+                    max_workers=min(raw_limit, len(normalized)),
+                    thread_name_prefix="capt-cohort",
+                ) as pool:
+                    futures = {
+                        pool.submit(run_one, index, spec, item): spec["cohortId"]
+                        for index, (spec, item) in enumerate(normalized)
+                    }
+                    for future in as_completed(futures):
+                        cohort_id, receipt = future.result()
+                        results[cohort_id] = receipt
+
+                ordered = [
+                    {"cohortId": spec["cohortId"], "receipt": results[spec["cohortId"]]}
+                    for spec, _item in normalized
+                ]
+                result = {
+                    "councilId": str(payload.get("councilId") or ""),
+                    "cohortCount": len(normalized),
+                    "vesselsPerCohort": next(iter(vessel_counts)),
+                    "logicalVessels": len(normalized) * next(iter(vessel_counts)),
+                    "providerCallInvariant": "one_call_per_cohort",
+                    "maxConcurrentCohorts": raw_limit,
+                    "peakConcurrentCohortExecutions": peak,
+                    "cohorts": ordered,
+                }
+                return self._receipt(
+                    cmd,
+                    status="accepted",
+                    classification="accepted",
                     result=result,
                 )
 
