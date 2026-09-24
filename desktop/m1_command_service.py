@@ -811,7 +811,7 @@ class RuntimeCommandService:
                 def run_one(index: int, spec: Dict[str, Any], item: Dict[str, Any]):
                     nonlocal active, peak
                     sub = {
-                        "commandId": "%s:cohort:%02d" % (cmd["commandId"], index + 1),
+                        "commandId": "%s-cohort-%02d" % (cmd["commandId"], index + 1),
                         "operatorId": cmd["operatorId"],
                         "sessionId": cmd["sessionId"],
                         "schemaVersion": cmd["schemaVersion"],
