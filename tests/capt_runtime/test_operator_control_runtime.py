@@ -135,3 +135,36 @@ def test_stale_control_revision_rejects_prompt_before_proposal_creation(tmp_path
     assert rejected["error"]["code"] == "E_OPERATOR_CONTROL_STALE"
     assert after == before
     store.close()
+
+
+def test_operator_control_reasoning_effort_reaches_proposal_and_approval(tmp_path):
+    root, store, _control, relay, _query = _harness(tmp_path)
+    chat = relay.execute(_cmd("operator_chat_new", {"expectedRevision": 0}, "chat-reason"))["result"]
+    cfg = relay.execute(_cmd("operator_execution_config_set", {
+        "expectedRevision": chat["revision"],
+        "targetRoot": str(root),
+        "provider": "openrouter",
+        "model": "z-ai/glm-5.3-flash",
+        "promptIntelligence": "OFF",
+        "reasoningEffort": "high",
+    }, "cfg-reason"))["result"]
+    assert cfg["reasoningEffort"] == "high"
+    submitted = relay.execute(_cmd("operator_prompt_submit", {
+        "text": "Return exactly REASONING_CONTROL_GOLDEN and no other text.",
+        "controlRevision": cfg["revision"],
+        "configurationDigest": cfg["configurationDigest"],
+    }, "submit-reason"))["result"]
+    proposal = submitted["proposal"]
+    assert proposal["reasoningEffort"] == "high"
+    control = submitted["control"]
+    selected = relay.execute(_cmd("operator_proposal_select", {
+        "proposalId": proposal["proposalId"],
+        "basis": "original",
+        "controlRevision": control["revision"],
+        "configurationDigest": control["configurationDigest"],
+    }, "select-reason"))["result"]
+    approval = selected["approval"]
+    assert approval["reasoningEffort"] == "high"
+    state = store.require_state("human_approval-" + approval["requestId"])
+    assert state["scope"]["approvalBinding"]["reasoningEffort"] == "high"
+    store.close()

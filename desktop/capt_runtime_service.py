@@ -49,7 +49,11 @@ from capt_runtime.errors import AuthorityViolation
 from capt_runtime.store import EventStore
 from capt_runtime.ipc_framing import FrameProtocolError, recv_json, send_json
 from capt_runtime.resource_governor import TokenCostGovernor
-from capt_runtime.reasoning import ReasoningConfigurationError, normalize_reasoning_effort
+from capt_runtime.reasoning import (
+    ReasoningConfigurationError,
+    normalize_reasoning_effort,
+    openai_reasoning_fields,
+)
 from capt_runtime.replay import replay_to_sequence
 from capt_runtime.verification import (
     build_artifact_hash_evidence,
@@ -1135,6 +1139,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             "model": "qwen3.5-defiant-fable:latest",
             "targetRoot": "",
             "promptIntelligence": "AUTO",
+            "reasoningEffort": "",
         },
     )
 
@@ -1237,6 +1242,13 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     provider = ProviderManager(Path(ledger_path).parent / "ui").get(str(provider_id))
                     if provider is None or not provider_model:
                         raise ValueError("PROVIDER_OR_MODEL_UNAVAILABLE")
+                    if reasoning_effort:
+                        try:
+                            openai_reasoning_fields(
+                                provider.id, provider.base_url, reasoning_effort
+                            )
+                        except ReasoningConfigurationError as exc:
+                            raise ValueError(str(exc)) from exc
                 skill_context, skill_names = prepare_runtime_skill_context(
                     payload, state_root=Path(ledger_path).parent
                 )

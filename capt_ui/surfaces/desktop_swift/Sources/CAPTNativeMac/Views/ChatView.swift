@@ -220,6 +220,19 @@ private struct ChatContextRail: View {
                 .padding(.vertical, 7)
                 .background(InversionTone.danger.color.opacity(0.07))
                 .overlay(alignment: .top) { InversionDivider() }
+            } else if store.selectedRemotePromptIntelligenceBlocked {
+                HStack(spacing: 8) {
+                    Image(systemName: "brain.head.profile.fill")
+                        .foregroundStyle(InversionTone.amber.color)
+                    Text("Prompt Intelligence is enabled on a remote provider, but remote Prompt Intelligence is not authorized. The request will fail closed before any model-stage prompt enhancement. Enable Remote Prompt Intelligence in Settings or choose a local provider.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 7)
+                .background(InversionTone.amber.color.opacity(0.07))
+                .overlay(alignment: .top) { InversionDivider() }
             }
         }
         .background(.ultraThinMaterial)

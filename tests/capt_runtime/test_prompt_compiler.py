@@ -233,6 +233,10 @@ def test_meta_observes_omni_without_rewriting_execution_prompt():
     assert proposal.stage_chain == (PromptStageName.OMNI, PromptStageName.META)
     assert proposal.stage_records[1].input_digest == proposal.stage_records[1].output_digest
     assert proposal.proposed_prompt_digest == proposal.stage_records[0].output_digest
+    assert proposal.stage_records[1].rationale == "meta telemetry only"
+    assert proposal.stage_records[1].acceptance_criteria == ("reviewable",)
+    # META may critique verification, but it does not become the proof-contract author.
+    assert proposal.verification_contract.acceptance_criteria == ("reviewable",)
 
 
 def test_auto_routes_software_work_through_all_standard_engines():
@@ -306,3 +310,38 @@ def test_model_ambiguities_are_advisory_and_do_not_block_approval():
     assert proposal.unresolved_questions == (
         "Optional preference: exact presentation format is unspecified",
     )
+
+
+def test_meta_criteria_are_advisory_and_do_not_replace_omni_verification_contract():
+    def transport(payload):
+        if payload["stage"] == "OMNI":
+            outcome, criteria = "omni transformed prompt", ["omni criterion"]
+        else:
+            outcome, criteria = "meta critique persisted", ["meta suggestion"]
+        return {
+            "stage": payload["stage"], "outcome": outcome, "scope": "prompt",
+            "inputs": [], "outputs": ["bounded"], "constraints": [],
+            "successCriteria": criteria, "ambiguities": [], "requestedCapabilities": [],
+        }
+
+    proposal = PromptCompiler(
+        runner=BoundedPromptCompilerRunner(transport),
+        provider=CompilerProvider("openrouter", "test-model", "remote"),
+        remote_compilation_authorized=True,
+    ).compile(_request(requested_engine="AUTO"))
+
+    assert proposal.verification_contract.acceptance_criteria == ("omni criterion",)
+    assert proposal.stage_records[1].rationale == "meta critique persisted"
+    assert proposal.stage_records[1].acceptance_criteria == ("meta suggestion",)
+
+
+def test_reasoning_visible_default_alias_normalizes_to_provider_default():
+    from capt_runtime.reasoning import normalize_reasoning_effort
+    assert normalize_reasoning_effort("DEFAULT") == ""
+    assert normalize_reasoning_effort("provider") == ""
+    assert normalize_reasoning_effort("none") == "none"
+
+
+def test_prompt_compile_request_rejects_unknown_compiler_failure_code():
+    with pytest.raises(ValueError, match="invalid prompt compiler failure code"):
+        _request(compiler_failure_code="provider_raw_exception_text")

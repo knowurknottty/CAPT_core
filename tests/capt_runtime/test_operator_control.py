@@ -12,6 +12,7 @@ def _defaults(tmp_path):
         "model": "qwen3.5-defiant-fable:latest",
         "targetRoot": str(tmp_path),
         "promptIntelligence": "AUTO",
+        "reasoningEffort": "",
     }
 
 
@@ -79,3 +80,42 @@ def test_invalid_target_root_is_rejected_before_persistence(tmp_path):
             expected_revision=before["revision"], target_root=str(missing)
         )
     assert store.snapshot() == before
+
+
+def test_reasoning_effort_is_configuration_state_and_digest_bound(tmp_path):
+    store = _store(tmp_path)
+    before = store.snapshot()
+    after = store.set_configuration(
+        expected_revision=before["revision"], reasoning_effort="high"
+    )
+    assert after["reasoningEffort"] == "high"
+    assert after["configurationDigest"] != before["configurationDigest"]
+    assert after["configurationRevision"] == before["configurationRevision"] + 1
+    recovered = _store(tmp_path).snapshot()
+    assert recovered["reasoningEffort"] == "high"
+
+
+def test_legacy_operator_control_digest_migrates_reasoning_field(tmp_path):
+    from capt_runtime.contracts import digest
+    path = tmp_path / "operator-control.json"
+    config = _defaults(tmp_path)
+    config.pop("reasoningEffort")
+    legacy_digest = digest({
+        key: config[key]
+        for key in ("provider", "model", "targetRoot", "promptIntelligence")
+    })
+    legacy = {
+        "schemaVersion": "1.0.0", "revision": 0,
+        "updatedAt": "2026-09-23T00:00:00Z",
+        "activeSessionId": None, "configurationRevision": 0,
+        "configurationDigest": legacy_digest, **config,
+        "proposalId": None, "proposalRevision": None, "proposalSelection": None,
+        "approvalRequestId": None, "missionId": None, "taskId": None,
+        "driverRunId": None, "claimId": None, "sessions": {},
+    }
+    path.write_text(json.dumps(legacy))
+    store = OperatorControlStore(path, _defaults(tmp_path))
+    snapshot = store.snapshot()
+    assert snapshot["reasoningEffort"] == ""
+    assert snapshot["configurationDigest"] != legacy_digest
+    assert json.loads(path.read_text())["reasoningEffort"] == ""

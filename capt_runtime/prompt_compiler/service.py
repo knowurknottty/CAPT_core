@@ -65,6 +65,7 @@ class PromptCompiler:
                 unresolved_questions=("Clarify the intended outcome and scope before execution.",),
             )
         if self._runner is None or self._provider is None:
+            failure = request.compiler_failure_code or "compiler_not_available"
             return self._proposal(
                 request,
                 route,
@@ -72,6 +73,9 @@ class PromptCompiler:
                 proposed_prompt=request.original_prompt,
                 stage_records=self._disabled_records(request, route),
                 requested_capabilities=request.requested_capabilities,
+                unresolved_questions=(
+                    "Prompt compiler unavailable [" + failure + "].",
+                ),
             )
 
         if (
@@ -106,9 +110,14 @@ class PromptCompiler:
                 if stage is PromptStageName.META
                 else render_execution_prompt(request.original_prompt, result)
             )
-            records.append(self._record(stage, current_prompt, next_prompt, True))
+            records.append(self._record(
+                stage, current_prompt, next_prompt, True,
+                rationale=result.outcome,
+                acceptance_criteria=result.success_criteria,
+            ))
             unresolved.extend(result.ambiguities)
-            acceptance_criteria = result.success_criteria
+            if stage is not PromptStageName.META:
+                acceptance_criteria = result.success_criteria
             current_prompt = next_prompt
 
         # Model-generated ambiguities are advisory review notes, not approval vetoes.
@@ -140,6 +149,9 @@ class PromptCompiler:
         input_prompt: str,
         output_prompt: str,
         execution_enabled: bool,
+        *,
+        rationale: str = "",
+        acceptance_criteria: Tuple[str, ...] = (),
     ) -> PromptStageRecord:
         provider = self._provider or CompilerProvider("", "", "")
         return PromptStageRecord(
@@ -151,6 +163,8 @@ class PromptCompiler:
             provider_id=provider.provider_id,
             model=provider.model,
             endpoint_class=provider.endpoint_class,
+            rationale=rationale,
+            acceptance_criteria=acceptance_criteria,
         )
 
     def _disabled_records(

@@ -9,7 +9,7 @@ import json
 import http.client
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
@@ -363,8 +363,79 @@ def _compiler_from_selection(selection: PromptCompilerSelection):
             governor=governor,
         ),
         provider=CompilerProvider(selection.provider_id, selection.model, selection.endpoint_class),
-        remote_compilation_authorized=selection.remote_authorized,
+        # Configuration selects a candidate; only the live human request can authorize
+        # remote Prompt Intelligence for this proposal.
+        remote_compilation_authorized=False,
     )
+
+
+
+
+def _compiler_failure_code(exc: BaseException) -> str:
+    """Map internal failures to a bounded, non-secret diagnostic vocabulary."""
+    text = str(exc).lower()
+    if "remote_compilation_not_authorized" in text:
+        return "remote_not_authorized"
+    if "reasoning_effort_unsupported_provider" in text:
+        return "reasoning_effort_unsupported"
+    if "credential" in text:
+        return "credential_unavailable"
+    if "not advertised" in text or "model alias" in text:
+        return "model_not_advertised"
+    if "truncated" in text:
+        return "response_truncated"
+    if "malformed" in text or "structured" in text or "no structured content" in text:
+        return "structured_response_invalid"
+    if isinstance(exc, (OSError, TimeoutError)) or "unavailable" in text or "connection" in text:
+        return "transport_unavailable"
+    return "compiler_transport_failure"
+
+
+def _selection_failure_code(
+    providers: list[Any], provider_id: str, model: str, *, remote_authorized: bool
+) -> str:
+    if not provider_id or not model:
+        return "execution_provider_or_model_missing"
+    provider = next(
+        (item for item in providers if isinstance(item, dict) and str(item.get("id")) == provider_id),
+        None,
+    )
+    if provider is None:
+        return "provider_not_configured"
+    if not provider.get("enabled", True):
+        return "provider_disabled"
+    if str(provider.get("transport") or "") not in {"openai_compatible", "ollama"}:
+        return "transport_unsupported"
+    models = provider.get("models")
+    if isinstance(models, list) and models and model not in [str(item) for item in models]:
+        return "model_not_configured_for_provider"
+    base_url = str(provider.get("base_url") or "").rstrip("/")
+    kind = str(provider.get("kind") or "")
+    eclass = endpoint_class(base_url)
+    if kind == "cloud" and eclass == "cloud" and not remote_authorized:
+        return "remote_not_authorized"
+    return "endpoint_not_eligible"
+
+
+def _unavailable(request: Any, code: str):
+    from capt_runtime.prompt_compiler import PromptCompiler
+    return PromptCompiler().compile(replace(request, compiler_failure_code=code))
+
+class ConfiguredPromptCompilerCandidate:
+    """Resolve credentials lazily so live request authority is checked first."""
+
+    def __init__(self, selection: PromptCompilerSelection) -> None:
+        self.selection = selection
+
+    def compile(self, request):
+        if self.selection.endpoint_class == "remote" and not bool(
+            getattr(request, "remote_compilation_authorized", False)
+        ):
+            raise AuthorityViolation("REMOTE_COMPILATION_NOT_AUTHORIZED")
+        compiler = _compiler_from_selection(self.selection)
+        if compiler is None:
+            raise ValueError("prompt compiler credential unavailable")
+        return compiler.compile(request)
 
 
 class FailoverPromptCompiler:
@@ -378,16 +449,16 @@ class FailoverPromptCompiler:
         for compiler in self._compilers:
             try:
                 return compiler.compile(request)
-            except AuthorityViolation:
+            except AuthorityViolation as exc:
+                if str(exc) == "REMOTE_COMPILATION_NOT_AUTHORIZED":
+                    last_error = exc
+                    continue
                 raise
             except (OSError, TimeoutError, ValueError) as exc:
                 last_error = exc
         if last_error is not None:
-            # Prompt enhancement is optional. Preserve the literal human prompt in
-            # a durable compiler_unavailable proposal instead of turning compiler
-            # availability into an execution dependency.
-            from capt_runtime.prompt_compiler import PromptCompiler
-            return PromptCompiler().compile(request)
+            # Enhancement is advisory, but degradation must remain diagnosable.
+            return _unavailable(request, _compiler_failure_code(last_error))
         raise ValueError("no configured prompt compiler available")
 
 
@@ -408,36 +479,53 @@ class RequestBoundPromptCompiler:
             reasoning_effort=str(getattr(request, "reasoning_effort", "") or ""),
         )
         if selection is None:
-            return PromptCompiler().compile(request)
+            return _unavailable(
+                request,
+                _selection_failure_code(
+                    providers,
+                    str(getattr(request, "execution_provider", "") or ""),
+                    str(getattr(request, "execution_model", "") or ""),
+                    remote_authorized=bool(
+                        getattr(request, "remote_compilation_authorized", False)
+                    ),
+                ),
+            )
         if selection.endpoint_class == "remote" and not bool(
             getattr(request, "remote_compilation_authorized", False)
         ):
             raise AuthorityViolation("REMOTE_COMPILATION_NOT_AUTHORIZED")
         compiler = _compiler_from_selection(selection)
         if compiler is None:
-            return PromptCompiler().compile(request)
+            return _unavailable(request, "credential_unavailable")
         try:
             return compiler.compile(request)
         except AuthorityViolation:
             raise
-        except (OSError, TimeoutError, ValueError):
-            # Enhancement is advisory. Never silently switch to a different provider.
-            return PromptCompiler().compile(request)
+        except (OSError, TimeoutError, ValueError) as exc:
+            # Enhancement is advisory. Never silently switch providers, and preserve
+            # a safe failure code for the operator.
+            return _unavailable(request, _compiler_failure_code(exc))
+
+
+class UnavailablePromptCompiler:
+    def __init__(self, code: str) -> None:
+        self._code = code
+
+    def compile(self, request):
+        return _unavailable(request, self._code)
 
 
 def build_prompt_compiler(ui_config_dir: Path):
     # Construct the compiler without inventing a hidden second model selection.
     ui = Path(ui_config_dir)
     explicit = ui / "prompt-compiler.json"
-    compilers = []
-    for selection in select_prompt_compiler_preferences(ui):
-        compiler = _compiler_from_selection(selection)
-        if compiler is not None:
-            compilers.append(compiler)
+    compilers = [
+        ConfiguredPromptCompilerCandidate(selection)
+        for selection in select_prompt_compiler_preferences(ui)
+    ]
     if explicit.exists():
         if not compilers:
-            from capt_runtime.prompt_compiler import PromptCompiler
-            return PromptCompiler()
+            return UnavailablePromptCompiler("configured_compiler_unavailable")
         return FailoverPromptCompiler(compilers)
     return RequestBoundPromptCompiler(ui)
 

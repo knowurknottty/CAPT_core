@@ -26,16 +26,17 @@ def _require_human(metadata: Dict[str, Any]) -> None:
 def _stage_record(record: Any, proposal: Any) -> Dict[str, Any]:
     provenance = {"stage": record.stage.value, "version": record.version,
                   "inputDigest": record.input_digest, "outputDigest": record.output_digest,
+                  "rationale": record.rationale,
                   "provider": record.provider_id, "model": record.model,
                   "endpointClass": record.endpoint_class,
                   "executionEnabled": record.execution_enabled}
     return {
         "stage": record.stage.value, "version": record.version,
         "proposedPromptDigest": record.output_digest,
-        "rationale": proposal.rationale or "Bounded prompt-intelligence stage.",
+        "rationale": record.rationale or proposal.rationale or "Bounded prompt-intelligence stage.",
         "assumptions": [], "unresolvedQuestions": list(proposal.unresolved_questions),
         "constraintsAdded": [],
-        "acceptanceCriteriaAdded": list(proposal.verification_contract.acceptance_criteria),
+        "acceptanceCriteriaAdded": list(record.acceptance_criteria),
         "confidence": 1.0 if record.execution_enabled else 0.0,
         "limitations": ["Advisory compilation only; no execution or verification authority."],
         "provenanceDigest": digest(provenance),

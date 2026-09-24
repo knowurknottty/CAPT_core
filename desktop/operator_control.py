@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from capt_runtime.contracts import canonical_json, digest
+from capt_runtime.reasoning import normalize_reasoning_effort
 
 SCHEMA_VERSION = "1.0.0"
 ALLOWED_PROMPT_INTELLIGENCE = frozenset(
@@ -65,6 +66,7 @@ class OperatorControlStore:
         model = str(raw.get("model", "")).strip()
         target_root = str(raw.get("targetRoot", "")).strip()
         prompt_intelligence = str(raw.get("promptIntelligence", "")).strip().upper()
+        reasoning_effort = normalize_reasoning_effort(raw.get("reasoningEffort", ""))
         if not provider:
             raise ValueError("PROVIDER_MISSING")
         if not model:
@@ -82,6 +84,7 @@ class OperatorControlStore:
             "model": model,
             "targetRoot": normalized_target,
             "promptIntelligence": prompt_intelligence,
+            "reasoningEffort": reasoning_effort,
         }
         if self._validate_external is not None:
             validated = self._validate_external(dict(config))
@@ -92,7 +95,7 @@ class OperatorControlStore:
     @staticmethod
     def _configuration_digest(config: dict[str, str]) -> str:
         return digest({key: config[key] for key in (
-            "provider", "model", "targetRoot", "promptIntelligence"
+            "provider", "model", "targetRoot", "promptIntelligence", "reasoningEffort"
         )})
     def _build_state(
         self,
@@ -130,8 +133,38 @@ class OperatorControlStore:
         if raw.get("schemaVersion") != SCHEMA_VERSION:
             raise ValueError("OPERATOR_CONTROL_SCHEMA_INVALID")
         config = self._normalize_configuration(raw)
-        if raw.get("configurationDigest") != self._configuration_digest(config):
-            raise ValueError("OPERATOR_CONTROL_DIGEST_INVALID")
+        current_digest = self._configuration_digest(config)
+        stored_digest = raw.get("configurationDigest")
+        if stored_digest != current_digest:
+            # R1 files predate reasoningEffort. Accept only an exact legacy digest,
+            # then migrate deterministically; never treat an arbitrary mismatch as legacy.
+            if "reasoningEffort" in raw:
+                raise ValueError("OPERATOR_CONTROL_DIGEST_INVALID")
+            legacy_digest = digest({
+                key: config[key]
+                for key in ("provider", "model", "targetRoot", "promptIntelligence")
+            })
+            if stored_digest != legacy_digest:
+                raise ValueError("OPERATOR_CONTROL_DIGEST_INVALID")
+            migrated = dict(raw)
+            migrated["reasoningEffort"] = config["reasoningEffort"]
+            migrated["configurationDigest"] = current_digest
+            sessions = copy.deepcopy(raw.get("sessions", {}))
+            for session_id, session in sessions.items():
+                if not isinstance(session, dict) or "reasoningEffort" in session:
+                    continue
+                session_config = self._normalize_configuration(session)
+                legacy_session_digest = digest({
+                    key: session_config[key]
+                    for key in ("provider", "model", "targetRoot", "promptIntelligence")
+                })
+                if session.get("configurationDigest") != legacy_session_digest:
+                    raise ValueError("OPERATOR_CONTROL_SESSION_DIGEST_INVALID")
+                session["reasoningEffort"] = session_config["reasoningEffort"]
+                session["configurationDigest"] = self._configuration_digest(session_config)
+            migrated["sessions"] = sessions
+            self._persist(migrated)
+            raw = migrated
         os.chmod(self.path, 0o600)
         return raw
 
@@ -171,7 +204,7 @@ class OperatorControlStore:
     def _current_configuration(self) -> dict[str, str]:
         return {
             key: str(self._state[key])
-            for key in ("provider", "model", "targetRoot", "promptIntelligence")
+            for key in ("provider", "model", "targetRoot", "promptIntelligence", "reasoningEffort")
         }
     def set_configuration(
         self,
@@ -181,6 +214,7 @@ class OperatorControlStore:
         model: str | None = None,
         target_root: str | None = None,
         prompt_intelligence: str | None = None,
+        reasoning_effort: str | None = None,
     ) -> dict[str, Any]:
         with self._lock:
             self._require_revision(expected_revision)
@@ -191,6 +225,7 @@ class OperatorControlStore:
                 "model": model,
                 "targetRoot": target_root,
                 "promptIntelligence": prompt_intelligence,
+                "reasoningEffort": reasoning_effort,
             }
             for key, value in updates.items():
                 if value is not None:
@@ -228,6 +263,7 @@ class OperatorControlStore:
         model: str | None = None,
         target_root: str | None = None,
         prompt_intelligence: str | None = None,
+        reasoning_effort: str | None = None,
     ) -> dict[str, Any]:
         with self._lock:
             self._require_revision(expected_revision)
@@ -238,6 +274,7 @@ class OperatorControlStore:
                 "model": model,
                 "targetRoot": target_root,
                 "promptIntelligence": prompt_intelligence,
+                "reasoningEffort": reasoning_effort,
             }
             for key, value in overrides.items():
                 if value is not None:

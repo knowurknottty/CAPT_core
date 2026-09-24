@@ -18,6 +18,24 @@ class PromptStageName(str, Enum):
 
 _VALID_ENGINES = frozenset({"OFF", "AUTO", *(stage.value for stage in PromptStageName)})
 _VALID_MODES = frozenset({"normal", "software-development"})
+_VALID_COMPILER_FAILURE_CODES = frozenset({
+    "compiler_not_available",
+    "configured_compiler_unavailable",
+    "execution_provider_or_model_missing",
+    "provider_not_configured",
+    "provider_disabled",
+    "transport_unsupported",
+    "model_not_configured_for_provider",
+    "remote_not_authorized",
+    "endpoint_not_eligible",
+    "credential_unavailable",
+    "model_not_advertised",
+    "response_truncated",
+    "structured_response_invalid",
+    "transport_unavailable",
+    "compiler_transport_failure",
+    "reasoning_effort_unsupported",
+})
 _MAX_PROMPT_CHARS = 65_536
 _MAX_LIST_ITEMS = 32
 _MAX_ITEM_CHARS = 2_048
@@ -53,6 +71,7 @@ class PromptCompileRequest:
     requested_context_budget: int = 0
     reasoning_effort: str = ""
     remote_compilation_authorized: bool = False
+    compiler_failure_code: str = ""
 
     def __post_init__(self) -> None:
         prompt = _bounded_text(
@@ -75,6 +94,10 @@ class PromptCompileRequest:
         object.__setattr__(self, "mode", mode)
         object.__setattr__(self, "requested_capabilities", capabilities)
         object.__setattr__(self, "reasoning_effort", normalize_reasoning_effort(self.reasoning_effort))
+        failure_code = str(self.compiler_failure_code or "").strip().lower()
+        if failure_code and failure_code not in _VALID_COMPILER_FAILURE_CODES:
+            raise ValueError("invalid prompt compiler failure code")
+        object.__setattr__(self, "compiler_failure_code", failure_code)
 
 
 @dataclass(frozen=True)
@@ -94,6 +117,8 @@ class PromptStageRecord:
     model: str = ""
     endpoint_class: str = ""
     resource_usage: Optional[Mapping[str, Any]] = None
+    rationale: str = ""
+    acceptance_criteria: Tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

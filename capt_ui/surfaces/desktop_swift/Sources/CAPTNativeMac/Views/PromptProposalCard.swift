@@ -25,13 +25,31 @@ struct PromptProposalCard: View {
     }
 
     private var statusTone: InversionTone {
+        if proposal.status == "compiler_unavailable" { return .warning }
         if !proposal.isApprovalSelectable { return .warning }
         return proposal.hasMaterialUpgrade ? .violet : .cyan
     }
 
+    private var headerDetail: String {
+        if proposal.status == "compiler_unavailable" {
+            return "Prompt Intelligence could not run. The literal operator prompt remains selectable, and no execution authority has been consumed."
+        }
+        if proposal.stageChain.isEmpty || !proposal.hasMaterialUpgrade {
+            return "CAPT has prepared a reviewable proposal without changing the operator prompt. No execution authority has been consumed."
+        }
+        return "CAPT has transformed the operator request, but no execution authority has been consumed. Choose the exact prompt bytes that should become the HumanApproval basis."
+    }
+
     private var compilerLabel: String {
         let enabled = proposal.stageRecords.first(where: { $0.executionEnabled })
-        guard let enabled else { return "deterministic · no model stage" }
+        guard let enabled else {
+            if proposal.status == "compiler_unavailable",
+               let diagnostic = proposal.unresolvedQuestions.first,
+               !diagnostic.isEmpty {
+                return diagnostic
+            }
+            return "deterministic · no model stage"
+        }
         let location = (enabled.endpointClass ?? "unknown").lowercased()
         let provider = enabled.provider ?? "unknown-provider"
         let model = enabled.model ?? "unknown-model"
@@ -62,7 +80,7 @@ struct PromptProposalCard: View {
                 InversionSectionHeader(
                     "Prompt Intelligence proposal",
                     eyebrow: "PRE-EXECUTION",
-                    detail: "CAPT has transformed the operator request, but no execution authority has been consumed. Choose the exact prompt bytes that should become the HumanApproval basis.",
+                    detail: headerDetail,
                     symbol: "brain.head.profile",
                     tone: statusTone
                 )

@@ -275,6 +275,7 @@ class RuntimeCommandService:
                     provider=payload.get("provider"), model=payload.get("model"),
                     target_root=payload.get("targetRoot"),
                     prompt_intelligence=payload.get("promptIntelligence"),
+                    reasoning_effort=payload.get("reasoningEffort"),
                 )
                 return self._receipt(
                     cmd, status="accepted", classification="accepted", result=result
@@ -287,6 +288,7 @@ class RuntimeCommandService:
                     provider=payload.get("provider"), model=payload.get("model"),
                     target_root=payload.get("targetRoot"),
                     prompt_intelligence=payload.get("promptIntelligence"),
+                    reasoning_effort=payload.get("reasoningEffort"),
                 )
                 return self._receipt(
                     cmd, status="accepted", classification="accepted", result=result
@@ -322,6 +324,7 @@ class RuntimeCommandService:
                         "mode": str(payload.get("mode") or "normal"),
                         "provider": control["provider"],
                         "model": control["model"],
+                        "reasoningEffort": control.get("reasoningEffort", ""),
                         "requestedContextBudget": int(payload.get("requestedContextBudget", 32_000)),
                         "requestedCapabilities": list(payload.get("requestedCapabilities") or []),
                         "remoteCompilationAuthorized": bool(payload.get("remoteCompilationAuthorized", False)),

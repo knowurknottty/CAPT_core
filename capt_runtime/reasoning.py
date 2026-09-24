@@ -15,7 +15,7 @@ def normalize_reasoning_effort(value: Any) -> str:
     if not isinstance(value, str):
         raise ReasoningConfigurationError("REASONING_EFFORT_MUST_BE_STRING")
     effort = value.strip().lower()
-    if not effort:
+    if not effort or effort in {"default", "provider"}:
         return ""
     # Legacy operator/config vocabulary used max; preserve it as the semantic
     # alias for the current highest portable level rather than breaking stored prefs.

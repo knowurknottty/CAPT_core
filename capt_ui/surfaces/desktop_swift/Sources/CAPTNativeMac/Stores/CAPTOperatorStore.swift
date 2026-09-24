@@ -702,6 +702,13 @@ final class CAPTOperatorStore: ObservableObject {
         authoritySettings.providerNetwork == .localOnly && selectedProviderRequiresRemoteNetwork
     }
 
+    var selectedRemotePromptIntelligenceBlocked: Bool {
+        selectedProviderRequiresRemoteNetwork &&
+            promptIntelligence != "OFF" &&
+            (!authoritySettings.remotePromptCompilationAllowed ||
+             authoritySettings.providerNetwork != .remoteAllowed)
+    }
+
     var runtimeCompatibilityIssue: String? {
         guard connectionState == .connected, let capabilities = runtimeCapabilities else { return nil }
         let requiredQueries = ["managed_skills", "bots"]
