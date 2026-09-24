@@ -496,3 +496,200 @@ def test_operator_can_close_completed_provider_run_by_claim_identity(tmp_path: P
         assert runtime.store.require_state("task-" + ids["taskId"])["state"] == "succeeded"
     finally:
         runtime.close()
+
+def _attach_executing_mission_to_review_fixture(runtime, ids, suffix):
+    from capt_runtime import commands
+    task = runtime.store.require_state("task-" + ids["taskId"])
+    mission_id = task["missionId"]
+    now = "2026-09-08T21:00:00Z"
+
+    def meta(step, actor="human", actor_id="operator-x"):
+        return commands.command(
+            command_id=f"cmd-mission-{suffix}-{step}",
+            idempotency_key=f"idem-mission-{suffix}-{step}",
+            operation_fingerprint=commands.fingerprint(
+                step, {"missionId": mission_id, "suffix": suffix}
+            ),
+            correlation_id=f"corr-mission-{suffix}",
+            actor_id=actor_id,
+            actor_kind=actor,
+            issued_at=now,
+            replay_policy="never",
+        )
+
+    runtime.service.create_mission({
+        "schemaVersion": "1.0.0",
+        "missionId": mission_id,
+        "rawRequest": "finish the software goal",
+        "normalizedRequest": "finish the software goal",
+        "objectives": [{"objectiveId": "o1", "statement": "finish", "priority": 1}],
+        "constraints": [],
+        "successCriteria": [{
+            "criterionId": "s1",
+            "statement": "verified task succeeds",
+            "requiresVerification": True,
+        }],
+        "terminationCriteria": [{
+            "criterionId": "t1",
+            "statement": "invariant violation",
+            "terminalState": "failed",
+        }],
+        "unresolvedAmbiguities": [],
+        "taskGraphId": None,
+        "createdAt": now,
+    }, meta("create"))
+    runtime.service.transition_mission(
+        mission_id, "authorized", "approved", meta("authorized")
+    )
+    runtime.service.transition_mission(
+        mission_id, "executing", "work started",
+        meta("executing", "system", "runtime"),
+    )
+    return mission_id, meta
+
+
+def test_verified_single_task_provider_goal_completes_mission(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "ledger-review-goal.db"))
+    try:
+        ids = _seed_provider_result_awaiting_review(runtime, "goal")
+        mission_id, _meta = _attach_executing_mission_to_review_fixture(
+            runtime, ids, "goal"
+        )
+        relay = RuntimeCommandService(
+            runtime.store, "operator-x", "sess-1", runtime_service=runtime.service
+        )
+        receipt = relay.execute(_envelope(
+            "submit_provider_result_review",
+            {
+                "driverRunId": ids["driverRunId"],
+                "disposition": "accept",
+                "note": "Verified implementation satisfies the goal.",
+            },
+            key="provider-review-goal-accept",
+        ))
+        assert receipt["status"] == "accepted", receipt
+        assert receipt["result"]["taskState"] == "succeeded"
+        assert receipt["result"]["missionState"] == "completed"
+        assert runtime.store.require_state(
+            "mission-" + mission_id
+        )["state"] == "completed"
+    finally:
+        runtime.close()
+
+
+def test_rejected_provider_goal_leaves_mission_open_for_successor(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "ledger-review-goal-reject.db"))
+    try:
+        ids = _seed_provider_result_awaiting_review(runtime, "goal-reject")
+        mission_id, _meta = _attach_executing_mission_to_review_fixture(
+            runtime, ids, "goal-reject"
+        )
+        relay = RuntimeCommandService(
+            runtime.store, "operator-x", "sess-1", runtime_service=runtime.service
+        )
+        receipt = relay.execute(_envelope(
+            "submit_provider_result_review",
+            {
+                "driverRunId": ids["driverRunId"],
+                "disposition": "reject",
+                "note": "Implementation does not yet satisfy the goal.",
+            },
+            key="provider-review-goal-reject",
+        ))
+        assert receipt["status"] == "accepted", receipt
+        assert receipt["result"]["taskState"] == "failed"
+        assert receipt["result"]["missionState"] == "executing"
+        assert runtime.store.require_state(
+            "mission-" + mission_id
+        )["state"] == "executing"
+    finally:
+        runtime.close()
+
+
+def test_verified_successor_completes_mission_after_prior_failed_attempt(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "ledger-review-successor.db"))
+    try:
+        ids = _seed_provider_result_awaiting_review(runtime, "successor")
+        mission_id, meta = _attach_executing_mission_to_review_fixture(
+            runtime, ids, "successor"
+        )
+        prior_task_id = "t-provider-successor-prior"
+        runtime.service.create_task({
+            "taskId": prior_task_id,
+            "missionId": mission_id,
+            "title": "prior failed attempt",
+            "state": "pending",
+            "consequential": False,
+            "capabilityRequirements": [],
+            "assignedDriverId": None,
+            "attempt": 0,
+            "maxAttempts": 1,
+            "recoveryState": "none",
+        }, meta("prior-task", "cognitive_plane", "cog-1"))
+        runtime.service.transition_task(
+            prior_task_id, "ready", "attempt admitted",
+            meta("prior-ready", "system", "runtime"),
+        )
+        runtime.service.transition_task(
+            prior_task_id, "assigned", "attempt assigned",
+            meta("prior-assigned", "system", "runtime"),
+        )
+        runtime.service.transition_task(
+            prior_task_id, "failed", "attempt did not satisfy goal",
+            meta("prior-failed", "system", "runtime"),
+        )
+        relay = RuntimeCommandService(
+            runtime.store, "operator-x", "sess-1", runtime_service=runtime.service
+        )
+        receipt = relay.execute(_envelope(
+            "submit_provider_result_review",
+            {"driverRunId": ids["driverRunId"], "disposition": "accept"},
+            key="provider-review-successor",
+        ))
+        assert receipt["status"] == "accepted", receipt
+        assert receipt["result"]["taskState"] == "succeeded"
+        assert receipt["result"]["missionState"] == "completed"
+        assert runtime.store.require_state("task-" + prior_task_id)["state"] == "failed"
+        assert runtime.store.require_state("mission-" + mission_id)["state"] == "completed"
+    finally:
+        runtime.close()
+
+
+def test_verified_task_does_not_prematurely_complete_multi_task_mission(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "ledger-review-multitask.db"))
+    try:
+        ids = _seed_provider_result_awaiting_review(runtime, "multi")
+        mission_id, meta = _attach_executing_mission_to_review_fixture(
+            runtime, ids, "multi"
+        )
+        runtime.service.create_task({
+            "taskId": "t-provider-multi-2",
+            "missionId": mission_id,
+            "title": "remaining mission work",
+            "state": "pending",
+            "consequential": False,
+            "capabilityRequirements": [],
+            "assignedDriverId": None,
+            "attempt": 0,
+            "maxAttempts": 1,
+            "recoveryState": "none",
+        }, meta("task-2", "cognitive_plane", "cog-1"))
+        relay = RuntimeCommandService(
+            runtime.store, "operator-x", "sess-1", runtime_service=runtime.service
+        )
+        receipt = relay.execute(_envelope(
+            "submit_provider_result_review",
+            {"driverRunId": ids["driverRunId"], "disposition": "accept"},
+            key="provider-review-multitask",
+        ))
+        assert receipt["status"] == "accepted", receipt
+        assert receipt["result"]["taskState"] == "succeeded"
+        assert receipt["result"]["missionState"] == "executing"
+        assert runtime.store.require_state(
+            "mission-" + mission_id
+        )["state"] == "executing"
+        assert runtime.store.require_state(
+            "task-t-provider-multi-2"
+        )["state"] == "pending"
+    finally:
+        runtime.close()

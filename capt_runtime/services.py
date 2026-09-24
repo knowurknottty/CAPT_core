@@ -1487,6 +1487,21 @@ class RuntimeService(object):
         if task_state.get("state") != "awaiting_verification":
             raise AuthorityViolation("human claim review requires task awaiting_verification")
 
+        mission_id = str(claim_state["missionId"])
+        mission_stream = MissionAggregate.stream_id(mission_id)
+        mission_state = self.store.load_state(mission_stream)
+        mission_expected = (
+            self.store.aggregate_version(mission_stream)
+            if mission_state is not None else None
+        )
+        mission_tasks = []
+        for candidate_stream, candidate_kind, _candidate_version in self.store.all_aggregates():
+            if candidate_kind != TaskAggregate.KIND:
+                continue
+            candidate = self.store.load_state(candidate_stream)
+            if candidate and candidate.get("missionId") == mission_id:
+                mission_tasks.append(candidate)
+
         issued_at = metadata["issuedAt"]
         correlation_id = metadata["correlationId"]
         base_command = metadata["commandId"]
@@ -1623,12 +1638,54 @@ class RuntimeService(object):
             mission_id=claim_state["missionId"],
             task_id=task_id,
         )
+        final_mission_state = mission_state.get("state") if mission_state else None
+        mission_append = None
+        terminal_task_states = {"succeeded", "failed", "cancelled"}
+        all_other_tasks_terminal = all(
+            str(candidate.get("taskId")) == str(task_id)
+            or candidate.get("state") in terminal_task_states
+            for candidate in mission_tasks
+        )
+        if (
+            disposition == "accept"
+            and mission_state is not None
+            and mission_state.get("state") == "executing"
+            and all_other_tasks_terminal
+        ):
+            mission_meta = phase_meta(
+                "mission", "runtime", "system", "transition_mission",
+                {"missionId": mission_id, "toState": "completed"},
+            )
+            require_authority("transition_mission", mission_meta["actor"]["kind"])
+            final_mission = MissionAggregate.transition(mission_state, "completed")
+            mission_event = commands.envelope(
+                event_id=mission_meta["commandId"] + "-ev1",
+                stream_id=mission_stream,
+                event_type="MissionStateChanged",
+                payload={
+                    "eventType": "MissionStateChanged",
+                    "fromState": mission_state["state"],
+                    "toState": "completed",
+                    "reason": "verified task accepted and all other mission tasks are terminal",
+                },
+                metadata=mission_meta,
+                occurred_at=issued_at,
+                mission_id=mission_id,
+            )
+            mission_append = AppendRequest(
+                mission_stream, MissionAggregate.KIND,
+                int(mission_expected), mission_event, final_mission,
+            )
+            final_mission_state = "completed"
+
         appends = [
             AppendRequest(claim_stream, ClaimAggregate.KIND, claim_expected, evidence_event, ClaimAggregate.attach_evidence(claim_state, evidence_id)),
             AppendRequest(claim_stream, ClaimAggregate.KIND, claim_expected + 1, verification_event, ClaimAggregate.record_verification(ClaimAggregate.attach_evidence(claim_state, evidence_id), verification)),
             AppendRequest(claim_stream, ClaimAggregate.KIND, claim_expected + 2, decision_event, state),
             AppendRequest(task_stream, TaskAggregate.KIND, task_expected, task_event, final_task),
         ]
+        if mission_append is not None:
+            appends.append(mission_append)
         commit = self._commit(appends, metadata)
         return {
             "claimId": claim_id,
@@ -1638,6 +1695,7 @@ class RuntimeService(object):
             "verdict": verdict,
             "claimState": state["promotionState"],
             "taskState": to_state,
+            "missionState": final_mission_state,
             "eventIds": commit.get("eventIds", []),
         }
 
