@@ -248,11 +248,11 @@ def approve_and_run() -> dict[str, Any]:
                 "remainingUses": authoritative.get("remainingUses"),
                 "expiresAt": authoritative.get("expiresAt"),
             })
-        bad = [row for row in rows if row["state"] not in {"pending", "approved"}]
+        bad = [row for row in rows if row["state"] not in {"requested", "approved"}]
         if bad:
             raise RuntimeError("approval_not_actionable:" + json.dumps(bad))
         for index, row in enumerate(rows, 1):
-            if row["state"] == "pending":
+            if row["state"] == "requested":
                 decision = client.command(
                     "submit_approval_decision",
                     {"requestId": row["requestId"], "decision": "approve",
