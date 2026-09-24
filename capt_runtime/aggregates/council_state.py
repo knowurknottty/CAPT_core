@@ -24,6 +24,7 @@ class CouncilAggregate(object):
         "council.admittedAt",
         "council.verificationState",
         "council.analysisHistory",
+        "council.scheduleHistory",
     })
     REFERENCE_FIELDS = frozenset({"councilId"})
 
@@ -52,6 +53,7 @@ class CouncilAggregate(object):
             "admittedAt": str(plan["admittedAt"]),
             "verificationState": "unverified",
             "analysisHistory": [],
+            "scheduleHistory": [],
         }
         if str(plan.get("councilId") or definition.council_id) != definition.council_id:
             raise IntegrityViolation("COUNCIL_PLAN_IDENTITY_MISMATCH")
@@ -73,6 +75,27 @@ class CouncilAggregate(object):
         return nxt
 
     @classmethod
+    def record_schedule(
+        cls, current: Mapping[str, Any], schedule: Mapping[str, Any]
+    ) -> Dict[str, Any]:
+        if str(schedule.get("councilId") or "") != str(current["councilId"]):
+            raise AuthorityViolation("COUNCIL_SCHEDULE_IDENTITY_MISMATCH")
+        if str(schedule.get("councilDigest") or "") != str(current["councilDigest"]):
+            raise AuthorityViolation("COUNCIL_SCHEDULE_DIGEST_MISMATCH")
+        if int(schedule.get("logicalVesselCount", -1)) != int(current["logicalVesselCount"]):
+            raise AuthorityViolation("COUNCIL_SCHEDULE_LOGICAL_COUNT_MISMATCH")
+        if int(schedule.get("physicalSlotCount", -1)) != int(current["cohortCount"]):
+            raise AuthorityViolation("COUNCIL_SCHEDULE_SLOT_COUNT_MISMATCH")
+        slots = schedule.get("slots") or []
+        if len(slots) != int(current["cohortCount"]):
+            raise AuthorityViolation("COUNCIL_SCHEDULE_SLOT_COUNT_MISMATCH")
+        nxt = dict(current)
+        history = [dict(item) for item in current.get("scheduleHistory") or []]
+        history.append(dict(schedule))
+        nxt["scheduleHistory"] = history
+        return nxt
+
+    @classmethod
     def replay_create(cls, plan: Mapping[str, Any]) -> Dict[str, Any]:
         return cls.create(plan)
 
@@ -81,3 +104,9 @@ class CouncilAggregate(object):
         cls, current: Mapping[str, Any], analysis: Mapping[str, Any]
     ) -> Dict[str, Any]:
         return cls.record_analysis(current, analysis)
+
+    @classmethod
+    def replay_record_schedule(
+        cls, current: Mapping[str, Any], schedule: Mapping[str, Any]
+    ) -> Dict[str, Any]:
+        return cls.record_schedule(current, schedule)

@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:1a50b6afb54be4d05c97ab531694c0b2e1a4f90b2fc08e693c73e6fa4dede2c3
+// source digest:  sha256:9b4349d7745641c54ec70ada757c7b93ce70e07b7124e97ea864fb2ecff2cd95
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -908,6 +908,19 @@ export interface CouncilDefinitionRecord {
   readonly vesselsPerCohort: number;
 }
 
+/** CouncilExecutionScheduleRecord */
+export interface CouncilExecutionScheduleRecord {
+  readonly councilDigest: Digest;
+  readonly councilId: Identifier;
+  readonly logicalVesselCount: number;
+  readonly physicalSlotCount: number;
+  readonly providerCapacity: readonly Readonly<Record<string, unknown>>[];
+  readonly scheduleDigest: Digest;
+  readonly scheduleId: Identifier;
+  readonly slots: readonly Readonly<Record<string, unknown>>[];
+  readonly waveCount: number;
+}
+
 /** CouncilPlanState */
 export interface CouncilPlanState {
   readonly admittedAt: Timestamp;
@@ -918,6 +931,7 @@ export interface CouncilPlanState {
   readonly definition: CouncilDefinitionRecord;
   readonly launchAuthorization: Readonly<Record<string, unknown>>;
   readonly logicalVesselCount: number;
+  readonly scheduleHistory: readonly CouncilExecutionScheduleRecord[];
   readonly tier: unknown;
   readonly verificationState: unknown;
   readonly vesselsPerCohort: number;
@@ -1332,6 +1346,12 @@ export interface CouncilAnalysisRecordedPayload {
   readonly eventType: "CouncilAnalysisRecorded";
 }
 
+/** CouncilExecutionScheduledPayload */
+export interface CouncilExecutionScheduledPayload {
+  readonly eventType: "CouncilExecutionScheduled";
+  readonly schedule: CouncilExecutionScheduleRecord;
+}
+
 /** DriverRunCreatedPayload */
 export interface DriverRunCreatedPayload {
   readonly driverRun: DriverRun;
@@ -1401,6 +1421,7 @@ export type EventPayload =
   | CohortSteeredPayload
   | CouncilAdmittedPayload
   | CouncilAnalysisRecordedPayload
+  | CouncilExecutionScheduledPayload
   | ReplayForkCreatedPayload
   | ToolExecutionPreparedPayload
   | ToolExecutionAdmittedPayload
@@ -1413,7 +1434,7 @@ export type EventPayload =
   | PromptProposalCancelledPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "PromptProposalCreated" | "PromptProposalRevised" | "PromptProposalCancelled" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "CouncilAdmitted" | "CouncilAnalysisRecorded" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "PromptProposalCreated" | "PromptProposalRevised" | "PromptProposalCancelled" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "CouncilAdmitted" | "CouncilAnalysisRecorded" | "CouncilExecutionScheduled" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -1450,6 +1471,7 @@ export const EventTypeValues = [
   "CohortSteered",
   "CouncilAdmitted",
   "CouncilAnalysisRecorded",
+  "CouncilExecutionScheduled",
   "ReplayForkCreated",
   "ToolExecutionPrepared",
   "ToolExecutionAdmitted",

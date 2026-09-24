@@ -102,6 +102,69 @@ def test_analysis_append_preserves_dissent_raw_observations_and_unverified_state
     assert replayed["analysisHistory"][0]["claims"][0]["dissentCohorts"] == ["c01"]
     reopened.close()
 
+def test_admitted_council_schedule_is_durable_idempotent_and_replayable(tmp_path):
+    db = str(tmp_path / "council-schedule.db")
+    store = EventStore(db)
+    svc = GovernedRuntimeService(store)
+    definition = make_council(CouncilTier.SMALL)
+    svc.admit_council_plan(
+        definition, CouncilLaunchAuthorization(council_digest(definition)), meta("admit-schedule")
+    )
+
+    capacity = {"p0": 1, "p1": 1}
+    first = svc.schedule_admitted_council(
+        definition.council_id, capacity, meta("schedule", idem="idem-schedule")
+    )
+    schedule = first["schedule"]
+    assert schedule["logicalVesselCount"] == 6
+    assert schedule["physicalSlotCount"] == 2
+    assert schedule["waveCount"] == 1
+    assert schedule["providerCapacity"] == [
+        {"providerId": "p0", "maxConcurrentJobs": 1},
+        {"providerId": "p1", "maxConcurrentJobs": 1},
+    ]
+    assert first["council"]["scheduleHistory"] == [schedule]
+
+    retry = svc.schedule_admitted_council(
+        definition.council_id, capacity, meta("schedule", idem="idem-schedule")
+    )
+    assert retry["status"] == "idempotent"
+    assert retry["schedule"]["scheduleDigest"] == schedule["scheduleDigest"]
+    store.close()
+
+    reopened = EventStore(db)
+    replayed = full_replay(reopened).aggregates["council-council-small"]
+    assert replayed == reopened.require_state("council-council-small")
+    assert replayed["scheduleHistory"][0]["scheduleDigest"] == schedule["scheduleDigest"]
+    reopened.close()
+
+
+def test_authoritative_council_schedule_requires_positive_capacity_and_system_authority(tmp_path):
+    store = EventStore(str(tmp_path / "council-schedule-auth.db"))
+    svc = GovernedRuntimeService(store)
+    definition = make_council(CouncilTier.SMALL)
+    svc.admit_council_plan(
+        definition, CouncilLaunchAuthorization(council_digest(definition)), meta("admit-auth")
+    )
+    with pytest.raises(AuthorityViolation, match="CAPACITY_INVALID"):
+        svc.schedule_admitted_council(
+            definition.council_id, {"p0": 0, "p1": 1}, meta("bad-capacity")
+        )
+    human = commands.command(
+        command_id="cmd-human-schedule",
+        idempotency_key="idem-human-schedule",
+        operation_fingerprint=commands.fingerprint("schedule_council", {"councilId": definition.council_id}),
+        correlation_id="corr-council",
+        actor_id="operator", actor_kind="human",
+        issued_at="2026-09-10T18:00:00Z", replay_policy="never",
+    )
+    with pytest.raises(AuthorityViolation):
+        svc.schedule_admitted_council(
+            definition.council_id, {"p0": 1, "p1": 1}, human
+        )
+    store.close()
+
+
 def test_checkpoint_tracks_council_stream_for_replay_equivalence(tmp_path):
     from capt_runtime.checkpoint import create_checkpoint
     from capt_runtime.replay import checkpoint_replay, replay_equivalent

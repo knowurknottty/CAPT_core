@@ -44,6 +44,7 @@
         "CohortSteered",
         "CouncilAdmitted",
         "CouncilAnalysisRecorded",
+        "CouncilExecutionScheduled",
         "ReplayForkCreated",
         "ToolExecutionPrepared",
         "ToolExecutionAdmitted",
@@ -724,6 +725,24 @@
             },
             "analysis": {
               "$ref": "council.schema.json#/$defs/CouncilAnalysisRecord"
+            }
+          }
+        },
+        {
+          "title": "CouncilExecutionScheduledPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "schedule"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "CouncilExecutionScheduled"
+            },
+            "schedule": {
+              "$ref": "council.schema.json#/$defs/CouncilExecutionScheduleRecord"
             }
           }
         },

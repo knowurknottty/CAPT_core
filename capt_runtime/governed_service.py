@@ -17,8 +17,9 @@ from .authority import require_authority
 from .contracts import digest, require
 from .council import (
     CouncilAnalysis, CouncilDefinition, CouncilLaunchAuthorization, authorize_launch,
-    council_analysis_to_record, council_definition_to_record,
+    council_analysis_to_record, council_definition_from_record, council_definition_to_record,
 )
+from .council_scheduler import council_schedule_to_record, schedule_council
 from .errors import AuthorityViolation, IdempotencyConflict, IntegrityViolation
 from .services import RuntimeService
 from .store import AppendRequest
@@ -376,6 +377,59 @@ class GovernedRuntimeService(RuntimeService):
             [AppendRequest(stream, CouncilAggregate.KIND, 0, event, state)], metadata
         )
         return {**result, "council": state}
+
+    def schedule_admitted_council(
+        self,
+        council_id: str,
+        provider_capacity: Mapping[str, int],
+        metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Persist one deterministic, capacity-bounded schedule for an admitted Council."""
+        require_authority("schedule_council", metadata["actor"]["kind"])
+        if not isinstance(provider_capacity, Mapping) or not provider_capacity:
+            raise AuthorityViolation("COUNCIL_SCHEDULING_CAPACITY_REQUIRED")
+        normalized_capacity: Dict[str, int] = {}
+        for provider, value in provider_capacity.items():
+            provider_id = str(provider).strip()
+            if (
+                not provider_id
+                or isinstance(value, bool)
+                or not isinstance(value, int)
+                or int(value) <= 0
+            ):
+                raise AuthorityViolation("COUNCIL_SCHEDULING_CAPACITY_INVALID")
+            normalized_capacity[provider_id] = int(value)
+
+        stream = CouncilAggregate.stream_id(council_id)
+        current = self.store.require_state(stream)
+        definition = council_definition_from_record(current["definition"])
+        schedule = schedule_council(definition, normalized_capacity)
+        record = council_schedule_to_record(schedule)
+
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            offered = metadata.get("operationFingerprint")
+            if offered and prior["operation_fingerprint"] != offered:
+                raise IdempotencyConflict("council scheduling idempotency conflict")
+            for item in current.get("scheduleHistory") or []:
+                if item.get("scheduleDigest") == record["scheduleDigest"]:
+                    return {"status": "idempotent", "council": current, "schedule": item}
+            raise IntegrityViolation("idempotent council schedule record is unavailable")
+
+        expected = self.store.aggregate_version(stream)
+        state = CouncilAggregate.record_schedule(current, record)
+        event = commands.envelope(
+            event_id=metadata["commandId"] + "-schedule",
+            stream_id=stream,
+            event_type="CouncilExecutionScheduled",
+            payload={"eventType": "CouncilExecutionScheduled", "schedule": record},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+        )
+        result = self._commit(
+            [AppendRequest(stream, CouncilAggregate.KIND, expected, event, state)], metadata
+        )
+        return {**result, "council": state, "schedule": record}
 
     def record_council_analysis(
         self,

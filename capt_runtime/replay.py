@@ -183,6 +183,8 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         nxt = CouncilAggregate.replay_create(payload["plan"])
     elif event_type == "CouncilAnalysisRecorded":
         nxt = CouncilAggregate.replay_record_analysis(existing(), payload["analysis"])
+    elif event_type == "CouncilExecutionScheduled":
+        nxt = CouncilAggregate.replay_record_schedule(existing(), payload["schedule"])
     elif event_type == "CohortSnapshotPersisted":
         nxt = CohortAggregate.replay_replace(existing(), payload["snapshot"])
     elif event_type == "CohortSteered":
