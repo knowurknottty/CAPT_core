@@ -309,3 +309,34 @@ def test_checkpoint_accounts_for_durable_tool_execution_stream(tmp_path: Path):
         }]
     finally:
         runtime.close()
+
+
+def test_model_visible_tool_result_is_bounded_but_eventstore_keeps_full_result(tmp_path: Path):
+    payload = "BEGIN-" + ("x" * 30000) + "-END"
+    target = tmp_path / "large.txt"
+    target.write_text(payload, encoding="utf-8")
+    profile = normalize_model_authority(None, target_root=str(tmp_path))
+    runtime = create_runtime(str(tmp_path / "rt-bounded.db"))
+    try:
+        bridge = _bridge(runtime, tmp_path, profile, profile["toolOperations"])
+        visible = bridge.execute_call(
+            "capt_file_read", {"path": str(target), "limit_bytes": 65536},
+            call_id="call-large-read",
+        )
+        shown = visible["values"]["content"]
+        assert shown.startswith("BEGIN-")
+        assert shown.endswith("-END")
+        assert "bytes omitted here" in shown
+        assert len(str(visible).encode("utf-8")) < len(payload.encode("utf-8"))
+
+        state = runtime.store.require_state(
+            "tool_execution-" + visible["toolExecutionId"]
+        )
+        raw_values = {
+            item["name"]: item.get("value")
+            for item in state["result"]["output"]
+        }
+        assert raw_values["content"] == payload
+        assert "bytes omitted here" not in raw_values["content"]
+    finally:
+        runtime.close()

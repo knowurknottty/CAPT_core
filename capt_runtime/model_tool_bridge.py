@@ -15,6 +15,7 @@ from .contracts import digest
 from .errors import AuthorityViolation
 from .model_authority import revalidate_normalized_model_authority
 from .tool_broker import ToolBroker, tool_request_fingerprint
+from .openworker_compat.toolresult import DEFAULT_TOOL_RESULT_MAX_BYTES, bound_tool_result
 
 MODEL_TOOL_MAX_CALLS = 32
 
@@ -186,13 +187,25 @@ class ModelToolBridge:
         )
         tool_result = result["result"]
         values = {item["name"]: item.get("value") for item in tool_result.get("output", [])}
-        return {
+        # OpenWorker convergence: bound only the model-visible projection. CAPT nests
+        # adapter values under the values key, so bound that dictionary first; the
+        # upstream helper intentionally operates on one mapping level at a time. The
+        # canonical ToolResult above remains complete and durable in EventStore.
+        visible_values = bound_tool_result(
+            values,
+            max_bytes=max(1000, DEFAULT_TOOL_RESULT_MAX_BYTES - 1024),
+            spill_dir=None,
+            step=0,
+            tool_name=name,
+        )
+        model_visible = {
             "toolExecutionId": result["toolExecutionId"],
             "status": tool_result["status"],
             "exitCode": tool_result.get("exitCode"),
-            "values": values,
+            "values": visible_values,
             "replayed": bool(result.get("replayed")),
         }
+        return model_visible
 
     @staticmethod
     def _decode_arguments(value: Mapping[str, Any] | str) -> dict[str, Any]:
