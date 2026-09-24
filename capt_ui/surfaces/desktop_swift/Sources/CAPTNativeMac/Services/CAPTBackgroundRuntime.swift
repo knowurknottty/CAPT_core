@@ -48,6 +48,12 @@ actor CAPTBackgroundRuntime {
         return CAPTRuntimeControlProjection.capabilities(result)
     }
 
+    func botsSnapshot() throws -> CAPTBotSnapshot {
+        let response = try client.query(op: "bots", payload: [:])
+        let result = response["result"] as? [String: Any] ?? response
+        return CAPTRuntimeControlProjection.bots(result)
+    }
+
     func managedSkillsSnapshot() throws -> CAPTManagedSkillSnapshot {
         let response = try client.query(op: "managed_skills", payload: [:])
         let result = response["result"] as? [String: Any] ?? response
@@ -298,11 +304,13 @@ actor CAPTBackgroundRuntime {
         provider: String,
         model: String,
         promptIntelligence: String,
+        reasoningEffort: String = "",
         remoteCompilationAuthorized: Bool = false
     ) throws -> CAPTPromptProposal {
         try coordinator.compileProposal(
             original: original, targetRoot: targetRoot, provider: provider, model: model,
             promptIntelligence: promptIntelligence,
+            reasoningEffort: reasoningEffort,
             remoteCompilationAuthorized: remoteCompilationAuthorized
         )
     }
@@ -332,6 +340,7 @@ actor CAPTBackgroundRuntime {
         targetRoot: String,
         provider: String,
         model: String,
+        reasoningEffort: String = "",
         missionID: String? = nil,
         authoritySettings: CAPTExecutionAuthoritySettings = .default
     ) throws -> CAPTPendingApproval {
@@ -340,6 +349,7 @@ actor CAPTBackgroundRuntime {
             targetRoot: targetRoot,
             provider: provider,
             model: model,
+            reasoningEffort: reasoningEffort,
             missionID: missionID,
             authoritySettings: authoritySettings
         )

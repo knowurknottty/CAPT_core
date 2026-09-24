@@ -278,6 +278,20 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--provider", required=True, help="registered CAPT provider id")
     p.add_argument("--model", required=True)
     p.add_argument("--prompt", required=True)
+    p.add_argument(
+        "--reasoning-effort",
+        choices=("none", "minimal", "low", "medium", "high", "xhigh"),
+        default=None,
+        help="optional provider reasoning effort; approval-bound when supplied",
+    )
+    p.add_argument(
+        "--approve-exact-prompt",
+        action="store_true",
+        help=(
+            "record explicit approval for this exact provider/model/prompt/settings "
+            "and dispatch; without it, capt run creates the approval request only"
+        ),
+    )
     p.add_argument("--state-dir", default=None)
     p.add_argument("--idempotency-key", default=None)
     sub.add_parser("tui", help="launch the interactive CAPT operator console")
@@ -445,18 +459,103 @@ def _cmd_harness(args) -> int:
 def _cmd_run(args, as_json: bool) -> int:
     from capt_runtime.cli_ramp import default_paths, is_running
     from desktop.desktop_runtime_client import RuntimeClient
-    paths=default_paths()
+
+    paths = default_paths()
     if args.state_dir:
-        base=Path(args.state_dir).expanduser(); paths={"state_dir":base,"ledger":base/"runtime.db","sock":base/"runtime.sock","token":base/"runtime.token","pid":base/"runtime.pid"}
+        base = Path(args.state_dir).expanduser()
+        paths = {
+            "state_dir": base,
+            "ledger": base / "runtime.db",
+            "sock": base / "runtime.sock",
+            "token": base / "runtime.token",
+            "pid": base / "runtime.pid",
+        }
     if not paths["sock"].exists() or not is_running(paths["sock"]):
         return _fail("CAPT runtime is not running. Run: capt start")
-    client=RuntimeClient(str(paths["sock"]),str(paths["token"]))
+
+    base_key = args.idempotency_key or ("cli-run-" + uuid.uuid4().hex)
+    target_root = str(Path.cwd())
+    network_policy = "remote_allowed" if args.provider == "openrouter" else "local_only"
+    payload = {
+        "provider": args.provider,
+        "model": args.model,
+        "objective": args.prompt,
+        "targetRoot": target_root,
+        "authorityProfile": {
+            "filesystemScope": "project",
+            "filesystemRoot": target_root,
+            "fileMutationAllowed": False,
+            "shellAccessAllowed": False,
+            "providerNetworkPolicy": network_policy,
+        },
+        "promptEnhancement": "OFF",
+        "responseMode": "SPOCK",
+        "requestedContextBudget": 32_000,
+        "humanVerificationRequired": True,
+    }
+    if args.reasoning_effort:
+        payload["reasoningEffort"] = args.reasoning_effort
+
+    client = RuntimeClient(str(paths["sock"]), str(paths["token"]))
     try:
         client.connect()
-        receipt=client.command("run_approved_hermes_inspection", {"provider":args.provider,"model":args.model,"objective":args.prompt,"targetRoot":str(Path.cwd())}, args.idempotency_key)
-        print(_json_or_human(receipt,as_json))
-        return 0 if receipt.get("status") in ("accepted","idempotent") else 1
-    finally: client.disconnect()
+        approval = client.command(
+            "request_model_prompt_approval",
+            payload,
+            base_key + ":approval-request",
+        )
+        if approval.get("status") not in ("accepted", "idempotent"):
+            print(_json_or_human(approval, as_json))
+            return 1
+        planned = approval.get("result", approval)
+        required = ("requestId", "missionId", "taskId", "driverRunId")
+        if any(not planned.get(key) for key in required):
+            return _fail("runtime returned incomplete prompt approval receipt")
+
+        if not args.approve_exact_prompt:
+            pending = {
+                "status": "approval_required",
+                "idempotencyKey": base_key,
+                "approval": approval,
+                "hint": (
+                    "Review the exact provider/model/prompt/settings, then rerun with "
+                    "--approve-exact-prompt and the same --idempotency-key."
+                ),
+            }
+            print(_json_or_human(pending, as_json))
+            return 2
+
+        decision = client.command(
+            "submit_approval_decision",
+            {
+                "requestId": planned["requestId"],
+                "decision": "approve",
+                "note": "Explicit approval supplied by capt run --approve-exact-prompt.",
+            },
+            base_key + ":approval-decision",
+        )
+        if decision.get("status") not in ("accepted", "idempotent"):
+            print(_json_or_human(decision, as_json))
+            return 1
+
+        run_payload = dict(payload)
+        run_payload.update(
+            {
+                "approvalRequestId": planned["requestId"],
+                "missionId": planned["missionId"],
+                "taskId": planned["taskId"],
+                "driverRunId": planned["driverRunId"],
+            }
+        )
+        receipt = client.command(
+            "run_approved_hermes_inspection",
+            run_payload,
+            base_key + ":dispatch",
+        )
+        print(_json_or_human(receipt, as_json))
+        return 0 if receipt.get("status") in ("accepted", "idempotent") else 1
+    finally:
+        client.disconnect()
 
 
 def _cmd_ramp(args, as_json) -> int:

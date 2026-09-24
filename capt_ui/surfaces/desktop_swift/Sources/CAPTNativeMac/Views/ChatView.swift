@@ -115,6 +115,21 @@ struct ChatView: View {
             ComposerView(
                 draft: $draft,
                 promptIntelligence: $store.promptIntelligence,
+                reasoningEffort: Binding(
+                    get: { store.reasoningEffort },
+                    set: { store.setReasoningEffort($0) }
+                ),
+                remotePromptCompilationAllowed: Binding(
+                    get: { store.authoritySettings.remotePromptCompilationAllowed },
+                    set: { value in
+                        var settings = store.authoritySettings
+                        settings.remotePromptCompilationAllowed = value
+                        store.setAuthoritySettings(settings)
+                    }
+                ),
+                remotePromptCompilationAvailable:
+                    store.authoritySettings.providerNetwork == .remoteAllowed,
+                showRemotePromptCompilationControl: store.selectedProviderRequiresRemoteNetwork,
                 enabled: store.canComposeInActiveChat,
                 skillMode: store.skillSelectionMode,
                 highRiskAuthority: store.authoritySettings.isHighRisk
@@ -173,6 +188,10 @@ private struct ChatContextRail: View {
                     symbol: "brain.head.profile", tone: .violet
                 )
                 contextChip(
+                    "REASON", value: reasoningLabel,
+                    symbol: "dial.high", tone: .cyan
+                )
+                contextChip(
                     "SKILLS", value: store.skillSelectionMode.uppercased(),
                     symbol: "puzzlepiece.extension", tone: .cyan
                 )
@@ -204,6 +223,13 @@ private struct ChatContextRail: View {
             }
         }
         .background(.ultraThinMaterial)
+    }
+
+    private var reasoningLabel: String {
+        let frozen = store.pendingApproval?.reasoningEffort
+            ?? store.promptProposal?.reasoningEffort
+            ?? store.reasoningEffort
+        return (frozen.isEmpty ? "DEFAULT" : frozen).uppercased()
     }
 
     private var authorityLabel: String {
@@ -495,12 +521,17 @@ private struct ApprovalCard: View {
 private struct ComposerView: View {
     @Binding var draft: String
     @Binding var promptIntelligence: String
+    @Binding var reasoningEffort: String
+    @Binding var remotePromptCompilationAllowed: Bool
+    let remotePromptCompilationAvailable: Bool
+    let showRemotePromptCompilationControl: Bool
     let enabled: Bool
     let skillMode: String
     let highRiskAuthority: Bool
     let send: () -> Void
 
     private let modes = ["AUTO", "OFF", "OMNI", "META", "FORGE", "SIGMA"]
+    private let reasoningModes = ["", "none", "minimal", "low", "medium", "high", "xhigh"]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -515,6 +546,30 @@ private struct ComposerView: View {
                         .labelsHidden()
                         .pickerStyle(.menu)
                         .frame(width: 102)
+                        .disabled(!enabled)
+
+                        HStack(spacing: 5) {
+                            Image(systemName: "dial.high")
+                                .foregroundStyle(InversionTone.cyan.color)
+                            Picker("Reasoning", selection: $reasoningEffort) {
+                                ForEach(reasoningModes, id: \.self) { mode in
+                                    Text(mode.isEmpty ? "DEFAULT" : mode.uppercased()).tag(mode)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .frame(width: 96)
+                            .disabled(!enabled)
+                        }
+                        .help("Reasoning effort frozen into the proposal, HumanApproval, and provider dispatch")
+
+                        if showRemotePromptCompilationControl {
+                            Toggle("REMOTE PI", isOn: $remotePromptCompilationAllowed)
+                                .toggleStyle(.switch)
+                                .controlSize(.mini)
+                                .disabled(!enabled || !remotePromptCompilationAvailable)
+                                .help("Allow Prompt Intelligence to use the selected remote model")
+                        }
 
                         Text(promptIntelligence == "AUTO"
                              ? "CAPT selects the governed stage chain from the task."
@@ -532,6 +587,19 @@ private struct ComposerView: View {
                         if highRiskAuthority {
                             InversionStatusBadge("elevated authority", tone: .amber)
                         }
+                    }
+
+                    if showRemotePromptCompilationControl &&
+                        promptIntelligence != "OFF" &&
+                        !remotePromptCompilationAllowed {
+                        Label(
+                            remotePromptCompilationAvailable
+                                ? "Remote Prompt Intelligence is off. Enable REMOTE PI to enhance with the selected cloud model."
+                                : "Remote Prompt Intelligence is blocked because Provider Network is Local only.",
+                            systemImage: "brain.head.profile"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(InversionTone.amber.color)
                     }
 
                     HStack(alignment: .bottom, spacing: 10) {

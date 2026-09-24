@@ -665,3 +665,86 @@ def test_openai_tool_loop_preserves_final_answer_context_headroom(tmp_path: Path
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_openrouter_reasoning_effort_uses_reasoning_map_and_records_diagnostics(tmp_path: Path):
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _Server)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        driver = ProviderDriver(
+            str(tmp_path),
+            provider_id="openrouter",
+            model="stealth/space-bunny-alpha",
+            base_url=f"http://127.0.0.1:{server.server_port}/v1",
+            task_resolver=_resolver(),
+            reasoning_effort="xhigh",
+        )
+        out = asyncio.run(driver.submit({
+            "driverRunId": "dr-reasoning-openrouter",
+            "missionId": "m-reasoning",
+            "taskId": "t-reasoning",
+            "contextSlice": {},
+            "submittedAt": "2026-09-23T00:00:00Z",
+        }))
+        assert _Server.seen["body"]["reasoning"] == {"effort": "xhigh"}
+        assert "reasoning_effort" not in _Server.seen["body"]
+        assert out["diagnostics"]["reasoningEffort"] == "xhigh"
+        assert "ReasoningEffort: xhigh" in Path(
+            out["artifactCandidate"]["artifactPath"]
+        ).read_text()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_generic_openai_compatible_reasoning_effort_uses_top_level_field(tmp_path: Path):
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _Server)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        driver = ProviderDriver(
+            str(tmp_path),
+            provider_id="mtplx",
+            model="reasoning-model",
+            base_url=f"http://127.0.0.1:{server.server_port}/v1",
+            task_resolver=_resolver(),
+            reasoning_effort="high",
+        )
+        asyncio.run(driver.submit({
+            "driverRunId": "dr-reasoning-generic",
+            "missionId": "m-reasoning",
+            "taskId": "t-reasoning",
+            "contextSlice": {},
+            "submittedAt": "2026-09-23T00:00:00Z",
+        }))
+        assert _Server.seen["body"]["reasoning_effort"] == "high"
+        assert "reasoning" not in _Server.seen["body"]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_reasoning_effort_rejects_invalid_or_native_ollama_values(tmp_path: Path):
+    from capt_runtime.reasoning import ReasoningConfigurationError
+
+    with __import__("pytest").raises(
+        ReasoningConfigurationError, match="REASONING_EFFORT_UNSUPPORTED"
+    ):
+        ProviderDriver(
+            str(tmp_path / "bad"),
+            provider_id="openrouter",
+            model="model",
+            base_url="https://openrouter.ai/api/v1",
+            reasoning_effort="turbo-max",
+        )
+    with __import__("pytest").raises(
+        ReasoningConfigurationError, match="REASONING_EFFORT_UNSUPPORTED_PROVIDER"
+    ):
+        ProviderDriver(
+            str(tmp_path / "ollama"),
+            provider_id="ollama",
+            model="model",
+            base_url="http://127.0.0.1:11434/v1",
+            reasoning_effort="high",
+        )

@@ -175,6 +175,53 @@ def test_remote_glm_malformed_stage_falls_back_to_configured_local_compiler(monk
     assert "http://127.0.0.1:18085/v1/chat/completions" in calls
 
 
+def test_without_compiler_override_pi_uses_selected_execution_provider_model(monkeypatch, tmp_path):
+    from desktop.prompt_compiler_provider import build_prompt_compiler
+    from capt_runtime.prompt_compiler import PromptCompileRequest
+
+    ui = tmp_path / "ui"
+    ui.mkdir()
+    providers = _providers()
+    providers["providers"] = [providers["providers"][0]]
+    (ui / "providers.json").write_text(json.dumps(providers))
+    seen = {}
+
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+        def read(self, _limit=-1):
+            stage = {
+                "stage": "OMNI", "outcome": "enhanced", "scope": "prompt",
+                "inputs": ["operator prompt"], "outputs": ["execution prompt"],
+                "constraints": [], "successCriteria": ["clear"], "ambiguities": [],
+                "requestedCapabilities": [],
+            }
+            return json.dumps({"choices": [{"message": {"content": json.dumps(stage)}}]}).encode()
+
+    def fake_urlopen(request, timeout):
+        seen["body"] = json.loads(request.data.decode())
+        return Response()
+
+    monkeypatch.setattr("desktop.prompt_compiler_provider.resolve_secret", lambda *_a, **_k: "synthetic-key")
+    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen", fake_urlopen)
+
+    compiler = build_prompt_compiler(ui)
+    proposal = compiler.compile(PromptCompileRequest(
+        original_prompt="Sharpen this prompt.",
+        requested_engine="OMNI",
+        execution_provider="openrouter",
+        execution_model="z-ai/glm-5.3-flash",
+        reasoning_effort="high",
+        remote_compilation_authorized=True,
+    ))
+
+    assert proposal.status == "ready_for_approval"
+    assert proposal.stage_records[0].provider_id == "openrouter"
+    assert proposal.stage_records[0].model == "z-ai/glm-5.3-flash"
+    assert seen["body"]["model"] == "z-ai/glm-5.3-flash"
+    assert seen["body"]["reasoning"] == {"effort": "high"}
+
+
 def test_unreachable_single_local_compiler_degrades_to_original_proposal(monkeypatch, tmp_path):
     from urllib.error import URLError
     from desktop.prompt_compiler_provider import build_prompt_compiler

@@ -64,6 +64,7 @@ public struct CAPTPendingApproval: Codable, Equatable, Sendable {
     public let targetRoot: String
     public let provider: String
     public let model: String
+    public let reasoningEffort: String?
     public let promptAssemblyDigest: String
     public let skillNames: [String]
     public let expiresAt: Date?
@@ -80,6 +81,7 @@ public struct CAPTPendingApproval: Codable, Equatable, Sendable {
         targetRoot: String,
         provider: String,
         model: String,
+        reasoningEffort: String? = nil,
         promptAssemblyDigest: String,
         skillNames: [String] = [],
         expiresAt: Date? = nil,
@@ -95,6 +97,7 @@ public struct CAPTPendingApproval: Codable, Equatable, Sendable {
         self.targetRoot = targetRoot
         self.provider = provider
         self.model = model
+        self.reasoningEffort = reasoningEffort
         self.promptAssemblyDigest = promptAssemblyDigest
         self.skillNames = skillNames
         self.expiresAt = expiresAt
@@ -105,7 +108,7 @@ public struct CAPTPendingApproval: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case requestID, missionID, taskID, driverRunID, objective, targetRoot
-        case provider, model, promptAssemblyDigest, skillNames, expiresAt
+        case provider, model, reasoningEffort, promptAssemblyDigest, skillNames, expiresAt
         case proposalID, proposalRevision, selectedPromptKind
     }
 
@@ -119,6 +122,7 @@ public struct CAPTPendingApproval: Codable, Equatable, Sendable {
         targetRoot = try c.decode(String.self, forKey: .targetRoot)
         provider = try c.decode(String.self, forKey: .provider)
         model = try c.decode(String.self, forKey: .model)
+        reasoningEffort = try c.decodeIfPresent(String.self, forKey: .reasoningEffort)
         promptAssemblyDigest = try c.decode(String.self, forKey: .promptAssemblyDigest)
         skillNames = try c.decodeIfPresent([String].self, forKey: .skillNames) ?? []
         expiresAt = try c.decodeIfPresent(Date.self, forKey: .expiresAt)

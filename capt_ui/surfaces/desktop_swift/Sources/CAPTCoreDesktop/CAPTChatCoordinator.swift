@@ -30,6 +30,7 @@ public final class CAPTChatCoordinator {
         provider: String,
         model: String,
         promptIntelligence: String = "AUTO",
+        reasoningEffort: String = "",
         remoteCompilationAuthorized: Bool = false
     ) throws -> CAPTPromptProposal {
         let response = try client.command(
@@ -41,6 +42,7 @@ public final class CAPTChatCoordinator {
                 "mode": "normal",
                 "provider": provider,
                 "model": model,
+                "reasoningEffort": reasoningEffort,
                 "requestedContextBudget": 32_000,
                 "requestedCapabilities": [],
                 "remoteCompilationAuthorized": remoteCompilationAuthorized,
@@ -129,6 +131,7 @@ public final class CAPTChatCoordinator {
         targetRoot: String,
         provider: String,
         model: String,
+        reasoningEffort: String = "",
         missionID: String? = nil,
         authoritySettings: CAPTExecutionAuthoritySettings = .default
     ) throws -> CAPTPendingApproval {
@@ -137,6 +140,7 @@ public final class CAPTChatCoordinator {
             "targetRoot": targetRoot,
             "provider": provider,
             "model": model,
+            "reasoningEffort": reasoningEffort,
             "requestedContextBudget": 32_000,
             "responseMode": "SPOCK",
             "promptEnhancement": "OFF",
@@ -180,6 +184,7 @@ public final class CAPTChatCoordinator {
             targetRoot: targetRoot,
             provider: provider,
             model: model,
+            reasoningEffort: result["reasoningEffort"] as? String,
             promptAssemblyDigest: digest,
             skillNames: skillNames,
             expiresAt: expiresAt
@@ -218,6 +223,7 @@ public final class CAPTChatCoordinator {
                 "targetRoot": pending.targetRoot,
                 "provider": pending.provider,
                 "model": pending.model,
+                "reasoningEffort": pending.reasoningEffort ?? "",
                 "missionId": pending.missionID,
                 "taskId": pending.taskID,
                 "driverRunId": pending.driverRunID,
@@ -274,7 +280,9 @@ public final class CAPTChatCoordinator {
         return CAPTPendingApproval(
             requestID: requestID, missionID: missionID, taskID: taskID,
             driverRunID: driverRunID, objective: objective, targetRoot: targetRoot,
-            provider: provider, model: model, promptAssemblyDigest: digest,
+            provider: provider, model: model,
+            reasoningEffort: result["reasoningEffort"] as? String,
+            promptAssemblyDigest: digest,
             skillNames: skillNames, expiresAt: expiresAt, proposalID: proposalID,
             proposalRevision: proposalRevision, selectedPromptKind: selectedPromptKind
         )

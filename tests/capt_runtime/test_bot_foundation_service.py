@@ -116,6 +116,22 @@ def test_lab_board_human_blocker_survives_service_boundary():
     assert store.aggregate_version("lab_board-board1") == 2
 
 
+def test_runtime_query_projects_registered_bots_without_live_authority_material():
+    from desktop.capt_runtime_service import RuntimeQueryService
+
+    store = EventStore(":memory:")
+    service = GovernedRuntimeService(store)
+    service.register_bot(_bot(), _meta("register-bot-query"))
+
+    result = RuntimeQueryService(store).handle({"op": "bots"})["result"]
+    assert result["count"] == 1
+    assert result["bots"][0]["botId"] == "researcher"
+    assert result["bots"][0]["promotionMode"] == "governed"
+    assert result["bots"][0]["privateData"] == "local_only"
+    assert "credentials" not in result["bots"][0]
+    assert "capabilities" not in result["bots"][0]
+
+
 def test_bot_stream_does_not_contain_authority_or_secrets():
     store = EventStore(":memory:")
     service = GovernedRuntimeService(store)

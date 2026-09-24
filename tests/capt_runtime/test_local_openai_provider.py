@@ -108,7 +108,9 @@ def test_runtime_dispatches_credentialless_local_openai_provider(tmp_path: Path,
     client = RuntimeClient(str(sock), str(token))
     try:
         client.connect()
-        objective = "Reply with exactly CAPT_LOCAL_NOAUTH_OK and no other text."
+        # Regression: approval canonicalizes outer whitespace; execution must
+        # reconstruct the same canonical objective bytes or its approval digest drifts.
+        objective = "Reply with exactly CAPT_LOCAL_NOAUTH_OK and no other text.\n"
         approval = client.command("request_model_prompt_approval", {
             "objective": objective,
             "targetRoot": str(target),

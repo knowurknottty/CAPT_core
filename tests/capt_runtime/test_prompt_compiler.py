@@ -209,6 +209,32 @@ def test_runner_payload_contains_stage_instructions_and_closed_response_contract
     assert all("tools" not in payload for payload in seen)
 
 
+def test_meta_observes_omni_without_rewriting_execution_prompt():
+    def transport(payload):
+        stage = payload["stage"]
+        return {
+            "stage": stage,
+            "outcome": "omni execution contract" if stage == "OMNI" else "meta telemetry only",
+            "scope": "operator request",
+            "inputs": ["operator prompt"],
+            "outputs": ["execution prompt"],
+            "constraints": ["preserve operator intent"],
+            "successCriteria": ["reviewable"],
+            "ambiguities": [],
+            "requestedCapabilities": [],
+        }
+
+    proposal = PromptCompiler(
+        runner=BoundedPromptCompilerRunner(transport),
+        provider=CompilerProvider("openrouter", "test-model", "remote"),
+        remote_compilation_authorized=True,
+    ).compile(_request(requested_engine="AUTO"))
+
+    assert proposal.stage_chain == (PromptStageName.OMNI, PromptStageName.META)
+    assert proposal.stage_records[1].input_digest == proposal.stage_records[1].output_digest
+    assert proposal.proposed_prompt_digest == proposal.stage_records[0].output_digest
+
+
 def test_auto_routes_software_work_through_all_standard_engines():
     route = route_stages(_request(original_prompt="Implement and test a provider selection fix."))
     assert route.stage_chain == (

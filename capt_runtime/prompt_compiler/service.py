@@ -88,14 +88,24 @@ class PromptCompiler:
         for stage in route:
             stage_context = None
             if stage in (PromptStageName.FORGE, PromptStageName.SIGMA):
+                expectations = list(acceptance_criteria)
+                if not expectations:
+                    expectations = [
+                        "Implement the operator objective and produce evidence satisfying its stated success criteria."
+                    ]
                 stage_context = stage_repository_context(
-                    request.target_root, request.original_prompt, list(acceptance_criteria) or [request.original_prompt]
+                    request.target_root, request.original_prompt, expectations
                 )
             result = self._runner.run(
                 stage, request, self._provider, current_prompt=current_prompt, stage_context=stage_context
             )
             self.admit_stage_result(request, result)
-            next_prompt = render_execution_prompt(request.original_prompt, result)
+            # META critiques and learns from OMNI; it does not rewrite the execution prompt.
+            next_prompt = (
+                current_prompt
+                if stage is PromptStageName.META
+                else render_execution_prompt(request.original_prompt, result)
+            )
             records.append(self._record(stage, current_prompt, next_prompt, True))
             unresolved.extend(result.ambiguities)
             acceptance_criteria = result.success_criteria
