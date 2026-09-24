@@ -21,17 +21,17 @@ TOKEN = STATE_ROOT / "runtime.token"
 MISSION_ID = "m-capt-donor-convergence-r1-20260924"
 COUNCIL_ID = "council-capt-donor-convergence-r1-20260924"
 MANIFEST = "docs/missions/CAPT_DONOR_CHERRYPICK_INTEGRATION_R1.json"
-STATE_FILE = TARGET / ".capt-mission" / "donor-convergence-r1.json"
+STATE_FILE = TARGET / ".capt-mission" / "donor-convergence-r1-r2.json"
 EXPIRES_AT = "2026-09-25T06:00:00Z"
-REQUESTED_CONTEXT_BUDGET = 120_000
+REQUESTED_CONTEXT_BUDGET = 128_000
 
 COHORTS = (
     {
         "cohortId": "qwen38-flash",
         "provider": "openrouter",
         "model": "qwen/qwen3.8-flash",
-        "taskId": "t-capt-donor-qwen38-r1",
-        "driverRunId": "dr-capt-donor-qwen38-r1",
+        "taskId": "t-capt-donor-qwen38-r2",
+        "driverRunId": "dr-capt-donor-qwen38-r2",
         "phase": (
             "You are sequential cohort 1/3. Establish the source/provenance matrix "
             "across the entire donor manifest, then perform the strongest justified "
@@ -46,8 +46,8 @@ COHORTS = (
         "cohortId": "mimo26-flash",
         "provider": "openrouter",
         "model": "xiaomi/mimo-v2.6-flash",
-        "taskId": "t-capt-donor-mimo26-r1",
-        "driverRunId": "dr-capt-donor-mimo26-r1",
+        "taskId": "t-capt-donor-mimo26-r2",
+        "driverRunId": "dr-capt-donor-mimo26-r2",
         "phase": (
             "You are sequential cohort 2/3. Treat the current worktree, including "
             "cohort 1 changes, as the working artifact. Independently challenge every "
@@ -61,8 +61,8 @@ COHORTS = (
         "cohortId": "glm53-flash",
         "provider": "openrouter",
         "model": "z-ai/glm-5.3-flash",
-        "taskId": "t-capt-donor-glm53-r1",
-        "driverRunId": "dr-capt-donor-glm53-r1",
+        "taskId": "t-capt-donor-glm53-r2",
+        "driverRunId": "dr-capt-donor-glm53-r2",
         "phase": (
             "You are sequential cohort 3/3 and final convergence gate. Treat prior "
             "cohort changes as inputs, not conclusions. Close every remaining donor row, "
@@ -176,7 +176,7 @@ def request() -> dict[str, Any]:
             receipt = client.command(
                 "request_model_prompt_approval",
                 payload,
-                f"idem-capt-donor-r1-approval-{index}-20260924",
+                f"idem-capt-donor-r1-r2-approval-{index}-20260924",
             )
             if receipt.get("status") not in {"accepted", "idempotent"}:
                 raise RuntimeError("approval request failed: " + json.dumps(receipt))
@@ -257,7 +257,7 @@ def approve_and_run() -> dict[str, Any]:
                     "submit_approval_decision",
                     {"requestId": row["requestId"], "decision": "approve",
                      "note": "Explicit human approval for CAPT donor convergence council."},
-                    f"idem-capt-donor-r1-decision-{index}-20260924",
+                    f"idem-capt-donor-r1-r2-decision-{index}-20260924",
                 )
                 if decision.get("status") not in {"accepted", "idempotent"}:
                     raise RuntimeError("approval decision failed: " + json.dumps(decision))
@@ -268,7 +268,7 @@ def approve_and_run() -> dict[str, Any]:
                 "maxConcurrentCohorts": 1,
                 "executions": state["executions"],
             },
-            "idem-capt-donor-r1-council-run-20260924",
+            "idem-capt-donor-r1-r2-council-run-20260924",
         )
     finally:
         client.disconnect()
