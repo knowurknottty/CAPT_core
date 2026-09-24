@@ -55,12 +55,14 @@ def build_bound_model_operator_approval(
     human_verification_required: bool,
     executable: str,
     staging_root: str,
+    requested_execution_seconds: int = 600,
     context_pack_digest: str = "",
     continuation_context: Optional[List[Dict[str, Any]]] = None,
     authored_skill_context: Optional[Dict[str, Any]] = None,
     proposal_binding: Optional[Dict[str, Any]] = None,
     authority_profile: Optional[Dict[str, Any]] = None,
     reasoning_effort: str = "",
+    cohort_spec: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Return the model-visible assembly plus its execution admission binding."""
     assembly = build_model_operator_prompt_assembly(
@@ -102,6 +104,7 @@ def build_bound_model_operator_approval(
         "provider": provider_id,
         "model": model_id,
         "requestedContextBudget": int(requested_context_budget),
+        "requestedExecutionSeconds": int(requested_execution_seconds),
         "reasoningEffort": str(reasoning_effort or ""),
         "humanVerificationRequired": bool(human_verification_required),
         "executable": executable_selector,
@@ -115,6 +118,8 @@ def build_bound_model_operator_approval(
     if authority_profile is not None:
         binding["authorityProfile"] = dict(authority_profile)
         binding["modelToolSchemaDigest"] = model_tool_schema_digest(authority_profile)
+    if cohort_spec is not None:
+        binding["cohortSpec"] = dict(cohort_spec)
     if proposal_binding:
         binding.update(dict(proposal_binding))
     approval_digest = digest(

@@ -50,6 +50,8 @@ from capt_runtime.store import EventStore
 from capt_runtime.ipc_framing import FrameProtocolError, recv_json, send_json
 from capt_runtime.resource_governor import TokenCostGovernor
 from capt_runtime.reasoning import ReasoningConfigurationError, normalize_reasoning_effort
+from capt_runtime.cohort_contract import compile_cohort_objective, normalize_cohort_spec
+from capt_runtime.vessel_charter import validate_vessel_artifact
 from capt_runtime.replay import replay_to_sequence
 from capt_runtime.verification import (
     build_artifact_hash_evidence,
@@ -987,7 +989,7 @@ class RuntimeQueryService:
                 return {"ok": True, "result": {
                     "schemaVersion": CONTRACT_SCHEMA_VERSION,
                     "queryOperations": ["identity", "capabilities", "list_aggregates", "bots", "approvals", "missions", "tasks", "checkpoints", "security_rejections", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers", "managed_skills", "operator_control_snapshot", "operator_session_get", "operator_proposal_get", "operator_execution_state"],
-                    "commandOperations": ["create_mission", "operator_chat_new", "operator_execution_config_set", "operator_prompt_submit", "operator_proposal_select", "compile_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "submit_provider_result_review", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool", "install_managed_skill", "create_managed_skill"],
+                    "commandOperations": ["create_mission", "operator_chat_new", "operator_execution_config_set", "operator_prompt_submit", "operator_proposal_select", "compile_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "submit_provider_result_review", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "run_approved_council_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool", "install_managed_skill", "create_managed_skill"],
                     "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True, "toolRegistry": True, "toolBroker": True, "mcpClient": self.mcp_manager is not None, "promptCompiler": True, "botFoundation": True},
                     "lifecycleOperations": {"checkpoint": True, "shutdown": True, "resume": True},
                 }}
@@ -1233,6 +1235,14 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     raise ValueError(str(exc)) from exc
                 if reasoning_effort and not provider_id:
                     raise ValueError("REASONING_EFFORT_REQUIRES_PROVIDER")
+                try:
+                    cohort_spec = normalize_cohort_spec(payload.get("cohortSpec"))
+                except ValueError as exc:
+                    raise ValueError(str(exc)) from exc
+                bound_objective = compile_cohort_objective(
+                    str(objective), provider=str(provider_id or ""),
+                    model=str(provider_model or ""), cohort_spec=cohort_spec,
+                )
                 provider = None
                 provider_key = ""
                 if provider_id:
@@ -1269,6 +1279,11 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 )
                 approval_scope = approval_state.get("scope") or {}
                 approval_binding = approval_scope.get("approvalBinding") or {}
+                requested_execution_seconds = int(
+                    approval_binding.get("requestedExecutionSeconds", 600)
+                )
+                if requested_execution_seconds < 60 or requested_execution_seconds > 3600:
+                    raise AuthorityViolation("MODEL_EXECUTION_SECONDS_OUT_OF_RANGE")
                 frozen_authority = approval_binding.get("authorityProfile")
                 authority_profile = (
                     revalidate_normalized_model_authority(
@@ -1287,7 +1302,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     if credential_required(provider.id, provider.kind, provider.base_url) and not provider_key:
                         raise ValueError("PROVIDER_CREDENTIAL_UNAVAILABLE")
                 prompt_assembly = build_prompt_assembly(
-                    human_prompt=str(objective), response_mode=response_mode,
+                    human_prompt=bound_objective, response_mode=response_mode,
                     enhancement_engine=enhancement_engine,
                     context_pack_digest=context_pack_digest,
                     tool_schema_digest=contracts.digest({"operations": ["RepositoryRead", "FilesystemRead", "ArtifactCreate", "AnalysisOnly"]}),
@@ -1298,11 +1313,12 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 # model-visible assembly. Client booleans are provenance only;
                 # no client can use OFF/no-transform as a governance bypass.
                 bound_assembly = build_bound_model_operator_approval(
-                    human_prompt=str(objective), response_mode=response_mode,
+                    human_prompt=bound_objective, response_mode=response_mode,
                     enhancement_engine=enhancement_engine, mission_id=str(mission_id),
                     task_id=str(task_id), driver_run_id=str(run_id), target_root=str(target_root),
                     provider=str(provider_id or ""), model=str(provider_model or ""),
                     requested_context_budget=requested_context_budget,
+                    requested_execution_seconds=requested_execution_seconds,
                     human_verification_required=human_verification_required,
                     executable=str(executable or ""),
                     reasoning_effort=reasoning_effort,
@@ -1312,6 +1328,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     authored_skill_context=skill_context,
                     proposal_binding=proposal_binding,
                     authority_profile=authority_profile,
+                    cohort_spec=cohort_spec,
                 )
                 # This read-only check catches a mismatched approval before the
                 # command service consumes the one-use receipt.
@@ -1334,6 +1351,8 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         "claimId": str(claim_id), "policyDecisionId": str(policy_id),
                         "requestedContextBudget": requested_context_budget,
                         "reasoningEffort": reasoning_effort,
+                        "requestedExecutionSeconds": requested_execution_seconds,
+                        "cohortSpec": cohort_spec,
                         "effectiveBudget": effective_budget,
                         "responseMode": response_mode,
                         "enhancementEngine": enhancement_engine,
@@ -1374,9 +1393,14 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     if provider is None or not provider_model:
                         raise ValueError("PROVIDER_OR_MODEL_UNAVAILABLE")
                 requested_context_budget = prepared.data["requestedContextBudget"]
+                requested_execution_seconds = prepared.data["requestedExecutionSeconds"]
                 reasoning_effort = str(prepared.data.get("reasoningEffort") or "")
                 effective_budget = prepared.data["effectiveBudget"]
                 human_verification_required = prepared.data["humanVerificationRequired"]
+                cohort_spec = (
+                    dict(prepared.data.get("cohortSpec"))
+                    if prepared.data.get("cohortSpec") else None
+                )
                 prompt_assembly = prepared.data["promptAssembly"]
                 dispatch_prompt = prepared.data["dispatchPrompt"]
                 skill_context = (
@@ -1613,7 +1637,11 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     )
                 if skill_context is not None:
                     host.bind_prepared_authored_skills(skill_context, skill_names)
-                driver_budgets = {"maxSeconds": 600, "maxArtifacts": 1, "maxObservations": 10}
+                driver_budgets = {
+                    "maxSeconds": requested_execution_seconds,
+                    "maxArtifacts": 1,
+                    "maxObservations": 10,
+                }
                 if isinstance(effective_budget, int) and not isinstance(effective_budget, bool) and effective_budget > 0:
                     driver_budgets["maxTokens"] = effective_budget
                 ctx = host.build_context(
@@ -1701,6 +1729,10 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 # 4. Verification + ClaimGuard (CAPT-authored).
                 artifact_path = out["artifactCandidate"]["artifactPath"]
                 artifact_digest = out["artifactCandidate"]["artifactDigest"]
+                cohort_validation = validate_vessel_artifact(artifact_path, cohort_spec)
+                charter_failed = bool(
+                    cohort_validation.get("required") and not cohort_validation.get("valid")
+                )
                 baseline_ev_id = "ev-" + commands.fingerprint(
                     "artifact_hash", {"artifact": baseline["artifactDigest"], "role": "verification_baseline"}
                 )
@@ -1731,7 +1763,9 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 )
                 claim_record = {
                     "schemaVersion": "1.0.0", "claimId": claim_id, "missionId": mission_id,
-                    "taskId": task_id, "kind": "completion", "statement": accepted,
+                    "taskId": task_id,
+                    "kind": "observation" if charter_failed else "completion",
+                    "statement": accepted,
                     "evidenceIds": [baseline_ev_id, result_ev_id], "promotionState": "proposed",
                     "proposedBy": {"actorId": "cog-1", "kind": "cognitive_plane"},
                     "proposedAt": now, "sourceProposalId": None,
@@ -1756,7 +1790,18 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 # verification.  Keep the claim proposed and the task in the
                 # aggregate's existing awaiting_verification state; a later
                 # verification/ClaimGuard authority must perform any promotion.
-                svc.transition_task(task_id, "awaiting_verification", "provider response recorded; independent verification required", exec_meta("taskawaitingverification"))
+                if charter_failed:
+                    svc.transition_task(
+                        task_id, "failed",
+                        "approval-bound Vessel Charter ledger incomplete",
+                        exec_meta("taskcohortinvalid"),
+                    )
+                else:
+                    svc.transition_task(
+                        task_id, "awaiting_verification",
+                        "provider response recorded; independent verification required",
+                        exec_meta("taskawaitingverification"),
+                    )
                 create_checkpoint(store, "cp-model-" + command_id, now,
                                   contracts.digest({"policyBundle": "model-operator", "version": 1}))
                 receipt = {
@@ -1773,6 +1818,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     "providerProvenance": out.get("diagnostics", {}) if provider is not None else {},
                     "cognitiveProvenance": cognitive_provenance,
                     "authoredSkills": summarize_skill_context(ctx.get("skillContext")),
+                    "cohortValidation": cohort_validation,
                 }
                 store.complete_claimed_command(key, command_fingerprint, receipt)
                 return receipt

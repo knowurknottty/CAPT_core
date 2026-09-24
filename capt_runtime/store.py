@@ -217,13 +217,15 @@ class EventStore(object):
                     )
                     changed = True
         if changed:
-            self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            self._conn.execute("VACUUM")
+            with self._lock:
+                self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                self._conn.execute("VACUUM")
 
     # -- lifecycle ---------------------------------------------------------
 
     def close(self) -> None:
-        self._conn.close()
+        with self._lock:
+            self._conn.close()
 
     def subscribe(self, handler: Callable[[Dict[str, Any]], None]) -> None:
         """Register a post-commit subscriber. Called only from dispatch()."""
@@ -244,18 +246,20 @@ class EventStore(object):
     # -- reads -------------------------------------------------------------
 
     def aggregate_version(self, stream_id: str) -> int:
-        row = self._conn.execute(
-            "SELECT version FROM aggregates WHERE stream_id = ?", (stream_id,)
-        ).fetchone()
-        return int(row["version"]) if row else 0
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT version FROM aggregates WHERE stream_id = ?", (stream_id,)
+            ).fetchone()
+            return int(row["version"]) if row else 0
 
     def load_state(self, stream_id: str) -> Optional[Dict[str, Any]]:
-        row = self._conn.execute(
-            "SELECT stream_id, state_json FROM aggregates WHERE stream_id = ?", (stream_id,)
-        ).fetchone()
-        return self._open_json(
-            row["state_json"], table="aggregates", column="state_json", key=row["stream_id"]
-        ) if row else None
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT stream_id, state_json FROM aggregates WHERE stream_id = ?", (stream_id,)
+            ).fetchone()
+            return self._open_json(
+                row["state_json"], table="aggregates", column="state_json", key=row["stream_id"]
+            ) if row else None
 
     def require_state(self, stream_id: str) -> Dict[str, Any]:
         state = self.load_state(stream_id)
@@ -264,24 +268,27 @@ class EventStore(object):
         return state
 
     def head_sequence(self) -> int:
-        row = self._conn.execute("SELECT MAX(global_sequence) AS m FROM events").fetchone()
-        return int(row["m"]) if row and row["m"] is not None else 0
+        with self._lock:
+            row = self._conn.execute("SELECT MAX(global_sequence) AS m FROM events").fetchone()
+            return int(row["m"]) if row and row["m"] is not None else 0
 
     def head_chain(self) -> str:
-        row = self._conn.execute(
-            "SELECT chain_digest FROM events ORDER BY global_sequence DESC LIMIT 1"
-        ).fetchone()
-        return row["chain_digest"] if row else GENESIS_CHAIN
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT chain_digest FROM events ORDER BY global_sequence DESC LIMIT 1"
+            ).fetchone()
+            return row["chain_digest"] if row else GENESIS_CHAIN
 
     def read_events(self, after_sequence: int = 0) -> List[Dict[str, Any]]:
-        rows = self._conn.execute(
-            "SELECT event_id, envelope_json FROM events WHERE global_sequence > ? "
-            "ORDER BY global_sequence ASC",
-            (after_sequence,),
-        ).fetchall()
-        return [self._open_json(
-            r["envelope_json"], table="events", column="envelope_json", key=r["event_id"]
-        ) for r in rows]
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT event_id, envelope_json FROM events WHERE global_sequence > ? "
+                "ORDER BY global_sequence ASC",
+                (after_sequence,),
+            ).fetchall()
+            return [self._open_json(
+                r["envelope_json"], table="events", column="envelope_json", key=r["event_id"]
+            ) for r in rows]
 
     def read_recent_events(
         self, after_sequence: int = 0, limit: int = 250
@@ -302,32 +309,36 @@ class EventStore(object):
         return decoded
 
     def read_stream(self, stream_id: str) -> List[Dict[str, Any]]:
-        rows = self._conn.execute(
-            "SELECT event_id, envelope_json FROM events WHERE stream_id = ? "
-            "ORDER BY stream_version ASC",
-            (stream_id,),
-        ).fetchall()
-        return [self._open_json(
-            r["envelope_json"], table="events", column="envelope_json", key=r["event_id"]
-        ) for r in rows]
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT event_id, envelope_json FROM events WHERE stream_id = ? "
+                "ORDER BY stream_version ASC",
+                (stream_id,),
+            ).fetchall()
+            return [self._open_json(
+                r["envelope_json"], table="events", column="envelope_json", key=r["event_id"]
+            ) for r in rows]
 
     def all_aggregates(self) -> List[Tuple[str, str, int]]:
-        rows = self._conn.execute(
-            "SELECT stream_id, kind, version FROM aggregates ORDER BY stream_id"
-        ).fetchall()
-        return [(r["stream_id"], r["kind"], int(r["version"])) for r in rows]
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT stream_id, kind, version FROM aggregates ORDER BY stream_id"
+            ).fetchall()
+            return [(r["stream_id"], r["kind"], int(r["version"])) for r in rows]
 
     def pending_outbox(self) -> List[str]:
-        rows = self._conn.execute(
-            "SELECT event_id FROM outbox WHERE status = 'pending' "
-            "ORDER BY global_sequence ASC"
-        ).fetchall()
-        return [r["event_id"] for r in rows]
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT event_id FROM outbox WHERE status = 'pending' "
+                "ORDER BY global_sequence ASC"
+            ).fetchall()
+            return [r["event_id"] for r in rows]
 
     def find_idempotent(self, key: str) -> Optional[sqlite3.Row]:
-        return self._conn.execute(
-            "SELECT * FROM idempotency WHERE idempotency_key = ?", (key,)
-        ).fetchone()
+        with self._lock:
+            return self._conn.execute(
+                "SELECT * FROM idempotency WHERE idempotency_key = ?", (key,)
+            ).fetchone()
 
     def idempotent_result(self, key: str) -> Optional[Dict[str, Any]]:
         """Return a defensive copy of a durable command receipt."""
@@ -568,16 +579,17 @@ class EventStore(object):
         """
         delivered = 0
         for event_id in self.pending_outbox():
-            row = self._conn.execute(
-                "SELECT event_id, envelope_json FROM events WHERE event_id = ?", (event_id,)
-            ).fetchone()
-            if row is None:
-                raise IntegrityViolation(
-                    "outbox references event %s with no ledger row" % event_id
+            with self._lock:
+                row = self._conn.execute(
+                    "SELECT event_id, envelope_json FROM events WHERE event_id = ?", (event_id,)
+                ).fetchone()
+                if row is None:
+                    raise IntegrityViolation(
+                        "outbox references event %s with no ledger row" % event_id
+                    )
+                envelope = self._open_json(
+                    row["envelope_json"], table="events", column="envelope_json", key=row["event_id"]
                 )
-            envelope = self._open_json(
-                row["envelope_json"], table="events", column="envelope_json", key=row["event_id"]
-            )
             for handler in self._subscribers:
                 handler(envelope)
             with self.transaction() as conn:
@@ -594,11 +606,12 @@ class EventStore(object):
     def verify_chain(self) -> str:
         """Recompute the ledger hash chain. Raises on any mismatch."""
         chain = GENESIS_CHAIN
-        rows = self._conn.execute(
-            "SELECT event_id, payload_digest, chain_digest, envelope_json, "
-            "global_sequence, stream_id, stream_version FROM events "
-            "ORDER BY global_sequence ASC"
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT event_id, payload_digest, chain_digest, envelope_json, "
+                "global_sequence, stream_id, stream_version FROM events "
+                "ORDER BY global_sequence ASC"
+            ).fetchall()
         last_by_stream: Dict[str, int] = {}
         for row in rows:
             envelope = self._open_json(
@@ -639,23 +652,25 @@ class EventStore(object):
             )
 
     def load_checkpoint(self, checkpoint_id: str) -> Dict[str, Any]:
-        row = self._conn.execute(
-            "SELECT checkpoint_id, manifest_json FROM checkpoints WHERE checkpoint_id = ?",
-            (checkpoint_id,),
-        ).fetchone()
-        if row is None:
-            raise NotFound("no checkpoint %s" % checkpoint_id)
-        return self._open_json(
-            row["manifest_json"], table="checkpoints", column="manifest_json", key=row["checkpoint_id"]
-        )
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT checkpoint_id, manifest_json FROM checkpoints WHERE checkpoint_id = ?",
+                (checkpoint_id,),
+            ).fetchone()
+            if row is None:
+                raise NotFound("no checkpoint %s" % checkpoint_id)
+            return self._open_json(
+                row["manifest_json"], table="checkpoints", column="manifest_json", key=row["checkpoint_id"]
+            )
 
     def latest_checkpoint(self) -> Optional[Dict[str, Any]]:
-        row = self._conn.execute(
-            "SELECT checkpoint_id, manifest_json FROM checkpoints ORDER BY global_sequence DESC, rowid DESC LIMIT 1"
-        ).fetchone()
-        return self._open_json(
-            row["manifest_json"], table="checkpoints", column="manifest_json", key=row["checkpoint_id"]
-        ) if row else None
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT checkpoint_id, manifest_json FROM checkpoints ORDER BY global_sequence DESC, rowid DESC LIMIT 1"
+            ).fetchone()
+            return self._open_json(
+                row["manifest_json"], table="checkpoints", column="manifest_json", key=row["checkpoint_id"]
+            ) if row else None
 
     def list_checkpoints(self, limit: int = 20) -> List[Dict[str, Any]]:
         """Summarise checkpoints newest-first, from the table's own columns.
@@ -665,11 +680,12 @@ class EventStore(object):
         them must load the manifest explicitly — this method never opens one.
         Ordered exactly as :meth:`latest_checkpoint`.
         """
-        rows = self._conn.execute(
-            "SELECT checkpoint_id, integrity_digest, global_sequence "
-            "FROM checkpoints ORDER BY global_sequence DESC, rowid DESC LIMIT ?",
-            (max(0, int(limit)),),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT checkpoint_id, integrity_digest, global_sequence "
+                "FROM checkpoints ORDER BY global_sequence DESC, rowid DESC LIMIT ?",
+                (max(0, int(limit)),),
+            ).fetchall()
         return [
             {
                 "checkpointId": row["checkpoint_id"],
@@ -702,11 +718,12 @@ class EventStore(object):
             )
 
     def list_security_rejections(self, limit: int = 100) -> List[Dict[str, Any]]:
-        rows = self._conn.execute(
-            "SELECT rejection_id, timestamp, rejection_kind, source_ip, actor_id, details_json "
-            "FROM security_rejections ORDER BY timestamp DESC, rowid DESC LIMIT ?",
-            (limit,),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT rejection_id, timestamp, rejection_kind, source_ip, actor_id, details_json "
+                "FROM security_rejections ORDER BY timestamp DESC, rowid DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
         return [
             {
                 "rejectionId": row["rejection_id"],

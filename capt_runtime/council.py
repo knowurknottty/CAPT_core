@@ -33,6 +33,7 @@ class CouncilTier(str, Enum):
     MEDIUM = "medium"
     LARGE = "large"
     EXTREME = "extreme"
+    CUSTOM = "custom"
 
 
 @dataclass(frozen=True)
@@ -103,11 +104,18 @@ class VesselDispatchIntent:
 def validate_council(definition: CouncilDefinition) -> None:
     if not definition.council_id.strip():
         raise CouncilValidationError("COUNCIL_ID_REQUIRED")
-    preset = tier_preset(
-        definition.tier, vessels_per_cohort=definition.vessels_per_cohort
-    )
-    if len(definition.cohorts) != preset.cohort_count:
-        raise CouncilValidationError("COHORT_COUNT_MISMATCH")
+    tier = CouncilTier(definition.tier)
+    if tier is CouncilTier.CUSTOM:
+        if not 1 <= len(definition.cohorts) <= MAX_DISTINCT_COHORTS:
+            raise CouncilValidationError("CUSTOM_COHORT_COUNT_RANGE")
+        if not 1 <= int(definition.vessels_per_cohort) <= MAX_VESSELS_PER_COHORT:
+            raise CouncilValidationError("CUSTOM_VESSEL_COUNT_RANGE")
+    else:
+        preset = tier_preset(
+            tier, vessels_per_cohort=definition.vessels_per_cohort
+        )
+        if len(definition.cohorts) != preset.cohort_count:
+            raise CouncilValidationError("COHORT_COUNT_MISMATCH")
     if definition.logical_vessel_count > MAX_LOGICAL_VESSELS:
         raise CouncilValidationError("MAX_LOGICAL_VESSELS")
     if not definition.synthesis_policy.strip():

@@ -134,3 +134,45 @@ def test_runtime_planner_builds_prompt_approval_receipt_for_exact_model_assembly
     )
     assert approved["state"] == "approved"
     store.close()
+
+
+
+def test_cohort_vessel_count_is_bound_into_exact_prompt_approval(tmp_path):
+    target = tmp_path / "project"
+    target.mkdir()
+
+    def plan(db_name: str, request_id: str, vessels: int):
+        store = EventStore(str(tmp_path / db_name))
+        svc = RuntimeService(store)
+        result = request_model_prompt_approval(
+            svc,
+            {
+                "requestId": request_id,
+                "missionId": "m-" + request_id,
+                "taskId": "t-" + request_id,
+                "driverRunId": "dr-" + request_id,
+                "objective": "Analyze the same evidence.",
+                "targetRoot": str(target),
+                "provider": "openrouter",
+                "model": "example/model",
+                "cohortSpec": {
+                    "cohortId": "c01",
+                    "vesselsPerCohort": vessels,
+                    "configurationId": "xhigh",
+                },
+            },
+            meta("cmd-" + request_id, "human", "key-" + request_id),
+        )
+        state = store.require_state("human_approval-" + request_id)
+        binding = state["scope"]["approvalBinding"]
+        store.close()
+        return result, binding
+
+    twenty_two, binding_22 = plan("22.db", "r22", 22)
+    one_eleven, binding_111 = plan("111.db", "r111", 111)
+
+    assert twenty_two["promptAssemblyDigest"] != one_eleven["promptAssemblyDigest"]
+    assert binding_22["cohortSpec"]["vesselsPerCohort"] == 22
+    assert binding_111["cohortSpec"]["vesselsPerCohort"] == 111
+    assert twenty_two["cohortSpec"]["vesselsPerCohort"] == 22
+    assert one_eleven["cohortSpec"]["vesselsPerCohort"] == 111

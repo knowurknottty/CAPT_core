@@ -23,6 +23,7 @@ from .model_approval_binding import (
     staging_root_for_ledger,
 )
 from .continuation_context import select_continuation_context
+from .cohort_contract import compile_cohort_objective, normalize_cohort_spec
 
 
 def _expiry_from(issued_at: str) -> str:
@@ -77,7 +78,17 @@ def request_model_prompt_approval(
         raise AuthorityViolation(str(exc)) from exc
     if reasoning_effort and not provider:
         raise AuthorityViolation("REASONING_EFFORT_REQUIRES_PROVIDER")
+    try:
+        cohort_spec = normalize_cohort_spec(intent.get("cohortSpec"))
+    except ValueError as exc:
+        raise AuthorityViolation(str(exc)) from exc
+    bound_objective = compile_cohort_objective(
+        objective, provider=provider, model=model, cohort_spec=cohort_spec
+    )
     requested_context_budget = int(intent.get("requestedContextBudget", 32_000))
+    requested_execution_seconds = int(intent.get("requestedExecutionSeconds", 600))
+    if requested_execution_seconds < 60 or requested_execution_seconds > 3600:
+        raise AuthorityViolation("MODEL_EXECUTION_SECONDS_OUT_OF_RANGE")
     human_verification_required = bool(intent.get("humanVerificationRequired", True))
     executable = str(intent.get("executable", "") or "")
     authority_profile = normalize_model_authority(
@@ -98,7 +109,7 @@ def request_model_prompt_approval(
         exclude_run_id=driver_run_id, ledger_dir=ledger_dir,
     )
     assembly = build_bound_model_operator_approval(
-        human_prompt=objective,
+        human_prompt=bound_objective,
         response_mode=response_mode,
         enhancement_engine=enhancement_engine,
         mission_id=mission_id,
@@ -108,6 +119,7 @@ def request_model_prompt_approval(
         provider=provider,
         model=model,
         requested_context_budget=requested_context_budget,
+        requested_execution_seconds=requested_execution_seconds,
         human_verification_required=human_verification_required,
         executable=executable,
         staging_root=staging_root_for_ledger(service.store.path, driver_run_id),
@@ -116,6 +128,7 @@ def request_model_prompt_approval(
         authored_skill_context=skill_context,
         authority_profile=authority_profile,
         reasoning_effort=reasoning_effort,
+        cohort_spec=cohort_spec,
         proposal_binding={
             key: intent[key] for key in (
                 "proposalId", "proposalRevision", "proposalSnapshotDigest",
@@ -188,5 +201,6 @@ def request_model_prompt_approval(
         "skillNames": skill_names,
         "authorityProfile": authority_profile,
         "reasoningEffort": reasoning_effort or None,
+        "cohortSpec": cohort_spec,
         "expiresAt": authoritative["expiresAt"],
     }
