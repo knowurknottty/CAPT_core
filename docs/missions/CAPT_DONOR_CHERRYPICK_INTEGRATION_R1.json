@@ -1,0 +1,112 @@
+{
+  "classification": [
+    "ALREADY_PRESENT_EQUIVALENT_OR_STRONGER",
+    "CHERRY_PICK_CANDIDATE",
+    "REIMPLEMENT_SEMANTICS",
+    "DESIGN_REFERENCE_ONLY",
+    "REDTEAM_ONLY",
+    "EXTERNAL_SERVICE_BOUNDARY",
+    "REJECT"
+  ],
+  "cohorts": [
+    {
+      "cohortId": "qwen38-flash",
+      "model": "qwen/qwen3.8-flash",
+      "provider": "openrouter",
+      "role": "source archaeology, architecture mapping, first-pass implementation"
+    },
+    {
+      "cohortId": "mimo26-flash",
+      "model": "xiaomi/mimo-v2.6-flash",
+      "provider": "openrouter",
+      "role": "adversarial integration review, gap closure, compatibility and licensing checks"
+    },
+    {
+      "cohortId": "glm53-flash",
+      "model": "z-ai/glm-5.3-flash",
+      "provider": "openrouter",
+      "role": "final convergence, hardening, deduplication, test closure and completion audit"
+    }
+  ],
+  "councilId": "council-capt-donor-convergence-r1-20260924",
+  "donors": [
+    "jamiepine/voicebox",
+    "dyad-sh/dyad",
+    "presenton/presenton",
+    "invoke-ai/InvokeAI",
+    "upscayl/upscayl",
+    "Anil-matcha/AI-Youtube-Shorts-Generator",
+    "Anil-matcha/Open-Generative-AI",
+    "plausible/analytics",
+    "nocodb/nocodb",
+    "caddyserver/caddy",
+    "NVIDIA/garak",
+    "trufflesecurity/trufflehog",
+    "gitleaks/gitleaks",
+    "google/osv-scanner",
+    "snyk/agent-scan",
+    "getsops/sops",
+    "semgrep/semgrep",
+    "appwrite/appwrite",
+    "andrewyng/openworker",
+    "openJiuwen-ai/jiuwenswarm",
+    "openJiuwen-ai/agent-core",
+    "openJiuwen-ai/agent-studio",
+    "openJiuwen-ai/deepsearch",
+    "openJiuwen-ai/agent-infer",
+    "openJiuwen-ai/sciencediscovery",
+    "openJiuwen-ai/agent-protocol",
+    "openJiuwen-ai/agent-memory",
+    "openJiuwen-ai/jiuwensymbiosis",
+    "openJiuwen-ai/agent-core-java",
+    "openJiuwen-ai/docs",
+    "openJiuwen-ai/agent-runtime-java",
+    "openJiuwen-ai/skillhub",
+    "openJiuwen-ai/agent-tools",
+    "openJiuwen-ai/agent-runtime",
+    "openJiuwen-ai/community",
+    "openJiuwen-ai/CareerSim-BDCI26",
+    "openJiuwen-ai/model-router",
+    "openJiuwen-ai/relay",
+    "openJiuwen-ai/.github",
+    "openJiuwen-ai/agent-dx"
+  ],
+  "geometry": {
+    "cohortCount": 3,
+    "logicalVessels": 33,
+    "maxConcurrentCohorts": 1,
+    "providerCallInvariant": "one_governed_cohort_execution_per_model",
+    "vesselCharterPolicy": {
+      "schemaVersion": "2.0.0"
+    },
+    "vesselsPerCohort": 11
+  },
+  "invariants": [
+    "RuntimeService/EventStore remain authoritative; imported runtimes never become a second control plane.",
+    "All model/tool side effects remain behind CAPT authority, ToolBroker, approvals, receipts and evidence semantics.",
+    "Freeze upstream repository SHA and license before copying code; preserve provenance and notices.",
+    "Do not vendor whole donor repositories merely for convenience; transplant only justified capability.",
+    "Do not weaken Secure Intake/Quarantine, approval, provenance, ClaimGuard, verification, filesystem, network or secret boundaries.",
+    "Do not push, merge, publish or release. Local branch/worktree integration only.",
+    "Preserve unrelated user work; target only this isolated clean worktree.",
+    "Every copied/reimplemented consequential mechanism receives discriminating regression tests.",
+    "Every donor must end with an explicit disposition and rationale; no silent omissions.",
+    "Completion requires contract drift checks, targeted tests, full CAPT suite, clean diff checks, and a final donor ledger."
+  ],
+  "missionKind": "donor_cherry_pick_and_integration",
+  "requiredArtifacts": [
+    "docs/convergence/DONOR_LEDGER_OPENWORKER_OPENJIUWEN_R1.md",
+    "docs/convergence/DONOR_INTEGRATION_REPORT_R1.md",
+    "tests proving each enabled consequential mechanism",
+    "source changes required by accepted integrations"
+  ],
+  "schemaVersion": "1.0.0",
+  "sourceGuidance": [
+    "docs/OPENWORKER_CONVERGENCE.md",
+    "docs/workflows/CAPT_CORE_MAIN_CONVERGENCE_MACOS_MCP_R1.md",
+    "README.md"
+  ],
+  "targetBranch": "feat/openworker-convergence-r1",
+  "targetHead": "2c95b32d249f5ef2e7ea4515f870820624cad9bf",
+  "targetRoot": "/Users/knowurknot/.capt/worktrees/openworker-convergence-r1"
+}
