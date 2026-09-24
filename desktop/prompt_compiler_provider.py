@@ -15,10 +15,12 @@ from typing import Any, Mapping, Optional
 
 from capt_runtime.errors import AuthorityViolation
 from capt_runtime.provider_endpoint import endpoint_class
+from capt_runtime.reasoning import openai_reasoning_fields
 from capt_runtime.resource_governor import TokenCostGovernor
 from capt_ui.operator.secrets import resolve as resolve_secret
 
 _MAX_RESPONSE_BYTES = 262_144
+_DEFAULT_COMPILER_MAX_OUTPUT_TOKENS = 32_768
 
 
 @dataclass(frozen=True)
@@ -53,7 +55,8 @@ def _selection(
     for provider in providers:
         if not isinstance(provider, dict) or str(provider.get("id")) != provider_id:
             continue
-        if not provider.get("enabled", True) or str(provider.get("transport")) != "openai_compatible":
+        transport = str(provider.get("transport") or "")
+        if not provider.get("enabled", True) or transport not in {"openai_compatible", "ollama"}:
             return None
         base_url = str(provider.get("base_url") or "").rstrip("/")
         eclass = endpoint_class(base_url)
@@ -61,7 +64,7 @@ def _selection(
         models = provider.get("models")
         if isinstance(models, list) and models and model not in [str(item) for item in models]:
             return None
-        if kind == "local" and eclass == "local":
+        if eclass == "local" and kind in {"local", "hybrid"}:
             return PromptCompilerSelection(provider_id, model, base_url, "local", str(provider.get("key_ref") or ""), False, reasoning_effort)
         if kind == "cloud" and eclass == "cloud" and remote_authorized:
             return PromptCompilerSelection(provider_id, model, base_url, "remote", str(provider.get("key_ref") or ""), True, reasoning_effort)
@@ -84,7 +87,7 @@ def _local_fallback(ui: Path, providers: list[Any]) -> Optional[PromptCompilerSe
 
     candidates: list[PromptCompilerSelection] = []
     for provider in providers:
-        if not isinstance(provider, dict) or str(provider.get("kind")) != "local":
+        if not isinstance(provider, dict) or str(provider.get("kind")) not in {"local", "hybrid"}:
             continue
         models = provider.get("models")
         if not isinstance(models, list):
@@ -197,7 +200,7 @@ class OpenAICompatiblePromptCompilerTransport:
         *,
         api_key: str = "",
         timeout_seconds: int | None = None,
-        max_output_tokens: int = 4096,
+        max_output_tokens: int = _DEFAULT_COMPILER_MAX_OUTPUT_TOKENS,
     ):
         actual = endpoint_class(selection.base_url)
         if selection.endpoint_class == "local" and actual != "local":
@@ -299,8 +302,9 @@ class OpenAICompatiblePromptCompilerTransport:
                 "json_schema": {"name": "capt_prompt_stage", "strict": True, "schema": dict(response_schema)},
             },
         }
-        if self.selection.reasoning_effort:
-            body["reasoning"] = {"effort": self.selection.reasoning_effort}
+        body.update(openai_reasoning_fields(
+            self.selection.provider_id, self.selection.base_url, self.selection.reasoning_effort
+        ))
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
         if self.api_key:
             headers["Authorization"] = "Bearer " + self.api_key
@@ -348,11 +352,15 @@ def _compiler_from_selection(selection: PromptCompilerSelection):
         max_tokens_per_session=131_072,
         max_cost_usd_per_session=0.01,
         max_requests_per_session=32,
-        max_output_tokens_per_request=4096,
+        max_output_tokens_per_request=_DEFAULT_COMPILER_MAX_OUTPUT_TOKENS,
     )
     return PromptCompiler(
         runner=BoundedPromptCompilerRunner(
-            OpenAICompatiblePromptCompilerTransport(selection, api_key=api_key), governor=governor
+            OpenAICompatiblePromptCompilerTransport(
+                selection, api_key=api_key,
+                max_output_tokens=_DEFAULT_COMPILER_MAX_OUTPUT_TOKENS,
+            ),
+            governor=governor,
         ),
         provider=CompilerProvider(selection.provider_id, selection.model, selection.endpoint_class),
         remote_compilation_authorized=selection.remote_authorized,
@@ -383,18 +391,55 @@ class FailoverPromptCompiler:
         raise ValueError("no configured prompt compiler available")
 
 
+class RequestBoundPromptCompiler:
+    # Use the operator-selected execution provider/model when no compiler override exists.
+    def __init__(self, ui_config_dir: Path) -> None:
+        self._ui = Path(ui_config_dir)
+
+    def compile(self, request):
+        from capt_runtime.prompt_compiler import PromptCompiler
+
+        providers = _load_providers(self._ui)
+        selection = _selection(
+            providers,
+            str(getattr(request, "execution_provider", "") or ""),
+            str(getattr(request, "execution_model", "") or ""),
+            remote_authorized=True,
+            reasoning_effort=str(getattr(request, "reasoning_effort", "") or ""),
+        )
+        if selection is None:
+            return PromptCompiler().compile(request)
+        if selection.endpoint_class == "remote" and not bool(
+            getattr(request, "remote_compilation_authorized", False)
+        ):
+            raise AuthorityViolation("REMOTE_COMPILATION_NOT_AUTHORIZED")
+        compiler = _compiler_from_selection(selection)
+        if compiler is None:
+            return PromptCompiler().compile(request)
+        try:
+            return compiler.compile(request)
+        except AuthorityViolation:
+            raise
+        except (OSError, TimeoutError, ValueError):
+            # Enhancement is advisory. Never silently switch to a different provider.
+            return PromptCompiler().compile(request)
+
+
 def build_prompt_compiler(ui_config_dir: Path):
-    """Construct the ordered Prompt Intelligence compiler preference chain."""
+    # Construct the compiler without inventing a hidden second model selection.
+    ui = Path(ui_config_dir)
+    explicit = ui / "prompt-compiler.json"
     compilers = []
-    for selection in select_prompt_compiler_preferences(Path(ui_config_dir)):
+    for selection in select_prompt_compiler_preferences(ui):
         compiler = _compiler_from_selection(selection)
         if compiler is not None:
             compilers.append(compiler)
-    if not compilers:
-        return None
-    # Even a single configured compiler is wrapped so transient availability
-    # failures degrade to an original-selectable proposal rather than escaping.
-    return FailoverPromptCompiler(compilers)
+    if explicit.exists():
+        if not compilers:
+            from capt_runtime.prompt_compiler import PromptCompiler
+            return PromptCompiler()
+        return FailoverPromptCompiler(compilers)
+    return RequestBoundPromptCompiler(ui)
 
 
 def build_local_prompt_compiler(ui_config_dir: Path):

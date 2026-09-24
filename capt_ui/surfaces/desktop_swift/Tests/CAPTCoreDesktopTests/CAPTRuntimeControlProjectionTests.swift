@@ -81,6 +81,38 @@ extension CAPTRuntimeControlProjectionTests {
 }
 
 extension CAPTRuntimeControlProjectionTests {
+    func testBotProjectionPreservesIdentityPolicyWithoutAuthorityMaterial() {
+        let result: [String: Any] = [
+            "countsByRoleKind": ["crew": 1],
+            "note": "Identity is not authority.",
+            "bots": [[
+                "botId": "researcher",
+                "displayName": "Researcher",
+                "roleKind": "crew",
+                "role": "research",
+                "missionId": NSNull(),
+                "primaryModel": "qwen/qwen3.8-flash",
+                "fallbackModels": ["deepseek/deepseek-v4.1-flash"],
+                "promotionMode": "governed",
+                "defaultRuntime": "local",
+                "privateData": "local_only",
+                "mayDelegate": true,
+                "maxSpawnDepth": 2,
+                "authorityTemplateRef": NSNull(),
+                "createdAt": "2026-09-08T16:00:00Z"
+            ]]
+        ]
+        let snapshot = CAPTRuntimeControlProjection.bots(result)
+        XCTAssertEqual(snapshot.bots.count, 1)
+        XCTAssertEqual(snapshot.bots[0].id, "researcher")
+        XCTAssertEqual(snapshot.bots[0].promotionMode, "governed")
+        XCTAssertEqual(snapshot.bots[0].privateData, "local_only")
+        XCTAssertTrue(snapshot.bots[0].mayDelegate)
+        XCTAssertEqual(snapshot.countsByRoleKind["crew"], 1)
+    }
+}
+
+extension CAPTRuntimeControlProjectionTests {
     func testClaimReviewProjectionKeepsAdvisorySeparateFromVerification() {
         let guardResult: [String: Any] = [
             "statement": "Repository inspected.", "verdict": "accepted",

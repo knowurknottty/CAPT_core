@@ -50,6 +50,29 @@ public struct CAPTRuntimeCapabilitiesSnapshot: Hashable, Sendable {
 }
 
 
+public struct CAPTBotSummary: Identifiable, Hashable, Sendable {
+    public let id: String
+    public let displayName: String
+    public let roleKind: String
+    public let role: String
+    public let missionID: String?
+    public let primaryModel: String?
+    public let fallbackModels: [String]
+    public let promotionMode: String
+    public let defaultRuntime: String
+    public let privateData: String
+    public let mayDelegate: Bool
+    public let maxSpawnDepth: Int
+    public let authorityTemplateRef: String?
+    public let createdAt: String?
+}
+
+public struct CAPTBotSnapshot: Hashable, Sendable {
+    public let bots: [CAPTBotSummary]
+    public let countsByRoleKind: [String: Int]
+    public let note: String
+}
+
 public struct CAPTClaimReviewSnapshot: Hashable, Sendable {
     public let claimID: String
     public let guardVerdict: String
@@ -66,6 +89,34 @@ public enum CAPTRuntimeControlProjection {
             runtimeVersion: result["runtimeVersion"] as? String ?? "CAPT",
             integrity: result["integrity"] as? String ?? "unknown",
             headSequence: result["headSequence"] as? Int ?? 0
+        )
+    }
+
+    public static func bots(_ result: [String: Any]) -> CAPTBotSnapshot {
+        let raw = result["bots"] as? [[String: Any]] ?? []
+        let bots = raw.compactMap { item -> CAPTBotSummary? in
+            guard let id = item["botId"] as? String, !id.isEmpty else { return nil }
+            return CAPTBotSummary(
+                id: id,
+                displayName: item["displayName"] as? String ?? id,
+                roleKind: item["roleKind"] as? String ?? "unknown",
+                role: item["role"] as? String ?? "",
+                missionID: item["missionId"] as? String,
+                primaryModel: item["primaryModel"] as? String,
+                fallbackModels: item["fallbackModels"] as? [String] ?? [],
+                promotionMode: item["promotionMode"] as? String ?? "unknown",
+                defaultRuntime: item["defaultRuntime"] as? String ?? "unknown",
+                privateData: item["privateData"] as? String ?? "unknown",
+                mayDelegate: item["mayDelegate"] as? Bool ?? false,
+                maxSpawnDepth: item["maxSpawnDepth"] as? Int ?? 0,
+                authorityTemplateRef: item["authorityTemplateRef"] as? String,
+                createdAt: item["createdAt"] as? String
+            )
+        }
+        return CAPTBotSnapshot(
+            bots: bots,
+            countsByRoleKind: result["countsByRoleKind"] as? [String: Int] ?? [:],
+            note: result["note"] as? String ?? ""
         )
     }
 

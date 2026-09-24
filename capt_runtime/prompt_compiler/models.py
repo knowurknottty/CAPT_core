@@ -6,6 +6,7 @@ from enum import Enum
 from typing import Any, Mapping, Optional, Tuple
 
 from ..contracts import digest
+from ..reasoning import normalize_reasoning_effort
 
 
 class PromptStageName(str, Enum):
@@ -50,6 +51,7 @@ class PromptCompileRequest:
     execution_provider: str = ""
     execution_model: str = ""
     requested_context_budget: int = 0
+    reasoning_effort: str = ""
     remote_compilation_authorized: bool = False
 
     def __post_init__(self) -> None:
@@ -72,6 +74,7 @@ class PromptCompileRequest:
         object.__setattr__(self, "requested_engine", engine)
         object.__setattr__(self, "mode", mode)
         object.__setattr__(self, "requested_capabilities", capabilities)
+        object.__setattr__(self, "reasoning_effort", normalize_reasoning_effort(self.reasoning_effort))
 
 
 @dataclass(frozen=True)

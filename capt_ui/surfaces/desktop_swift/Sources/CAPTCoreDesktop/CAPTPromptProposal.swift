@@ -44,6 +44,7 @@ public struct CAPTPromptProposal: Codable, Equatable, Sendable {
     public let targetRoot: String
     public let provider: String?
     public let model: String?
+    public let reasoningEffort: String?
     public let rationale: String
 
     public var isActive: Bool { state == "active" }
@@ -85,6 +86,7 @@ public struct CAPTPromptProposal: Codable, Equatable, Sendable {
         targetRoot = try string("targetRoot")
         provider = dictionary["provider"] as? String
         model = dictionary["model"] as? String
+        reasoningEffort = dictionary["reasoningEffort"] as? String
         rationale = dictionary["rationale"] as? String ?? ""
 
         let verification = dictionary["verificationContract"] as? [String: Any]

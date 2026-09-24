@@ -16,6 +16,7 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var targetRoot = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("CAPT_core", isDirectory: true).path
     @Published var promptIntelligence = "AUTO"
+    @Published var reasoningEffort = ""
     @Published var runtimeIdentity = "Not connected"
     @Published var taskState = "—"
     @Published var isBusy = false
@@ -25,6 +26,7 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var approvals: [CAPTApprovalSummary] = []
     @Published var driverRuns: [CAPTDriverRunSummary] = []
     @Published var recentEvents: [CAPTEventSummary] = []
+    @Published var bots: [CAPTBotSummary] = []
     @Published var providers: [CAPTProviderSnapshot] = []
     @Published var modelSnapshot: CAPTModelSelectionSnapshot?
     @Published var verbosity = "normal"
@@ -60,6 +62,9 @@ final class CAPTOperatorStore: ObservableObject {
         let storedMode = defaults.string(forKey: "capt.skillSelectionMode") ?? "auto"
         self.skillSelectionMode = ["auto", "manual", "off"].contains(storedMode) ? storedMode : "auto"
         self.selectedSkillNames = Set(defaults.stringArray(forKey: "capt.selectedSkillNames") ?? [])
+        let storedReasoning = defaults.string(forKey: "capt.reasoningEffort") ?? ""
+        let allowedReasoning = Set(["", "none", "minimal", "low", "medium", "high", "xhigh"])
+        self.reasoningEffort = allowedReasoning.contains(storedReasoning) ? storedReasoning : ""
         if let data = defaults.data(forKey: "capt.executionAuthoritySettings"),
            let decoded = try? JSONDecoder().decode(CAPTExecutionAuthoritySettings.self, from: data) {
             self.authoritySettings = decoded
@@ -123,6 +128,13 @@ final class CAPTOperatorStore: ObservableObject {
         persistConfiguration(
             for: activeSessionID, provider: provider, model: model, targetRoot: value
         )
+    }
+
+    func setReasoningEffort(_ value: String) {
+        let allowed = Set(["", "none", "minimal", "low", "medium", "high", "xhigh"])
+        guard allowed.contains(value) else { return }
+        reasoningEffort = value
+        UserDefaults.standard.set(value, forKey: "capt.reasoningEffort")
     }
 
     func reconcileActiveApprovalValidity(now: Date = Date()) {
@@ -197,6 +209,7 @@ final class CAPTOperatorStore: ObservableObject {
                 refreshHistory()
                 refreshMemory()
                 refreshCapabilities()
+                refreshBots()
                 refreshSkills()
             } catch {
                 let message = error.localizedDescription
@@ -234,6 +247,7 @@ final class CAPTOperatorStore: ObservableObject {
         let selectedModel = model
         let root = targetRoot
         let intelligence = promptIntelligence
+        let selectedReasoningEffort = reasoningEffort
         let remoteCompilationAuthorized = authoritySettings.remotePromptCompilationAllowed &&
             authoritySettings.providerNetwork == .remoteAllowed
 
@@ -242,6 +256,7 @@ final class CAPTOperatorStore: ObservableObject {
                 let proposal = try await runtime.compileProposal(
                     original: trimmed, targetRoot: root, provider: selectedProvider,
                     model: selectedModel, promptIntelligence: intelligence,
+                    reasoningEffort: selectedReasoningEffort,
                     remoteCompilationAuthorized: remoteCompilationAuthorized
                 )
                 mutateWorkspace { $0.receiveProposal(proposal, for: sessionID) }
@@ -540,6 +555,14 @@ final class CAPTOperatorStore: ObservableObject {
         }
     }
 
+    func refreshBots() {
+        guard connectionState == .connected else { return }
+        Task {
+            do { bots = try await runtime.botsSnapshot().bots }
+            catch { lastError = error.localizedDescription }
+        }
+    }
+
     func refreshSkills() {
         guard connectionState == .connected else { return }
         Task {
@@ -681,7 +704,7 @@ final class CAPTOperatorStore: ObservableObject {
 
     var runtimeCompatibilityIssue: String? {
         guard connectionState == .connected, let capabilities = runtimeCapabilities else { return nil }
-        let requiredQueries = ["managed_skills"]
+        let requiredQueries = ["managed_skills", "bots"]
         let requiredCommands = [
             "compile_prompt_proposal",
             "request_prompt_proposal_approval",
@@ -702,6 +725,7 @@ final class CAPTOperatorStore: ObservableObject {
         refreshOperatorState()
         refreshMemory()
         refreshCapabilities()
+        refreshBots()
         refreshSkills()
     }
 

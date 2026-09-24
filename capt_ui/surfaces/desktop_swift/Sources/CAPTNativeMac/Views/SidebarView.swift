@@ -3,6 +3,7 @@ import SwiftUI
 enum CAPTSidebarSection: String, CaseIterable, Identifiable {
     case chat = "Chat"
     case missions = "Missions"
+    case bots = "Bots"
     case approvals = "Approvals"
     case providers = "Providers"
     case skills = "Skills"
@@ -18,6 +19,7 @@ enum CAPTSidebarSection: String, CaseIterable, Identifiable {
         switch self {
         case .chat: return "bubble.left.and.bubble.right"
         case .missions: return "scope"
+        case .bots: return "person.2"
         case .approvals: return "checkmark.circle.badge.questionmark"
         case .providers: return "cpu"
         case .skills: return "puzzlepiece.extension"
@@ -31,6 +33,7 @@ enum CAPTSidebarSection: String, CaseIterable, Identifiable {
 
     var tone: InversionTone {
         switch self {
+        case .bots: return .cyan
         case .approvals: return .amber
         case .skills: return .violet
         case .evidence: return .cyan
@@ -175,6 +178,7 @@ struct SidebarView: View {
     private func count(for item: CAPTSidebarSection) -> Int? {
         switch item {
         case .missions: return store.missions.filter(\.isMultiTask).count
+        case .bots: return store.bots.count
         case .approvals: return store.pendingApprovals.count
         case .skills: return store.managedSkills?.skills.count
         case .evidence: return store.evidenceItems.count

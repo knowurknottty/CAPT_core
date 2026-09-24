@@ -82,6 +82,7 @@ def test_transport_uses_strict_schema_and_capability_guard(monkeypatch):
     assert seen["url"] == "http://127.0.0.1:18085/v1/chat/completions"
     assert seen["body"]["stream"] is False
     assert seen["body"]["temperature"] == 0
+    assert seen["body"]["max_tokens"] >= 16_384
     schema = seen["body"]["response_format"]["json_schema"]
     assert schema["strict"] is True
     assert schema["schema"]["type"] == "object"

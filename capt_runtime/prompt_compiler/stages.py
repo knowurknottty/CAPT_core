@@ -75,8 +75,9 @@ _STAGE_INSTRUCTIONS = {
         "and ambiguities without changing the objective or inventing authority."
     ),
     PromptStageName.META: (
-        "Convert resolved intent into an execution-grade prompt and verification criteria; "
-        "preserve unresolved ambiguity and never enlarge capabilities."
+        "Observe how OMNI transformed the operator prompt and preserve that execution prompt unchanged. "
+        "Record prompt-engineering lessons, ambiguities, and verification criteria for future OMNI/prompt-policy improvement; "
+        "META is telemetry and critique, not a second prompt rewriter, and must never enlarge capabilities."
     ),
     PromptStageName.FORGE: (
         "Use the bounded repository observation to compile implementation requirements, acceptance criteria, "

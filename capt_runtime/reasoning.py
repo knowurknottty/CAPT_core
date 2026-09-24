@@ -17,6 +17,10 @@ def normalize_reasoning_effort(value: Any) -> str:
     effort = value.strip().lower()
     if not effort:
         return ""
+    # Legacy operator/config vocabulary used max; preserve it as the semantic
+    # alias for the current highest portable level rather than breaking stored prefs.
+    if effort == "max":
+        effort = "xhigh"
     if effort not in SUPPORTED_REASONING_EFFORTS:
         raise ReasoningConfigurationError("REASONING_EFFORT_UNSUPPORTED:" + effort)
     return effort

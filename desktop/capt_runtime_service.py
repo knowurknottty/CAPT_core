@@ -711,6 +711,52 @@ class RuntimeQueryService:
         return {"expiresAt": expires_at, "expired": delta <= 0,
                 "expiresInSeconds": delta}
 
+    def bots(self, request: Dict[str, Any]) -> Dict[str, Any]:
+        # Read bounded CAPT Bot identity/policy projections without secret material.
+        role_kind = request.get("roleKind")
+        mission_id = request.get("missionId")
+        limit = int(request.get("limit", 100))
+        entries: List[Dict[str, Any]] = []
+        by_role: Dict[str, int] = {}
+        for agg in self._aggregate_states("bot"):
+            role = str(agg.get("roleKind") or "")
+            by_role[role] = by_role.get(role, 0) + 1
+            if role_kind and role != role_kind:
+                continue
+            if mission_id and agg.get("missionId") != mission_id:
+                continue
+            model_strategy = agg.get("modelStrategy") or {}
+            cognition = agg.get("cognitionPolicy") or {}
+            locality = agg.get("localityPolicy") or {}
+            collaboration = agg.get("collaboration") or {}
+            entries.append({
+                "botId": agg.get("botId"),
+                "displayName": agg.get("displayName"),
+                "roleKind": role,
+                "role": agg.get("role"),
+                "missionId": agg.get("missionId"),
+                "primaryModel": model_strategy.get("primary"),
+                "fallbackModels": list(model_strategy.get("fallbacks") or []),
+                "promotionMode": cognition.get("promotionMode"),
+                "defaultRuntime": locality.get("defaultRuntime"),
+                "privateData": locality.get("privateData"),
+                "mayDelegate": bool(collaboration.get("mayDelegate", False)),
+                "maxSpawnDepth": int(collaboration.get("maxSpawnDepth", 0)),
+                "authorityTemplateRef": agg.get("authorityTemplateRef"),
+                "createdAt": agg.get("createdAt"),
+            })
+        entries.sort(key=lambda e: (str(e.get("displayName") or ""), str(e.get("botId") or "")))
+        return {
+            "schemaVersion": CONTRACT_SCHEMA_VERSION,
+            "count": len(entries),
+            "countsByRoleKind": by_role,
+            "note": (
+                "Bot identity and policy are authoritative EventStore projections. "
+                "Identity is not authority; credentials and live capability leases are never exposed here."
+            ),
+            "bots": entries[:limit],
+        }
+
     def approvals(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """Read approvals, with expiry DERIVED rather than asserted."""
         wanted_state = request.get("state")
@@ -939,9 +985,9 @@ class RuntimeQueryService:
             if op == "capabilities":
                 return {"ok": True, "result": {
                     "schemaVersion": CONTRACT_SCHEMA_VERSION,
-                    "queryOperations": ["identity", "capabilities", "list_aggregates", "approvals", "missions", "tasks", "checkpoints", "security_rejections", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers", "managed_skills", "operator_control_snapshot", "operator_session_get", "operator_proposal_get", "operator_execution_state"],
+                    "queryOperations": ["identity", "capabilities", "list_aggregates", "bots", "approvals", "missions", "tasks", "checkpoints", "security_rejections", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers", "managed_skills", "operator_control_snapshot", "operator_session_get", "operator_proposal_get", "operator_execution_state"],
                     "commandOperations": ["create_mission", "operator_chat_new", "operator_execution_config_set", "operator_prompt_submit", "operator_proposal_select", "compile_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "submit_provider_result_review", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool", "install_managed_skill", "create_managed_skill"],
-                    "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True, "toolRegistry": True, "toolBroker": True, "mcpClient": self.mcp_manager is not None, "promptCompiler": True},
+                    "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True, "toolRegistry": True, "toolBroker": True, "mcpClient": self.mcp_manager is not None, "promptCompiler": True, "botFoundation": True},
                     "lifecycleOperations": {"checkpoint": True, "shutdown": True, "resume": True},
                 }}
             if op == "operator_control_snapshot":
@@ -956,6 +1002,8 @@ class RuntimeQueryService:
                 return {"ok": True, "result": self.managed_skills()}
             if op == "list_aggregates":
                 return {"ok": True, "result": self.list_aggregates()}
+            if op == "bots":
+                return {"ok": True, "result": self.bots(request)}
             if op == "approvals":
                 return {"ok": True, "result": self.approvals(request)}
             if op == "missions":
