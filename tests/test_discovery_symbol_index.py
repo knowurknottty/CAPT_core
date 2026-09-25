@@ -98,3 +98,32 @@ def test_parse_failure_is_visible_not_silently_covered(tmp_path):
     assert index["coverage"]["indexedFiles"] == 0
     assert index["coverage"]["parseOrReadFailures"] == 1
     assert index["failures"][0]["reason"] == "parse_failed"
+
+
+def test_index_decodes_seal_home_normalized_paths(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    repo = home / "repo"
+    repo.mkdir(parents=True)
+    source = repo / "service.py"
+    source.write_text("def governed():\n    return True\n", encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+
+    discovery = {
+        "root": "${HOME}/repo",
+        "classification": "source_present",
+        "candidates": [
+            {
+                "candidate_id": "seal-home",
+                "path": "${HOME}/repo/service.py",
+                "resolved_path": "${HOME}/repo/service.py",
+                "kind": "file",
+                "accepted": True,
+            }
+        ],
+    }
+    index = build_symbol_index(discovery)
+    assert index["coverage"]["indexedFiles"] == 1
+    assert index["coverage"]["parseOrReadFailures"] == 0
+    assert [(s["path"], s["qualname"]) for s in index["symbols"]] == [
+        ("service.py", "governed")
+    ]

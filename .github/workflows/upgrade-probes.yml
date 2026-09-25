@@ -1,0 +1,58 @@
+name: CAPT Upgrade Empirical Probes
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/upgrade-probes.yml"
+      - "scripts/upgrade_probe_suite.py"
+      - "scripts/context_merkle_probe.py"
+      - "capt_runtime/context_merkle.py"
+      - "capt_runtime/discovery/**"
+      - "benchmarks/**"
+      - "capt_ui/operator/cognitive_debt.py"
+      - "desktop/cognitive_debt.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/upgrade-probes.yml"
+      - "scripts/upgrade_probe_suite.py"
+      - "scripts/context_merkle_probe.py"
+      - "capt_runtime/context_merkle.py"
+      - "capt_runtime/discovery/**"
+      - "benchmarks/**"
+      - "capt_ui/operator/cognitive_debt.py"
+      - "desktop/cognitive_debt.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  empirical-probes:
+    name: Upgrade probes (Py3.12)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install CAPT and isolated probe dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+          python -m pip install "fastcdc==1.7.0" "tree-sitter-language-pack==1.20.0"
+      - name: Run exact-head upgrade probes
+        run: python scripts/upgrade_probe_suite.py
+      - name: Upload empirical evidence
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: capt-upgrade-probe-evidence
+          path: upgrade-probe-results.json
+          if-no-files-found: warn
+          retention-days: 30
