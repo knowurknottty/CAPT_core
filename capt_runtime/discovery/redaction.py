@@ -13,6 +13,8 @@ import re
 from pathlib import Path
 from typing import Sequence
 
+from capt_runtime.secret_patterns import redact_credential_shapes
+
 
 _SECRET_NAME_RE = re.compile(
     r"(token|secret|password|passwd|api[_-]?key|auth|bearer|private[_-]?key|"
@@ -32,7 +34,11 @@ _PREFIXED_SK_RE = re.compile(
 
 def redact_text(text: str) -> str:
     """Replace credential-shaped substrings with a redaction marker."""
-    out = _LONG_B64_RE.sub("[REDACTED_B64]", text)
+    # Specific, labeled credential shapes first (gitleaks-derived registry),
+    # so provider tokens keep an accurate family marker before the generic
+    # digest/token heuristics below run.
+    out = redact_credential_shapes(text)
+    out = _LONG_B64_RE.sub("[REDACTED_B64]", out)
     out = _LONG_HEX_RE.sub("[REDACTED_HEX]", out)
     out = _LONG_B58_RE.sub("[REDACTED_B58]", out)
     out = _PREFIXED_SK_RE.sub("[REDACTED_KEY]", out)

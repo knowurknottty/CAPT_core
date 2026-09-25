@@ -31,6 +31,16 @@ _PATTERNS: List[Tuple[str, re.Pattern]] = [
     ("auth_cookie", re.compile(r"(?i)(session|auth|access)[_\-]?token\s*[:=]\s*['\"]?[A-Za-z0-9._\-]{20,}")),
     ("recovery_code", re.compile(r"(?i)recovery[_-]?code\s*[:=]\s*['\"]?[A-Za-z0-9]{8,}")),
     ("seed_phrase", re.compile(r"(?i)(seed\s*phrase|mnemonic|recovery\s*phrase)\b")),
+    # Provider/token families added for donor convergence R1 (see
+    # capt_runtime/secret_patterns.py for the shared gitleaks-derived registry;
+    # these are kept local here so capt_solo does not import capt_runtime).
+    # They close the gap where a bare provider key with no surrounding
+    # assignment keyword previously passed screening and persisted.
+    ("provider_key", re.compile(r"\bsk-[A-Za-z0-9_\-]{16,}")),
+    ("aws_session_key", re.compile(r"(?:A3T[A-Z0-9]|ASIA|ABIA|ACCA)[0-9A-Z]{16}")),
+    ("gitlab_token", re.compile(r"glpat-[A-Za-z0-9_\-]{20}")),
+    ("huggingface_token", re.compile(r"hf_[A-Za-z0-9]{34}", re.IGNORECASE)),
+    ("jwt", re.compile(r"eyJ[A-Za-z0-9_\-]{8,}\.eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{10,}")),
     ("env_secret", re.compile(
         r"(?i)(?:^|\n)\s*(?:export\s+)?[A-Z][A-Z0-9_]{2,}\s*=\s*['\"]?[A-Za-z0-9/+_\-]{20,}['\"]?\s*(?:\n|$)")),
 ]
