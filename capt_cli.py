@@ -280,6 +280,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     p.add_argument("--prompt", required=True)
     p.add_argument("--state-dir", default=None)
     p.add_argument("--idempotency-key", default=None)
+
+    p = sub.add_parser("council", help="launch the human Council workflow builder")
+    p.add_argument("--template", choices=("blank", "donor-convergence"), default="blank")
+    p.add_argument("--target-root", default=None)
+    p.add_argument("--headless", action="store_true", help="render the configured workflow without opening the GUI")
+
     sub.add_parser("tui", help="launch the interactive CAPT operator console")
 
     args = parser.parse_args(argv)
@@ -290,6 +296,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     as_json = args.json
     if args.group == "run":
         return _cmd_run(args, as_json)
+    if args.group == "council":
+        from desktop.council_workflow import main as council_main
+        council_argv: List[str] = ["--template", args.template]
+        if args.target_root:
+            council_argv.extend(["--target-root", args.target_root])
+        if args.headless:
+            council_argv.append("--headless")
+        return council_main(council_argv)
     if args.group == "tui":
         from capt_runtime.cli_ramp import default_paths
         if _cmd_ramp_start(args, default_paths(), False) != 0:

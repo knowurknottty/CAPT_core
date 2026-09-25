@@ -37,6 +37,8 @@ The operator can edit Council ID, Mission ID, target root, context budget,
 execution timeout, concurrency, authority toggles, and each cohort's provider,
 model, vessel count, configuration, and objective.
 
+The workflow is a first-class CAPT harness surface. Run `capt council` to open the builder, or `capt council --template donor-convergence --target-root <repo>` to preload the exact 3×11 donor workflow. `capt-council-workflow` remains the direct desktop entrypoint.
+
 The required human sequence is intentionally explicit:
 
 1. Configure or load the workflow.
