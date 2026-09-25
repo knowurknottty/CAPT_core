@@ -199,6 +199,81 @@ class Operator:
             raise OperatorError("HumanApproval %s not found" % request_id)
         return state
 
+    def request_council_workflow(self, workflow: Any) -> Dict[str, Any]:
+        """Request one exact HumanApproval per cohort without auto-approving."""
+        from .council_workflow import bind_approval_results, workflow_digest
+
+        workflow.validate()
+        digest = workflow_digest(workflow)
+        short = digest.split(":", 1)[-1][:16]
+        approvals: List[Dict[str, Any]] = []
+        for index, payload in enumerate(workflow.approval_payloads(), 1):
+            receipt = self.request_prompt_approval(
+                payload, "council-workflow:%s:approval:%02d" % (short, index)
+            )
+            if receipt.get("status") not in ("accepted", "idempotent"):
+                raise OperatorError(
+                    "Cohort approval request rejected: %s"
+                    % (receipt.get("detail") or receipt.get("error") or receipt)
+                )
+            approvals.append(dict(receipt["result"]))
+        return {
+            "schemaVersion": "1.0.0",
+            "workflowDigest": digest,
+            "workflow": workflow.to_record(),
+            "approvals": approvals,
+            "executions": bind_approval_results(workflow, approvals),
+        }
+
+    def council_workflow_status(self, session: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Return authoritative approval state for every cohort in a prepared session."""
+        rows: List[Dict[str, Any]] = []
+        for approval in session.get("approvals") or []:
+            request_id = str(approval.get("requestId") or "")
+            state = self.approval_state(request_id)
+            rows.append({
+                "cohortId": (approval.get("cohortSpec") or {}).get("cohortId"),
+                "provider": approval.get("provider"),
+                "model": approval.get("model"),
+                "requestId": request_id,
+                "state": state.get("state"),
+                "remainingUses": state.get("remainingUses"),
+                "expiresAt": state.get("expiresAt"),
+            })
+        return rows
+
+    def decide_council_workflow(
+        self, session: Dict[str, Any], decision: str, note: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Apply an explicit human approve/deny decision to each pending cohort."""
+        if decision not in ("approve", "deny"):
+            raise OperatorError("Council decision must be approve or deny")
+        receipts: List[Dict[str, Any]] = []
+        for row in self.council_workflow_status(session):
+            if row["state"] == "requested":
+                receipts.append(self.decide_approval(row["requestId"], decision, note))
+        return receipts
+
+    def run_council_workflow(self, session: Dict[str, Any]) -> Dict[str, Any]:
+        """Launch only after every runtime-owned cohort approval is approved."""
+        from .council_workflow import CouncilWorkflow, council_launch_payload
+
+        caps = self._client.capabilities()
+        if "run_approved_council_inspection" not in set(caps.get("commandOperations") or []):
+            raise OperatorError("Runtime lacks governed Council execution support")
+        statuses = self.council_workflow_status(session)
+        blockers = [row for row in statuses if row.get("state") != "approved"]
+        if blockers:
+            raise OperatorError("Council approvals are not all approved: %s" % blockers)
+        workflow = CouncilWorkflow.from_mapping(session["workflow"]).validate()
+        payload = council_launch_payload(workflow, session.get("executions") or [])
+        short = str(session.get("workflowDigest") or "workflow").split(":")[-1][:16]
+        return self._client.command(
+            "run_approved_council_inspection",
+            payload,
+            "council-workflow:%s:run" % short,
+        )
+
     def cancel_task(self, task_id: str, reason: str = "operator stop") -> Dict[str, Any]:
         return self._client.command("cancel_task", {"taskId": task_id, "reason": reason})
 

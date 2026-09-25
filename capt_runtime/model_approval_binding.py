@@ -61,6 +61,7 @@ def build_bound_model_operator_approval(
     authored_skill_context: Optional[Dict[str, Any]] = None,
     proposal_binding: Optional[Dict[str, Any]] = None,
     authority_profile: Optional[Dict[str, Any]] = None,
+    cohort_spec: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Return the model-visible assembly plus its execution admission binding."""
     assembly = build_model_operator_prompt_assembly(
@@ -115,6 +116,8 @@ def build_bound_model_operator_approval(
     if authority_profile is not None:
         binding["authorityProfile"] = dict(authority_profile)
         binding["modelToolSchemaDigest"] = model_tool_schema_digest(authority_profile)
+    if cohort_spec is not None:
+        binding["cohortSpec"] = dict(cohort_spec)
     if proposal_binding:
         binding.update(dict(proposal_binding))
     approval_digest = digest(

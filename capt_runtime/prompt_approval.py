@@ -22,6 +22,7 @@ from .model_approval_binding import (
     staging_root_for_ledger,
 )
 from .continuation_context import select_continuation_context
+from .cohort_contract import compile_cohort_objective, normalize_cohort_spec
 
 
 def _expiry_from(issued_at: str) -> str:
@@ -70,6 +71,13 @@ def request_model_prompt_approval(
     enhancement_engine = str(intent.get("promptEnhancement", "OFF"))
     provider = str(intent.get("provider", "")).strip()
     model = str(intent.get("model", "")).strip()
+    try:
+        cohort_spec = normalize_cohort_spec(intent.get("cohortSpec"))
+    except ValueError as exc:
+        raise AuthorityViolation(str(exc)) from exc
+    bound_objective = compile_cohort_objective(
+        objective, provider=provider, model=model, cohort_spec=cohort_spec
+    )
     requested_context_budget = int(intent.get("requestedContextBudget", 32_000))
     requested_execution_seconds = int(intent.get("requestedExecutionSeconds", 600))
     if requested_execution_seconds < 60 or requested_execution_seconds > 3600:
@@ -94,7 +102,7 @@ def request_model_prompt_approval(
         exclude_run_id=driver_run_id, ledger_dir=ledger_dir,
     )
     assembly = build_bound_model_operator_approval(
-        human_prompt=objective,
+        human_prompt=bound_objective,
         response_mode=response_mode,
         enhancement_engine=enhancement_engine,
         mission_id=mission_id,
@@ -112,6 +120,7 @@ def request_model_prompt_approval(
         continuation_context=continuation["records"],
         authored_skill_context=skill_context,
         authority_profile=authority_profile,
+        cohort_spec=cohort_spec,
         proposal_binding={
             key: intent[key] for key in (
                 "proposalId", "proposalRevision", "proposalSnapshotDigest",
@@ -183,5 +192,6 @@ def request_model_prompt_approval(
         "authoredSkills": summarize_skill_context(skill_context),
         "skillNames": skill_names,
         "authorityProfile": authority_profile,
+        "cohortSpec": cohort_spec,
         "expiresAt": authoritative["expiresAt"],
     }
