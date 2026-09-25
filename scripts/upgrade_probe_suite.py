@@ -20,6 +20,10 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from capt_runtime.context_merkle import build_context_merkle, diff_context_merkle
 from capt_runtime.discovery import ScanLimits, run_discovery
 from capt_runtime.discovery.symbol_index import (
@@ -35,7 +39,6 @@ from benchmarks.chunk_stability import (
     optional_fastcdc_chunks,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
 RESULT_PATH = ROOT / "upgrade-probe-results.json"
 
 
