@@ -204,17 +204,17 @@ def symbol_index_probe() -> Dict[str, Any]:
         for rel in ("capt_runtime", "capt_ui", "desktop"):
             shutil.copytree(ROOT / rel, copy_root / rel)
         copied_candidates = []
-        for candidate in discovery["candidates"]:
-            path = Path(str(candidate.get("resolved_path") or candidate.get("path"))).expanduser()
-            try:
-                relative = path.resolve().relative_to(ROOT.resolve())
-            except Exception:
-                continue
+        for ordinal, admitted_file in enumerate(index.get("files", []) or []):
+            relative = Path(str(admitted_file["path"]))
             copied = copy_root / relative
-            updated = dict(candidate)
-            updated["path"] = str(copied)
-            updated["resolved_path"] = str(copied.resolve())
-            copied_candidates.append(updated)
+            copied_candidates.append({
+                "candidate_id": "admitted-copy-%d" % ordinal,
+                "path": str(copied),
+                "resolved_path": str(copied.resolve()),
+                "kind": "file",
+                "accepted": True,
+            })
+        assert copied_candidates, "no admitted indexed files available for edit probe"
         edited_discovery = {
             "root": str(copy_root),
             "classification": "source_present",
