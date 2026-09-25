@@ -25,7 +25,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from capt_runtime.context_merkle import build_context_merkle, diff_context_merkle
-from capt_runtime.discovery import ScanLimits, run_discovery
+from capt_runtime.discovery import BoundedLocalScanner, ScanLimits
 from capt_runtime.discovery.symbol_index import (
     build_symbol_index,
     select_symbols,
@@ -123,27 +123,27 @@ def _seal_candidates_for_repo() -> Dict[str, Any]:
     )
     candidates = []
     traces = []
+    scanner = BoundedLocalScanner(
+        limits=limits,
+        allowed_roots=[str(ROOT)],
+    )
     for rel in ("capt_runtime", "capt_ui/operator", "desktop"):
         target = ROOT / rel
-        result = run_discovery(
-            targets=[str(target)],
-            allowed_roots=[str(ROOT)],
-            limits=limits,
-            guess_budget=1,
-            requester="upgrade-probe-suite",
+        scan = scanner.scan(
+            str(target),
+            strategy="KNOWN_PATH",
+            run_id="upgrade-probe-suite",
             request_id="probe-symbol-" + rel.replace("/", "-"),
         )
-        assert result.termination == "source_present", (
-            rel, result.termination, result.stop_reason
-        )
-        accepted = [dict(c) for c in result.candidates if c.get("accepted")]
-        assert accepted, "SEAL admitted no candidates for %s" % rel
+        accepted = [dict(c) for c in scan.get("candidates", []) if c.get("accepted")]
+        assert accepted, ("SEAL admitted no candidates", rel, scan)
         candidates.extend(accepted)
         traces.append({
             "target": rel,
-            "termination": result.termination,
+            "classification": scan.get("classification"),
+            "termination": scan.get("termination"),
             "acceptedCandidates": len(accepted),
-            "confidence": result.source_location_confidence,
+            "confidence": scan.get("confidence"),
         })
     return {
         "root": str(ROOT),
@@ -530,14 +530,21 @@ def main() -> int:
         },
         "probes": {},
     }
+    def persist() -> None:
+        RESULT_PATH.write_text(
+            json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+        )
+
     result["probes"]["upg013ContextMerkle"] = context_merkle_probe()
+    persist()
     result["probes"]["upg021SymbolIndex"] = symbol_index_probe()
+    persist()
     result["probes"]["upg022TreeSitter"] = tree_sitter_probe()
+    persist()
     result["probes"]["upg023FastCDC"] = fastcdc_probe()
+    persist()
     result["probes"]["upg024CognitiveDebt"] = cognitive_debt_live_probe()
-    RESULT_PATH.write_text(
-        json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8"
-    )
+    persist()
     print(json.dumps(result, sort_keys=True, indent=2))
     return 0
 
