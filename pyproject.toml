@@ -61,7 +61,7 @@ addopts = "-m 'not slow'"
 # Vendored upstream projects keep their own test/dependency matrix. CAPT tests the
 # adapted boundary in tests/capt_runtime/test_openworker_compat.py instead of
 # accidentally collecting third-party suites under CAPT's environment.
-norecursedirs = ["third_party"]
+norecursedirs = ["third_party", ".worktrees"]
 markers = [
     "slow: test spawns a real external runtime process (seconds to minutes)",
 ]
