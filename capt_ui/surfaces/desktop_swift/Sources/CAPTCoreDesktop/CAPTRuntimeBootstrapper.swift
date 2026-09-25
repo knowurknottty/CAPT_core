@@ -20,47 +20,33 @@ public struct CAPTRuntimeBootstrapper {
 
     public init(
         stateDirectory: String? = nil,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        bundleIdentifier: String? = Bundle.main.bundleIdentifier
     ) {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
         var effectiveEnvironment = environment
         if let stateDirectory {
-            let expanded = NSString(string: stateDirectory).expandingTildeInPath
-            self.stateDirectory = expanded
-            effectiveEnvironment["CAPT_STATE_DIR"] = expanded
-        } else if let override = environment["CAPT_STATE_DIR"], !override.isEmpty {
-            self.stateDirectory = NSString(string: override).expandingTildeInPath
-        } else {
-            self.stateDirectory = URL(fileURLWithPath: home)
-                .appendingPathComponent(".capt", isDirectory: true).path
+            effectiveEnvironment["CAPT_STATE_DIR"] = NSString(string: stateDirectory).expandingTildeInPath
         }
-        self.executableCandidates = Self.defaultCandidates(
-            home: home, environment: effectiveEnvironment
-        )
+        self.init(profile: CAPTRuntimeProfile.resolve(
+            home: FileManager.default.homeDirectoryForCurrentUser.path,
+            environment: effectiveEnvironment,
+            bundleIdentifier: bundleIdentifier
+        ))
+    }
+
+    public init(profile: CAPTRuntimeProfile) {
+        self.stateDirectory = profile.stateDirectory
+        self.executableCandidates = profile.runtimeExecutableCandidates
     }
 
     public static func defaultCandidates(
         home: String,
-        environment: [String: String]
+        environment: [String: String],
+        bundleIdentifier: String? = Bundle.main.bundleIdentifier
     ) -> [String] {
-        var paths: [String] = []
-        if let state = environment["CAPT_STATE_DIR"], !state.isEmpty {
-            paths.append(
-                URL(fileURLWithPath: NSString(string: state).expandingTildeInPath)
-                    .appendingPathComponent("runtime-venv/bin/capt").path
-            )
-        } else if let explicit = environment["CAPT_CLI"], !explicit.isEmpty {
-            paths.append(NSString(string: explicit).expandingTildeInPath)
-        }
-        paths.append(URL(fileURLWithPath: home)
-            .appendingPathComponent(".capt/runtime-venv/bin/capt").path)
-        paths.append(contentsOf: [
-            "/opt/homebrew/bin/capt",
-            "/usr/local/bin/capt",
-            URL(fileURLWithPath: home).appendingPathComponent(".local/bin/capt").path,
-        ])
-        var seen = Set<String>()
-        return paths.filter { seen.insert($0).inserted }
+        CAPTRuntimeProfile.resolve(
+            home: home, environment: environment, bundleIdentifier: bundleIdentifier
+        ).runtimeExecutableCandidates
     }
 
     public func resolvedExecutable(

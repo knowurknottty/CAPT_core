@@ -53,16 +53,21 @@ final class CAPTOperatorStore: ObservableObject {
 
     private let runtime: CAPTBackgroundRuntime
     private let sessionStore: CAPTEncryptedSessionStore
+    let runtimeStateDirectory: String
     private var providerWarmIdentity: String?
     private var cachedOperatorProvider = "ollama"
     private var cachedOperatorModel = "qwen3.5-defiant-fable:latest"
 
     init(
-        runtime: CAPTBackgroundRuntime = CAPTBackgroundRuntime(),
-        sessionStore: CAPTEncryptedSessionStore = CAPTEncryptedSessionStore()
+        profile: CAPTRuntimeProfile = CAPTRuntimeProfile.current(),
+        runtime: CAPTBackgroundRuntime? = nil,
+        sessionStore: CAPTEncryptedSessionStore? = nil
     ) {
-        self.runtime = runtime
-        self.sessionStore = sessionStore
+        self.runtime = runtime ?? CAPTBackgroundRuntime(profile: profile)
+        self.sessionStore = sessionStore ?? CAPTEncryptedSessionStore(
+            fileURL: CAPTEncryptedSessionStore.defaultFileURL(profile: profile)
+        )
+        self.runtimeStateDirectory = profile.stateDirectory
         let defaults = UserDefaults.standard
         let storedMode = defaults.string(forKey: "capt.skillSelectionMode") ?? "auto"
         self.skillSelectionMode = ["auto", "manual", "off"].contains(storedMode) ? storedMode : "auto"

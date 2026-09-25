@@ -18,6 +18,14 @@ actor CAPTBackgroundRuntime {
         self.operatorCLI = operatorCLI
     }
 
+    init(profile: CAPTRuntimeProfile) {
+        let client = CAPTRuntimeClient(profile: profile)
+        self.client = client
+        self.coordinator = CAPTChatCoordinator(client: client)
+        self.bootstrapper = CAPTRuntimeBootstrapper(profile: profile)
+        self.operatorCLI = CAPTOperatorCLI(profile: profile)
+    }
+
     func connect() throws -> CAPTRuntimeIdentitySnapshot {
         let response: [String: Any]
         do {

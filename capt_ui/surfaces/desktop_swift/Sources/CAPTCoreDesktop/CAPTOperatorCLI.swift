@@ -171,14 +171,27 @@ public struct CAPTOperatorCLI: Sendable {
 
     public init(
         executablePath: String? = nil,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        bundleIdentifier: String? = Bundle.main.bundleIdentifier
     ) {
         if let executablePath {
             self.executablePath = executablePath
         } else {
-            self.executablePath = FileManager.default.homeDirectoryForCurrentUser
-                .appendingPathComponent(".capt/runtime-venv/bin/capt-ui").path
+            let profile = CAPTRuntimeProfile.resolve(
+                home: FileManager.default.homeDirectoryForCurrentUser.path,
+                environment: environment,
+                bundleIdentifier: bundleIdentifier
+            )
+            self.executablePath = profile.operatorExecutableCandidates.first ?? ""
         }
+        self.processEnvironment = CAPTRuntimeBootstrapper.sanitizedChildEnvironment(environment)
+    }
+
+    public init(
+        profile: CAPTRuntimeProfile,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) {
+        self.executablePath = profile.operatorExecutableCandidates.first ?? ""
         self.processEnvironment = CAPTRuntimeBootstrapper.sanitizedChildEnvironment(environment)
     }
 
