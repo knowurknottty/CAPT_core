@@ -73,6 +73,43 @@ Minimum inventory to reconcile:
 
 For every item, prove either `ALREADY_PRESENT_EQUIVALENT_OR_STRONGER` or land a minimal current-stack change with tests. Do not copy old aggregate/state code merely to preserve branch history.
 
+### External donor cherry-pick queue — openJiuwen-ai
+
+Treat every public repository under `openJiuwen-ai` as a donor source to inspect during semantic convergence. “Cherry-pick” here means **extract/reimplement useful behavior behind CAPT authority boundaries**, not wholesale runtime replacement. Preserve upstream provenance and license notices for any copied code.
+
+Verified organization inventory on 2026-09-24: **21 public repositories**.
+
+- `openJiuwen-ai/jiuwenswarm` — default branch `develop`
+- `openJiuwen-ai/agent-core` — default branch `develop`
+- `openJiuwen-ai/agent-studio` — default branch `studio-2.0-dev`
+- `openJiuwen-ai/deepsearch` — default branch `main`
+- `openJiuwen-ai/agent-infer` — default branch `main`
+- `openJiuwen-ai/sciencediscovery` — default branch `main`
+- `openJiuwen-ai/agent-protocol` — default branch `main`
+- `openJiuwen-ai/agent-memory` — default branch `develop`
+- `openJiuwen-ai/jiuwensymbiosis` — default branch `main`
+- `openJiuwen-ai/agent-core-java` — default branch `develop`
+- `openJiuwen-ai/docs` — default branch `main`
+- `openJiuwen-ai/agent-runtime-java` — default branch `develop`
+- `openJiuwen-ai/skillhub` — default branch `develop`
+- `openJiuwen-ai/agent-tools` — default branch `dev`
+- `openJiuwen-ai/agent-runtime` — default branch `main`
+- `openJiuwen-ai/community` — default branch `main`
+- `openJiuwen-ai/CareerSim-BDCI26` — default branch `main`
+- `openJiuwen-ai/model-router` — default branch `main`
+- `openJiuwen-ai/relay` — default branch `main`
+- `openJiuwen-ai/.github` — default branch `main`
+- `openJiuwen-ai/agent-dx` — default branch `master`
+
+For each donor repository:
+1. freeze the inspected upstream commit SHA before analysis;
+2. inventory architecture, runtime behavior, memory, tools, protocols, orchestration, routing, inference, search, skills, UI, deployment, and security mechanisms;
+3. classify each useful mechanism as `ALREADY_PRESENT_EQUIVALENT_OR_STRONGER`, `CHERRY_PICK_CANDIDATE`, `REIMPLEMENT_SEMANTICS`, `DESIGN_REFERENCE_ONLY`, or `REJECT`;
+4. prefer CAPT-native reimplementation when upstream state/authority semantics conflict with RuntimeService/EventStore/ToolBroker;
+5. preserve exact upstream attribution and license provenance for copied implementation;
+6. add a discriminating CAPT regression test before enabling any consequential behavior;
+7. never allow imported agent/runtime/provider logic to mint authority, self-verify evidence, bypass approval, or become a second control plane.
+
 ## Phase D — Push and PR the MCP companion
 In `capt-workspace-mcp`:
 1. branch from the local 13-commit-ahead state rather than force-updating remote `main`;

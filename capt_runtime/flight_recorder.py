@@ -15,6 +15,7 @@ from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Set, Union
 
 from .contracts import canonical_json
 from .errors import IntegrityViolation
+from .secret_patterns import redact_credential_shapes
 from .store import EventStore
 
 FLIGHT_SCHEMA_VERSION = "1.0.0"
@@ -56,7 +57,16 @@ def redact(
     secret_keys: Optional[Iterable[str]] = None,
     secret_values: Optional[Iterable[str]] = None,
 ) -> Any:
-    """Recursively redact explicit secret fields and known secret values."""
+    """Recursively redact explicit secret fields, known secret values, and
+    credential-shaped substrings (gitleaks-derived registry, see
+    ``capt_runtime.secret_patterns``).
+
+    Pattern redaction applies to every string value regardless of key name so
+    that tokens embedded in prompts, tool output or notes cannot leave the
+    forensic bundle in clear text. Digest-looking hex/base64 strings are NOT
+    generically clobbered here: only registered credential shapes are replaced,
+    so ledger/manifest digests remain verifiable.
+    """
     keys: Set[str] = set(_DEFAULT_SECRET_KEYS)
     keys.update(_normalized_key(k) for k in (secret_keys or ()))
     values = {str(v) for v in (secret_values or ()) if v is not None and str(v)}
@@ -82,7 +92,7 @@ def redact(
             for secret in sorted(values, key=len, reverse=True):
                 if secret and secret in replaced:
                     replaced = replaced.replace(secret, _REDACTED)
-            return replaced
+            return redact_credential_shapes(replaced, marker=_REDACTED)
         return node
 
     return walk(value)
