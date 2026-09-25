@@ -27,6 +27,7 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var recentEvents: [CAPTEventSummary] = []
     @Published var providers: [CAPTProviderSnapshot] = []
     @Published var modelSnapshot: CAPTModelSelectionSnapshot?
+    @Published var operatorStateError: String?
     @Published var verbosity = "normal"
     @Published var memorySnapshot: CAPTMemoryRuntimeSnapshot?
     @Published var checkpointSnapshot: CAPTCheckpointSnapshot?
@@ -474,6 +475,18 @@ final class CAPTOperatorStore: ObservableObject {
         }
     }
 
+    var operatorPreferenceSelection: CAPTOperatorPreferenceSelection {
+        if let snapshot = modelSnapshot {
+            return CAPTOperatorPreferenceResolver.resolve(
+                providers: providers,
+                models: snapshot,
+                fallbackProvider: provider,
+                fallbackModel: model
+            )
+        }
+        return CAPTOperatorPreferenceSelection(providerID: provider, modelID: model)
+    }
+
     private func warmupTarget() -> CAPTProviderSnapshot? {
         let selected = providers.first(where: { $0.id == provider }) ??
             providers.first(where: { $0.selected })
@@ -524,8 +537,13 @@ final class CAPTOperatorStore: ObservableObject {
 
     func refreshOperatorState() {
         Task {
-            do { applyOperatorSnapshot(try await runtime.operatorSnapshot()) }
-            catch { lastError = error.localizedDescription }
+            do {
+                let snapshot = try CAPTOperatorStateLoader(cli: CAPTOperatorCLI()).load()
+                applyOperatorSnapshot(snapshot)
+                operatorStateError = nil
+            } catch {
+                operatorStateError = error.localizedDescription
+            }
         }
     }
 
@@ -818,6 +836,31 @@ final class CAPTOperatorStore: ObservableObject {
             providerCredentialStatus[providerID] = "Setup failed — key retained for retry"
             handleGlobal(error)
             return false
+        }
+    }
+
+    func setDefaultModel(providerID: String, modelID: String) {
+        guard !isBusy else { return }
+        let originSessionID = activeSessionID
+        let originTargetRoot = originSessionID.flatMap { chatWorkspace.session($0)?.targetRoot } ?? targetRoot
+        isBusy = true
+        Task {
+            defer { isBusy = false }
+            do {
+                modelSnapshot = try await runtime.setDefaultModel(
+                    providerID: providerID,
+                    modelID: modelID
+                )
+                persistConfiguration(
+                    for: originSessionID,
+                    provider: providerID,
+                    model: modelID,
+                    targetRoot: originTargetRoot
+                )
+                operatorStateError = nil
+            } catch {
+                operatorStateError = error.localizedDescription
+            }
         }
     }
 
