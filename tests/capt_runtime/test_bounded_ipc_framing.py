@@ -113,3 +113,42 @@ def test_runtime_service_bounded_ipc_integration():
     finally:
         import shutil
         shutil.rmtree(td, ignore_errors=True)
+
+
+def test_runtime_client_serializes_framed_exchanges_across_threads():
+    client = RuntimeClient("/tmp/unused.sock", "/tmp/unused.token")
+    client._sock = object()
+    client.operator_id = "operator-test"
+    client.session_id = "session-test"
+
+    state_lock = threading.Lock()
+    active = 0
+    peak = 0
+
+    def fake_send(_sock, _payload):
+        nonlocal active, peak
+        with state_lock:
+            active += 1
+            peak = max(peak, active)
+        time.sleep(0.03)
+
+    def fake_recv(_sock):
+        nonlocal active
+        time.sleep(0.03)
+        with state_lock:
+            active -= 1
+        return {"status": "accepted"}
+
+    client._send = fake_send
+    client._recv = fake_recv
+    threads = [
+        threading.Thread(target=client.command, args=("noop", {}, f"idem-{i}"))
+        for i in range(4)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=2.0)
+
+    assert all(not thread.is_alive() for thread in threads)
+    assert peak == 1
