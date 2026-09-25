@@ -204,3 +204,14 @@ def test_second_service_refuses_live_socket_without_disrupting_first(runtime):
     client = RuntimeClient(str(runtime["sock"]), str(runtime["token"]))
     assert client.connect()["integrity"] == "ok"
     client.disconnect()
+
+
+def test_event_timeline_honors_recent_limit(runtime):
+    client = RuntimeClient(str(runtime["sock"]), str(runtime["token"]))
+    client.connect()
+    full = client.event_timeline()
+    bounded = client._query({"op": "event_timeline", "after": 0, "limit": 1})["result"]
+    assert len(full) > 1
+    assert len(bounded) == 1
+    assert bounded[0]["eventId"] == full[-1]["eventId"]
+    client.disconnect()

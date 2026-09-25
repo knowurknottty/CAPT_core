@@ -88,6 +88,10 @@ public final class CAPTRuntimeClient: CAPTRuntimeCommanding {
     public func disconnect() {
         lock.lock()
         defer { lock.unlock() }
+        disconnectUnlocked()
+    }
+
+    private func disconnectUnlocked() {
         if socketFD >= 0 {
             Darwin.close(socketFD)
             socketFD = -1
@@ -186,8 +190,13 @@ public final class CAPTRuntimeClient: CAPTRuntimeCommanding {
         guard socketFD >= 0 else {
             throw CAPTRuntimeClientError.socketFailure("CAPT runtime socket is not connected")
         }
-        try sendUnlocked(payload: payload)
-        return try receiveUnlocked()
+        do {
+            try sendUnlocked(payload: payload)
+            return try receiveUnlocked()
+        } catch {
+            disconnectUnlocked()
+            throw error
+        }
     }
 
     private func send(payload: [String: Any]) throws {
@@ -261,6 +270,22 @@ public final class CAPTRuntimeClient: CAPTRuntimeCommanding {
         return data
     }
 
+    static func configureNoSigPipe(fd: Int32) throws {
+        var enabled: Int32 = 1
+        let result = Darwin.setsockopt(
+            fd,
+            SOL_SOCKET,
+            SO_NOSIGPIPE,
+            &enabled,
+            socklen_t(MemoryLayout<Int32>.size)
+        )
+        guard result == 0 else {
+            throw CAPTRuntimeClientError.socketFailure(
+                "Unable to suppress SIGPIPE on CAPT socket: \(String(cString: strerror(errno)))"
+            )
+        }
+    }
+
     private static func openUnixSocket(path: String) throws -> Int32 {
         var address = sockaddr_un()
         address.sun_family = sa_family_t(AF_UNIX)
@@ -282,6 +307,12 @@ public final class CAPTRuntimeClient: CAPTRuntimeCommanding {
             throw CAPTRuntimeClientError.socketFailure(
                 "Unable to create CAPT Unix socket: \(String(cString: strerror(errno)))"
             )
+        }
+        do {
+            try configureNoSigPipe(fd: fd)
+        } catch {
+            Darwin.close(fd)
+            throw error
         }
         let result = withUnsafePointer(to: &address) { pointer in
             pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
