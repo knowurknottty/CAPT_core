@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import socket
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -46,37 +47,43 @@ class RuntimeClient:
         # timeout must not be reused as a recv timeout for commands.
         self.command_timeout = command_timeout
         self._sock: Optional[socket.socket] = None
+        # A RuntimeClient owns one framed stream. Every request/response pair must
+        # stay atomic across GUI/background threads or one reader can consume part
+        # of another response and desynchronize the length-prefixed JSON stream.
+        self._io_lock = threading.RLock()
         self.operator_id: Optional[str] = None
         self.session_id: Optional[str] = None
 
     # -- connection lifecycle ---------------------------------------------
 
     def connect(self) -> Dict[str, Any]:
-        token = Path(self.token_file).read_text().strip()
-        s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        s.settimeout(self.connect_timeout)
-        s.connect(self.sock_path)
-        self._send(s, {"token": token})
-        auth_resp = self._recv(s)
-        if not auth_resp.get("ok"):
-            s.close()
-            raise RuntimeClientError("authentication failed: %s" % auth_resp.get("error"))
-        # Capture the operator/session identity bound to this connection.
-        self.operator_id = auth_resp.get("operatorId")
-        self.session_id = auth_resp.get("sessionId")
-        # After authentication, command responses may take minutes (model
-        # drivers). Do not reuse the short connect timeout for them.
-        s.settimeout(self.command_timeout)
-        self._sock = s
-        return self.identity()
+        with self._io_lock:
+            token = Path(self.token_file).read_text().strip()
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.settimeout(self.connect_timeout)
+            s.connect(self.sock_path)
+            self._send(s, {"token": token})
+            auth_resp = self._recv(s)
+            if not auth_resp.get("ok"):
+                s.close()
+                raise RuntimeClientError("authentication failed: %s" % auth_resp.get("error"))
+            # Capture the operator/session identity bound to this connection.
+            self.operator_id = auth_resp.get("operatorId")
+            self.session_id = auth_resp.get("sessionId")
+            # After authentication, command responses may take minutes (model
+            # drivers). Do not reuse the short connect timeout for them.
+            s.settimeout(self.command_timeout)
+            self._sock = s
+            return self.identity()
 
     def disconnect(self) -> None:
-        if self._sock is not None:
-            try:
-                self._sock.close()
-            except OSError:
-                pass
-            self._sock = None
+        with self._io_lock:
+            if self._sock is not None:
+                try:
+                    self._sock.close()
+                except OSError:
+                    pass
+                self._sock = None
 
     @property
     def connected(self) -> bool:
@@ -152,10 +159,11 @@ class RuntimeClient:
             "op": op,
             "payload": payload,
         }
-        if self._sock is None:
-            raise RuntimeClientError("not connected")
-        self._send(self._sock, {"op": "command", "command": envelope})
-        return self._recv(self._sock)
+        with self._io_lock:
+            if self._sock is None:
+                raise RuntimeClientError("not connected")
+            self._send(self._sock, {"op": "command", "command": envelope})
+            return self._recv(self._sock)
 
     # -- framed transport --------------------------------------------------
 
@@ -179,13 +187,14 @@ class RuntimeClient:
         return message
 
     def _query(self, request: Dict[str, Any]) -> Dict[str, Any]:
-        if self._sock is None:
-            raise RuntimeClientError("not connected")
-        self._send(self._sock, request)
-        resp = self._recv(self._sock)
-        if not resp.get("ok"):
-            raise RuntimeClientError(resp.get("error", "unknown error"))
-        return resp
+        with self._io_lock:
+            if self._sock is None:
+                raise RuntimeClientError("not connected")
+            self._send(self._sock, request)
+            resp = self._recv(self._sock)
+            if not resp.get("ok"):
+                raise RuntimeClientError(resp.get("error", "unknown error"))
+            return resp
 
 
 # --------------------------------------------------------------------------
