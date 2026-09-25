@@ -17,6 +17,23 @@ from capt_runtime.contracts import digest
 INDEX_SCHEMA_VERSION = "1.0.0"
 
 
+def _expand_discovery_path(value: Any) -> Path:
+    """Decode SEAL's deterministic home marker before local path checks.
+
+    Discovery evidence redacts an absolute home prefix as `${HOME}`. The
+    symbol index is a local derived view, so it may resolve that exact leading
+    marker back to the current home directory before re-applying its canonical
+    under-root containment check. No other variable/interpolation is accepted.
+    """
+    raw = str(value)
+    marker = "${HOME}"
+    if raw == marker:
+        raw = str(Path.home())
+    elif raw.startswith(marker + os.sep):
+        raw = str(Path.home()) + raw[len(marker):]
+    return Path(raw).expanduser()
+
+
 def _sha256_text(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -87,7 +104,7 @@ def build_symbol_index(discovery: Mapping[str, Any]) -> Dict[str, Any]:
     root_raw = discovery.get("root")
     if not root_raw:
         raise ValueError("discovery result missing root")
-    root = Path(str(root_raw)).expanduser()
+    root = _expand_discovery_path(root_raw)
 
     files: List[Dict[str, Any]] = []
     symbols: List[Dict[str, Any]] = []
@@ -104,7 +121,7 @@ def build_symbol_index(discovery: Mapping[str, Any]) -> Dict[str, Any]:
         if not raw_path:
             failures.append({"candidateId": candidate.get("candidate_id"), "reason": "missing_path"})
             continue
-        path = Path(str(raw_path)).expanduser()
+        path = _expand_discovery_path(raw_path)
         if not _safe_under_root(path, root):
             failures.append({"path": str(path), "reason": "path_outside_discovery_root"})
             continue
