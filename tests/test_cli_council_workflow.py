@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import capt_cli
 
@@ -24,3 +25,7 @@ def test_capt_council_headless_uses_human_workflow_surface(tmp_path, capsys):
         "xiaomi/mimo-v2.6-flash",
         "z-ai/glm-5.3-flash",
     ]
+
+
+def test_capt_cli_source_root_is_the_repository_root():
+    assert Path(capt_cli._SRC) == Path(capt_cli.__file__).resolve().parent

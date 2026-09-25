@@ -50,8 +50,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-# Make the package importable when run as a script.
-_SRC = Path(__file__).resolve().parent.parent
+# Make the repository packages importable when run as a script or console entrypoint.
+# capt_cli.py lives at the repository root; inserting its parent.parent can shadow
+# CAPT with unrelated ~/capt_runtime scratch trees when invoked outside the repo.
+_SRC = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SRC))
 
 from capt_solo.api import (  # noqa: E402
