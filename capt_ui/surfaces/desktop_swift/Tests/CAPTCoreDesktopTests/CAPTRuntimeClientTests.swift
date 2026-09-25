@@ -48,7 +48,6 @@ final class CAPTRuntimeClientTests: XCTestCase {
         )
         XCTAssertEqual(value, 1)
     }
-    }
 
     func testCommandEnvelopeBindsAuthenticatedIdentity() throws {
         let envelope = try CAPTRuntimeClient.makeCommandEnvelope(
