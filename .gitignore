@@ -29,6 +29,7 @@ capt-verify-*/
 hermes-verify-*
 /tmp/
 *.json.tmp
+.tmp_*.py
 
 # Session-local release execution contract (kept on disk, never committed)
 .hermes.md
