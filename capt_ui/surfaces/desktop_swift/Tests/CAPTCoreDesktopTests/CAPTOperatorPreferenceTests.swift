@@ -42,7 +42,7 @@ esac
 """#
         try body.write(to: script, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
-        let cli = CAPTOperatorCLI(executablePath: script.path, stateDirectory: root.path)
+        let cli = CAPTOperatorCLI(executablePath: script.path)
         let snapshot = try CAPTOperatorStateLoader(cli: cli).load()
         XCTAssertEqual(snapshot.providers.map(\.id), ["openrouter"])
         XCTAssertEqual(snapshot.models.defaultSelection?.provider, "openrouter")
