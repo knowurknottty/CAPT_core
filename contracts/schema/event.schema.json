@@ -32,6 +32,7 @@
         "HumanApprovalRequested",
         "HumanApprovalDecided",
         "HumanApprovalConsumed",
+        "HumanApprovalConsumedForCapability",
         "PromptProposalCreated",
         "PromptProposalRevised",
         "PromptProposalCancelled",
@@ -530,6 +531,24 @@
             },
             "consumption": {
               "$ref": "common.schema.json#/$defs/HumanApprovalConsumption"
+            }
+          }
+        },
+        {
+          "title": "HumanApprovalConsumedForCapabilityPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "consumption"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "HumanApprovalConsumedForCapability"
+            },
+            "consumption": {
+              "$ref": "common.schema.json#/$defs/HumanApprovalCapabilityConsumption"
             }
           }
         },

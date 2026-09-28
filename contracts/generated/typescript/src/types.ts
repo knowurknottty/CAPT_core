@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:f0c87b685a44cef4e9b70075f07a0f10062ae3120d81b598f6015e1e743078d6
+// source digest:  sha256:daac0addf0d4a2d589c70824f355dc860956733d89a3946cbd31b655e3611931
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -238,6 +238,8 @@ export interface CapabilityGrant {
   readonly subject: ActorRef;
   readonly validFrom: Timestamp;
   readonly validUntil: Timestamp;
+  readonly approvalRequestId?: string | null;
+  readonly externalCommitments?: readonly ExternalCommitment[];
   readonly maxUses?: number | null;
 }
 
@@ -750,6 +752,31 @@ export interface ExtensionEnvelope {
   readonly payloadJson: string;
 }
 
+/** Digest-bound reference to an external agreement or artifact. Provenance only: recording a commitment never manufactures CAPT authority. */
+export interface ExternalCommitment {
+  readonly digest: Digest;
+  readonly kind: string;
+  readonly reference?: string | null;
+}
+
+/** Durable one-use transfer of an exact approved HumanApprovalRequest into an exact CapabilityGrant. The approval and grant are committed atomically. */
+export interface HumanApprovalCapabilityConsumption {
+  readonly capabilityId: Identifier;
+  readonly conditions: readonly GrantCondition[];
+  readonly consumedAt: Timestamp;
+  readonly externalCommitments: readonly ExternalCommitment[];
+  readonly grantId: Identifier;
+  readonly maxUses: number;
+  readonly missionId: Identifier;
+  readonly operations: readonly string[];
+  readonly requestId: Identifier;
+  readonly schemaVersion: SchemaVersion;
+  readonly scope: ResourceScope;
+  readonly subject: ActorRef;
+  readonly taskId: Identifier;
+  readonly useId: Identifier;
+}
+
 /** Durable one-use admission of a previously approved model execution. */
 export interface HumanApprovalConsumption {
   readonly consumedAt: Timestamp;
@@ -793,6 +820,11 @@ export interface HumanApprovalRequest {
   readonly schemaVersion: SchemaVersion;
   readonly scope: Readonly<Record<string, unknown>>;
   readonly taskId: Identifier;
+  readonly capabilityConditions?: readonly GrantCondition[];
+  readonly capabilityMaxUses?: number | null;
+  readonly capabilitySubject?: ActorRef | null;
+  readonly externalCommitments?: readonly ExternalCommitment[];
+  readonly operations?: readonly string[];
   readonly promptAssemblyDigest?: string | null;
   readonly remainingUses?: number | null;
 }
@@ -931,11 +963,21 @@ export interface OperatorMissionIntent {
   readonly schemaVersion: SchemaVersion;
   readonly scope: Readonly<Record<string, unknown>>;
   readonly budget?: unknown | null;
+  readonly capabilityConditions?: readonly GrantCondition[];
+  readonly capabilityMaxUses?: number;
+  readonly capabilitySubject?: ActorRef;
+  readonly consequential?: boolean;
   readonly constraints?: readonly Readonly<Record<string, unknown>>[];
+  readonly correlationId?: Identifier;
+  readonly expiresAt?: Timestamp;
+  readonly externalCommitments?: readonly ExternalCommitment[];
+  readonly maxAttempts?: number;
   readonly normalizedRequest?: string | null;
   readonly operation?: string | null;
+  readonly operations?: readonly string[];
   readonly policyReason?: string | null;
   readonly rawRequest?: string | null;
+  readonly remainingUses?: number | null;
   readonly requestId?: string | null;
   readonly requestedCapability?: string;
   readonly resource?: string | null;
@@ -1677,6 +1719,7 @@ export type EventPayload =
   | HumanApprovalRequestedPayload
   | HumanApprovalDecidedPayload
   | HumanApprovalConsumedPayload
+  | HumanApprovalConsumedForCapabilityPayload
   | ArtifactPromotionPreparedPayload
   | ArtifactPromotionAuthorizedPayload
   | ArtifactPromotionAdoptedPayload
@@ -1711,7 +1754,7 @@ export type EventPayload =
   | SandboxLeaseTransitionedPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "PromptProposalCreated" | "PromptProposalRevised" | "PromptProposalCancelled" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "CouncilAdmitted" | "CouncilAnalysisRecorded" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated" | "BotRegistered" | "CognitiveCandidateProposed" | "CognitiveCandidateDecided" | "SkillCandidateCreated" | "SkillCandidateTransitioned" | "LabBoardItemCreated" | "LabBoardItemTransitioned" | "DelegateAssigned" | "DelegateAssignmentTransitioned" | "CloudflareResourceAdoptionApprovalConsumed" | "CloudflareResourceBindingCreated" | "SandboxLeaseReserved" | "SandboxLeaseTransitioned";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "HumanApprovalConsumedForCapability" | "PromptProposalCreated" | "PromptProposalRevised" | "PromptProposalCancelled" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "CouncilAdmitted" | "CouncilAnalysisRecorded" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated" | "BotRegistered" | "CognitiveCandidateProposed" | "CognitiveCandidateDecided" | "SkillCandidateCreated" | "SkillCandidateTransitioned" | "LabBoardItemCreated" | "LabBoardItemTransitioned" | "DelegateAssigned" | "DelegateAssignmentTransitioned" | "CloudflareResourceAdoptionApprovalConsumed" | "CloudflareResourceBindingCreated" | "SandboxLeaseReserved" | "SandboxLeaseTransitioned";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -1736,6 +1779,7 @@ export const EventTypeValues = [
   "HumanApprovalRequested",
   "HumanApprovalDecided",
   "HumanApprovalConsumed",
+  "HumanApprovalConsumedForCapability",
   "PromptProposalCreated",
   "PromptProposalRevised",
   "PromptProposalCancelled",
@@ -1774,6 +1818,12 @@ export const EventTypeValues = [
 export interface EvidenceRecordedPayload {
   readonly eventType: "EvidenceRecorded";
   readonly evidence: EvidenceRecord;
+}
+
+/** HumanApprovalConsumedForCapabilityPayload */
+export interface HumanApprovalConsumedForCapabilityPayload {
+  readonly consumption: HumanApprovalCapabilityConsumption;
+  readonly eventType: "HumanApprovalConsumedForCapability";
 }
 
 /** HumanApprovalConsumedPayload */
@@ -2084,6 +2134,7 @@ export interface MissionSpec {
   readonly successCriteria: readonly SuccessCriterion[];
   readonly terminationCriteria: readonly TerminationCriterion[];
   readonly unresolvedAmbiguities: readonly string[];
+  readonly externalCommitments?: readonly ExternalCommitment[];
   readonly taskGraphId?: Identifier | null;
 }
 
@@ -2141,6 +2192,7 @@ export interface PolicyDecision {
   readonly schemaVersion: SchemaVersion;
   readonly subject: ActorRef;
   readonly conditions?: readonly GrantCondition[];
+  readonly externalCommitments?: readonly ExternalCommitment[];
   readonly missionId?: Identifier | null;
   readonly taskId?: Identifier | null;
 }
