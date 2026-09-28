@@ -241,6 +241,7 @@ class RuntimeService(object):
             "successCriteria": success,
             "terminationCriteria": termination,
             "unresolvedAmbiguities": intent.get("unresolvedAmbiguities", []),
+            "externalCommitments": list(intent.get("externalCommitments") or []),
             "taskGraphId": None,
             "createdAt": _now_rfc3339(),
         }
@@ -265,7 +266,7 @@ class RuntimeService(object):
             ],
             "assignedDriverId": None,
             "attempt": 0,
-            "maxAttempts": 1,
+            "maxAttempts": int(intent.get("maxAttempts", 1)),
             "recoveryState": "none",
         }
 
@@ -283,6 +284,10 @@ class RuntimeService(object):
             "requestedCapability": intent.get("requestedCapability", "cap.fs.read"),
             "resource": intent.get("resource", intent.get("target", "/tmp")),
             "operation": intent.get("operation", "RepositoryRead"),
+            "operations": list(intent.get("operations") or ["repository.read"]),
+            "capabilitySubject": intent.get("capabilitySubject"),
+            "capabilityConditions": list(intent.get("capabilityConditions") or []),
+            "capabilityMaxUses": intent.get("capabilityMaxUses"),
             "scope": scope,
             "riskClassification": intent.get("riskClassification", "low"),
             "policyReason": intent.get(
@@ -293,6 +298,7 @@ class RuntimeService(object):
             "expiresAt": intent.get("expiresAt", "2030-01-01T00:00:00Z"),
             "remainingUses": intent.get("remainingUses"),
             "correlationId": intent.get("correlationId", "corr-m1"),
+            "externalCommitments": list(intent.get("externalCommitments") or []),
             "createdAt": _now_rfc3339(),
         }
 
@@ -453,6 +459,8 @@ class RuntimeService(object):
                 "PolicyDecision.decidedBy must be a governance_kernel actor, got %r"
                 % decision["decidedBy"]["kind"]
             )
+        if self.store.find_idempotent(metadata["idempotencyKey"]) is not None:
+            return self._commit([], metadata)
 
         mission_id = decision["missionId"]
         stream = MissionAggregate.stream_id(mission_id)
@@ -599,6 +607,13 @@ class RuntimeService(object):
                 "CapabilityGrant.issuedBy must be a governance_kernel actor, got %r"
                 % grant["issuedBy"]["kind"]
             )
+        if any(
+            condition.get("kind") == "requires_approval"
+            for condition in grant.get("conditions", [])
+        ) or grant.get("approvalRequestId"):
+            raise AuthorityViolation(
+                "HUMAN_APPROVAL_GRANT_MUST_USE_ATOMIC_APPROVAL_TRANSFER"
+            )
 
         # The grant must cite a PolicyDecision this runtime actually recorded.
         # A grant citing an unknown decision is unauthorized even if its own
@@ -626,13 +641,218 @@ class RuntimeService(object):
             metadata,
         )
 
-    def _policy_decision_exists(self, policy_decision_id: str) -> bool:
+    def _find_policy_decision(self, policy_decision_id: str) -> Optional[Dict[str, Any]]:
         for env in self.store.read_events():
             payload = env["payload"]
             if payload["eventType"] == "PolicyEvaluated":
-                if payload["policyDecision"]["policyDecisionId"] == policy_decision_id:
-                    return True
-        return False
+                decision = payload["policyDecision"]
+                if decision["policyDecisionId"] == policy_decision_id:
+                    return decision
+        return None
+
+    def _policy_decision_exists(self, policy_decision_id: str) -> bool:
+        return self._find_policy_decision(policy_decision_id) is not None
+
+    def issue_grant_from_human_approval(
+        self,
+        request_id: str,
+        grant: Dict[str, Any],
+        metadata: Dict[str, Any],
+        *,
+        use_id: str,
+        now: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Atomically consume one exact human approval and issue one exact grant.
+
+        The approval, PolicyDecision, and CapabilityGrant must agree on mission,
+        task, capability, operations, scope, and external commitments.  This is
+        the generic causal bridge from human consent to executable capability;
+        the approval is consumed in the same commit that creates the grant.
+        """
+        require("CapabilityGrant", grant)
+        require("CommandMetadata", metadata)
+        require_authority("issue_grant", metadata["actor"]["kind"])
+        expected_fingerprint = commands.fingerprint(
+            "issue_grant_from_human_approval",
+            {"requestId": request_id, "grant": grant, "useId": use_id},
+        )
+        if metadata["operationFingerprint"] != expected_fingerprint:
+            raise IdempotencyConflict(
+                "issue_grant_from_human_approval operation fingerprint does not match semantic request"
+            )
+        if grant["issuedBy"]["kind"] != "governance_kernel":
+            raise AuthorityViolation(
+                "CapabilityGrant.issuedBy must be a governance_kernel actor, got %r"
+                % grant["issuedBy"]["kind"]
+            )
+        if grant.get("approvalRequestId") != request_id:
+            raise AuthorityViolation("HUMAN_APPROVAL_GRANT_REQUEST_ID_MISMATCH")
+
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            if prior["operation_fingerprint"] != expected_fingerprint:
+                raise IdempotencyConflict(
+                    "idempotency key %r reused with a different approval-to-grant request"
+                    % metadata["idempotencyKey"]
+                )
+            approval = self.store.load_state(HumanApprovalAggregate.stream_id(request_id))
+            capability = self.store.load_state(CapabilityAggregate.stream_id(grant["grantId"]))
+            return {
+                "status": "idempotent",
+                "requestId": request_id,
+                "approvalState": approval.get("state") if approval else None,
+                "grantId": grant["grantId"],
+                "grantState": capability.get("grantState") if capability else None,
+            }
+
+        decision = self._find_policy_decision(grant["policyDecisionId"])
+        if decision is None:
+            raise AuthorityViolation(
+                "grant %s cites unknown policy decision %s"
+                % (grant["grantId"], grant["policyDecisionId"])
+            )
+        if decision["effect"] not in ("allow", "allow_with_conditions"):
+            raise AuthorityViolation("HUMAN_APPROVAL_GRANT_POLICY_NOT_ALLOW")
+
+        approval_stream = HumanApprovalAggregate.stream_id(request_id)
+        approval_expected = self.store.aggregate_version(approval_stream)
+        approval = self.store.require_state(approval_stream)
+        consumed_at = now or metadata["issuedAt"]
+
+        if approval.get("state") != "approved":
+            raise AuthorityViolation("HUMAN_APPROVAL_NOT_APPROVED")
+        if consumed_at > approval.get("expiresAt", ""):
+            raise AuthorityViolation("HUMAN_APPROVAL_EXPIRED")
+        if approval.get("remainingUses") != 1:
+            raise AuthorityViolation("HUMAN_APPROVAL_ONE_USE_REQUIRED")
+
+        approval_ops = list(approval.get("operations") or [])
+        decision_ops = list(decision.get("requestedOperations") or [])
+        grant_ops = list(grant.get("operations") or [])
+        if not approval_ops:
+            raise AuthorityViolation("HUMAN_APPROVAL_OPERATIONS_REQUIRED_FOR_CAPABILITY")
+        approval_subject = approval.get("capabilitySubject")
+        if not isinstance(approval_subject, dict):
+            raise AuthorityViolation("HUMAN_APPROVAL_SUBJECT_REQUIRED_FOR_CAPABILITY")
+        approval_conditions = list(approval.get("capabilityConditions") or [])
+        approval_max_uses = approval.get("capabilityMaxUses")
+        if isinstance(approval_max_uses, bool) or not isinstance(approval_max_uses, int):
+            raise AuthorityViolation("HUMAN_APPROVAL_MAX_USES_REQUIRED_FOR_CAPABILITY")
+        if len(approval_ops) != len(set(approval_ops)):
+            raise AuthorityViolation("HUMAN_APPROVAL_DUPLICATE_OPERATIONS")
+        if len(decision_ops) != len(set(decision_ops)):
+            raise AuthorityViolation("HUMAN_APPROVAL_POLICY_DUPLICATE_OPERATIONS")
+        if len(grant_ops) != len(set(grant_ops)):
+            raise AuthorityViolation("HUMAN_APPROVAL_GRANT_DUPLICATE_OPERATIONS")
+        if set(approval_ops) != set(decision_ops) or set(approval_ops) != set(grant_ops):
+            raise AuthorityViolation("HUMAN_APPROVAL_GRANT_OPERATIONS_MISMATCH")
+
+        if approval.get("requestedCapability") != grant.get("capabilityId"):
+            raise AuthorityViolation("HUMAN_APPROVAL_GRANT_CAPABILITY_MISMATCH")
+        if approval.get("missionId") != decision.get("missionId"):
+            raise AuthorityViolation("HUMAN_APPROVAL_POLICY_MISSION_MISMATCH")
+        if approval.get("taskId") != decision.get("taskId"):
+            raise AuthorityViolation("HUMAN_APPROVAL_POLICY_TASK_MISMATCH")
+        if approval.get("scope") != decision.get("requestedScope"):
+            raise AuthorityViolation("HUMAN_APPROVAL_POLICY_SCOPE_MISMATCH")
+        if approval.get("scope") != grant.get("scope"):
+            raise AuthorityViolation("HUMAN_APPROVAL_GRANT_SCOPE_MISMATCH")
+        if approval_subject != decision.get("subject") or approval_subject != grant.get("subject"):
+            raise AuthorityViolation("HUMAN_APPROVAL_GRANT_SUBJECT_MISMATCH")
+        if approval_conditions != list(decision.get("conditions") or []):
+            raise AuthorityViolation("HUMAN_APPROVAL_POLICY_CONDITIONS_MISMATCH")
+        if approval_conditions != list(grant.get("conditions") or []):
+            raise AuthorityViolation("HUMAN_APPROVAL_GRANT_CONDITIONS_MISMATCH")
+        if approval_max_uses != grant.get("maxUses"):
+            raise AuthorityViolation("HUMAN_APPROVAL_GRANT_MAX_USES_MISMATCH")
+        if decision.get("policyBundleDigest") != grant.get("policyBundleDigest"):
+            raise AuthorityViolation("HUMAN_APPROVAL_GRANT_POLICY_DIGEST_MISMATCH")
+        if grant.get("issuedAt", "") < approval.get("decidedAt", ""):
+            raise AuthorityViolation("HUMAN_APPROVAL_GRANT_ISSUED_BEFORE_DECISION")
+        if grant.get("validUntil", "") > approval.get("expiresAt", ""):
+            raise AuthorityViolation("HUMAN_APPROVAL_GRANT_OUTLIVES_APPROVAL")
+
+        approval_commitments = list(approval.get("externalCommitments") or [])
+        decision_commitments = list(decision.get("externalCommitments") or [])
+        grant_commitments = list(grant.get("externalCommitments") or [])
+        if approval_commitments != decision_commitments:
+            raise AuthorityViolation("HUMAN_APPROVAL_POLICY_COMMITMENT_MISMATCH")
+        if approval_commitments != grant_commitments:
+            raise AuthorityViolation("HUMAN_APPROVAL_GRANT_COMMITMENT_MISMATCH")
+
+        approval_state = HumanApprovalAggregate.consume(approval, use_id, consumed_at)
+        consumption = {
+            "schemaVersion": "1.0.0",
+            "requestId": request_id,
+            "useId": use_id,
+            "consumedAt": consumed_at,
+            "missionId": approval["missionId"],
+            "taskId": approval["taskId"],
+            "grantId": grant["grantId"],
+            "capabilityId": grant["capabilityId"],
+            "operations": grant_ops,
+            "scope": grant["scope"],
+            "subject": grant["subject"],
+            "conditions": list(grant.get("conditions") or []),
+            "maxUses": grant["maxUses"],
+            "externalCommitments": grant_commitments,
+        }
+        require("HumanApprovalCapabilityConsumption", consumption)
+
+        grant_stream = CapabilityAggregate.stream_id(grant["grantId"])
+        if self.store.aggregate_version(grant_stream) != 0:
+            raise AuthorityViolation("HUMAN_APPROVAL_GRANT_ALREADY_EXISTS")
+        grant_state = CapabilityAggregate.grant(grant)
+
+        approval_event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev1",
+            stream_id=approval_stream,
+            event_type="HumanApprovalConsumedForCapability",
+            payload={
+                "eventType": "HumanApprovalConsumedForCapability",
+                "consumption": consumption,
+            },
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+            mission_id=approval["missionId"],
+            task_id=approval["taskId"],
+        )
+        grant_event = commands.envelope(
+            event_id=metadata["commandId"] + "-ev2",
+            stream_id=grant_stream,
+            event_type="CapabilityGranted",
+            payload={"eventType": "CapabilityGranted", "grant": grant},
+            metadata=metadata,
+            occurred_at=metadata["issuedAt"],
+            mission_id=approval["missionId"],
+            task_id=approval["taskId"],
+        )
+        committed = self._commit(
+            [
+                AppendRequest(
+                    approval_stream,
+                    HumanApprovalAggregate.KIND,
+                    approval_expected,
+                    approval_event,
+                    approval_state,
+                ),
+                AppendRequest(
+                    grant_stream,
+                    CapabilityAggregate.KIND,
+                    0,
+                    grant_event,
+                    grant_state,
+                ),
+            ],
+            metadata,
+        )
+        return {
+            "status": committed.get("status", "applied"),
+            "requestId": request_id,
+            "approvalState": approval_state["state"],
+            "grantId": grant["grantId"],
+            "grantState": grant_state["grantState"],
+        }
 
     def activate_lease(
         self, lease: Dict[str, Any], metadata: Dict[str, Any]
@@ -640,6 +860,8 @@ class RuntimeService(object):
         require("CapabilityLease", lease)
         require("CommandMetadata", metadata)
         require_authority("activate_lease", metadata["actor"]["kind"])
+        if self.store.find_idempotent(metadata["idempotencyKey"]) is not None:
+            return self._commit([], metadata)
 
         stream = CapabilityAggregate.stream_id(lease["grantId"])
         expected = self.store.aggregate_version(stream)

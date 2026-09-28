@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from capt_runtime import commands
+from capt_runtime.approved_capability_authority import issue_approved_capability_authority
 from capt_runtime.errors import AuthorityViolation, CaptRuntimeError, IdempotencyConflict
 from capt_runtime.approval_dispatch import register_expected_prompt_digest
 from capt_runtime.prompt_approval import request_model_prompt_approval
@@ -63,6 +64,7 @@ _VALID_OPS = (
     "request_prompt_proposal_approval",
     "request_model_prompt_approval",
     "submit_approval_decision",
+    "activate_approved_capability",
     "submit_provider_result_review",
     "cancel_task",
     "cancel_driver_run",
@@ -612,6 +614,49 @@ class RuntimeCommandService:
                     "sessionId": self.session_id,
                 }
                 result = self.svc.submit_human_approval_decision(decision, meta)
+
+            elif op == "activate_approved_capability":
+                p = cmd["payload"]
+                required = {"requestId", "executionContextId"}
+                if not isinstance(p, dict) or set(p) != required:
+                    return self._receipt(
+                        cmd,
+                        status="rejected",
+                        classification="malformed",
+                        error=self._error_envelope(
+                            cmd, "malformed", "APPROVED_CAPABILITY_PAYLOAD_INVALID"
+                        ),
+                        detail="payload must contain only requestId and executionContextId",
+                    )
+                request_id = p["requestId"]
+                execution_context_id = p["executionContextId"]
+                if not isinstance(request_id, str) or not request_id.strip():
+                    raise ValueError("APPROVED_CAPABILITY_REQUEST_ID_REQUIRED")
+                if not isinstance(execution_context_id, str) or not execution_context_id.strip():
+                    raise ValueError("APPROVED_CAPABILITY_EXECUTION_CONTEXT_REQUIRED")
+                authority = issue_approved_capability_authority(
+                    service=self.svc,
+                    request_id=request_id,
+                    execution_context_id=execution_context_id,
+                    operator_id=self.operator_id,
+                    command_id=cmd["commandId"],
+                    idempotency_key=cmd["idempotencyKey"],
+                    correlation_id=cmd["correlationId"],
+                    issued_at=cmd.get("timestamp") or _now_rfc3339(),
+                )
+                status = "idempotent" if authority.status == "idempotent" else "accepted"
+                return self._receipt(
+                    cmd,
+                    status=status,
+                    classification="duplicate" if status == "idempotent" else "accepted",
+                    result={
+                        "requestId": authority.request_id,
+                        "policyDecisionId": authority.policy_id,
+                        "grantId": authority.grant_id,
+                        "leaseId": authority.lease_id,
+                    },
+                    stream_id="capability-" + authority.grant_id,
+                )
 
             elif op == "submit_provider_result_review":
                 p = cmd["payload"]
