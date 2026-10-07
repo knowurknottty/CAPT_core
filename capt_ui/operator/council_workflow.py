@@ -34,6 +34,8 @@ class CohortWorkflow:
     objective: str
     vessels_per_cohort: int
     configuration_id: str = "default"
+    output_modality: str = "text"
+    output_format: str = ""
     task_id: str = ""
     driver_run_id: str = ""
 
@@ -51,10 +53,17 @@ class CohortWorkflow:
             raise CouncilWorkflowError("COHORT_VESSEL_COUNT_RANGE")
         if not self.configuration_id.strip():
             raise CouncilWorkflowError("COHORT_CONFIGURATION_ID_REQUIRED")
+        if self.output_modality not in ("text", "image"):
+            raise CouncilWorkflowError("COHORT_OUTPUT_MODALITY_INVALID")
+        if self.output_modality == "image":
+            if (self.output_format or "png") not in ("png", "jpeg", "webp"):
+                raise CouncilWorkflowError("COHORT_IMAGE_OUTPUT_FORMAT_INVALID")
+        elif self.output_format:
+            raise CouncilWorkflowError("COHORT_TEXT_OUTPUT_FORMAT_FORBIDDEN")
         return self
 
     def to_record(self) -> dict[str, Any]:
-        return {
+        record = {
             "cohortId": self.cohort_id,
             "provider": self.provider,
             "model": self.model,
@@ -64,6 +73,10 @@ class CohortWorkflow:
             "taskId": self.task_id,
             "driverRunId": self.driver_run_id,
         }
+        if self.output_modality != "text":
+            record["outputModality"] = self.output_modality
+            record["outputFormat"] = self.output_format or "png"
+        return record
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "CohortWorkflow":
@@ -74,6 +87,8 @@ class CohortWorkflow:
             objective=str(value.get("objective") or ""),
             vessels_per_cohort=int(value.get("vesselsPerCohort") or 0),
             configuration_id=str(value.get("configurationId") or "default"),
+            output_modality=str(value.get("outputModality") or "text"),
+            output_format=str(value.get("outputFormat") or ""),
             task_id=str(value.get("taskId") or ""),
             driver_run_id=str(value.get("driverRunId") or ""),
         )
@@ -148,6 +163,17 @@ class CouncilWorkflow:
             cohort_slug = _slug(cohort.cohort_id)
             task_id = cohort.task_id or f"t-{mission_slug}-{cohort_slug}"
             run_id = cohort.driver_run_id or f"dr-{mission_slug}-{cohort_slug}"
+            cohort_spec = {
+                "cohortId": cohort.cohort_id,
+                "vesselsPerCohort": cohort.vessels_per_cohort,
+                "configurationId": cohort.configuration_id,
+                "vesselCharterPolicy": {
+                    "schemaVersion": self.charter_schema_version,
+                },
+            }
+            if cohort.output_modality != "text":
+                cohort_spec["outputModality"] = cohort.output_modality
+                cohort_spec["outputFormat"] = cohort.output_format or "png"
             payloads.append({
                 "objective": cohort.objective,
                 "targetRoot": str(Path(self.target_root).expanduser().resolve()),
@@ -161,14 +187,7 @@ class CouncilWorkflow:
                 "humanVerificationRequired": self.human_verification_required,
                 "responseMode": self.response_mode,
                 "promptEnhancement": self.prompt_enhancement,
-                "cohortSpec": {
-                    "cohortId": cohort.cohort_id,
-                    "vesselsPerCohort": cohort.vessels_per_cohort,
-                    "configurationId": cohort.configuration_id,
-                    "vesselCharterPolicy": {
-                        "schemaVersion": self.charter_schema_version,
-                    },
-                },
+                "cohortSpec": cohort_spec,
                 "authorityProfile": self._authority_profile(),
             })
         return payloads

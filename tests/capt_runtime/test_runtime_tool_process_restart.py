@@ -3,6 +3,8 @@ from __future__ import annotations
 import subprocess
 import sys
 import time
+
+import pytest
 from pathlib import Path
 
 from capt_runtime.composition import create_runtime
@@ -139,3 +141,18 @@ def test_real_service_restart_reconciles_without_redispatch(tmp_path: Path) -> N
                 proc.wait(timeout=2)
     assert proc.returncode == 0
     assert not marker.exists()
+
+
+def test_runtime_state_lock_is_exclusive_and_reusable(tmp_path: Path) -> None:
+    from desktop.capt_runtime_service import _acquire_runtime_state_lock
+
+    ledger = tmp_path / "runtime.db"
+    first = _acquire_runtime_state_lock(str(ledger))
+    try:
+        with pytest.raises(RuntimeError, match="already owns state lock"):
+            _acquire_runtime_state_lock(str(ledger))
+    finally:
+        first.close()
+
+    second = _acquire_runtime_state_lock(str(ledger))
+    second.close()

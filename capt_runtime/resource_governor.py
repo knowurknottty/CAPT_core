@@ -18,7 +18,7 @@ class TokenCostGovernor:
         max_tokens_per_session: int = 1_000_000,
         max_cost_usd_per_session: float = 10.0,
         max_requests_per_session: int = 100,
-        max_output_tokens_per_request: int = 16_384,
+        max_output_tokens_per_request: int = 49_152,
         alert_cost_usd: Optional[float] = None,
         on_cost_alert: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> None:
