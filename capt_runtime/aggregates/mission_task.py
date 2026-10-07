@@ -53,7 +53,7 @@ class MissionAggregate(object):
     )
     # Read-only identifiers owned by another aggregate or by the mission spec.
     # Copied into the snapshot for correlation; never mutated here.
-    REFERENCE_FIELDS = frozenset({"missionId"})
+    REFERENCE_FIELDS = frozenset({"missionId", "externalCommitments"})
 
     @staticmethod
     def stream_id(mission_id: str) -> str:
@@ -68,6 +68,7 @@ class MissionAggregate(object):
             "successCriteria": [c["criterionId"] for c in spec["successCriteria"]],
             "terminationCriteria": [c["criterionId"] for c in spec["terminationCriteria"]],
             "taskGraphId": spec.get("taskGraphId"),
+            "externalCommitments": list(spec.get("externalCommitments") or []),
             "policyDecisionIds": [],
         }
 

@@ -74,7 +74,7 @@ class CapabilityAggregate(object):
         }
     )
     REFERENCE_FIELDS = frozenset(
-        {"grantId", "capabilityId", "subjectActorId", "policyDecisionId", "policyBundleDigest"}
+        {"grantId", "capabilityId", "subjectActorId", "policyDecisionId", "policyBundleDigest", "approvalRequestId", "externalCommitments"}
     )
 
     @staticmethod
@@ -95,6 +95,8 @@ class CapabilityAggregate(object):
             "conditions": list(grant.get("conditions", [])),
             "policyDecisionId": grant["policyDecisionId"],
             "policyBundleDigest": grant["policyBundleDigest"],
+            "approvalRequestId": grant.get("approvalRequestId"),
+            "externalCommitments": list(grant.get("externalCommitments") or []),
             "maxUses": grant.get("maxUses"),
             "usesConsumed": 0,
             "validFrom": grant["validFrom"],

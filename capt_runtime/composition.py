@@ -161,6 +161,7 @@ class RuntimeComposition:
         output_modality: str = "text", output_format: str = "",
         reasoning_effort: str = "", governor=None, tool_bridge=None,
         cohort_spec=None,
+        boundary_recorder=None, durable_boundary_reader=None,
     ) -> DriverHost:
         from .drivers.provider import DESCRIPTOR as PROVIDER_DESCRIPTOR
         from .drivers.provider import ProviderDriver
@@ -173,6 +174,8 @@ class RuntimeComposition:
             dispatch_prompt=dispatch_prompt, output_modality=output_modality,
             output_format=output_format, reasoning_effort=reasoning_effort,
             governor=governor, tool_bridge=tool_bridge, cohort_spec=cohort_spec,
+            boundary_recorder=boundary_recorder,
+            durable_boundary_reader=durable_boundary_reader,
         ))
         return host
 

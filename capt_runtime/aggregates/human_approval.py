@@ -43,6 +43,7 @@ class HumanApprovalAggregate(object):
     OWNED_FIELDS = frozenset(
         {
             "human_approval.state",
+            "human_approval.operations",
             "human_approval.decision",
             "human_approval.operatorId",
             "human_approval.decidedAt",
@@ -53,7 +54,7 @@ class HumanApprovalAggregate(object):
             "human_approval.consumedBy",
         }
     )
-    REFERENCE_FIELDS = frozenset({"requestId", "missionId", "taskId"})
+    REFERENCE_FIELDS = frozenset({"requestId", "missionId", "taskId", "externalCommitments"})
 
     @staticmethod
     def stream_id(request_id: str) -> str:
@@ -68,6 +69,10 @@ class HumanApprovalAggregate(object):
             "requestedCapability": request["requestedCapability"],
             "resource": request["resource"],
             "operation": request["operation"],
+            "operations": list(request.get("operations") or []),
+            "capabilitySubject": request.get("capabilitySubject"),
+            "capabilityConditions": list(request.get("capabilityConditions") or []),
+            "capabilityMaxUses": request.get("capabilityMaxUses"),
             "scope": request.get("scope", {}),
             "riskClassification": request["riskClassification"],
             "policyReason": request["policyReason"],
@@ -77,6 +82,7 @@ class HumanApprovalAggregate(object):
             "correlationId": request["correlationId"],
             "createdAt": request["createdAt"],
             "promptAssemblyDigest": request.get("promptAssemblyDigest"),
+            "externalCommitments": list(request.get("externalCommitments") or []),
             "state": "requested",
             "decision": None,
             "operatorId": None,

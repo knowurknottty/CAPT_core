@@ -73,7 +73,7 @@ def test_openrouter_driver_provenance_and_secret_not_persisted(tmp_path: Path):
         assert _Server.seen["body"]["reasoning"] == {"effort": "xhigh"}
         assert _Server.seen["auth"] == "Bearer " + secret
         assert out["state"] == "completed"
-        assert out["dispatchBoundary"] == "response_completed"
+        assert out["dispatchBoundary"] == "result_persisted"
         assert out["transportCancellationSupported"] is False
         assert out["diagnostics"]["provider"] == "openrouter"
         assert out["diagnostics"]["reasoningEffortRequested"] == "xhigh"
@@ -83,7 +83,7 @@ def test_openrouter_driver_provenance_and_secret_not_persisted(tmp_path: Path):
         assert secret not in Path(out["artifactCandidate"]["artifactPath"]).read_text()
         inspected = asyncio.run(driver.inspect("dr-1"))
         assert inspected["state"] == "completed"
-        assert inspected["dispatchBoundary"] == "response_completed"
+        assert inspected["dispatchBoundary"] == "result_persisted"
         reconciled = asyncio.run(driver.reconcile("dr-1"))
         assert reconciled["result"] == "response_completed"
     finally:

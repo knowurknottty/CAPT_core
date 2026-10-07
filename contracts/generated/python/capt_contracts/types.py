@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:f0c87b685a44cef4e9b70075f07a0f10062ae3120d81b598f6015e1e743078d6
+# source digest:  sha256:7cf4592b209b32df0c0e63050c236208ea99e112632105106ef1624f591ecbb1
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -274,6 +274,8 @@ class CapabilityGrant(object):
     subject: ActorRef
     validFrom: Timestamp
     validUntil: Timestamp
+    approvalRequestId: Optional[str] = None
+    externalCommitments: List[ExternalCommitment] = field(default_factory=list)
     maxUses: Optional[int] = None
 
 
@@ -853,6 +855,35 @@ class ExtensionEnvelope(object):
 
 
 @dataclass(frozen=True)
+class ExternalCommitment(object):
+    """Digest-bound reference to an external agreement or artifact. Provenance only: recording a commitment never manufactures CAPT authority."""
+
+    digest: Digest
+    kind: str
+    reference: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class HumanApprovalCapabilityConsumption(object):
+    """Durable one-use transfer of an exact approved HumanApprovalRequest into an exact CapabilityGrant. The approval and grant are committed atomically."""
+
+    capabilityId: Identifier
+    conditions: List[GrantCondition]
+    consumedAt: Timestamp
+    externalCommitments: List[ExternalCommitment]
+    grantId: Identifier
+    maxUses: int
+    missionId: Identifier
+    operations: List[str]
+    requestId: Identifier
+    schemaVersion: SchemaVersion
+    scope: ResourceScope
+    subject: ActorRef
+    taskId: Identifier
+    useId: Identifier
+
+
+@dataclass(frozen=True)
 class HumanApprovalConsumption(object):
     """Durable one-use admission of a previously approved model execution."""
 
@@ -866,6 +897,7 @@ class HumanApprovalConsumption(object):
     schemaVersion: SchemaVersion
     taskId: Identifier
     useId: Identifier
+    commandIssuedAt: Optional[Timestamp] = None
 
 
 @dataclass(frozen=True)
@@ -901,6 +933,11 @@ class HumanApprovalRequest(object):
     schemaVersion: SchemaVersion
     scope: Dict[str, Any]
     taskId: Identifier
+    capabilityConditions: List[GrantCondition] = field(default_factory=list)
+    capabilityMaxUses: Optional[int] = None
+    capabilitySubject: Optional[ActorRef] = None
+    externalCommitments: List[ExternalCommitment] = field(default_factory=list)
+    operations: List[str] = field(default_factory=list)
     promptAssemblyDigest: Optional[str] = None
     remainingUses: Optional[int] = None
 
@@ -1061,11 +1098,21 @@ class OperatorMissionIntent(object):
     schemaVersion: SchemaVersion
     scope: Dict[str, Any]
     budget: Optional[Any] = None
+    capabilityConditions: List[GrantCondition] = field(default_factory=list)
+    capabilityMaxUses: Optional[int] = None
+    capabilitySubject: Optional[ActorRef] = None
+    consequential: Optional[bool] = None
     constraints: List[Dict[str, Any]] = field(default_factory=list)
+    correlationId: Optional[Identifier] = None
+    expiresAt: Optional[Timestamp] = None
+    externalCommitments: List[ExternalCommitment] = field(default_factory=list)
+    maxAttempts: Optional[int] = None
     normalizedRequest: Optional[str] = None
     operation: Optional[str] = None
+    operations: List[str] = field(default_factory=list)
     policyReason: Optional[str] = None
     rawRequest: Optional[str] = None
+    remainingUses: Optional[int] = None
     requestId: Optional[str] = None
     requestedCapability: Optional[str] = None
     resource: Optional[str] = None
@@ -1362,6 +1409,19 @@ class ContextSlice(object):
     skillContext: Optional[AuthoredSkillContext] = None
 
 
+class DispatchBoundary(str, Enum):
+    """Durable provider dispatch-boundary marker. Records how far an external dispatch progressed before a crash or loss, so reconciliation can decide safe_to_retry vs retry_forbidden vs harvestable without fabricating certainty."""
+
+    NOT_DISPATCHED = "not_dispatched"
+    PREPARED = "prepared"
+    REQUEST_STARTED = "request_started"
+    RESPONSE_STARTED = "response_started"
+    RESPONSE_COMPLETED = "response_completed"
+    RESULT_PERSISTED = "result_persisted"
+    BUDGET_REJECTED = "budget_rejected"
+    UNKNOWN = "unknown"
+
+
 @dataclass(frozen=True)
 class DriverArtifactCandidate(object):
     """A driver-produced artifact candidate. CAPT validates existence before creating an EvidenceRecord."""
@@ -1539,6 +1599,8 @@ class DriverRun(object):
     state: DriverRunState
     taskId: Identifier
     workOrderVersion: int
+    dispatchBoundary: Optional[DispatchBoundary] = None
+    dispatchBoundaryUpdatedAt: Optional[Timestamp] = None
     externalRunId: Optional[str] = None
 
 
@@ -1894,6 +1956,17 @@ class DriverRunCreatedPayload(object):
 
 
 @dataclass(frozen=True)
+class DriverRunDispatchBoundaryRecordedPayload(object):
+    """DriverRunDispatchBoundaryRecordedPayload"""
+
+    dispatchBoundary: DispatchBoundary
+    driverRunId: Identifier
+    eventType: Literal["DriverRunDispatchBoundaryRecorded"]
+    previousDispatchBoundary: Optional[DispatchBoundary] = None
+    recordedAt: Optional[Timestamp] = None
+
+
+@dataclass(frozen=True)
 class DriverRunStateChangedPayload(object):
     """DriverRunStateChangedPayload"""
 
@@ -1931,6 +2004,14 @@ class EvidenceRecordedPayload(object):
 
     eventType: Literal["EvidenceRecorded"]
     evidence: EvidenceRecord
+
+
+@dataclass(frozen=True)
+class HumanApprovalConsumedForCapabilityPayload(object):
+    """HumanApprovalConsumedForCapabilityPayload"""
+
+    consumption: HumanApprovalCapabilityConsumption
+    eventType: Literal["HumanApprovalConsumedForCapability"]
 
 
 @dataclass(frozen=True)
@@ -2161,7 +2242,7 @@ class ToolExecutionTerminatedPayload(object):
 
 
 # discriminated on 'eventType'
-EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, CouncilAdmittedPayload, CouncilAnalysisRecordedPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload, PromptProposalCreatedPayload, PromptProposalRevisedPayload, PromptProposalCancelledPayload, BotRegisteredPayload, CognitiveCandidateProposedPayload, CognitiveCandidateDecidedPayload, SkillCandidateCreatedPayload, SkillCandidateTransitionedPayload, LabBoardItemCreatedPayload, LabBoardItemTransitionedPayload, DelegateAssignedPayload, DelegateAssignmentTransitionedPayload, CloudflareResourceAdoptionApprovalConsumedPayload, CloudflareResourceBindingCreatedPayload, SandboxLeaseReservedPayload, SandboxLeaseTransitionedPayload]
+EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, DriverRunDispatchBoundaryRecordedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, HumanApprovalConsumedForCapabilityPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, CouncilAdmittedPayload, CouncilAnalysisRecordedPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload, PromptProposalCreatedPayload, PromptProposalRevisedPayload, PromptProposalCancelledPayload, BotRegisteredPayload, CognitiveCandidateProposedPayload, CognitiveCandidateDecidedPayload, SkillCandidateCreatedPayload, SkillCandidateTransitionedPayload, LabBoardItemCreatedPayload, LabBoardItemTransitionedPayload, DelegateAssignedPayload, DelegateAssignmentTransitionedPayload, CloudflareResourceAdoptionApprovalConsumedPayload, CloudflareResourceBindingCreatedPayload, SandboxLeaseReservedPayload, SandboxLeaseTransitionedPayload]
 
 
 class EventType(str, Enum):
@@ -2183,6 +2264,7 @@ class EventType(str, Enum):
     CAPABILITYLEASEREVOKED = "CapabilityLeaseRevoked"
     DRIVERRUNCREATED = "DriverRunCreated"
     DRIVERRUNSTATECHANGED = "DriverRunStateChanged"
+    DRIVERRUNDISPATCHBOUNDARYRECORDED = "DriverRunDispatchBoundaryRecorded"
     CLAIMCREATED = "ClaimCreated"
     EVIDENCERECORDED = "EvidenceRecorded"
     CLAIMVERIFIED = "ClaimVerified"
@@ -2190,6 +2272,7 @@ class EventType(str, Enum):
     HUMANAPPROVALREQUESTED = "HumanApprovalRequested"
     HUMANAPPROVALDECIDED = "HumanApprovalDecided"
     HUMANAPPROVALCONSUMED = "HumanApprovalConsumed"
+    HUMANAPPROVALCONSUMEDFORCAPABILITY = "HumanApprovalConsumedForCapability"
     PROMPTPROPOSALCREATED = "PromptProposalCreated"
     PROMPTPROPOSALREVISED = "PromptProposalRevised"
     PROMPTPROPOSALCANCELLED = "PromptProposalCancelled"
@@ -2382,6 +2465,7 @@ class MissionSpec(object):
     successCriteria: List[SuccessCriterion]
     terminationCriteria: List[TerminationCriterion]
     unresolvedAmbiguities: List[str]
+    externalCommitments: List[ExternalCommitment] = field(default_factory=list)
     taskGraphId: Optional[Identifier] = None
 
 
@@ -2439,6 +2523,7 @@ class PolicyDecision(object):
     schemaVersion: SchemaVersion
     subject: ActorRef
     conditions: List[GrantCondition] = field(default_factory=list)
+    externalCommitments: List[ExternalCommitment] = field(default_factory=list)
     missionId: Optional[Identifier] = None
     taskId: Optional[Identifier] = None
 

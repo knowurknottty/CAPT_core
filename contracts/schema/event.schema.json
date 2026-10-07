@@ -25,6 +25,7 @@
         "CapabilityLeaseRevoked",
         "DriverRunCreated",
         "DriverRunStateChanged",
+        "DriverRunDispatchBoundaryRecorded",
         "ClaimCreated",
         "EvidenceRecorded",
         "ClaimVerified",
@@ -32,6 +33,7 @@
         "HumanApprovalRequested",
         "HumanApprovalDecided",
         "HumanApprovalConsumed",
+        "HumanApprovalConsumedForCapability",
         "PromptProposalCreated",
         "PromptProposalRevised",
         "PromptProposalCancelled",
@@ -408,6 +410,34 @@
           }
         },
         {
+          "title": "DriverRunDispatchBoundaryRecordedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "driverRunId",
+            "dispatchBoundary"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "DriverRunDispatchBoundaryRecorded"
+            },
+            "driverRunId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "dispatchBoundary": {
+              "$ref": "driver.schema.json#/$defs/DispatchBoundary"
+            },
+            "previousDispatchBoundary": {
+              "$ref": "driver.schema.json#/$defs/DispatchBoundary"
+            },
+            "recordedAt": {
+              "$ref": "common.schema.json#/$defs/Timestamp"
+            }
+          }
+        },
+        {
           "title": "ClaimCreatedPayload",
           "type": "object",
           "additionalProperties": false,
@@ -530,6 +560,24 @@
             },
             "consumption": {
               "$ref": "common.schema.json#/$defs/HumanApprovalConsumption"
+            }
+          }
+        },
+        {
+          "title": "HumanApprovalConsumedForCapabilityPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "consumption"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "HumanApprovalConsumedForCapability"
+            },
+            "consumption": {
+              "$ref": "common.schema.json#/$defs/HumanApprovalCapabilityConsumption"
             }
           }
         },

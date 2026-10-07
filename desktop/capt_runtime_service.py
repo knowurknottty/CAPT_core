@@ -40,6 +40,8 @@ from typing import Any, Dict, List, Optional
 
 import capt_runtime
 from capt_runtime import commands, contracts
+
+
 from capt_runtime.checkpoint import (
     can_dispatch_consequential,
     create_checkpoint,
@@ -86,6 +88,41 @@ from capt_runtime.managed_skills import default_managed_skill_root, verify_manag
 from desktop.prompt_compiler_provider import build_prompt_compiler
 from desktop.operator_control import OperatorControlStore
 
+
+_COMMAND_TIMESTAMP_SKEW_BOUND_SECONDS = 300
+
+
+def _parse_rfc3339_timestamp(value: Any) -> datetime:
+    """Parse an RFC3339 timestamp, failing closed on malformed input."""
+    stamp = str(value).replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(stamp)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _check_command_timestamp_skew(
+    command_issued_at: Any,
+    consumed_at: str,
+    bound_seconds: int = _COMMAND_TIMESTAMP_SKEW_BOUND_SECONDS,
+) -> None:
+    """Fail closed when a command-carried timestamp disagrees with authoritative wall-clock time.
+
+    The preparation path stamps authority consumption with the runtime's own
+    clock. A command-carried timestamp that is missing, malformed, or skewed
+    beyond the bound is evidence of tampering or clock failure and must not
+    be silently trusted as the authority-consumption time.
+    """
+    if not command_issued_at:
+        raise AuthorityViolation("MODEL_COMMAND_TIMESTAMP_MISSING")
+    try:
+        skew = abs(
+            (_parse_rfc3339_timestamp(command_issued_at) - _parse_rfc3339_timestamp(consumed_at)).total_seconds()
+        )
+    except Exception as exc:
+        raise AuthorityViolation("MODEL_COMMAND_TIMESTAMP_MALFORMED") from exc
+    if skew > bound_seconds:
+        raise AuthorityViolation("MODEL_COMMAND_TIMESTAMP_SKEW")
 
 RUNTIME_VERSION = getattr(capt_runtime, "RUNTIME_VERSION", "0.1.0")
 CONTRACT_SCHEMA_VERSION = "1.0.0"
@@ -990,7 +1027,7 @@ class RuntimeQueryService:
                 return {"ok": True, "result": {
                     "schemaVersion": CONTRACT_SCHEMA_VERSION,
                     "queryOperations": ["identity", "capabilities", "list_aggregates", "bots", "approvals", "missions", "tasks", "checkpoints", "security_rejections", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers", "managed_skills", "operator_control_snapshot", "operator_session_get", "operator_proposal_get", "operator_execution_state"],
-                    "commandOperations": ["create_mission", "operator_chat_new", "operator_execution_config_set", "operator_prompt_submit", "operator_proposal_select", "compile_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "submit_provider_result_review", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "run_approved_council_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool", "install_managed_skill", "create_managed_skill"],
+                    "commandOperations": ["create_mission", "operator_chat_new", "operator_execution_config_set", "operator_prompt_submit", "operator_proposal_select", "compile_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "activate_approved_capability", "submit_provider_result_review", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "run_approved_council_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool", "install_managed_skill", "create_managed_skill"],
                     "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True, "toolRegistry": True, "toolBroker": True, "mcpClient": self.mcp_manager is not None, "promptCompiler": True, "botFoundation": True},
                     "lifecycleOperations": {"checkpoint": True, "shutdown": True, "resume": True},
                 }}
@@ -1243,7 +1280,14 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 # re-verified here, then carried in the immutable prepared object;
                 # dispatch never re-reads the skill checkout.
                 command_id = command["commandId"]
-                now = command.get("timestamp") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                # P0.1: authority is consumed at authoritative runtime time, never at a
+                # command-carried timestamp. A command-carried timestamp that is missing,
+                # malformed, or skewed beyond the bound is evidence of tampering or
+                # clock failure: fail closed. The command timestamp is retained as
+                # provenance evidence (timingEvidence) only.
+                command_issued_at = command.get("timestamp")
+                now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                _check_command_timestamp_skew(command_issued_at, now)
                 mission_id = payload.get("missionId") or ("m-model-" + command_id)
                 task_id = payload.get("taskId") or (mission_id + "-task-1")
                 run_id = payload.get("driverRunId") or ("dr-model-" + command_id)
@@ -1400,6 +1444,11 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         "skillNames": skill_names,
                         "authorityProfile": authority_profile,
                         "approvalExpiresAt": str(approval_state["expiresAt"]),
+                        "timingEvidence": {
+                            "commandIssuedAt": command_issued_at,
+                            "authorityConsumedAt": now,
+                            "timestampSkewBoundSeconds": _COMMAND_TIMESTAMP_SKEW_BOUND_SECONDS,
+                        },
                     }),
                     context_pack_digest=context_pack_digest,
                 )
@@ -1616,7 +1665,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     "policyDecisionId": policy_id,
                     "policyBundleDigest": contracts.digest({"policyBundle": "model-operator", "version": 1}),
                     "conditions": [{"kind": "isolated_worktree", "worktreeRoot": target_root}],
-                    "maxUses": 1, "validFrom": now, "validUntil": "2030-01-01T00:00:00Z",
+                    "maxUses": 1, "validFrom": now, "validUntil": str(prepared.data["approvalExpiresAt"]),
                     "issuedBy": {"actorId": "gk-1", "kind": "governance_kernel"}, "issuedAt": now,
                 }
                 svc.issue_grant(grant, gk_meta("issue_grant"))
@@ -1626,7 +1675,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     "executionContextId": "ec-model-" + command_id,
                     "operations": ["repository.read", "filesystem.read", "artifact.create", "analysis.execute"],
                     "scope": {"kind": "filesystem", "rootPath": target_root, "recursive": True},
-                    "maxUses": 1, "validFrom": now, "validUntil": "2030-01-01T00:00:00Z",
+                    "maxUses": 1, "validFrom": now, "validUntil": str(prepared.data["approvalExpiresAt"]),
                     "activatedAt": now,
                 }
                 svc.activate_lease(lease, gk_meta("activate_lease"))
@@ -1660,6 +1709,41 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 worktree = Path(target_root)
                 staging = Path(staging_root_for_ledger(store.path, str(run_id)))
                 staging.mkdir(parents=True, exist_ok=True)
+                # P0.3: crash-consistent dispatch-boundary recorder. The
+                # provider driver invokes this BEFORE crossing each
+                # irreversible external boundary (request_started before
+                # urlopen, response_started after headers, response_completed
+                # after the body, result_persisted after the artifact write).
+                # A recording failure propagates out of the driver and aborts
+                # dispatch: the run must not cross a boundary its durable
+                # record does not show (fail closed).
+                # P0.3: every boundary record carries a fresh monotonic sequence so
+                # a tool-call loop that legitimately re-opens request_started (or
+                # any other recurring boundary) appends a DISTINCT durable event.
+                # Reusing one idempotency key per boundary name would make the
+                # store return the first round's receipt as a duplicate and leave
+                # the durable boundary understated in the unsafe direction.
+                _boundary_seq = {"n": 0}
+                def _record_dispatch_boundary(driver_run_id: str, boundary: str) -> None:
+                    _boundary_seq["n"] += 1
+                    seq = _boundary_seq["n"]
+                    record_id = "%s:dispatch-boundary:%03d:%s" % (command_id, seq, boundary)
+                    boundary_meta = commands.command(
+                        command_id=record_id,
+                        idempotency_key="%s:dispatch-boundary:%03d:%s" % (key, seq, boundary),
+                        operation_fingerprint=commands.fingerprint(
+                            "record_driver_dispatch_boundary",
+                            {"driverRunId": driver_run_id, "dispatchBoundary": boundary,
+                             "sequence": seq},
+                        ),
+                        correlation_id=correlation_id,
+                        actor_id="exec-1",
+                        actor_kind="execution_plane",
+                        issued_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        replay_policy="never",
+                    )
+                    svc.record_driver_dispatch_boundary(driver_run_id, boundary, boundary_meta)
+
                 if provider is not None:
                     host = runtime.provider_host(
                         target_repo=str(worktree), staging_root=str(staging),
@@ -1672,6 +1756,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         cohort_spec=cohort_spec,
                         governor=provider_governor,
                         tool_bridge=tool_authority.bridge if tool_authority is not None else None,
+                        boundary_recorder=_record_dispatch_boundary,
                     )
                 else:
                     host = runtime.hermes_host(
