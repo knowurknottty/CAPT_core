@@ -39,6 +39,24 @@ class ReconciliationError(Exception):
     pass
 
 
+def classify_dispatch_boundary(dispatch_boundary: str) -> str:
+    """Map a durable dispatch-boundary marker to a reconciliation disposition.
+
+    Pure function over the boundary vocabulary; ``reconcile`` uses it for
+    crash-recovered (lost) runs. Never fabricates certainty: a crossed
+    request boundary without a completed response forbids automatic retry;
+    a persisted result is harvestable; a pre-dispatch boundary is safe to
+    retry only under fresh authority.
+    """
+    if dispatch_boundary in ("not_dispatched", "prepared", "budget_rejected"):
+        return "safe_to_retry"
+    if dispatch_boundary in ("request_started", "response_started"):
+        return "retry_forbidden"
+    if dispatch_boundary in ("response_completed", "result_persisted"):
+        return "reconciled_completed"
+    return "external_state_unknown"
+
+
 def reconcile(
     driver_run_state: Dict[str, Any],
     ledger_events: List[Dict[str, Any]],
@@ -81,7 +99,43 @@ def reconcile(
         anomalies.append("budget invalid or exceeded")
 
     if driver_run_state["state"] == "lost":
-        result = "external_state_unknown"
+        # P0.3: a lost run is classified from its durable dispatch-boundary
+        # marker, not from guesswork. A crossed request boundary without a
+        # completed response forbids automatic retry; a persisted result is
+        # harvestable; a pre-dispatch boundary is safe to retry under fresh
+        # authority. Anything else stays unknown.
+        boundary = driver_run_state.get("dispatchBoundary", "unknown")
+        disposition = classify_dispatch_boundary(boundary)
+        if disposition == "safe_to_retry":
+            result = "safe_to_retry"
+            anomalies.append(
+                "lost driver run with durable dispatch boundary %r: external dispatch "
+                "provably never crossed; retry requires fresh authority" % (boundary,)
+            )
+        elif disposition == "retry_forbidden":
+            result = "retry_forbidden"
+            anomalies.append(
+                "lost driver run with durable dispatch boundary %r: request crossed the "
+                "provider boundary; external effect unknown; automatic retry forbidden" % (boundary,)
+            )
+        elif disposition == "reconciled_completed":
+            if artifact_present:
+                result = "reconciled_completed"
+                anomalies.append(
+                    "lost driver run with durable dispatch boundary %r and artifact present: "
+                    "harvest the result; do not redispatch" % (boundary,)
+                )
+            else:
+                result = "reconciliation_requires_human"
+                anomalies.append(
+                    "lost driver run with durable dispatch boundary %r but no artifact: "
+                    "human decision required" % (boundary,)
+                )
+        else:
+            result = "external_state_unknown"
+            anomalies.append(
+                "lost driver run with unknown dispatch boundary %r: external effects unknown" % (boundary,)
+            )
     elif not lease_valid or not budget_valid:
         result = "retry_forbidden"
     elif has_completion and artifact_present:

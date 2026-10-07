@@ -27,6 +27,7 @@ from .aggregates import (
 )
 from .authority import require_authority
 from .contracts import digest, require
+from .driver_run import DriverRunAggregate as _DispatchBoundaryAggregate
 from .errors import AuthorityViolation, ConcurrencyError, IdempotencyConflict
 from .replay import ledger_identity_to_sequence, replay_to_sequence
 from .store import AppendRequest, EventStore
@@ -1988,88 +1989,156 @@ class RuntimeService(object):
         if prior is not None:
             return {"status": "idempotent", "driverRunId": driver_run_id,
                     "preparedExecutionDigest": prepared_execution_digest}
-        stream = HumanApprovalAggregate.stream_id(request_id)
-        current = self.store.require_state(stream)
-        if current.get("operation") != operation:
-            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_OPERATION_MISMATCH")
-        if current.get("promptAssemblyDigest") != prompt_assembly_digest:
-            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_DIGEST_MISMATCH")
-        binding = (current.get("scope") or {}).get("approvalBinding") or {}
-        checks = (
-            ("missionId", mission_id, "MODEL_PROMPT_APPROVAL_MISSION_MISMATCH"),
-            ("taskId", task_id, "MODEL_PROMPT_APPROVAL_TASK_MISMATCH"),
-            ("driverRunId", driver_run_id, "MODEL_PROMPT_APPROVAL_DRIVER_RUN_MISMATCH"),
-            ("targetRoot", resource, "MODEL_PROMPT_APPROVAL_RESOURCE_MISMATCH"),
-        )
-        for key, offered, code in checks:
-            if str(binding.get(key, "")) != str(offered):
-                raise AuthorityViolation(code)
-        if str(current.get("resource", "")) != str(resource):
-            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_RESOURCE_MISMATCH")
-        if current.get("state") == "consumed":
-            if current.get("consumedBy") == use_id:
-                return {**current, "status": "idempotent"}
-            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_CONSUMED")
-        if current.get("state") != "approved":
-            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_NOT_APPROVED")
-        if now > current.get("expiresAt", ""):
-            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_EXPIRED")
-        if current.get("remainingUses") != 1:
-            raise AuthorityViolation("MODEL_PROMPT_APPROVAL_ONE_USE_REQUIRED")
+        # P0.1: the expiry check and the consumption commit below execute as one
+        # atomic section under the store lock: approval expiry is revalidated
+        # against authoritative wall-clock consumption time immediately
+        # before authority is consumed, with no interleaving writer able to
+        # slip between the check and the commit (TOCTOU). The command-carried
+        # `now` is retained as provenance evidence only.
+        with self.store.authority_section():
+            stream = HumanApprovalAggregate.stream_id(request_id)
+            current = self.store.require_state(stream)
+            if current.get("operation") != operation:
+                raise AuthorityViolation("MODEL_PROMPT_APPROVAL_OPERATION_MISMATCH")
+            if current.get("promptAssemblyDigest") != prompt_assembly_digest:
+                raise AuthorityViolation("MODEL_PROMPT_APPROVAL_DIGEST_MISMATCH")
+            binding = (current.get("scope") or {}).get("approvalBinding") or {}
+            checks = (
+                ("missionId", mission_id, "MODEL_PROMPT_APPROVAL_MISSION_MISMATCH"),
+                ("taskId", task_id, "MODEL_PROMPT_APPROVAL_TASK_MISMATCH"),
+                ("driverRunId", driver_run_id, "MODEL_PROMPT_APPROVAL_DRIVER_RUN_MISMATCH"),
+                ("targetRoot", resource, "MODEL_PROMPT_APPROVAL_RESOURCE_MISMATCH"),
+            )
+            for key, offered, code in checks:
+                if str(binding.get(key, "")) != str(offered):
+                    raise AuthorityViolation(code)
+            if str(current.get("resource", "")) != str(resource):
+                raise AuthorityViolation("MODEL_PROMPT_APPROVAL_RESOURCE_MISMATCH")
+            if current.get("state") == "consumed":
+                if current.get("consumedBy") == use_id:
+                    return {**current, "status": "idempotent"}
+                raise AuthorityViolation("MODEL_PROMPT_APPROVAL_CONSUMED")
+            if current.get("state") != "approved":
+                raise AuthorityViolation("MODEL_PROMPT_APPROVAL_NOT_APPROVED")
+            # P0.1: one authoritative consumption timestamp for the whole
+            # check-then-consume sequence. Expiry is revalidated against
+            # current wall-clock time in addition to the command-carried
+            # timestamp: a stale command time must not extend authority, and
+            # the aggregate's own check uses the same authoritative value.
+            consumed_at = _now_rfc3339()
+            if now > current.get("expiresAt", ""):
+                raise AuthorityViolation("MODEL_PROMPT_APPROVAL_EXPIRED")
+            if consumed_at > current.get("expiresAt", ""):
+                raise AuthorityViolation("MODEL_PROMPT_APPROVAL_EXPIRED")
+            if current.get("remainingUses") != 1:
+                raise AuthorityViolation("MODEL_PROMPT_APPROVAL_ONE_USE_REQUIRED")
 
+            expected = self.store.aggregate_version(stream)
+            state = HumanApprovalAggregate.consume(current, use_id, consumed_at)
+            consumption = {
+                "schemaVersion": "1.0.0",
+                "requestId": request_id,
+                "useId": use_id,
+                "consumedAt": consumed_at,
+                "commandIssuedAt": now,
+                "missionId": mission_id,
+                "taskId": task_id,
+                "driverRunId": driver_run_id,
+                "resource": resource,
+                "operation": operation,
+                "promptAssemblyDigest": prompt_assembly_digest,
+            }
+            require("HumanApprovalConsumption", consumption)
+            event = commands.envelope(
+                event_id=metadata["commandId"] + "-ev1",
+                stream_id=stream,
+                event_type="HumanApprovalConsumed",
+                payload={"eventType": "HumanApprovalConsumed", "consumption": consumption},
+                metadata=metadata,
+                occurred_at=metadata["issuedAt"],
+                mission_id=mission_id,
+                task_id=task_id,
+            )
+            run = {
+                "schemaVersion": "1.0.0", "driverRunId": driver_run_id,
+                "driverId": driver_id, "missionId": mission_id, "taskId": task_id,
+                "workOrderVersion": 1, "externalRunId": None, "state": "created",
+                "reconciliationStatus": "not_required", "createdAt": consumed_at,
+                "dispatchBoundary": "not_dispatched",
+            }
+            require("DriverRun", run)
+            run_stream = DriverRunAggregate.stream_id(driver_run_id)
+            if self.store.aggregate_version(run_stream) != 0:
+                raise AuthorityViolation("MODEL_DRIVER_RUN_ALREADY_EXISTS")
+            run_event = commands.envelope(
+                event_id=metadata["commandId"] + "-ev2", stream_id=run_stream,
+                event_type="DriverRunCreated",
+                payload={"eventType": "DriverRunCreated", "driverRun": run},
+                metadata=metadata, occurred_at=metadata["issuedAt"],
+                mission_id=mission_id, task_id=task_id,
+            )
+            committed = self._commit(
+                [
+                    AppendRequest(stream, HumanApprovalAggregate.KIND, expected, event, state),
+                    AppendRequest(run_stream, DriverRunAggregate.KIND, 0, run_event,
+                                  DriverRunAggregate.create(run)),
+                ],
+                metadata,
+            )
+            return {**state, "status": committed.get("status", "applied"),
+                    "driverRunId": driver_run_id,
+                    "preparedExecutionDigest": prepared_execution_digest}
+
+    def record_driver_dispatch_boundary(
+        self, driver_run_id: str, dispatch_boundary: str, metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Durably record provider dispatch-boundary progress for a driver run.
+
+        Crash-consistent ordering is the caller's duty: the driver records
+        ``request_started`` BEFORE the irreversible external call, so a crash
+        between the record and the call can only overstate progress in the
+        safe direction (retry forbidden, never silent redispatch). Recording
+        never dispatches; it only persists the boundary marker. Boundary
+        moves are forward-monotonic at the aggregate: a stale recorder may
+        re-record the current boundary (idempotent) but may never move it
+        backward.
+        """
+        require("CommandMetadata", metadata)
+        require_authority("record_driver_dispatch_boundary", metadata["actor"]["kind"])
+        stream = DriverRunAggregate.stream_id(driver_run_id)
         expected = self.store.aggregate_version(stream)
-        state = HumanApprovalAggregate.consume(current, use_id, now)
-        consumption = {
-            "schemaVersion": "1.0.0",
-            "requestId": request_id,
-            "useId": use_id,
-            "consumedAt": now,
-            "missionId": mission_id,
-            "taskId": task_id,
-            "driverRunId": driver_run_id,
-            "resource": resource,
-            "operation": operation,
-            "promptAssemblyDigest": prompt_assembly_digest,
-        }
-        require("HumanApprovalConsumption", consumption)
+        current = self.store.require_state(stream)
+        recorded_at = _now_rfc3339()
+        # Boundary vocabulary/monotonicity is owned by the boundary-capable
+        # aggregate (capt_runtime.driver_run); the service aggregate
+        # (aggregates.claim_driver.DriverRunAggregate) carries the durable
+        # field. One order table, one source of truth.
+        state = _DispatchBoundaryAggregate.record_dispatch_boundary(
+            current, dispatch_boundary, recorded_at
+        )
         event = commands.envelope(
             event_id=metadata["commandId"] + "-ev1",
             stream_id=stream,
-            event_type="HumanApprovalConsumed",
-            payload={"eventType": "HumanApprovalConsumed", "consumption": consumption},
+            event_type="DriverRunDispatchBoundaryRecorded",
+            payload={
+                "eventType": "DriverRunDispatchBoundaryRecorded",
+                "driverRunId": driver_run_id,
+                "dispatchBoundary": dispatch_boundary,
+                "previousDispatchBoundary": current.get("dispatchBoundary", "unknown"),
+                "recordedAt": recorded_at,
+            },
             metadata=metadata,
             occurred_at=metadata["issuedAt"],
-            mission_id=mission_id,
-            task_id=task_id,
+            mission_id=current.get("missionId"),
+            task_id=current.get("taskId"),
         )
-        run = {
-            "schemaVersion": "1.0.0", "driverRunId": driver_run_id,
-            "driverId": driver_id, "missionId": mission_id, "taskId": task_id,
-            "workOrderVersion": 1, "externalRunId": None, "state": "created",
-            "reconciliationStatus": "not_required", "createdAt": now,
-        }
-        require("DriverRun", run)
-        run_stream = DriverRunAggregate.stream_id(driver_run_id)
-        if self.store.aggregate_version(run_stream) != 0:
-            raise AuthorityViolation("MODEL_DRIVER_RUN_ALREADY_EXISTS")
-        run_event = commands.envelope(
-            event_id=metadata["commandId"] + "-ev2", stream_id=run_stream,
-            event_type="DriverRunCreated",
-            payload={"eventType": "DriverRunCreated", "driverRun": run},
-            metadata=metadata, occurred_at=metadata["issuedAt"],
-            mission_id=mission_id, task_id=task_id,
-        )
-        committed = self._commit(
-            [
-                AppendRequest(stream, HumanApprovalAggregate.KIND, expected, event, state),
-                AppendRequest(run_stream, DriverRunAggregate.KIND, 0, run_event,
-                              DriverRunAggregate.create(run)),
-            ],
+        # _commit reads idempotencyKey/operationFingerprint from metadata;
+        # it accepts no such keyword arguments. The caller (desktop runtime
+        # service) mints a unique idempotency key per boundary record.
+        return self._commit(
+            [AppendRequest(stream, DriverRunAggregate.KIND, expected, event, state)],
             metadata,
         )
-        return {**state, "status": committed.get("status", "applied"),
-                "driverRunId": driver_run_id,
-                "preparedExecutionDigest": prepared_execution_digest}
 
     # -- cancellation (M1) ------------------------------------------------
 

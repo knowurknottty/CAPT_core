@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:daac0addf0d4a2d589c70824f355dc860956733d89a3946cbd31b655e3611931
+# source digest:  sha256:7cf4592b209b32df0c0e63050c236208ea99e112632105106ef1624f591ecbb1
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -897,6 +897,7 @@ class HumanApprovalConsumption(object):
     schemaVersion: SchemaVersion
     taskId: Identifier
     useId: Identifier
+    commandIssuedAt: Optional[Timestamp] = None
 
 
 @dataclass(frozen=True)
@@ -1408,6 +1409,19 @@ class ContextSlice(object):
     skillContext: Optional[AuthoredSkillContext] = None
 
 
+class DispatchBoundary(str, Enum):
+    """Durable provider dispatch-boundary marker. Records how far an external dispatch progressed before a crash or loss, so reconciliation can decide safe_to_retry vs retry_forbidden vs harvestable without fabricating certainty."""
+
+    NOT_DISPATCHED = "not_dispatched"
+    PREPARED = "prepared"
+    REQUEST_STARTED = "request_started"
+    RESPONSE_STARTED = "response_started"
+    RESPONSE_COMPLETED = "response_completed"
+    RESULT_PERSISTED = "result_persisted"
+    BUDGET_REJECTED = "budget_rejected"
+    UNKNOWN = "unknown"
+
+
 @dataclass(frozen=True)
 class DriverArtifactCandidate(object):
     """A driver-produced artifact candidate. CAPT validates existence before creating an EvidenceRecord."""
@@ -1585,6 +1599,8 @@ class DriverRun(object):
     state: DriverRunState
     taskId: Identifier
     workOrderVersion: int
+    dispatchBoundary: Optional[DispatchBoundary] = None
+    dispatchBoundaryUpdatedAt: Optional[Timestamp] = None
     externalRunId: Optional[str] = None
 
 
@@ -1940,6 +1956,17 @@ class DriverRunCreatedPayload(object):
 
 
 @dataclass(frozen=True)
+class DriverRunDispatchBoundaryRecordedPayload(object):
+    """DriverRunDispatchBoundaryRecordedPayload"""
+
+    dispatchBoundary: DispatchBoundary
+    driverRunId: Identifier
+    eventType: Literal["DriverRunDispatchBoundaryRecorded"]
+    previousDispatchBoundary: Optional[DispatchBoundary] = None
+    recordedAt: Optional[Timestamp] = None
+
+
+@dataclass(frozen=True)
 class DriverRunStateChangedPayload(object):
     """DriverRunStateChangedPayload"""
 
@@ -2215,7 +2242,7 @@ class ToolExecutionTerminatedPayload(object):
 
 
 # discriminated on 'eventType'
-EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, HumanApprovalConsumedForCapabilityPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, CouncilAdmittedPayload, CouncilAnalysisRecordedPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload, PromptProposalCreatedPayload, PromptProposalRevisedPayload, PromptProposalCancelledPayload, BotRegisteredPayload, CognitiveCandidateProposedPayload, CognitiveCandidateDecidedPayload, SkillCandidateCreatedPayload, SkillCandidateTransitionedPayload, LabBoardItemCreatedPayload, LabBoardItemTransitionedPayload, DelegateAssignedPayload, DelegateAssignmentTransitionedPayload, CloudflareResourceAdoptionApprovalConsumedPayload, CloudflareResourceBindingCreatedPayload, SandboxLeaseReservedPayload, SandboxLeaseTransitionedPayload]
+EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, DriverRunDispatchBoundaryRecordedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, HumanApprovalConsumedForCapabilityPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, CouncilAdmittedPayload, CouncilAnalysisRecordedPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload, PromptProposalCreatedPayload, PromptProposalRevisedPayload, PromptProposalCancelledPayload, BotRegisteredPayload, CognitiveCandidateProposedPayload, CognitiveCandidateDecidedPayload, SkillCandidateCreatedPayload, SkillCandidateTransitionedPayload, LabBoardItemCreatedPayload, LabBoardItemTransitionedPayload, DelegateAssignedPayload, DelegateAssignmentTransitionedPayload, CloudflareResourceAdoptionApprovalConsumedPayload, CloudflareResourceBindingCreatedPayload, SandboxLeaseReservedPayload, SandboxLeaseTransitionedPayload]
 
 
 class EventType(str, Enum):
@@ -2237,6 +2264,7 @@ class EventType(str, Enum):
     CAPABILITYLEASEREVOKED = "CapabilityLeaseRevoked"
     DRIVERRUNCREATED = "DriverRunCreated"
     DRIVERRUNSTATECHANGED = "DriverRunStateChanged"
+    DRIVERRUNDISPATCHBOUNDARYRECORDED = "DriverRunDispatchBoundaryRecorded"
     CLAIMCREATED = "ClaimCreated"
     EVIDENCERECORDED = "EvidenceRecorded"
     CLAIMVERIFIED = "ClaimVerified"

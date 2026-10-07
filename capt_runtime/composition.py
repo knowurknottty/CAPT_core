@@ -159,6 +159,7 @@ class RuntimeComposition:
         self, *, target_repo: str, staging_root: str, provider_id: str, model: str,
         base_url: str, api_key: str = "", dispatch_prompt: str = "",
         reasoning_effort: str = "", governor=None, tool_bridge=None,
+        boundary_recorder=None, durable_boundary_reader=None,
     ) -> DriverHost:
         from .drivers.provider import DESCRIPTOR as PROVIDER_DESCRIPTOR
         from .drivers.provider import ProviderDriver
@@ -170,6 +171,8 @@ class RuntimeComposition:
             api_key=api_key, task_resolver=self.task_resolver(),
             dispatch_prompt=dispatch_prompt, reasoning_effort=reasoning_effort,
             governor=governor, tool_bridge=tool_bridge,
+            boundary_recorder=boundary_recorder,
+            durable_boundary_reader=durable_boundary_reader,
         ))
         return host
 

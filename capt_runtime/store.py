@@ -9,6 +9,7 @@ global_sequence across streams. Timestamps are descriptive only (ADR-0106).
 """
 
 from __future__ import annotations
+import contextlib
 
 import hashlib
 import json
@@ -389,6 +390,21 @@ class EventStore(object):
             )
 
     # -- the single write path --------------------------------------------
+
+    @contextlib.contextmanager
+    def authority_section(self):
+        """Hold the store lock across a check-then-consume authority sequence.
+
+        Reentrant (RLock): nested ``commit_command`` calls inside the section
+        are safe. Used by admission paths that must revalidate approval expiry
+        against wall-clock time immediately before the atomic consumption
+        commit, with no interleaving writer in between.
+        """
+        with self._lock:
+            yield self
+
+
+
 
     def commit_command(
         self,

@@ -199,6 +199,153 @@ class Operator:
             raise OperatorError("HumanApproval %s not found" % request_id)
         return state
 
+    def request_council_workflow(self, workflow: Any) -> Dict[str, Any]:
+        """Request one exact HumanApproval per cohort without auto-approving."""
+        from .council_workflow import bind_approval_results, workflow_digest
+
+        workflow.validate()
+        digest = workflow_digest(workflow)
+        short = digest.split(":", 1)[-1][:16]
+        approvals: List[Dict[str, Any]] = []
+        for index, payload in enumerate(workflow.approval_payloads(), 1):
+            receipt = self.request_prompt_approval(
+                payload, "council-workflow:%s:approval:%02d" % (short, index)
+            )
+            if receipt.get("status") not in ("accepted", "idempotent"):
+                raise OperatorError(
+                    "Cohort approval request rejected: %s"
+                    % (receipt.get("detail") or receipt.get("error") or receipt)
+                )
+            approvals.append(dict(receipt["result"]))
+        return {
+            "schemaVersion": "1.0.0",
+            "workflowDigest": digest,
+            "workflow": workflow.to_record(),
+            "approvals": approvals,
+            "executions": bind_approval_results(workflow, approvals),
+        }
+
+    def council_workflow_status(self, session: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Return authoritative approval state for every cohort in a prepared session."""
+        rows: List[Dict[str, Any]] = []
+        for approval in session.get("approvals") or []:
+            request_id = str(approval.get("requestId") or "")
+            state = self.approval_state(request_id)
+            rows.append({
+                "cohortId": (approval.get("cohortSpec") or {}).get("cohortId"),
+                "provider": approval.get("provider"),
+                "model": approval.get("model"),
+                "requestId": request_id,
+                "state": state.get("state"),
+                "consumedBy": state.get("consumedBy"),
+                "consumedAt": state.get("consumedAt"),
+                "commandIssuedAt": state.get("commandIssuedAt"),
+                "driverRunId": state.get("driverRunId"),
+                "missionId": state.get("missionId"),
+                "taskId": state.get("taskId"),
+                "remainingUses": state.get("remainingUses"),
+                "expiresAt": state.get("expiresAt"),
+            })
+        return rows
+
+    def decide_council_workflow(
+        self, session: Dict[str, Any], decision: str, note: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Apply an explicit human approve/deny decision to each pending cohort."""
+        if decision not in ("approve", "deny"):
+            raise OperatorError("Council decision must be approve or deny")
+        receipts: List[Dict[str, Any]] = []
+        for row in self.council_workflow_status(session):
+            if row["state"] == "requested":
+                receipts.append(self.decide_approval(row["requestId"], decision, note))
+        return receipts
+
+    def run_council_workflow(
+        self, session: Dict[str, Any], *, reattach: bool = False
+    ) -> Dict[str, Any]:
+        """Launch only after every runtime-owned cohort approval is approved.
+
+        With ``reattach=True`` (see :meth:`reattach_council_workflow`), an
+        approval already ``consumed`` by this exact council lineage may be
+        reattached after transport loss: the approval's ``consumedBy`` must
+        equal the expected per-cohort use id derived from the session's own
+        workflow digest (``<run_key>:cohort:<cohortId>``). A consumed approval
+        from any other council, workflow, or idempotency lineage fails closed.
+
+        Reattach re-observes durable state and replays the same durable
+        idempotency identity through the existing duplicate path: completed
+        runs are harvestable, running runs are observable, and provider
+        dispatch happens at most once. It never manufactures a fresh attempt
+        or redispatches provider inference.
+        """
+        from .council_workflow import (
+            CouncilWorkflow,
+            council_launch_payload,
+            workflow_digest,
+        )
+
+        caps = self._client.capabilities()
+        if "run_approved_council_inspection" not in set(caps.get("commandOperations") or []):
+            raise OperatorError("Runtime lacks governed Council execution support")
+        statuses = self.council_workflow_status(session)
+        # P0.2: validate structure, then recompute the canonical digest and
+        # require exact equality with the session's claimed digest BEFORE
+        # deriving any identity. A mutated workflow with a stale digest, or a
+        # forged digest for a different workflow, fails closed here.
+        workflow = CouncilWorkflow.from_mapping(session["workflow"]).validate()
+        actual_digest = workflow_digest(workflow)
+        claimed_digest = session.get("workflowDigest")
+        if not isinstance(claimed_digest, str) or claimed_digest != actual_digest:
+            raise OperatorError(
+                "Council workflow digest mismatch: session claims %r but the "
+                "validated workflow digests to %r"
+                % (claimed_digest, actual_digest)
+            )
+        # The run key derives from the RECOMPUTED digest, never from the
+        # caller-supplied string.
+        short = actual_digest.split(":")[-1][:16]
+        run_key = "council-workflow:%s:run" % short
+        blockers = []
+        for row in statuses:
+            state = row.get("state")
+            if state == "approved":
+                continue
+            expected_use_id = "%s:cohort:%s" % (run_key, row.get("cohortId"))
+            if (
+                reattach
+                and state == "consumed"
+                and row.get("consumedBy") == expected_use_id
+            ):
+                # Same council lineage: this cohort's approval was consumed by
+                # this council's own admission. Reattach replays the durable
+                # idempotency identity; dispatch happens at most once.
+                continue
+            blockers.append({
+                "cohortId": row.get("cohortId"),
+                "state": state,
+                "consumedBy": row.get("consumedBy"),
+                "expectedUseId": expected_use_id,
+            })
+        if blockers:
+            raise OperatorError("Council approvals are not all approved: %s" % blockers)
+        payload = council_launch_payload(workflow, session.get("executions") or [])
+        return self._client.command(
+            "run_approved_council_inspection",
+            payload,
+            run_key,
+        )
+
+    def reattach_council_workflow(self, session: Dict[str, Any]) -> Dict[str, Any]:
+        """Reattach a council session after transport loss.
+
+        Equivalent to ``run_council_workflow(session, reattach=True)``: only
+        approvals already consumed by this exact council lineage are accepted;
+        anything else fails closed. Repeated reattachment is idempotent and
+        never redispatches provider inference.
+        """
+        return self.run_council_workflow(session, reattach=True)
+
+
     def cancel_task(self, task_id: str, reason: str = "operator stop") -> Dict[str, Any]:
         return self._client.command("cancel_task", {"taskId": task_id, "reason": reason})
 

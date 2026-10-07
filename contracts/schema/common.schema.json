@@ -1158,6 +1158,10 @@
         },
         "promptAssemblyDigest": {
           "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "commandIssuedAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp",
+          "description": "Command-carried issuance timestamp presented at admission (provenance only). Approval expiry is always revalidated against the authoritative wall-clock consumption time (consumedAt). Optional for backward compatibility with consumption records written before the runtime-authority remediation."
         }
       }
     },

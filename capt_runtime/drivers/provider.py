@@ -30,6 +30,14 @@ class ProviderDriverFailure(RuntimeError):
     pass
 
 
+class DispatchBoundaryError(ProviderDriverFailure):
+    """The durable dispatch-boundary record could not be written.
+
+    Dispatch is aborted (fail closed): the run must not cross an external
+    boundary its durable record does not show.
+    """
+
+
 class ProviderDriver:
     KIND = DRIVER_ID
 
@@ -46,6 +54,8 @@ class ProviderDriver:
         reasoning_effort: str = "",
         governor: Optional[TokenCostGovernor] = None,
         tool_bridge=None,
+        boundary_recorder=None,
+        durable_boundary_reader=None,
     ):
         self.root = Path(staging_root)
         self.root.mkdir(parents=True, exist_ok=True)
@@ -61,9 +71,49 @@ class ProviderDriver:
         )
         self.governor = governor or TokenCostGovernor()
         self.tool_bridge = tool_bridge
+        self._boundary_recorder = boundary_recorder
+        self._durable_boundary_reader = durable_boundary_reader
         self.runs: Dict[str, Dict[str, Any]] = {}
         self._request_deadlines: Dict[str, float] = {}
         self._lock = threading.RLock()
+
+    def _note_dispatch_boundary(self, rid: str, boundary: str) -> None:
+        """Record dispatch-boundary progress in memory and durably.
+
+        The durable record is written BEFORE the caller crosses the
+        corresponding irreversible external boundary. A recording failure
+        raises DispatchBoundaryError and aborts dispatch (fail closed): the
+        run must not cross a boundary its durable record does not show.
+        """
+        with self._lock:
+            if rid in self.runs:
+                self.runs[rid]["dispatchBoundary"] = boundary
+        recorder = self._boundary_recorder
+        if recorder is not None:
+            try:
+                recorder(rid, boundary)
+            except DispatchBoundaryError:
+                raise
+            except Exception as exc:
+                raise DispatchBoundaryError(
+                    "dispatch boundary %r not durably recorded; dispatch aborted" % (boundary,)
+                ) from exc
+
+    def _read_durable_dispatch_boundary(self, rid: str) -> Optional[str]:
+        """Return the durable dispatch-boundary marker, if a reader is configured."""
+        reader = self._durable_boundary_reader
+        if reader is None:
+            return None
+        return reader(rid)
+
+    @staticmethod
+    def _classify_dispatch_boundary(boundary: str) -> str:
+        """Classify a dispatch boundary without fabricating certainty."""
+        if boundary in ("not_dispatched", "prepared", "budget_rejected"):
+            return "pre_dispatch"
+        if boundary in ("response_completed", "result_persisted"):
+            return "response_completed"
+        return "external_state_unknown"
 
     def describe(self):
         return dict(DESCRIPTOR)
@@ -110,25 +160,32 @@ class ProviderDriver:
     async def resume(self, rid, resume_input=None):
         raise ProviderDriverFailure("provider runs are not resumable")
 
-    async def reconcile(self, rid):
+    async def reconcile(self, rid: str) -> Dict[str, Any]:
         with self._lock:
             run = dict(self.runs.get(rid, {}))
         if not run:
+            # Process memory is gone (crash/restart). Prefer the durable
+            # dispatch-boundary record over fabricating certainty from an
+            # empty run table: a missing durable record is itself "unknown",
+            # never "safe".
+            durable = self._read_durable_dispatch_boundary(rid)
+            if durable is None:
+                return {
+                    "driverRunId": rid,
+                    "result": "external_state_unknown",
+                    "anomalies": ["unknown_driver_run"],
+                }
             return {
                 "driverRunId": rid,
-                "result": "external_state_unknown",
-                "anomalies": ["unknown_driver_run"],
+                "result": self._classify_dispatch_boundary(durable),
+                "dispatchBoundary": durable,
+                "durableDispatchBoundary": True,
+                "anomalies": ["reconciled_from_durable_dispatch_boundary"],
             }
         boundary = run.get("dispatchBoundary", "unknown")
-        if boundary == "prepared":
-            result = "pre_dispatch"
-        elif boundary == "response_completed":
-            result = "response_completed"
-        else:
-            result = "external_state_unknown"
         return {
             "driverRunId": rid,
-            "result": result,
+            "result": self._classify_dispatch_boundary(boundary),
             "dispatchBoundary": boundary,
             "cancelRequested": bool(run.get("cancelRequested")),
             "anomalies": [],
@@ -168,18 +225,18 @@ class ProviderDriver:
         return min(reserve, max(1, context_budget - 1))
 
     def _post_json(self, rid: str, url: str, body: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
+        # P0.3: the durable dispatch-boundary record is written BEFORE the
+        # irreversible external call it marks. A recording failure raises
+        # DispatchBoundaryError and aborts dispatch (fail closed).
+        self._note_dispatch_boundary(rid, "request_started")
         try:
             req = urllib.request.Request(
                 url, data=json.dumps(body).encode(), headers=headers, method="POST"
             )
-            with self._lock:
-                self.runs[rid]["dispatchBoundary"] = "request_started"
             with urllib.request.urlopen(req, timeout=self._remaining_request_timeout(rid)) as response:
-                with self._lock:
-                    self.runs[rid]["dispatchBoundary"] = "response_started"
+                self._note_dispatch_boundary(rid, "response_started")
                 data = json.loads(response.read().decode())
-                with self._lock:
-                    self.runs[rid]["dispatchBoundary"] = "response_completed"
+                self._note_dispatch_boundary(rid, "response_completed")
             if not isinstance(data, dict):
                 raise ProviderDriverFailure("provider returned non-object JSON")
             return data
@@ -470,7 +527,7 @@ class ProviderDriver:
         except BudgetCeilingExceeded as exc:
             with self._lock:
                 self.runs[rid]["state"] = "failed"
-                self.runs[rid]["dispatchBoundary"] = "budget_rejected"
+            self._note_dispatch_boundary(rid, "budget_rejected")
             raise ProviderDriverFailure(f"budget ceiling exceeded: {exc}") from exc
 
         prompt_digest = "sha256:" + hashlib.sha256(prompt.encode()).hexdigest()
@@ -552,6 +609,7 @@ class ProviderDriver:
         path = self.root / ("provider-analysis-%s.md" % rid)
         path.write_text(artifact)
         artifact_digest = "sha256:" + hashlib.sha256(artifact.encode()).hexdigest()
+        self._note_dispatch_boundary(rid, "result_persisted")
         with self._lock:
             run = self.runs[rid]
             run["state"] = "completed"

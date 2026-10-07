@@ -6,7 +6,8 @@ planning, authority, aggregate mutation, idempotency, and lifecycle to CAPT
 runtime modules/services.
 """
 
-from __future__ import annotations
+from __future__ from concurrent.futures import ThreadPoolExecutor, as_completed
+import annotations
 
 import hashlib
 import json
@@ -14,6 +15,7 @@ import secrets
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from capt_runtime.cohort_contract import MAX_COHORTS, normalize_cohort_spec
 from capt_runtime import commands
 from capt_runtime.approved_capability_authority import issue_approved_capability_authority
 from capt_runtime.errors import AuthorityViolation, CaptRuntimeError, IdempotencyConflict
@@ -64,6 +66,7 @@ _VALID_OPS = (
     "cancel_driver_run",
     "update_memory_trigger_policy",
     "run_fixed_openharness_inspection",
+    "run_approved_council_inspection",
     "run_approved_hermes_inspection",
     "checkpoint_runtime",
     "shutdown",
@@ -748,6 +751,106 @@ class RuntimeCommandService:
                     cmd,
                     status=status,
                     classification="duplicate" if status == "idempotent" else "accepted",
+                    result=result,
+                )
+
+            elif op == "run_approved_council_inspection":
+                payload = cmd["payload"]
+                executions = payload.get("executions")
+                if not isinstance(executions, list) or not executions:
+                    raise ValueError("COUNCIL_EXECUTIONS_REQUIRED")
+                if len(executions) > MAX_COHORTS:
+                    raise ValueError("COUNCIL_COHORT_COUNT_RANGE")
+                normalized = []
+                cohort_ids = set()
+                vessel_counts = set()
+                for item in executions:
+                    if not isinstance(item, dict):
+                        raise ValueError("COUNCIL_EXECUTION_MUST_BE_OBJECT")
+                    spec = normalize_cohort_spec(item.get("cohortSpec"))
+                    if spec is None:
+                        raise ValueError("COUNCIL_COHORT_SPEC_REQUIRED")
+                    cohort_id = spec["cohortId"]
+                    if cohort_id in cohort_ids:
+                        raise ValueError("COUNCIL_DUPLICATE_COHORT_ID")
+                    cohort_ids.add(cohort_id)
+                    vessel_counts.add(spec["vesselsPerCohort"])
+                    normalized.append((spec, dict(item)))
+                if len(vessel_counts) != 1:
+                    raise ValueError("COUNCIL_VESSEL_COUNT_MISMATCH")
+                raw_limit = payload.get("maxConcurrentCohorts", len(normalized))
+                if isinstance(raw_limit, bool) or not isinstance(raw_limit, int):
+                    raise ValueError("COUNCIL_CONCURRENCY_INVALID")
+                if not 1 <= raw_limit <= MAX_COHORTS:
+                    raise ValueError("COUNCIL_CONCURRENCY_RANGE")
+
+                lock = threading.Lock()
+                active = 0
+                peak = 0
+
+                def run_one(index: int, spec: Dict[str, Any], item: Dict[str, Any]):
+                    nonlocal active, peak
+                    # P0.1: stamp each cohort subcommand with authoritative runtime
+                    # time at dispatch. The outer council creation timestamp is
+                    # preserved as provenance (councilIssuedAt) but never reused as
+                    # the authorization consumption timestamp: approval expiry is
+                    # validated against the time authority is actually consumed, and
+                    # a stale copied timestamp would let an expired approval through.
+                    cohort_dispatched_at = _now_rfc3339()
+                    sub = {
+                        "commandId": "%s-cohort-%02d" % (cmd["commandId"], index + 1),
+                        "operatorId": cmd["operatorId"],
+                        "sessionId": cmd["sessionId"],
+                        "schemaVersion": cmd["schemaVersion"],
+                        "correlationId": cmd["correlationId"],
+                        "idempotencyKey": "%s:cohort:%s" % (
+                            cmd["idempotencyKey"], spec["cohortId"]
+                        ),
+                        "timestamp": cohort_dispatched_at,
+                        "councilIssuedAt": cmd["timestamp"],
+                        "op": "run_approved_hermes_inspection",
+                        "payload": item,
+                    }
+                    with lock:
+                        active += 1
+                        peak = max(peak, active)
+                    try:
+                        return spec["cohortId"], self.execute(sub)
+                    finally:
+                        with lock:
+                            active -= 1
+
+                results = {}
+                with ThreadPoolExecutor(
+                    max_workers=min(raw_limit, len(normalized)),
+                    thread_name_prefix="capt-cohort",
+                ) as pool:
+                    futures = {
+                        pool.submit(run_one, index, spec, item): spec["cohortId"]
+                        for index, (spec, item) in enumerate(normalized)
+                    }
+                    for future in as_completed(futures):
+                        cohort_id, receipt = future.result()
+                        results[cohort_id] = receipt
+
+                ordered = [
+                    {"cohortId": spec["cohortId"], "receipt": results[spec["cohortId"]]}
+                    for spec, _item in normalized
+                ]
+                result = {
+                    "councilId": str(payload.get("councilId") or ""),
+                    "cohortCount": len(normalized),
+                    "vesselsPerCohort": next(iter(vessel_counts)),
+                    "logicalVessels": len(normalized) * next(iter(vessel_counts)),
+                    "providerCallInvariant": "one_call_per_cohort",
+                    "maxConcurrentCohorts": raw_limit,
+                    "peakConcurrentCohortExecutions": peak,
+                    "cohorts": ordered,
+                }
+                return self._receipt(
+                    cmd,
+                    status="accepted",
+                    classification="accepted",
                     result=result,
                 )
 

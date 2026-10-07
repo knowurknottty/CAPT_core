@@ -25,6 +25,7 @@
         "CapabilityLeaseRevoked",
         "DriverRunCreated",
         "DriverRunStateChanged",
+        "DriverRunDispatchBoundaryRecorded",
         "ClaimCreated",
         "EvidenceRecorded",
         "ClaimVerified",
@@ -405,6 +406,34 @@
             },
             "toState": {
               "$ref": "driver.schema.json#/$defs/DriverRunState"
+            }
+          }
+        },
+        {
+          "title": "DriverRunDispatchBoundaryRecordedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "driverRunId",
+            "dispatchBoundary"
+          ],
+          "properties": {
+            "eventType": {
+              "type": "string",
+              "const": "DriverRunDispatchBoundaryRecorded"
+            },
+            "driverRunId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "dispatchBoundary": {
+              "$ref": "driver.schema.json#/$defs/DispatchBoundary"
+            },
+            "previousDispatchBoundary": {
+              "$ref": "driver.schema.json#/$defs/DispatchBoundary"
+            },
+            "recordedAt": {
+              "$ref": "common.schema.json#/$defs/Timestamp"
             }
           }
         },
