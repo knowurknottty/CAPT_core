@@ -3,6 +3,8 @@ from __future__ import annotations
 import subprocess
 import sys
 import time
+
+import pytest
 from pathlib import Path
 
 from capt_runtime.composition import create_runtime
@@ -194,3 +196,18 @@ def test_runtime_restart_preserves_unproven_reserved_sandbox_when_docker_is_unav
         assert item["status"] == "unproven"
     finally:
         restarted.close()
+
+
+def test_runtime_state_lock_is_exclusive_and_reusable(tmp_path: Path) -> None:
+    from desktop.capt_runtime_service import _acquire_runtime_state_lock
+
+    ledger = tmp_path / "runtime.db"
+    first = _acquire_runtime_state_lock(str(ledger))
+    try:
+        with pytest.raises(RuntimeError, match="already owns state lock"):
+            _acquire_runtime_state_lock(str(ledger))
+    finally:
+        first.close()
+
+    second = _acquire_runtime_state_lock(str(ledger))
+    second.close()

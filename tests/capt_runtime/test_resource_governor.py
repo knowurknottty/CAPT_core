@@ -5,6 +5,10 @@ from capt_runtime.resource_governor import TokenCostGovernor, BudgetCeilingExcee
 from capt_runtime.drivers.provider import ProviderDriver, ProviderDriverFailure
 
 
+def test_default_provider_output_ceiling_is_tripled():
+    assert TokenCostGovernor().max_output_tokens_per_request == 49_152
+
+
 def test_token_cost_governor_trips_on_request_cap():
     gov = TokenCostGovernor(max_requests_per_session=2)
     gov.check_pre_dispatch()

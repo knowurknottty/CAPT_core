@@ -54,6 +54,7 @@ def test_openrouter_driver_provenance_and_secret_not_persisted(tmp_path: Path):
             base_url=f"http://127.0.0.1:{server.server_port}/v1",
             api_key=secret,
             task_resolver=_resolver(),
+            reasoning_effort="xhigh",
         )
         out = asyncio.run(
             driver.submit(
@@ -68,12 +69,14 @@ def test_openrouter_driver_provenance_and_secret_not_persisted(tmp_path: Path):
         )
         assert _Server.seen["path"] == "/v1/chat/completions"
         assert _Server.seen["body"]["model"] == "deepseek/deepseek-v4-flash-0731"
-        assert _Server.seen["body"]["max_tokens"] == 16_384
+        assert _Server.seen["body"]["max_tokens"] == 49_152
+        assert _Server.seen["body"]["reasoning"] == {"effort": "xhigh"}
         assert _Server.seen["auth"] == "Bearer " + secret
         assert out["state"] == "completed"
         assert out["dispatchBoundary"] == "response_completed"
         assert out["transportCancellationSupported"] is False
         assert out["diagnostics"]["provider"] == "openrouter"
+        assert out["diagnostics"]["reasoningEffortRequested"] == "xhigh"
         assert out["diagnostics"]["promptDigest"].startswith("sha256:")
         assert out["diagnostics"]["responseDigest"].startswith("sha256:")
         assert secret not in str(out)
@@ -165,7 +168,7 @@ def test_ollama_driver_uses_native_generate_endpoint(tmp_path: Path):
             "model": "local-model",
             "prompt": "minimal prompt",
             "stream": False,
-            "options": {"num_predict": 16_384},
+            "options": {"num_predict": 49_152},
         }
         assert _Server.seen["auth"] is None
         assert out["state"] == "completed"
@@ -698,6 +701,77 @@ def test_openrouter_reasoning_effort_uses_reasoning_map_and_records_diagnostics(
         server.server_close()
 
 
+class _ImageServer(BaseHTTPRequestHandler):
+    seen = {}
+
+    def do_POST(self):  # noqa: N802
+        raw = self.rfile.read(int(self.headers["Content-Length"]))
+        self.__class__.seen = {
+            "path": self.path,
+            "body": json.loads(raw),
+            "auth": self.headers.get("Authorization"),
+        }
+        payload = b"\x89PNG\r\n\x1a\nCAPT_IMAGE_TEST"
+        import base64
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps({
+            "data": [{"b64_json": base64.b64encode(payload).decode()}],
+            "usage": {"prompt_tokens": 17, "cost": 0.0},
+        }).encode())
+
+    def log_message(self, format, *args):  # noqa: N802,A002
+        return
+
+
+def test_openrouter_image_driver_uses_dedicated_endpoint_and_binary_artifact(tmp_path: Path):
+    _ImageServer.seen = {}
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _ImageServer)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        secret = "synthetic-image-secret"
+        driver = ProviderDriver(
+            str(tmp_path),
+            provider_id="openrouter",
+            model="inclusionai/ming-image-0.1-design",
+            base_url=f"http://127.0.0.1:{server.server_port}/v1",
+            api_key=secret,
+            dispatch_prompt="render one governed campaign board",
+            output_modality="image",
+            output_format="png",
+        )
+        out = asyncio.run(driver.submit({
+            "driverRunId": "dr-image-1",
+            "missionId": "m-image",
+            "taskId": "t-image",
+            "contextSlice": {"budgets": {"maxSeconds": 300, "maxTokens": 32000}},
+            "submittedAt": "2026-09-26T00:00:00Z",
+        }))
+        assert _ImageServer.seen["path"] == "/v1/images"
+        assert _ImageServer.seen["body"] == {
+            "model": "inclusionai/ming-image-0.1-design",
+            "prompt": "render one governed campaign board",
+            "output_format": "png",
+        }
+        assert _ImageServer.seen["auth"] == "Bearer " + secret
+        assert out["state"] == "completed"
+        assert out["artifactCandidate"]["artifactKind"] == "image"
+        assert out["artifactCandidate"]["mediaType"] == "image/png"
+        artifact = Path(out["artifactCandidate"]["artifactPath"])
+        assert artifact.suffix == ".png"
+        assert artifact.read_bytes() == b"\x89PNG\r\n\x1a\nCAPT_IMAGE_TEST"
+        assert out["diagnostics"]["outputModality"] == "image"
+        assert out["diagnostics"]["outputFormat"] == "png"
+        assert out["diagnostics"]["imageBytes"] == len(artifact.read_bytes())
+        assert "b64_json" not in str(out)
+        assert secret not in str(out)
+        assert secret.encode() not in artifact.read_bytes()
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_generic_openai_compatible_reasoning_effort_uses_top_level_field(tmp_path: Path):
     server = ThreadingHTTPServer(("127.0.0.1", 0), _Server)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -720,6 +794,73 @@ def test_generic_openai_compatible_reasoning_effort_uses_top_level_field(tmp_pat
         }))
         assert _Server.seen["body"]["reasoning_effort"] == "high"
         assert "reasoning" not in _Server.seen["body"]
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_provider_image_modality_validates_format(tmp_path: Path):
+    try:
+        ProviderDriver(
+            str(tmp_path), provider_id="openrouter", model="image-model",
+            base_url="https://example.invalid/v1",
+            output_modality="image", output_format="gif",
+        )
+    except ValueError as exc:
+        assert str(exc) == "PROVIDER_IMAGE_OUTPUT_FORMAT_INVALID"
+    else:
+        raise AssertionError("unsupported image format must fail closed")
+
+
+class _ErrorServer(BaseHTTPRequestHandler):
+    secret = ""
+
+    def do_POST(self):  # noqa: N802
+        self.rfile.read(int(self.headers["Content-Length"]))
+        body = json.dumps({
+            "error": {
+                "message": "route missing credential=" + self.__class__.secret + " " + ("x" * 5000)
+            }
+        }).encode()
+        self.send_response(404)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format, *args):  # noqa: N802,A002
+        return
+
+
+def test_provider_http_error_body_is_bounded_and_secret_redacted(tmp_path: Path):
+    secret = "synthetic-super-secret"
+    _ErrorServer.secret = secret
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _ErrorServer)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        driver = ProviderDriver(
+            str(tmp_path),
+            provider_id="openrouter",
+            model="inclusionai/ming-image-0.1-design",
+            base_url=f"http://127.0.0.1:{server.server_port}/v1",
+            api_key=secret,
+            dispatch_prompt="render",
+            output_modality="image",
+            output_format="png",
+        )
+        try:
+            asyncio.run(driver.submit({
+                "driverRunId": "dr-image-error",
+                "contextSlice": {"budgets": {"maxSeconds": 30, "maxTokens": 32000}},
+            }))
+        except ProviderDriverFailure as exc:
+            message = str(exc)
+            assert message.startswith("provider HTTP 404:")
+            assert "route missing" in message
+            assert secret not in message
+            assert "[REDACTED]" in message
+            assert len(message) < 1100
+        else:
+            raise AssertionError("HTTP 404 must fail closed")
     finally:
         server.shutdown()
         server.server_close()
@@ -748,3 +889,299 @@ def test_reasoning_effort_rejects_invalid_or_native_ollama_values(tmp_path: Path
             base_url="http://127.0.0.1:11434/v1",
             reasoning_effort="high",
         )
+
+
+class _OpenRouterAnswerOnlyClosureServer(BaseHTTPRequestHandler):
+    calls = []
+
+    def do_POST(self):  # noqa: N802
+        raw = self.rfile.read(int(self.headers["Content-Length"]))
+        body = json.loads(raw)
+        self.__class__.calls.append(body)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        index = len(self.__class__.calls) - 1
+        if index < 2:
+            message = {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{
+                    "id": f"answer-only-call-{index}",
+                    "type": "function",
+                    "function": {"name": "capt_file_read", "arguments": "{}"},
+                }],
+            }
+        else:
+            message = {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "ANSWER_ONLY_FINAL"},
+                    {"type": "text", "text": "SECOND_BLOCK"},
+                ],
+            }
+        payload = {
+            "choices": [{"message": message, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 8, "completion_tokens": 4},
+        }
+        self.wfile.write(json.dumps(payload).encode())
+
+    def log_message(self, format, *args):  # noqa: N802,A002
+        return
+
+
+def test_openrouter_tool_closure_serializes_answer_only_reasoning_and_visible_text(tmp_path: Path):
+    _OpenRouterAnswerOnlyClosureServer.calls = []
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _OpenRouterAnswerOnlyClosureServer)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        driver = ProviderDriver(
+            str(tmp_path / "staging-answer-only"),
+            provider_id="openrouter",
+            model="test/reasoning-model",
+            base_url=f"http://127.0.0.1:{server.server_port}/v1",
+            task_resolver=_resolver(),
+            tool_bridge=_TwoCallBridge(),
+            reasoning_effort="high",
+        )
+        out = asyncio.run(driver.submit({
+            "driverRunId": "dr-answer-only-closure",
+            "missionId": "m-answer-only-closure",
+            "taskId": "t-answer-only-closure",
+            "contextSlice": {},
+            "submittedAt": "2026-10-07T00:00:00Z",
+        }))
+        assert out["state"] == "completed"
+        assert out["observations"][0]["summary"] == "ANSWER_ONLY_FINAL\nSECOND_BLOCK"
+        assert len(_OpenRouterAnswerOnlyClosureServer.calls) == 3
+        assert _OpenRouterAnswerOnlyClosureServer.calls[0]["reasoning"] == {"effort": "high"}
+        assert _OpenRouterAnswerOnlyClosureServer.calls[1]["reasoning"] == {"effort": "high"}
+        assert _OpenRouterAnswerOnlyClosureServer.calls[2]["reasoning"] == {"effort": "none"}
+        assert "tools" not in _OpenRouterAnswerOnlyClosureServer.calls[2]
+        assert out["diagnostics"]["finalizationReasoningMode"] == "answer_only"
+        assert out["diagnostics"]["finalizationTextSource"] == "closure_response"
+        assert out["diagnostics"]["finalizationFinishReason"] == "stop"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_final_facing_text_rejects_hidden_reasoning_only():
+    assert ProviderDriver._final_facing_text({
+        "content": "",
+        "reasoning": "hidden reasoning must not count",
+    }) == ""
+
+
+def test_tool_closure_does_not_promote_stale_prior_visible_text(tmp_path: Path, monkeypatch):
+    driver = ProviderDriver(
+        str(tmp_path / "staging-stale-prior"),
+        provider_id="openrouter",
+        model="test/model",
+        base_url="https://example.invalid/v1",
+        reasoning_effort="high",
+    )
+    rid = "dr-stale-prior-visible"
+    driver.runs[rid] = {"state": "running"}
+
+    def fake_post(_rid, _url, _body, _headers, **_kwargs):
+        return {
+            "choices": [{"message": {"content": "", "reasoning": "hidden only"}, "finish_reason": "length"}],
+            "usage": {"prompt_tokens": 9, "completion_tokens": 0},
+        }
+
+    monkeypatch.setattr(driver, "_post_json", fake_post)
+    messages = [
+        {"role": "user", "content": "work"},
+        {"role": "assistant", "content": "prior synthesis before tool evidence", "tool_calls": [{
+            "id": "stale-call",
+            "type": "function",
+            "function": {"name": "capt_file_read", "arguments": "{}"},
+        }]},
+        {"role": "tool", "tool_call_id": "stale-call", "name": "capt_file_read", "content": "{\"new\":\"evidence\"}"},
+    ]
+    import pytest
+    with pytest.raises(ProviderDriverFailure, match="no final-facing content after tool budget closure"):
+        driver._openai_finalize_after_tool_budget(
+            rid,
+            "https://example.invalid/v1/chat/completions",
+            {},
+            messages,
+            0, 0, 0.0, 1,
+        )
+    assert driver.runs[rid]["finalizationTextSource"] == "none"
+    assert driver.runs[rid]["finalizationFinishReason"] == "length"
+
+
+def test_provider_response_read_enforces_absolute_wall_clock_deadline(tmp_path: Path, monkeypatch):
+    import time
+    import pytest
+
+    class SlowResponse:
+        def __init__(self):
+            self.closed = threading.Event()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            self.close()
+            return False
+
+        def close(self):
+            self.closed.set()
+
+        def read(self):
+            deadline = time.monotonic() + 2.0
+            while time.monotonic() < deadline and not self.closed.is_set():
+                time.sleep(0.01)
+            if self.closed.is_set():
+                raise OSError("response closed")
+            return b'{"choices":[{"message":{"content":"late"}}]}'
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda *_args, **_kwargs: SlowResponse())
+    driver = ProviderDriver(
+        str(tmp_path / "staging-hard-deadline"),
+        provider_id="openrouter",
+        model="test/model",
+        base_url="https://example.invalid/v1",
+    )
+    rid = "dr-hard-deadline"
+    driver.runs[rid] = {"state": "running"}
+    driver._request_deadlines[rid] = time.monotonic() + 0.08
+    started = time.monotonic()
+    with pytest.raises(ProviderDriverFailure, match="wall-clock budget exhausted"):
+        driver._post_json(
+            rid,
+            "https://example.invalid/v1/chat/completions",
+            {"model": "test/model", "messages": []},
+            {},
+        )
+    assert time.monotonic() - started < 0.8
+    assert driver.runs[rid]["state"] == "failed"
+    assert driver.runs[rid]["dispatchBoundary"] == "request_timeout"
+
+
+class _SlowDripProviderServer(BaseHTTPRequestHandler):
+    def do_POST(self):  # noqa: N802
+        import time
+        self.rfile.read(int(self.headers["Content-Length"]))
+        payload = json.dumps({
+            "choices": [{"message": {"content": "TOO_LATE"}}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+        }).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        for byte in payload:
+            try:
+                self.wfile.write(bytes([byte]))
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                break
+            time.sleep(0.01)
+
+    def log_message(self, format, *args):  # noqa: N802,A002
+        return
+
+
+def test_provider_real_http_slow_drip_cannot_extend_wall_clock_budget(tmp_path: Path):
+    import time
+    import pytest
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _SlowDripProviderServer)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        driver = ProviderDriver(
+            str(tmp_path / "staging-slow-drip"),
+            provider_id="openrouter",
+            model="test/model",
+            base_url=f"http://127.0.0.1:{server.server_port}/v1",
+        )
+        started = time.monotonic()
+        with pytest.raises(ProviderDriverFailure, match="wall-clock budget exhausted"):
+            asyncio.run(driver.submit({
+                "driverRunId": "dr-slow-drip-deadline",
+                "missionId": "m-slow-drip-deadline",
+                "taskId": "t-slow-drip-deadline",
+                "contextSlice": {"budgets": {"maxSeconds": 0.12, "maxTokens": 32000}},
+                "submittedAt": "2026-10-07T00:00:00Z",
+            }))
+        assert time.monotonic() - started < 0.8
+        assert driver.runs["dr-slow-drip-deadline"]["dispatchBoundary"] == "request_timeout"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_strict_44_vessel_charter_reserves_geometry_aware_final_output(tmp_path: Path):
+    driver = ProviderDriver(
+        str(tmp_path / "staging-charter-reserve"),
+        provider_id="openrouter",
+        model="test/model",
+        base_url="https://example.invalid/v1",
+        cohort_spec={
+            "cohortId": "mimo26pro",
+            "vesselsPerCohort": 44,
+            "configurationId": "high",
+            "vesselCharterPolicy": {
+                "schemaVersion": "2.0.0",
+                "candidateMultiplier": 3,
+                "candidateMaxWords": 48,
+                "strictLedger": True,
+            },
+        },
+    )
+    assert driver._charter_minimum_output_tokens() == 19_968
+    assert driver._final_answer_reserve_tokens(32_000) == 19_968
+    assert driver._final_answer_reserve_tokens(96_000) == 48_000
+
+
+def test_strict_charter_finalization_prioritizes_physical_ledger(tmp_path: Path, monkeypatch):
+    driver = ProviderDriver(
+        str(tmp_path / "staging-charter-finalize"),
+        provider_id="openrouter",
+        model="test/model",
+        base_url="https://example.invalid/v1",
+        cohort_spec={
+            "cohortId": "mimo26pro",
+            "vesselsPerCohort": 44,
+            "configurationId": "high",
+            "vesselCharterPolicy": {
+                "schemaVersion": "2.0.0",
+                "candidateMultiplier": 3,
+                "candidateMaxWords": 48,
+                "strictLedger": True,
+            },
+        },
+    )
+    rid = "dr-charter-finalize"
+    driver.runs[rid] = {"state": "running"}
+    seen = {}
+
+    def fake_post(_rid, _url, body, _headers, **kwargs):
+        seen["body"] = body
+        seen["kwargs"] = kwargs
+        return {
+            "choices": [{"message": {"content": "CAPT_COHORT_INCOMPLETE"}}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+        }
+
+    monkeypatch.setattr(driver, "_post_json", fake_post)
+    driver._openai_finalize_after_tool_budget(
+        rid,
+        "https://example.invalid/v1/chat/completions",
+        {},
+        [{"role": "user", "content": "work"}],
+        0, 0, 0.0, 0,
+        reason="context headroom reserve reached",
+        context_budget_tokens=96_000,
+    )
+    closure = seen["body"]["messages"][-1]["content"]
+    assert "CAPT_CANDIDATE" in closure
+    assert "CAPT_CHARTER_AUDIT" in closure
+    assert "CAPT_VESSEL" in closure
+    assert "ledger first" in closure.lower()
+    assert seen["body"]["max_tokens"] == 48_000
+    assert seen["kwargs"]["reasoning_policy"] == "answer_only"

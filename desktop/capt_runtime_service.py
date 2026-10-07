@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 UTC = timezone.utc
+import fcntl
 import getpass
 import json
 import os
@@ -1098,7 +1099,27 @@ def _send_json(sock: socket.socket, payload: Dict[str, Any]) -> None:
     send_json(sock, payload)
 
 
+def _acquire_runtime_state_lock(ledger_path: str):
+    """Own the runtime state directory before socket/token mutation."""
+    lock_path = Path(ledger_path).parent / "runtime.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    handle = open(lock_path, "a+", encoding="utf-8")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as exc:
+        handle.close()
+        raise RuntimeError(
+            "CAPT runtime service already owns state lock: %s" % lock_path
+        ) from exc
+    handle.seek(0)
+    handle.truncate(0)
+    handle.write(str(os.getpid()))
+    handle.flush()
+    return handle
+
+
 def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> None:
+    lock_handle = _acquire_runtime_state_lock(ledger_path)
     sock_path = Path(sock_path)
     sock_path.parent.mkdir(parents=True, exist_ok=True)
     if sock_path.exists():
@@ -1152,6 +1173,10 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
     tf.parent.mkdir(parents=True, exist_ok=True)
     tf.write_text(token)
     os.chmod(tf, 0o600)
+    persisted_token = tf.read_text(encoding="utf-8").strip()
+    if not secrets.compare_digest(persisted_token, token):
+        raise RuntimeError("CAPT runtime token read-back verification failed")
+    token = persisted_token
 
     srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     srv.bind(str(sock_path))
@@ -1259,17 +1284,6 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 response_mode = str(payload.get("responseMode", "SPOCK"))
                 enhancement_engine = str(payload.get("promptEnhancement", "OFF"))
                 human_verification_required = bool(payload.get("humanVerificationRequired", True))
-                # Governed continuation context selection (PR #47 context gate).
-                # Prior authoritative mission evidence is selected HERE, from the
-                # ledger, before approval/admission. No manual injection, no
-                # surviving in-memory object carries it across the restart.
-                from capt_runtime.continuation_context import select_continuation_context
-                ledger_dir = str(Path(ledger_path).parent)
-                continuation = select_continuation_context(
-                    store, str(mission_id), str(task_id),
-                    exclude_run_id=str(run_id), ledger_dir=ledger_dir,
-                )
-                context_pack_digest = continuation["contextPackDigest"]
                 # Recover proposal identity only from authoritative approval state.
                 approval_request_id = payload.get("approvalRequestId")
                 if not approval_request_id:
@@ -1279,6 +1293,27 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 )
                 approval_scope = approval_state.get("scope") or {}
                 approval_binding = approval_scope.get("approvalBinding") or {}
+
+                # Replay the approval-time continuation snapshot. Sequential
+                # cohorts may complete between approval and execution; selecting
+                # from the live ledger here would mutate the model-visible prompt
+                # after the human approved its digest.
+                from capt_runtime.continuation_context import (
+                    resolve_approved_continuation_context,
+                )
+                ledger_dir = str(Path(ledger_path).parent)
+                try:
+                    continuation = resolve_approved_continuation_context(
+                        store,
+                        str(mission_id),
+                        str(task_id),
+                        approval_binding=approval_binding,
+                        exclude_run_id=str(run_id),
+                        ledger_dir=ledger_dir,
+                    )
+                except ValueError as exc:
+                    raise AuthorityViolation(str(exc)) from exc
+                context_pack_digest = continuation["contextPackDigest"]
                 requested_execution_seconds = int(
                     approval_binding.get("requestedExecutionSeconds", 600)
                 )
@@ -1401,6 +1436,12 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                     dict(prepared.data.get("cohortSpec"))
                     if prepared.data.get("cohortSpec") else None
                 )
+                output_modality = str((cohort_spec or {}).get("outputModality") or "text")
+                output_format = str((cohort_spec or {}).get("outputFormat") or "")
+                if not reasoning_effort:
+                    reasoning_effort = normalize_reasoning_effort(
+                        (cohort_spec or {}).get("configurationId")
+                    )
                 prompt_assembly = prepared.data["promptAssembly"]
                 dispatch_prompt = prepared.data["dispatchPrompt"]
                 skill_context = (
@@ -1597,7 +1638,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 # This is intentionally separate from the one-use driver lease
                 # governing the external model dispatch itself.
                 tool_authority = None
-                if provider is not None:
+                if provider is not None and output_modality == "text":
                     tool_authority = issue_model_tool_authority(
                         service=svc,
                         broker=runtime.tool_broker,
@@ -1625,7 +1666,10 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                         provider_id=provider.id, model=str(provider_model),
                         base_url=provider.base_url, api_key=provider_key,
                         dispatch_prompt=str(dispatch_prompt),
+                        output_modality=output_modality,
+                        output_format=output_format,
                         reasoning_effort=reasoning_effort,
+                        cohort_spec=cohort_spec,
                         governor=provider_governor,
                         tool_bridge=tool_authority.bridge if tool_authority is not None else None,
                     )
@@ -1880,9 +1924,18 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
     finally:
         runtime.close()
         try:
+            srv.close()
+        except OSError:
+            pass
+        try:
             sock_path.unlink()
         except OSError:
             pass
+        try:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+        except OSError:
+            pass
+        lock_handle.close()
 
 
 def main() -> int:

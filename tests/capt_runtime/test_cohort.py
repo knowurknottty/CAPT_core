@@ -147,3 +147,34 @@ def test_cognitive_debt_is_epoch_aware_and_counts_stale_results():
         "requestedEvidence": 1,
         "staleResults": 1,
     }
+
+
+def test_text_cohort_preserves_and_compiles_strict_v2_charter_policy():
+    from capt_runtime.cohort_contract import compile_cohort_objective, normalize_cohort_spec
+
+    raw = {
+        "cohortId": "deepseek0731",
+        "vesselsPerCohort": 44,
+        "configurationId": "deep-charter-r2",
+        "vesselCharterPolicy": {"schemaVersion": "2.0.0"},
+    }
+    normalized = normalize_cohort_spec(raw)
+    policy = normalized["vesselCharterPolicy"]
+    assert policy["schemaVersion"] == "2.0.0"
+    assert policy["strictLedger"] is True
+    assert policy["candidateMultiplier"] == 3
+    assert policy["candidateRequiredFields"] == ["AXIS", "MECH", "FALSIFIER", "DELTA"]
+    assert policy["requiredFields"] == [
+        "SOURCE", "WHO", "WHAT", "WHY", "HOW", "AGAINST",
+        "BIAS", "EVIDENCE", "INTERACTIONS", "FALSIFIER", "DELTA",
+    ]
+    text = compile_cohort_objective(
+        "Review the target deeply.",
+        provider="openrouter",
+        model="deepseek/deepseek-v4-flash-0731",
+        cohort_spec=raw,
+    )
+    assert "CAPT deep Vessel Charter contract v2:" in text
+    assert "at least 132 surviving candidate charters" in text
+    assert "CAPT_CANDIDATE CNNNN" in text
+    assert "CAPT_VESSEL deepseek0731-vNNNN" in text

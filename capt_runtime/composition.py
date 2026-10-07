@@ -158,7 +158,9 @@ class RuntimeComposition:
     def provider_host(
         self, *, target_repo: str, staging_root: str, provider_id: str, model: str,
         base_url: str, api_key: str = "", dispatch_prompt: str = "",
+        output_modality: str = "text", output_format: str = "",
         reasoning_effort: str = "", governor=None, tool_bridge=None,
+        cohort_spec=None,
     ) -> DriverHost:
         from .drivers.provider import DESCRIPTOR as PROVIDER_DESCRIPTOR
         from .drivers.provider import ProviderDriver
@@ -168,8 +170,9 @@ class RuntimeComposition:
         host.select_driver(ProviderDriver(
             staging_root, provider_id=provider_id, model=model, base_url=base_url,
             api_key=api_key, task_resolver=self.task_resolver(),
-            dispatch_prompt=dispatch_prompt, reasoning_effort=reasoning_effort,
-            governor=governor, tool_bridge=tool_bridge,
+            dispatch_prompt=dispatch_prompt, output_modality=output_modality,
+            output_format=output_format, reasoning_effort=reasoning_effort,
+            governor=governor, tool_bridge=tool_bridge, cohort_spec=cohort_spec,
         ))
         return host
 

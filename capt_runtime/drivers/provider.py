@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import json
 import threading
@@ -43,9 +44,12 @@ class ProviderDriver:
         api_key: str = "",
         task_resolver=None,
         dispatch_prompt: str = "",
-        reasoning_effort: str = "",
+        output_modality: str = "text",
+        output_format: str = "",
         governor: Optional[TokenCostGovernor] = None,
         tool_bridge=None,
+        reasoning_effort: str = "",
+        cohort_spec: Optional[Dict[str, Any]] = None,
     ):
         self.root = Path(staging_root)
         self.root.mkdir(parents=True, exist_ok=True)
@@ -55,12 +59,23 @@ class ProviderDriver:
         self.api_key = api_key
         self.task_resolver = task_resolver
         self.dispatch_prompt = dispatch_prompt
+        self.output_modality = str(output_modality or "text").strip().lower()
+        self.output_format = str(output_format or "").strip().lower()
+        if self.output_modality not in ("text", "image"):
+            raise ValueError("PROVIDER_OUTPUT_MODALITY_INVALID")
+        if self.output_modality == "image":
+            self.output_format = self.output_format or "png"
+            if self.output_format not in ("png", "jpeg", "webp"):
+                raise ValueError("PROVIDER_IMAGE_OUTPUT_FORMAT_INVALID")
+        elif self.output_format:
+            raise ValueError("PROVIDER_TEXT_OUTPUT_FORMAT_FORBIDDEN")
         self.reasoning_effort = normalize_reasoning_effort(reasoning_effort)
         self._reasoning_fields = openai_reasoning_fields(
             self.provider_id, self.base_url, self.reasoning_effort
         )
         self.governor = governor or TokenCostGovernor()
         self.tool_bridge = tool_bridge
+        self.cohort_spec = dict(cohort_spec) if isinstance(cohort_spec, dict) else None
         self.runs: Dict[str, Dict[str, Any]] = {}
         self._request_deadlines: Dict[str, float] = {}
         self._lock = threading.RLock()
@@ -153,6 +168,33 @@ class ProviderDriver:
             raise TimeoutError("provider DriverRun wall-clock budget exhausted")
         return max(0.001, remaining)
 
+    def _read_response_with_deadline(self, rid: str, response) -> bytes:
+        remaining = self._remaining_request_timeout(rid)
+        done = threading.Event()
+        payload = []
+        errors = []
+        def reader():
+            try:
+                payload.append(response.read())
+            except Exception as exc:
+                errors.append(exc)
+            finally:
+                done.set()
+        worker = threading.Thread(target=reader, daemon=True)
+        worker.start()
+        if not done.wait(timeout=remaining):
+            def closer():
+                try:
+                    response.close()
+                except Exception:
+                    pass
+            threading.Thread(target=closer, daemon=True).start()
+            raise TimeoutError("provider DriverRun wall-clock budget exhausted")
+        if errors:
+            raise errors[0]
+        self._remaining_request_timeout(rid)
+        return payload[0] if payload else b""
+
     @staticmethod
     def _work_order_context_budget_tokens(work_order: dict[str, Any]) -> int | None:
         context = work_order.get("contextSlice")
@@ -162,31 +204,118 @@ class ProviderDriver:
             return None
         return value
 
+    def _strict_charter_policy(self) -> dict[str, Any] | None:
+        spec = self.cohort_spec
+        if not isinstance(spec, dict):
+            return None
+        policy = spec.get("vesselCharterPolicy")
+        if not isinstance(policy, dict) or not bool(policy.get("strictLedger")):
+            return None
+        return policy
+
+    def _charter_minimum_output_tokens(self) -> int:
+        """Reserve enough final output for the frozen strict-ledger geometry."""
+        policy = self._strict_charter_policy()
+        spec = self.cohort_spec
+        if policy is None or not isinstance(spec, dict):
+            return 0
+        vessels = spec.get("vesselsPerCohort")
+        multiplier = policy.get("candidateMultiplier", 3)
+        candidate_max_words = policy.get("candidateMaxWords", 48)
+        if (
+            isinstance(vessels, bool) or not isinstance(vessels, int) or vessels <= 0
+            or isinstance(multiplier, bool) or not isinstance(multiplier, int) or multiplier <= 0
+            or isinstance(candidate_max_words, bool)
+            or not isinstance(candidate_max_words, int)
+            or candidate_max_words <= 0
+        ):
+            return 0
+
+        candidates = vessels * multiplier
+        # Compact ledger budgeting. Candidate rows are capped by contract; selected
+        # vessel rows target <=140 words. Convert words to token headroom at 4/3,
+        # then add fixed synthesis and structural allowance.
+        candidate_tokens = candidates * ((candidate_max_words * 4 + 2) // 3)
+        vessel_tokens = vessels * 192
+        synthesis_tokens = 2048
+        structural_tokens = 1024
+        return candidate_tokens + vessel_tokens + synthesis_tokens + structural_tokens
+
     def _final_answer_reserve_tokens(self, context_budget: int) -> int:
-        reserve = max(1024, context_budget // 3)
+        fraction_reserve = (
+            context_budget // 2
+            if self._strict_charter_policy() is not None
+            else context_budget // 3
+        )
+        reserve = max(1024, fraction_reserve, self._charter_minimum_output_tokens())
         reserve = min(reserve, int(self.governor.max_output_tokens_per_request))
         return min(reserve, max(1, context_budget - 1))
 
-    def _post_json(self, rid: str, url: str, body: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
+    def _post_json(
+        self,
+        rid: str,
+        url: str,
+        body: dict[str, Any],
+        headers: dict[str, str],
+        *,
+        reasoning_policy: str = "configured",
+    ) -> dict[str, Any]:
         try:
+            if reasoning_policy not in {"configured", "answer_only"}:
+                raise ProviderDriverFailure("unsupported provider reasoning policy")
+            outbound = dict(body)
+            if self.provider_id == "openrouter" and url.endswith("/chat/completions"):
+                if reasoning_policy == "answer_only":
+                    outbound["reasoning"] = {"effort": "none"}
+                elif self.reasoning_effort:
+                    outbound["reasoning"] = {"effort": self.reasoning_effort}
             req = urllib.request.Request(
-                url, data=json.dumps(body).encode(), headers=headers, method="POST"
+                url, data=json.dumps(outbound).encode(), headers=headers, method="POST"
             )
             with self._lock:
                 self.runs[rid]["dispatchBoundary"] = "request_started"
-            with urllib.request.urlopen(req, timeout=self._remaining_request_timeout(rid)) as response:
-                with self._lock:
-                    self.runs[rid]["dispatchBoundary"] = "response_started"
-                data = json.loads(response.read().decode())
+            response = urllib.request.urlopen(
+                req, timeout=self._remaining_request_timeout(rid)
+            )
+            with self._lock:
+                self.runs[rid]["dispatchBoundary"] = "response_started"
+            completed_read = False
+            try:
+                raw_response = self._read_response_with_deadline(rid, response)
+                completed_read = True
+                data = json.loads(raw_response.decode())
+                self._remaining_request_timeout(rid)
                 with self._lock:
                     self.runs[rid]["dispatchBoundary"] = "response_completed"
+            finally:
+                if completed_read:
+                    close_response = getattr(response, "close", None)
+                    if callable(close_response):
+                        close_response()
             if not isinstance(data, dict):
                 raise ProviderDriverFailure("provider returned non-object JSON")
             return data
         except urllib.error.HTTPError as exc:
             with self._lock:
                 self.runs[rid]["state"] = "failed"
-            raise ProviderDriverFailure("provider HTTP %s" % exc.code) from exc
+            try:
+                raw_detail = exc.read(4096).decode("utf-8", errors="replace")
+            except Exception:
+                raw_detail = ""
+            detail = " ".join(raw_detail.split())[:1000]
+            if self.api_key and detail:
+                detail = detail.replace(self.api_key, "[REDACTED]")
+            message = "provider HTTP %s" % exc.code
+            if detail:
+                message += ": " + detail
+            raise ProviderDriverFailure(message) from exc
+        except TimeoutError as exc:
+            with self._lock:
+                self.runs[rid]["state"] = "failed"
+                self.runs[rid]["dispatchBoundary"] = "request_timeout"
+            raise ProviderDriverFailure(
+                "provider DriverRun wall-clock budget exhausted"
+            ) from exc
         except ProviderDriverFailure:
             with self._lock:
                 self.runs[rid]["state"] = "failed"
@@ -250,8 +379,8 @@ class ProviderDriver:
                 raise ProviderDriverFailure("provider returned malformed assistant message")
             tool_calls = message.get("tool_calls") or []
             if not tool_calls:
-                text = message.get("content") or ""
-                if not isinstance(text, str) or not text:
+                text = self._final_facing_text(message)
+                if not text:
                     raise ProviderDriverFailure("provider returned no content")
                 return (
                     text,
@@ -274,6 +403,7 @@ class ProviderDriver:
                         rid, url, headers, messages, prompt_tokens_total,
                         completion_tokens_total, cost_total, tool_call_count,
                         reason="context headroom reserve reached",
+                        context_budget_tokens=context_budget_tokens,
                     )
 
             remaining_calls = max_tool_rounds - tool_call_count
@@ -282,6 +412,7 @@ class ProviderDriver:
                     rid, url, headers, messages, prompt_tokens_total,
                     completion_tokens_total, cost_total, tool_call_count,
                     reason="tool authority budget is exhausted",
+                    context_budget_tokens=context_budget_tokens,
                 )
 
             messages.append({
@@ -318,8 +449,38 @@ class ProviderDriver:
                     rid, url, headers, messages, prompt_tokens_total,
                     completion_tokens_total, cost_total, tool_call_count,
                     reason="tool authority budget is exhausted",
+                    context_budget_tokens=context_budget_tokens,
                 )
         raise ProviderDriverFailure("provider tool-call loop did not terminate")
+
+    @staticmethod
+    def _final_facing_text(message: dict[str, Any]) -> str:
+        """Extract only provider fields intended as visible assistant output."""
+        content = message.get("content")
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+        if isinstance(content, list):
+            chunks: list[str] = []
+            for part in content:
+                if isinstance(part, str) and part.strip():
+                    chunks.append(part.strip())
+                    continue
+                if not isinstance(part, dict):
+                    continue
+                value = part.get("text")
+                if isinstance(value, str) and value.strip():
+                    chunks.append(value.strip())
+                    continue
+                value = part.get("content")
+                if isinstance(value, str) and value.strip():
+                    chunks.append(value.strip())
+            if chunks:
+                return "\n".join(chunks)
+        for key in ("text", "output_text", "final", "final_answer"):
+            value = message.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return ""
 
     def _openai_finalize_after_tool_budget(
         self,
@@ -332,37 +493,63 @@ class ProviderDriver:
         cost_total: float,
         tool_call_count: int,
         reason: str = "tool authority budget is exhausted",
+        context_budget_tokens: int | None = None,
     ) -> tuple[str, int, int, float, int]:
         """Close tool authority and require one evidence-bounded final answer."""
         final_messages = list(messages)
-        final_messages.append({
-            "role": "user",
-            "content": (
-                "CAPT tool access is now closed because " + reason + ". Do not request or assume "
-                "additional tool access. Produce the best final answer now using only "
-                "evidence already present in this conversation. Preserve uncertainty "
-                "and mark unresolved claims BLOCKED or UNVERIFIED."
-            ),
-        })
+        closure_instruction = (
+            "CAPT tool access is now closed because " + reason + ". Do not request or assume "
+            "additional tool access. Produce the best final answer now using only "
+            "evidence already present in this conversation. Preserve uncertainty "
+            "and mark unresolved claims BLOCKED or UNVERIFIED."
+        )
+        if self._strict_charter_policy() is not None:
+            closure_instruction += (
+                " This run is bound to a strict CAPT Vessel Charter. Use the reserved final "
+                "output for the physical ledger first: emit all required CAPT_CANDIDATE rows, "
+                "then CAPT_CHARTER_AUDIT, then all required CAPT_VESSEL rows, before optional "
+                "synthesis. Keep rows compact and schema-complete. Do not substitute prose for "
+                "countable ledger rows. Emit CAPT_COHORT_INCOMPLETE only if the required ledger "
+                "still cannot be completed inside this reserved final-output budget."
+            )
+        final_messages.append({"role": "user", "content": closure_instruction})
+        final_output_tokens = (
+            self._final_answer_reserve_tokens(context_budget_tokens)
+            if context_budget_tokens is not None
+            else int(self.governor.max_output_tokens_per_request)
+        )
         body = {
             "model": self.model,
             "messages": final_messages,
             "stream": False,
-            "max_tokens": self.governor.max_output_tokens_per_request,
-            **self._reasoning_fields,
+            "max_tokens": final_output_tokens,
         }
-        data = self._post_json(rid, url, body, headers)
+        data = self._post_json(
+            rid, url, body, headers, reasoning_policy="answer_only"
+        )
         p_tokens, c_tokens, cost = self._usage_from(data)
         prompt_tokens_total += p_tokens or 0
         completion_tokens_total += c_tokens or 0
         cost_total += cost
         choices = data.get("choices") or []
-        message = choices[0].get("message", {}) if choices and isinstance(choices[0], dict) else {}
+        choice = choices[0] if choices and isinstance(choices[0], dict) else {}
+        message = choice.get("message", {})
         if not isinstance(message, dict):
             raise ProviderDriverFailure("provider returned malformed final assistant message")
-        text = message.get("content") or ""
-        if not isinstance(text, str) or not text:
-            raise ProviderDriverFailure("provider returned no content after tool budget closure")
+        text = self._final_facing_text(message)
+        finish_reason = choice.get("finish_reason")
+        if not isinstance(finish_reason, str) or not finish_reason:
+            finish_reason = None
+        with self._lock:
+            run = self.runs.setdefault(rid, {})
+            run.setdefault("toolClosureReason", reason)
+            run["finalizationReasoningMode"] = "answer_only"
+            run["finalizationTextSource"] = "closure_response" if text else "none"
+            run["finalizationFinishReason"] = finish_reason
+        if not text:
+            raise ProviderDriverFailure(
+                "provider returned no final-facing content after tool budget closure"
+            )
         return (
             text, prompt_tokens_total, completion_tokens_total, cost_total, tool_call_count,
         )
@@ -450,6 +637,127 @@ class ProviderDriver:
                 })
         raise ProviderDriverFailure("provider tool-call loop did not terminate")
 
+    def _execute_image(
+        self,
+        rid: str,
+        wo: dict[str, Any],
+        prompt: str,
+        prompt_digest: str,
+        headers: dict[str, str],
+        estimated_prompt_tokens: int,
+    ) -> dict[str, Any]:
+        if self.provider_id == "ollama":
+            raise ProviderDriverFailure("image modality is not supported by the ollama provider path")
+        url = self.base_url + "/images"
+        body = {
+            "model": self.model,
+            "prompt": prompt,
+            "output_format": self.output_format,
+        }
+        data = self._post_json(rid, url, body, headers)
+        items = data.get("data")
+        if not isinstance(items, list) or not items or not isinstance(items[0], dict):
+            raise ProviderDriverFailure("image provider returned no image data")
+        encoded = items[0].get("b64_json")
+        if not isinstance(encoded, str) or not encoded:
+            raise ProviderDriverFailure("image provider returned no base64 image")
+        try:
+            image_bytes = base64.b64decode(encoded, validate=True)
+        except Exception as exc:
+            raise ProviderDriverFailure("image provider returned invalid base64 image") from exc
+        if not image_bytes:
+            raise ProviderDriverFailure("image provider returned an empty image")
+        if len(image_bytes) > 64 * 1024 * 1024:
+            raise ProviderDriverFailure("image provider artifact exceeds 64 MiB safety limit")
+
+        usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+        prompt_tokens = usage.get("prompt_tokens")
+        prompt_tokens = (
+            int(prompt_tokens)
+            if isinstance(prompt_tokens, (int, float))
+            else estimated_prompt_tokens
+        )
+        completion_tokens = usage.get("completion_tokens")
+        completion_tokens = (
+            int(completion_tokens)
+            if isinstance(completion_tokens, (int, float))
+            else 0
+        )
+        raw_cost = usage.get("cost", usage.get("cost_usd", 0.0))
+        cost_usd = float(raw_cost) if isinstance(raw_cost, (int, float)) else 0.0
+        resource_receipt = self.governor.record_usage(
+            prompt_tokens=max(1, prompt_tokens),
+            completion_tokens=max(0, completion_tokens),
+            cost_usd=cost_usd,
+        )
+
+        response_digest = "sha256:" + hashlib.sha256(image_bytes).hexdigest()
+        extension = "jpg" if self.output_format == "jpeg" else self.output_format
+        media_type = {
+            "png": "image/png",
+            "jpeg": "image/jpeg",
+            "webp": "image/webp",
+        }[self.output_format]
+        path = self.root / ("provider-image-%s.%s" % (rid, extension))
+        path.write_bytes(image_bytes)
+        artifact_digest = "sha256:" + hashlib.sha256(image_bytes).hexdigest()
+        ep_class = endpoint_class(self.base_url)
+        summary = (
+            "Generated untrusted provider image artifact "
+            f"{artifact_digest} ({self.output_format}, {len(image_bytes)} bytes)."
+        )
+        with self._lock:
+            run = self.runs[rid]
+            run["state"] = "completed"
+            cancel_requested = bool(run.get("cancelRequested"))
+            dispatch_boundary = run.get("dispatchBoundary", "response_completed")
+        return {
+            "driverRunId": rid,
+            "externalRunId": "%s-%s" % (self.provider_id, rid),
+            "state": "completed",
+            "cancelRequested": cancel_requested,
+            "transportCancellationSupported": False,
+            "dispatchBoundary": dispatch_boundary,
+            "observations": [
+                {
+                    "schemaVersion": "1.0.0",
+                    "observationId": "obs-" + rid,
+                    "observedBy": DRIVER_ID,
+                    "trust": "untrusted",
+                    "workOrderId": rid,
+                    "summary": summary,
+                    "observedAt": wo.get("submittedAt", ""),
+                }
+            ],
+            "artifactCandidate": {
+                "schemaVersion": "1.0.0",
+                "candidateId": "ac-" + rid,
+                "driverRunId": rid,
+                "artifactPath": str(path),
+                "artifactDigest": artifact_digest,
+                "artifactKind": "image",
+                "mediaType": media_type,
+                "producedAt": wo.get("submittedAt", ""),
+            },
+            "diagnostics": {
+                "provider": self.provider_id,
+                "model": self.model,
+                "reasoningEffortRequested": self.reasoning_effort or None,
+                "endpointClass": ep_class,
+                "promptDigest": prompt_digest,
+                "responseDigest": response_digest,
+                "outputModality": "image",
+                "outputFormat": self.output_format,
+                "imageBytes": len(image_bytes),
+                "dispatchBoundary": dispatch_boundary,
+                "cancelRequested": cancel_requested,
+                "toolCallCount": 0,
+                "contextBudgetTokens": self._work_order_context_budget_tokens(wo),
+                "requestTimeoutBudgetSeconds": self.runs[rid].get("requestTimeoutBudgetSeconds"),
+                "resourceUsage": resource_receipt,
+            },
+        }
+
     def _execute(self, rid, wo):
         timeout_seconds = self._work_order_timeout_seconds(wo)
         self._request_deadlines[rid] = time.monotonic() + timeout_seconds
@@ -478,6 +786,11 @@ class ProviderDriver:
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
         if self.api_key:
             headers["Authorization"] = "Bearer " + self.api_key
+
+        if self.output_modality == "image":
+            return self._execute_image(
+                rid, wo, prompt, prompt_digest, headers, estimated_prompt_tokens
+            )
 
         tool_call_count = 0
         context_budget_tokens = self._work_order_context_budget_tokens(wo)
@@ -587,6 +900,7 @@ class ProviderDriver:
                 "provider": self.provider_id,
                 "model": self.model,
                 "reasoningEffort": self.reasoning_effort or None,
+                "reasoningEffortRequested": self.reasoning_effort or None,
                 "endpointClass": ep_class,
                 "promptDigest": prompt_digest,
                 "responseDigest": response_digest,
@@ -596,6 +910,10 @@ class ProviderDriver:
                 "toolClosureReason": self.runs[rid].get("toolClosureReason"),
                 "contextBudgetTokens": context_budget_tokens,
                 "finalAnswerReserveTokens": self.runs[rid].get("finalAnswerReserveTokens"),
+                "charterMinimumOutputTokens": self._charter_minimum_output_tokens() or None,
+                "finalizationReasoningMode": self.runs[rid].get("finalizationReasoningMode"),
+                "finalizationTextSource": self.runs[rid].get("finalizationTextSource"),
+                "finalizationFinishReason": self.runs[rid].get("finalizationFinishReason"),
                 "resourceUsage": resource_receipt,
             },
         }
