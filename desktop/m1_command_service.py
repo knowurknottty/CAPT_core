@@ -6,8 +6,9 @@ planning, authority, aggregate mutation, idempotency, and lifecycle to CAPT
 runtime modules/services.
 """
 
-from __future__ from concurrent.futures import ThreadPoolExecutor, as_completed
-import annotations
+from __future__ import annotations
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import hashlib
 import json
