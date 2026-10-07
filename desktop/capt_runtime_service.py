@@ -1109,7 +1109,7 @@ def _acquire_runtime_state_lock(ledger_path: str):
     except BlockingIOError as exc:
         handle.close()
         raise RuntimeError(
-            "CAPT runtime service already owns state lock: %s" % lock_path
+            "CAPT runtime service already active; already owns state lock: %s" % lock_path
         ) from exc
     handle.seek(0)
     handle.truncate(0)

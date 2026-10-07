@@ -112,6 +112,11 @@ def build_bound_model_operator_approval(
         "basePromptAssemblyDigest": assembly["promptAssemblyDigest"],
         "dispatchPromptDigest": dispatch_prompt_digest,
     }
+    if context_pack_digest:
+        binding["contextPackDigest"] = str(context_pack_digest)
+        binding["continuationContext"] = [
+            dict(record) for record in (continuation_context or [])
+        ]
     authored_summary = summarize_skill_context(authored_skill_context)
     if authored_summary is not None:
         binding["authoredSkills"] = authored_summary

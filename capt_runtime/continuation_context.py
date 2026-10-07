@@ -130,6 +130,63 @@ def _digest_records(records: List[Dict[str, Any]], mission_id: str, task_id: str
     return "sha256:" + hashlib.sha256(canon).hexdigest()
 
 
+def continuation_pack_digest(
+    records: List[Dict[str, Any]], mission_id: str, task_id: str
+) -> str:
+    """Return the canonical digest for one frozen continuation snapshot."""
+    return _digest_records(list(records), mission_id, task_id)
+
+
+def resolve_approved_continuation_context(
+    store,
+    mission_id: str,
+    task_id: str,
+    *,
+    approval_binding: Optional[Dict[str, Any]],
+    exclude_run_id: Optional[str] = None,
+    ledger_dir: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Replay approval-time context, or select live context for legacy approvals.
+
+    New approvals freeze both the bounded records and their canonical digest in
+    approvalBinding. Execution replays that snapshot so a sequential council
+    cannot invalidate a later approval merely because an earlier cohort
+    completed after approvals were minted.
+    """
+    binding = approval_binding or {}
+    has_records = "continuationContext" in binding
+    has_digest = "contextPackDigest" in binding
+    if has_records or has_digest:
+        records = binding.get("continuationContext")
+        expected = binding.get("contextPackDigest")
+        if not isinstance(records, list) or not isinstance(expected, str) or not expected:
+            raise ValueError("APPROVED_CONTINUATION_CONTEXT_INVALID")
+        frozen: List[Dict[str, Any]] = []
+        for record in records:
+            if not isinstance(record, dict):
+                raise ValueError("APPROVED_CONTINUATION_CONTEXT_INVALID")
+            frozen.append(dict(record))
+        actual = continuation_pack_digest(frozen, mission_id, task_id)
+        if actual != expected:
+            raise ValueError("APPROVED_CONTINUATION_CONTEXT_DIGEST_MISMATCH")
+        return {
+            "records": frozen,
+            "contextPackDigest": expected,
+            "missionId": mission_id,
+            "taskId": task_id,
+            "isEmpty": len(frozen) == 0,
+            "source": "approval_snapshot",
+        }
+    selected = select_continuation_context(
+        store,
+        mission_id,
+        task_id,
+        exclude_run_id=exclude_run_id,
+        ledger_dir=ledger_dir,
+    )
+    return {**selected, "source": "legacy_live_selection"}
+
+
 def select_continuation_context(
     store,
     mission_id: str,

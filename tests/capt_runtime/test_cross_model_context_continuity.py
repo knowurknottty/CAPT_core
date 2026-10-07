@@ -151,3 +151,70 @@ def test_red04_unverified_label_preserved():
 def test_red05_continuation_selection_governed():
     from capt_runtime.continuation_context import select_continuation_context
     assert callable(select_continuation_context)
+
+def test_approval_snapshot_replays_without_reselecting_live_context():
+    from capt_runtime.continuation_context import (
+        continuation_pack_digest,
+        resolve_approved_continuation_context,
+    )
+
+    records = [{
+        "recordId": "cont-dr-a",
+        "kind": "prior_model_evidence",
+        "trust": "unverified",
+        "missionId": "m-x",
+        "taskId": "t-a",
+        "driverRunId": "dr-a",
+        "artifactPath": "/tmp/a.md",
+        "content": "approved context",
+        "marker": None,
+        "provenance": {"source": "prior_driverrun_evidence", "driverRunId": "dr-a", "claimId": None},
+    }]
+    digest = continuation_pack_digest(records, "m-x", "t-b")
+
+    class StoreMustNotBeRead:
+        def all_aggregates(self):
+            raise AssertionError("live ledger was reselected after approval")
+
+    resolved = resolve_approved_continuation_context(
+        StoreMustNotBeRead(),
+        "m-x",
+        "t-b",
+        approval_binding={
+            "contextPackDigest": digest,
+            "continuationContext": records,
+        },
+        exclude_run_id="dr-b",
+        ledger_dir="/tmp",
+    )
+    assert resolved["source"] == "approval_snapshot"
+    assert resolved["contextPackDigest"] == digest
+    assert resolved["records"] == records
+
+
+def test_approval_snapshot_rejects_tampered_context():
+    from capt_runtime.continuation_context import (
+        continuation_pack_digest,
+        resolve_approved_continuation_context,
+    )
+
+    approved = [{
+        "recordId": "cont-dr-a",
+        "kind": "prior_model_evidence",
+        "trust": "unverified",
+        "driverRunId": "dr-a",
+        "content": "approved context",
+    }]
+    digest = continuation_pack_digest(approved, "m-x", "t-b")
+    tampered = [dict(approved[0], content="changed after approval")]
+
+    with pytest.raises(ValueError, match="APPROVED_CONTINUATION_CONTEXT_DIGEST_MISMATCH"):
+        resolve_approved_continuation_context(
+            object(),
+            "m-x",
+            "t-b",
+            approval_binding={
+                "contextPackDigest": digest,
+                "continuationContext": tampered,
+            },
+        )
