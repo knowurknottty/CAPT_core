@@ -51,6 +51,7 @@ class DriverRunAggregate:
             "driverrun.reconciliationState",
             "driverrun.budgetConsumed",
             "driverrun.terminalDisposition",
+            "driverrun.dispatchBoundary",
         }
     )
     REFERENCE_FIELDS = frozenset(
@@ -80,6 +81,7 @@ class DriverRunAggregate:
             "reconciliationState": None,
             "budgetConsumed": {"artifacts": 0, "observations": 0, "seconds": 0},
             "terminalDisposition": None,
+            "dispatchBoundary": "not_dispatched",
         }
 
     @staticmethod
@@ -107,6 +109,62 @@ class DriverRunAggregate:
             nxt["reconciliationStatus"] = "required"
         if to_state == "reconciled":
             nxt["reconciliationStatus"] = state.get("reconciliationState") or "resolved_effect_absent"
+        return nxt
+
+    # Dispatch-boundary vocabulary: durable provider progress markers recorded
+    # BEFORE crossing each irreversible external boundary. Forward-monotonic:
+    # a recorder may re-record the current boundary (idempotent) but never move
+    # it backward, except that a tool-call loop legitimately opens a subsequent
+    # request after a completed response. "budget_rejected" is a terminal
+    # pre-dispatch marker. Recording "unknown" is refused: it is the
+    # classifier's fallback, never progress evidence.
+    _DISPATCH_BOUNDARY_ORDER = {
+        "not_dispatched": 0,
+        "prepared": 1,
+        "request_started": 2,
+        "response_started": 3,
+        "response_completed": 4,
+        "result_persisted": 5,
+    }
+
+    @staticmethod
+    def record_dispatch_boundary(state: Dict[str, Any], boundary: str, recorded_at: str) -> Dict[str, Any]:
+        """Durably record provider dispatch-boundary progress.
+
+        Forward-monotonic: re-recording the current boundary is idempotent;
+        moving it backward is an IllegalTransition (a replayed or stale
+        recorder must not rewrite history). Fail closed on unknown values.
+        """
+        current = state.get("dispatchBoundary", "unknown")
+        if boundary == current:
+            nxt = dict(state)
+            nxt["dispatchBoundaryUpdatedAt"] = recorded_at
+            return nxt
+        order = DriverRunAggregate._DISPATCH_BOUNDARY_ORDER
+        if boundary == "budget_rejected":
+            if current not in ("unknown", "not_dispatched", "prepared"):
+                raise IllegalTransition(
+                    "driver run %s" % state["driverRunId"], str(current), str(boundary))
+        elif boundary in order:
+            if current == "budget_rejected":
+                # Terminal: the run was rejected before any dispatch; no
+                # subsequent boundary (including re-preparation) is progress.
+                raise IllegalTransition(
+                    "driver run %s" % state["driverRunId"], str(current), str(boundary))
+            current_order = order.get(current)
+            forward = current_order is None or order[boundary] > current_order
+            # A tool-call loop legitimately opens a subsequent request after a
+            # completed response; that is new forward progress, not a rollback.
+            subsequent_request = boundary == "request_started" and current == "response_completed"
+            if not (forward or subsequent_request):
+                raise IllegalTransition(
+                    "driver run %s" % state["driverRunId"], str(current), str(boundary))
+        else:
+            raise IllegalTransition(
+                "driver run %s" % state["driverRunId"], str(current), str(boundary))
+        nxt = dict(state)
+        nxt["dispatchBoundary"] = boundary
+        nxt["dispatchBoundaryUpdatedAt"] = recorded_at
         return nxt
 
     @staticmethod

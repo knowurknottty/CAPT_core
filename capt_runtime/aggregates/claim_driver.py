@@ -202,6 +202,7 @@ class DriverRunAggregate(object):
             "driverrun.reconciliationStatus",
             "driverrun.workOrderVersion",
             "driverrun.externalRunId",
+            "driverrun.dispatchBoundary",
         }
     )
     REFERENCE_FIELDS = frozenset({"driverRunId", "driverId", "missionId", "taskId"})
@@ -221,6 +222,7 @@ class DriverRunAggregate(object):
             "externalRunId": run.get("externalRunId"),
             "state": "created",
             "reconciliationStatus": "not_required",
+            "dispatchBoundary": "not_dispatched",
         }
 
     @staticmethod

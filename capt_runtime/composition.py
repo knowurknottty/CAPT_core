@@ -104,6 +104,7 @@ class RuntimeComposition:
         self, *, target_repo: str, staging_root: str, provider_id: str, model: str,
         base_url: str, api_key: str = "", dispatch_prompt: str = "",
         governor=None, tool_bridge=None,
+        boundary_recorder=None, durable_boundary_reader=None,
     ) -> DriverHost:
         from .drivers.provider import DESCRIPTOR as PROVIDER_DESCRIPTOR, ProviderDriver
         if not self.registry.is_registered(PROVIDER_DESCRIPTOR["driverId"]):
@@ -113,6 +114,8 @@ class RuntimeComposition:
             staging_root, provider_id=provider_id, model=model, base_url=base_url,
             api_key=api_key, task_resolver=self.task_resolver(),
             dispatch_prompt=dispatch_prompt, governor=governor, tool_bridge=tool_bridge,
+            boundary_recorder=boundary_recorder,
+            durable_boundary_reader=durable_boundary_reader,
         ))
         return host
 

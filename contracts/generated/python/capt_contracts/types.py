@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:7d94ccff4a9eb8996555286520fa4e635750c74e0d6d0ef3df3517822408f70f
+# source digest:  sha256:1cb7e6739e97af2464b3b987575223cc9d238a96fdb9043f6bb24776b74b1cbb
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -641,6 +641,7 @@ class HumanApprovalConsumption(object):
     schemaVersion: SchemaVersion
     taskId: Identifier
     useId: Identifier
+    commandIssuedAt: Optional[Timestamp] = None
 
 
 @dataclass(frozen=True)
@@ -1168,6 +1169,19 @@ class ContextSlice(object):
     skillContext: Optional[AuthoredSkillContext] = None
 
 
+class DispatchBoundary(str, Enum):
+    """Durable provider dispatch-boundary marker. Records how far an external dispatch progressed before a crash or loss, so reconciliation can decide safe_to_retry vs retry_forbidden vs harvestable without fabricating certainty."""
+
+    NOT_DISPATCHED = "not_dispatched"
+    PREPARED = "prepared"
+    REQUEST_STARTED = "request_started"
+    RESPONSE_STARTED = "response_started"
+    RESPONSE_COMPLETED = "response_completed"
+    RESULT_PERSISTED = "result_persisted"
+    BUDGET_REJECTED = "budget_rejected"
+    UNKNOWN = "unknown"
+
+
 @dataclass(frozen=True)
 class DriverArtifactCandidate(object):
     """A driver-produced artifact candidate. CAPT validates existence before creating an EvidenceRecord."""
@@ -1345,6 +1359,8 @@ class DriverRun(object):
     state: DriverRunState
     taskId: Identifier
     workOrderVersion: int
+    dispatchBoundary: Optional[DispatchBoundary] = None
+    dispatchBoundaryUpdatedAt: Optional[Timestamp] = None
     externalRunId: Optional[str] = None
 
 
@@ -1643,6 +1659,17 @@ class DriverRunCreatedPayload(object):
 
 
 @dataclass(frozen=True)
+class DriverRunDispatchBoundaryRecordedPayload(object):
+    """DriverRunDispatchBoundaryRecordedPayload"""
+
+    dispatchBoundary: DispatchBoundary
+    driverRunId: Identifier
+    eventType: Literal["DriverRunDispatchBoundaryRecorded"]
+    previousDispatchBoundary: Optional[DispatchBoundary] = None
+    recordedAt: Optional[Timestamp] = None
+
+
+@dataclass(frozen=True)
 class DriverRunStateChangedPayload(object):
     """DriverRunStateChangedPayload"""
 
@@ -1859,7 +1886,7 @@ class ToolExecutionTerminatedPayload(object):
 
 
 # discriminated on 'eventType'
-EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, HumanApprovalConsumedForCapabilityPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, CouncilAdmittedPayload, CouncilAnalysisRecordedPayload, CouncilExecutionScheduledPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload, PromptProposalCreatedPayload, PromptProposalRevisedPayload, PromptProposalCancelledPayload]
+EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, DriverRunDispatchBoundaryRecordedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalConsumedPayload, HumanApprovalConsumedForCapabilityPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, CouncilAdmittedPayload, CouncilAnalysisRecordedPayload, CouncilExecutionScheduledPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload, PromptProposalCreatedPayload, PromptProposalRevisedPayload, PromptProposalCancelledPayload]
 
 
 class EventType(str, Enum):
@@ -1881,6 +1908,7 @@ class EventType(str, Enum):
     CAPABILITYLEASEREVOKED = "CapabilityLeaseRevoked"
     DRIVERRUNCREATED = "DriverRunCreated"
     DRIVERRUNSTATECHANGED = "DriverRunStateChanged"
+    DRIVERRUNDISPATCHBOUNDARYRECORDED = "DriverRunDispatchBoundaryRecorded"
     CLAIMCREATED = "ClaimCreated"
     EVIDENCERECORDED = "EvidenceRecorded"
     CLAIMVERIFIED = "ClaimVerified"

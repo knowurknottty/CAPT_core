@@ -855,6 +855,13 @@ class RuntimeCommandService:
 
                 def run_one(index: int, spec: Dict[str, Any], item: Dict[str, Any]):
                     nonlocal active, peak
+                    # P0.1: stamp each cohort subcommand with authoritative runtime
+                    # time at dispatch. The outer council creation timestamp is
+                    # preserved as provenance (councilIssuedAt) but never reused as
+                    # the authorization consumption timestamp: approval expiry is
+                    # validated against the time authority is actually consumed, and
+                    # a stale copied timestamp would let an expired approval through.
+                    cohort_dispatched_at = _now_rfc3339()
                     sub = {
                         "commandId": "%s-cohort-%02d" % (cmd["commandId"], index + 1),
                         "operatorId": cmd["operatorId"],
@@ -864,7 +871,8 @@ class RuntimeCommandService:
                         "idempotencyKey": "%s:cohort:%s" % (
                             cmd["idempotencyKey"], spec["cohortId"]
                         ),
-                        "timestamp": cmd["timestamp"],
+                        "timestamp": cohort_dispatched_at,
+                        "councilIssuedAt": cmd["timestamp"],
                         "op": "run_approved_hermes_inspection",
                         "payload": item,
                     }

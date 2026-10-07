@@ -352,6 +352,12 @@
         "reportedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
       }
     },
+    "DispatchBoundary": {
+      "title": "DispatchBoundary",
+      "description": "Durable provider dispatch-boundary marker. Records how far an external dispatch progressed before a crash or loss, so reconciliation can decide safe_to_retry vs retry_forbidden vs harvestable without fabricating certainty.",
+      "type": "string",
+      "enum": ["not_dispatched", "prepared", "request_started", "response_started", "response_completed", "result_persisted", "budget_rejected", "unknown"]
+    },
     "DriverRun": {
       "title": "DriverRun",
       "type": "object",
@@ -367,7 +373,9 @@
         "externalRunId": { "type": ["string", "null"], "maxLength": 512 },
         "state": { "$ref": "driver.schema.json#/$defs/DriverRunState" },
         "reconciliationStatus": { "$ref": "driver.schema.json#/$defs/DriverReconciliationStatus" },
-        "createdAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
+        "createdAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "dispatchBoundary": { "$ref": "driver.schema.json#/$defs/DispatchBoundary" },
+        "dispatchBoundaryUpdatedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
       }
     },
     "DriverRunCheckpoint": {

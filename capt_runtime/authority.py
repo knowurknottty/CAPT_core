@@ -50,6 +50,7 @@ _PERMITTED: Dict[str, FrozenSet[str]] = {
     # public act must permit at least the union of its callers' permitted kinds,
     # or the operator-facing cancel is refused one layer down.
     "transition_driver_run": frozenset({EXECUTION, HUMAN, SYSTEM}),
+    "record_driver_dispatch_boundary": frozenset({EXECUTION, SYSTEM}),
     "plan_tasks": frozenset({COGNITION, SYSTEM}),
     "transition_task": frozenset({EXECUTION, SYSTEM}),
     "submit_result": frozenset({EXECUTION, SYSTEM}),

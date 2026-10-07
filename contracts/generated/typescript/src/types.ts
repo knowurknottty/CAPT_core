@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:7d94ccff4a9eb8996555286520fa4e635750c74e0d6d0ef3df3517822408f70f
+// source digest:  sha256:1cb7e6739e97af2464b3b987575223cc9d238a96fdb9043f6bb24776b74b1cbb
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -555,6 +555,7 @@ export interface HumanApprovalConsumption {
   readonly schemaVersion: SchemaVersion;
   readonly taskId: Identifier;
   readonly useId: Identifier;
+  readonly commandIssuedAt?: Timestamp;
 }
 
 /** Operator decision on a HumanApprovalRequest. 'approve' permits only the originally requested scope; 'deny' must prevent execution. Idempotent by idempotencyKey. Additive M1 extension under contract 1.0.0 (ADR-DT-M1-001). */
@@ -1014,6 +1015,19 @@ export interface ContextSlice {
   readonly skillContext?: AuthoredSkillContext;
 }
 
+/** Durable provider dispatch-boundary marker. Records how far an external dispatch progressed before a crash or loss, so reconciliation can decide safe_to_retry vs retry_forbidden vs harvestable without fabricating certainty. */
+export type DispatchBoundary = "not_dispatched" | "prepared" | "request_started" | "response_started" | "response_completed" | "result_persisted" | "budget_rejected" | "unknown";
+export const DispatchBoundaryValues = [
+  "not_dispatched",
+  "prepared",
+  "request_started",
+  "response_started",
+  "response_completed",
+  "result_persisted",
+  "budget_rejected",
+  "unknown",
+] as const;
+
 /** A driver-produced artifact candidate. CAPT validates existence before creating an EvidenceRecord. */
 export interface DriverArtifactCandidate {
   readonly artifactDigest: string;
@@ -1163,6 +1177,8 @@ export interface DriverRun {
   readonly state: DriverRunState;
   readonly taskId: Identifier;
   readonly workOrderVersion: number;
+  readonly dispatchBoundary?: DispatchBoundary;
+  readonly dispatchBoundaryUpdatedAt?: Timestamp;
   readonly externalRunId?: string | null;
 }
 
@@ -1400,6 +1416,15 @@ export interface DriverRunCreatedPayload {
   readonly eventType: "DriverRunCreated";
 }
 
+/** DriverRunDispatchBoundaryRecordedPayload */
+export interface DriverRunDispatchBoundaryRecordedPayload {
+  readonly dispatchBoundary: DispatchBoundary;
+  readonly driverRunId: Identifier;
+  readonly eventType: "DriverRunDispatchBoundaryRecorded";
+  readonly previousDispatchBoundary?: DispatchBoundary;
+  readonly recordedAt?: Timestamp;
+}
+
 /** DriverRunStateChangedPayload */
 export interface DriverRunStateChangedPayload {
   readonly driverRunId: Identifier;
@@ -1447,6 +1472,7 @@ export type EventPayload =
   | CapabilityLeaseRevokedPayload
   | DriverRunCreatedPayload
   | DriverRunStateChangedPayload
+  | DriverRunDispatchBoundaryRecordedPayload
   | ClaimCreatedPayload
   | EvidenceRecordedPayload
   | ClaimVerifiedPayload
@@ -1477,7 +1503,7 @@ export type EventPayload =
   | PromptProposalCancelledPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "HumanApprovalConsumedForCapability" | "PromptProposalCreated" | "PromptProposalRevised" | "PromptProposalCancelled" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "CouncilAdmitted" | "CouncilAnalysisRecorded" | "CouncilExecutionScheduled" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "DriverRunDispatchBoundaryRecorded" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalConsumed" | "HumanApprovalConsumedForCapability" | "PromptProposalCreated" | "PromptProposalRevised" | "PromptProposalCancelled" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "CouncilAdmitted" | "CouncilAnalysisRecorded" | "CouncilExecutionScheduled" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -1495,6 +1521,7 @@ export const EventTypeValues = [
   "CapabilityLeaseRevoked",
   "DriverRunCreated",
   "DriverRunStateChanged",
+  "DriverRunDispatchBoundaryRecorded",
   "ClaimCreated",
   "EvidenceRecorded",
   "ClaimVerified",
