@@ -1268,7 +1268,44 @@ def _acquire_runtime_state_lock(ledger_path: str):
     return handle
 
 
-def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> None:
+def _register_optional_biocapt_qipc(
+    runtime: RuntimeComposition,
+    *,
+    enabled: bool,
+    source_root: str | None,
+    interpreter: str | None,
+) -> None:
+    """Opt-in local cognitive tool registration with zero implicit authority.
+
+    Imports an installed, source-reviewed CAPT Ouroboros adapter only when
+    explicitly requested by the operator's startup configuration. Running
+    inference, minting a grant, starting a mission and registering a bot are
+    NOT side effects of this function. It never adjusts sys.path to point at
+    arbitrary executable source trees.
+    """
+    if not enabled:
+        if source_root or interpreter:
+            raise ValueError("BIOCAPT_QIPC_REQUIRES_EXPLICIT_ENABLE_FLAG")
+        return
+    if not source_root or not interpreter:
+        raise ValueError("BIOCAPT_QIPC_EXPLICIT_SOURCE_AND_INTERPRETER_REQUIRED")
+    from capt_ouroboros.qipc_tool_broker import attach_biocapt_qipc_to_composition
+
+    adapter = attach_biocapt_qipc_to_composition(
+        runtime, source_root=source_root, interpreter=interpreter,
+    )
+    if runtime.tool_registry.readiness("biocapt.qipc")["status"] != "available":
+        raise RuntimeError("BIOCAPT_QIPC_REGISTRATION_NOT_READY")
+    if adapter.calls != 0:
+        raise RuntimeError("BIOCAPT_QIPC_REGISTRATION_TRIGGERED_EXECUTION")
+
+
+def serve(
+    ledger_path: str, sock_path: Path, token_file: str, seed: bool,
+    *, enable_biocapt_qipc: bool = False,
+    biocapt_qipc_source_root: str | None = None,
+    biocapt_qipc_interpreter: str | None = None,
+) -> None:
     lock_handle = _acquire_runtime_state_lock(ledger_path)
     sock_path = Path(sock_path)
     sock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1289,6 +1326,15 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
             probe.close()
 
     runtime = create_runtime(str(ledger_path), enable_mcp=True)
+    try:
+        _register_optional_biocapt_qipc(
+            runtime, enabled=enable_biocapt_qipc,
+            source_root=biocapt_qipc_source_root,
+            interpreter=biocapt_qipc_interpreter,
+        )
+    except Exception:
+        runtime.close()
+        raise
     prompt_compiler = build_prompt_compiler(Path(ledger_path).parent / "ui")
     recovery_now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     _reconcile_stranded_driver_runs(runtime, recovery_now)
@@ -2180,8 +2226,16 @@ def main() -> int:
     ap.add_argument("--sock", required=True)
     ap.add_argument("--token-file", required=True)
     ap.add_argument("--seed", action="store_true")
+    ap.add_argument("--enable-biocapt-qipc", action="store_true")
+    ap.add_argument("--biocapt-qipc-source-root")
+    ap.add_argument("--biocapt-qipc-interpreter")
     args = ap.parse_args()
-    serve(args.ledger, args.sock, args.token_file, args.seed)
+    serve(
+        args.ledger, args.sock, args.token_file, args.seed,
+        enable_biocapt_qipc=args.enable_biocapt_qipc,
+        biocapt_qipc_source_root=args.biocapt_qipc_source_root,
+        biocapt_qipc_interpreter=args.biocapt_qipc_interpreter,
+    )
     return 0
 
 
