@@ -138,7 +138,8 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         _ objective: String,
         provider: String,
         model: String,
-        targetRoot: String
+        targetRoot: String,
+        piRequestID: String? = nil
     ) -> UUID? {
         let trimmed = objective.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
@@ -156,6 +157,7 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         sessions[index].provider = provider
         sessions[index].model = model
         sessions[index].targetRoot = targetRoot
+        sessions[index].piRequestID = piRequestID
         sessions[index].messages.append(CAPTChatMessage(role: .user, text: trimmed))
         sessions[index].updatedAt = Date()
         currentFlow.beginCompilation()
@@ -173,6 +175,7 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
             return
         }
         sessions[index].promptProposal = proposal
+        sessions[index].piRequestID = nil
         sessions[index].updatedAt = Date()
         sessions[index].messages.append(CAPTChatMessage(
             role: .system,

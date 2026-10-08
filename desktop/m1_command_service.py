@@ -110,6 +110,9 @@ class RuntimeCommandService:
         self.memory_engine = memory_engine
         self.tool_broker = tool_broker
         self.prompt_compiler = prompt_compiler or PromptCompiler()
+        # Shared, per-process live attempts; never persisted as a claim of
+        # execution after RuntimeService restarts.
+        self.pi_active_attempts: set[str] = set()
         self.operator_control = operator_control
         self.fixed_openharness_runner = None
         self.approved_hermes_runner: Any = None
@@ -482,9 +485,17 @@ class RuntimeCommandService:
                 )
 
             if op == "compile_prompt_proposal":
-                result = compile_prompt_proposal(
-                    self.svc, self.prompt_compiler, cmd["payload"], meta
+                # Durable admission happens BEFORE any model/network operation.
+                # A disconnected socket or service restart must never trigger
+                # another compiler dispatch with the same attempt identity.
+                from capt_runtime.prompt_proposals import durable_pi_compile
+                result = durable_pi_compile(
+                    self.svc, self.prompt_compiler, cmd["payload"], meta,
+                    active_attempts=self.pi_active_attempts,
                 )
+                if result.get("status") == "in_progress":
+                    return self._receipt(cmd, status="in_progress",
+                        classification="in_progress", result=result)
                 status = "idempotent" if result.get("status") == "idempotent" else "accepted"
                 return self._receipt(
                     cmd, status=status,

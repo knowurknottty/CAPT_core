@@ -263,3 +263,80 @@ def request_prompt_proposal_approval(service: Any, intent: Dict[str, Any],
         **result,
         **proposal_binding,
     }
+
+
+def pi_attempt_status(store: Any, proposal_id: str,
+                      active_attempts: set[str] | None = None) -> Dict[str, Any]:
+    """Read-only reconciliation of an exact PI attempt. Never invokes compiler."""
+    import re
+    if not re.fullmatch(r"pp-[A-Za-z0-9-]{8,96}", proposal_id):
+        raise ValueError("PI_PROPOSAL_ID_INVALID")
+    state = store.load_state(PromptProposalAggregate.stream_id(proposal_id))
+    if state is not None:
+        # The persisted proposal is authoritative, even when the admission
+        # completion receipt was interrupted after the EventStore commit.
+        return {"proposalId": proposal_id, "status": "completed",
+                "proposal": {"status": state["compilationStatus"], **state},
+                "safeToAutoRetry": False}
+    admission = store.find_idempotent("pi-admission:" + proposal_id)
+    if admission is None:
+        return {"proposalId": proposal_id, "status": "not_found",
+                "safeToAutoRetry": False,
+                "detail": "No durable admission found. Delivery before admission is unknown; do not automatically resend."}
+    recorded = store.idempotent_result("pi-admission:" + proposal_id) or {}
+    if recorded.get("status") == "failed":
+        return {"proposalId": proposal_id, "status": "failed",
+                "safeToAutoRetry": False,
+                "detail": "PI attempt failed after admission; external usage may have occurred."}
+    if active_attempts is not None and proposal_id in active_attempts:
+        return {"proposalId": proposal_id, "status": "in_progress",
+                "safeToAutoRetry": False}
+    return {"proposalId": proposal_id, "status": "indeterminate",
+            "safeToAutoRetry": False,
+            "detail": "Attempt was durably admitted but no result exists and no live execution is known. Manual reconciliation required."}
+
+
+def durable_pi_compile(service: Any, compiler: PromptCompiler,
+                       intent: Dict[str, Any], metadata: Dict[str, Any],
+                       *, active_attempts: set[str] | None = None) -> Dict[str, Any]:
+    """One PI dispatch maximum for a durable attempt identity, across restarts.
+
+    The separate pre-dispatch claim is essential: PromptProposalCreated is
+    recorded only AFTER provider completion. The normal proposal EventStore
+    transaction retains its existing independent idempotency key.
+    """
+    import re
+    _require_human(metadata)
+    proposal_id = str(intent.get("proposalId") or ("pp-" + _suffix(metadata["idempotencyKey"])))
+    if not re.fullmatch(r"pp-[A-Za-z0-9-]{8,96}", proposal_id):
+        raise AuthorityViolation("PI_PROPOSAL_ID_INVALID")
+    fingerprint = commands.fingerprint("pi_attempt", intent)
+    key = "pi-admission:" + proposal_id
+    claim = service.store.claim_command(key, fingerprint, metadata["commandId"])
+    if claim.get("replayed"):
+        status = pi_attempt_status(service.store, proposal_id, active_attempts)
+        if status["status"] == "completed":
+            return {**status["proposal"], "status": "idempotent"}
+        if status["status"] in ("in_progress", "indeterminate", "failed"):
+            return {"status": "in_progress", "proposalId": proposal_id,
+                    "reconciliationStatus": status["status"],
+                    "safeToAutoRetry": False}
+        raise AuthorityViolation("PI_ADMISSION_WITHOUT_RESULT")
+    if active_attempts is not None:
+        active_attempts.add(proposal_id)
+    try:
+        result = compile_prompt_proposal(
+            service, compiler, {**intent, "proposalId": proposal_id}, metadata
+        )
+        service.store.complete_claimed_command(
+            key, fingerprint, {"status": "completed", "proposalId": proposal_id}
+        )
+        return result
+    except Exception:
+        # An exception may occur before or after external dispatch. Keep it
+        # admitted and non-retriable. A later read reports indeterminate,
+        # unless a committed proposal takes precedence.
+        raise
+    finally:
+        if active_attempts is not None:
+            active_attempts.discard(proposal_id)

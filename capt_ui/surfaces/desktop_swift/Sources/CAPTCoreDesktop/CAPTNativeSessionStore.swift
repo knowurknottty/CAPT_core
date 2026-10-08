@@ -15,6 +15,9 @@ public struct CAPTNativeSession: Identifiable, Codable, Equatable, Sendable {
     // Nil means cohorts disabled. Optional for lossless decoding of older sessions.
     public var cohortVessels: Int?
     public var councilReview: CAPTCouncilReview?
+    // Stable PI attempt identity persisted before network dispatch.
+    // Nil for older encrypted chat sessions.
+    public var piRequestID: String?
     public var promptProposal: CAPTPromptProposal?
     public var pendingApproval: CAPTPendingApproval?
     public var verificationDriverRunID: String?
@@ -38,6 +41,7 @@ public struct CAPTNativeSession: Identifiable, Codable, Equatable, Sendable {
         self.targetRoot = targetRoot
         self.cohortVessels = cohortVessels
         self.councilReview = nil
+        self.piRequestID = nil
         self.promptProposal = promptProposal
         self.pendingApproval = pendingApproval
         self.verificationDriverRunID = verificationDriverRunID

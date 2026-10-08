@@ -40,6 +40,19 @@ actor CAPTBackgroundRuntime {
 
     func disconnect() { client.disconnect() }
 
+    /// Connect solely to inspect an existing attempt; never bootstraps a
+    /// possibly unavailable runtime or starts a new paid compiler call.
+    func connectReadOnly() throws { _ = try client.connect() }
+
+    func piRequestStatus(_ id: String) throws -> [String: Any] {
+        let response = try client.query(op: "pi_request_status", payload: ["proposalId": id])
+        guard response["ok"] as? Bool == true,
+              let result = response["result"] as? [String: Any] else {
+            throw CAPTRuntimeClientError.malformedResponse("PI recovery query refused")
+        }
+        return result
+    }
+
     func identity() throws -> CAPTRuntimeIdentitySnapshot {
         CAPTRuntimeControlProjection.identity(
             try client.query(op: "identity", payload: [:])
@@ -316,13 +329,15 @@ actor CAPTBackgroundRuntime {
         model: String,
         promptIntelligence: String,
         reasoningEffort: String = "",
-        remoteCompilationAuthorized: Bool = false
+        remoteCompilationAuthorized: Bool = false,
+        piRequestID: String? = nil
     ) throws -> CAPTPromptProposal {
         try coordinator.compileProposal(
             original: original, targetRoot: targetRoot, provider: provider, model: model,
             promptIntelligence: promptIntelligence,
             reasoningEffort: reasoningEffort,
-            remoteCompilationAuthorized: remoteCompilationAuthorized
+            remoteCompilationAuthorized: remoteCompilationAuthorized,
+            piRequestID: piRequestID
         )
     }
 

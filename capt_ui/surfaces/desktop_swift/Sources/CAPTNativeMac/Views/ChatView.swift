@@ -29,6 +29,22 @@ struct ChatView: View {
                                 .id(message.id)
                         }
 
+                        if store.activePIRequestID != nil,
+                           store.promptProposal == nil {
+                            HStack {
+                                Label("PI request awaiting reconciliation", systemImage: "arrow.clockwise.circle")
+                                    .font(.caption)
+                                Spacer()
+                                Button("Check original PI request") { store.recoverPIRequest() }
+                                    .disabled(store.piRecoveryBusy)
+                                    .buttonStyle(.bordered)
+                                    .accessibilityIdentifier("pi-recover-original-request")
+                            }
+                            if let message = store.piRecoveryMessage {
+                                Text(message).font(.caption).textSelection(.enabled)
+                            }
+                        }
+
                         if store.activeChatFlow.phase == .compilingProposal {
                             ChatProgressCard(
                                 title: "Compiling Prompt Intelligence",

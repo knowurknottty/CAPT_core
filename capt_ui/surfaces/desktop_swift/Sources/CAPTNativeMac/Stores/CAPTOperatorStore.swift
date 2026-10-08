@@ -36,6 +36,8 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var taskState = "—"
     @Published var isBusy = false
     @Published var lastError: String?
+    @Published var piRecoveryMessage: String?
+    @Published var piRecoveryBusy = false
     @Published var missions: [CAPTMissionSummary] = []
     @Published var evidenceItems: [CAPTEvidenceSummary] = []
     @Published var approvals: [CAPTApprovalSummary] = []
@@ -67,6 +69,7 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var composerSeed: String?
     @Published var authoritySettings = CAPTExecutionAuthoritySettings.default
     @Published private var chatWorkspace = CAPTNativeChatWorkspace()
+    var activePIRequestID: String? { chatWorkspace.activeSession?.piRequestID }
 
     private let runtime: CAPTBackgroundRuntime
     private let runtimeProfile: CAPTRuntimeProfile
@@ -237,6 +240,9 @@ final class CAPTOperatorStore: ObservableObject {
                 syncSelectionFromActiveSession()
                 updateTaskStateFromActiveFlow()
                 saveSessions()
+                // Only inspect the original durable attempt after restoring.
+                // No automatic model dispatch or retry on launch.
+                recoverPIRequest()
             case .failure(let error):
                 lastError = "Native session cache: " + error.localizedDescription
             }
@@ -272,6 +278,7 @@ final class CAPTOperatorStore: ObservableObject {
                 refreshCapabilities()
                 refreshBots()
                 refreshSkills()
+                recoverPIRequest()
             } catch {
                 let message = error.localizedDescription
                 lastError = message
@@ -303,12 +310,17 @@ final class CAPTOperatorStore: ObservableObject {
         }
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Persist before touching RuntimeService, including the exact attempt
+        // identity used for both durable admission and read-only reattachment.
+        let piRequestID = "pp-native-" + UUID().uuidString.lowercased()
         guard let sessionID = mutateWorkspace({
-            $0.beginPrompt(trimmed, provider: provider, model: model, targetRoot: targetRoot)
+            $0.beginPrompt(trimmed, provider: provider, model: model,
+                           targetRoot: targetRoot, piRequestID: piRequestID)
         }) else { return }
 
         saveSessions()
         lastError = nil
+        piRecoveryMessage = nil
         if activeSessionID == sessionID { taskState = "proposal_compiling" }
 
         let selectedProvider = provider
@@ -339,7 +351,8 @@ final class CAPTOperatorStore: ObservableObject {
                     original: trimmed, targetRoot: root, provider: selectedProvider,
                     model: selectedModel, promptIntelligence: intelligence,
                     reasoningEffort: selectedReasoningEffort,
-                    remoteCompilationAuthorized: remoteCompilationAuthorized
+                    remoteCompilationAuthorized: remoteCompilationAuthorized,
+                    piRequestID: piRequestID
                 )
                 guard !Task.isCancelled,
                       compilationVersions[sessionID] == compilationVersion else { return }
@@ -362,6 +375,7 @@ final class CAPTOperatorStore: ObservableObject {
                     lastError = message
                 }
                 saveSessions()
+                recoverPIRequest(for: sessionID)
             }
         }
     }
@@ -371,7 +385,7 @@ final class CAPTOperatorStore: ObservableObject {
               activeChatFlow.phase == .compilingProposal else { return }
         compilationVersions.removeValue(forKey: sessionID)
         compilingTasks.removeValue(forKey: sessionID)?.cancel()
-        let message = "Stopped waiting for Prompt Intelligence locally. A remote request may still finish; no model execution was authorized. You can retry or select PI OFF."
+        let message = "Stopped waiting for Prompt Intelligence locally. The request identity was preserved for read-only recovery. A remote request may still finish or incur usage; do not automatically resubmit."
         mutateWorkspace { $0.failProposalRequest(message: message, for: sessionID) }
         taskState = "proposal_abandoned"
         lastError = nil
@@ -1538,6 +1552,68 @@ extension CAPTOperatorStore {
                 refreshHistory()
             } catch {
                 kanbanMessage = "Human verification refused: " + error.localizedDescription
+            }
+        }
+    }
+}
+
+extension CAPTOperatorStore {
+    /// Read-only reconstruction from the original durable PI attempt.
+    /// Reconnect MUST NOT call compile_prompt_proposal again.
+    func recoverPIRequest(for specificSessionID: UUID? = nil) {
+        guard !piRecoveryBusy,
+              let session = specificSessionID.flatMap({ chatWorkspace.session($0) })
+                  ?? chatWorkspace.activeSession,
+              let requestID = session.piRequestID,
+              session.promptProposal == nil else { return }
+        let sessionID = session.id
+        piRecoveryBusy = true
+        if activeSessionID == sessionID {
+            piRecoveryMessage = "Checking durable PI attempt " + requestID + "…"
+        }
+        let recoveryRuntime = CAPTBackgroundRuntime(profile: runtimeProfile)
+        Task {
+            defer { piRecoveryBusy = false }
+            do {
+                try await recoveryRuntime.connectReadOnly()
+                let status = try await recoveryRuntime.piRequestStatus(requestID)
+                guard chatWorkspace.session(sessionID)?.piRequestID == requestID else { return }
+                let kind = status["status"] as? String ?? "unknown"
+                switch kind {
+                case "completed":
+                    guard let data = status["proposal"] as? [String: Any] else {
+                        throw CAPTRuntimeClientError.malformedResponse("PI proposal missing from completed receipt")
+                    }
+                    let proposal = try CAPTPromptProposal(dictionary: data)
+                    mutateWorkspace { $0.receiveProposal(proposal, for: sessionID) }
+                    if activeSessionID == sessionID {
+                        updateTaskStateFromActiveFlow()
+                        piRecoveryMessage = "Recovered PI proposal " + proposal.proposalID + " from EventStore. No second provider call."
+                        lastError = nil
+                    }
+                    saveSessions()
+                case "in_progress":
+                    if activeSessionID == sessionID {
+                        piRecoveryMessage = "Original PI request remains active. Check status again; no duplicate call was made."
+                    }
+                case "indeterminate", "failed", "not_found":
+                    let detail = status["detail"] as? String ?? "Original PI attempt has no confirmed result."
+                    let message = "PI " + kind + ": " + detail +
+                        " Do not retry automatically; a prior attempt may have incurred usage."
+                    mutateWorkspace { $0.failProposalRequest(message: message, for: sessionID) }
+                    if activeSessionID == sessionID {
+                        piRecoveryMessage = message
+                        taskState = "proposal_reconciliation_required"
+                    }
+                    saveSessions()
+                default:
+                    piRecoveryMessage = "PI recovery returned an unrecognized state. Do not retry."
+                }
+            } catch {
+                if activeSessionID == sessionID {
+                    piRecoveryMessage = "PI status unavailable: " + error.localizedDescription +
+                        ". No new model call was sent."
+                }
             }
         }
     }

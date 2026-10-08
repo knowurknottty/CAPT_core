@@ -31,8 +31,10 @@ public final class CAPTChatCoordinator {
         model: String,
         promptIntelligence: String = "AUTO",
         reasoningEffort: String = "",
-        remoteCompilationAuthorized: Bool = false
+        remoteCompilationAuthorized: Bool = false,
+        piRequestID: String? = nil
     ) throws -> CAPTPromptProposal {
+        let attemptID = piRequestID ?? ("pp-" + UUID().uuidString.lowercased())
         let response = try client.command(
             op: "compile_prompt_proposal",
             payload: [
@@ -46,8 +48,9 @@ public final class CAPTChatCoordinator {
                 "requestedContextBudget": 32_000,
                 "requestedCapabilities": [],
                 "remoteCompilationAuthorized": remoteCompilationAuthorized,
+                "proposalId": attemptID,
             ],
-            idempotencyKey: "native-proposal-" + UUID().uuidString.lowercased()
+            idempotencyKey: "native-proposal-" + attemptID
         )
         try Self.ensureAcceptedOrApplied(response)
         guard let result = response["result"] as? [String: Any] else {
