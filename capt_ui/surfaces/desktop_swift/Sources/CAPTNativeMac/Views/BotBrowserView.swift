@@ -48,6 +48,13 @@ struct BotBrowserView: View {
             .background(.ultraThinMaterial)
 
             InversionDivider()
+            if store.runtimeCapabilities?.supportsCommand("register_bot") != true {
+                Text("Connected RuntimeService does not yet advertise Bot registration. A safe runtime update is required before Create Bot becomes available.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+            }
             if store.bots.isEmpty {
                 VStack(spacing: 10) {
                     Image(systemName: "person.2")
