@@ -29,9 +29,15 @@ capt-verify-*/
 hermes-verify-*
 /tmp/
 *.json.tmp
+.tmp_*.py
 
 # Session-local release execution contract (kept on disk, never committed)
 .hermes.md
+
+# CAPT governed file-mutation sidecars (runtime-local receipts/rollback state)
+**/.*.capt-lock
+**/.*.capt-receipt-*.json
+**/.*.capt-rollback-*
 
 # Editor / OS
 .DS_Store
