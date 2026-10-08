@@ -95,3 +95,22 @@ def test_real_reviewed_source_attaches_without_creating_authority(tmp_path):
         assert not composition.store.read_events()
     finally:
         composition.close()
+
+
+
+def test_malformed_startup_fails_before_lock_or_eventstore(tmp_path, monkeypatch):
+    import desktop.capt_runtime_service as host
+
+    def forbidden_lock(_ledger):
+        raise AssertionError("malformed opt-in acquired live CAPT lock")
+
+    monkeypatch.setattr(host, "_acquire_runtime_state_lock", forbidden_lock)
+    path = tmp_path / "never-created-runtime.db"
+    with pytest.raises(ValueError, match="EXPLICIT_SOURCE_AND_INTERPRETER"):
+        host.serve(
+            str(path), tmp_path / "capt.sock", str(tmp_path / "token"),
+            False, enable_biocapt_qipc=True,
+            biocapt_qipc_source_root="/tmp/reviewed-source",
+            biocapt_qipc_interpreter=None,
+        )
+    assert not path.exists()

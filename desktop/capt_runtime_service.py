@@ -1268,6 +1268,18 @@ def _acquire_runtime_state_lock(ledger_path: str):
     return handle
 
 
+def _validate_biocapt_qipc_startup_request(
+    *, enabled: bool, source_root: str | None, interpreter: str | None,
+) -> None:
+    """Reject malformed optional activation BEFORE runtime lock/DB startup."""
+    if not enabled:
+        if source_root or interpreter:
+            raise ValueError("BIOCAPT_QIPC_REQUIRES_EXPLICIT_ENABLE_FLAG")
+        return
+    if not source_root or not interpreter:
+        raise ValueError("BIOCAPT_QIPC_EXPLICIT_SOURCE_AND_INTERPRETER_REQUIRED")
+
+
 def _register_optional_biocapt_qipc(
     runtime: RuntimeComposition,
     *,
@@ -1283,12 +1295,11 @@ def _register_optional_biocapt_qipc(
     NOT side effects of this function. It never adjusts sys.path to point at
     arbitrary executable source trees.
     """
+    _validate_biocapt_qipc_startup_request(
+        enabled=enabled, source_root=source_root, interpreter=interpreter,
+    )
     if not enabled:
-        if source_root or interpreter:
-            raise ValueError("BIOCAPT_QIPC_REQUIRES_EXPLICIT_ENABLE_FLAG")
         return
-    if not source_root or not interpreter:
-        raise ValueError("BIOCAPT_QIPC_EXPLICIT_SOURCE_AND_INTERPRETER_REQUIRED")
     from capt_ouroboros.qipc_tool_broker import attach_biocapt_qipc_to_composition
 
     adapter = attach_biocapt_qipc_to_composition(
@@ -1306,6 +1317,11 @@ def serve(
     biocapt_qipc_source_root: str | None = None,
     biocapt_qipc_interpreter: str | None = None,
 ) -> None:
+    _validate_biocapt_qipc_startup_request(
+        enabled=enable_biocapt_qipc,
+        source_root=biocapt_qipc_source_root,
+        interpreter=biocapt_qipc_interpreter,
+    )
     lock_handle = _acquire_runtime_state_lock(ledger_path)
     sock_path = Path(sock_path)
     sock_path.parent.mkdir(parents=True, exist_ok=True)
