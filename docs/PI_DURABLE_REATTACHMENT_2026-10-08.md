@@ -67,3 +67,21 @@ The test suite covers:
   replay is permitted.
 - Generic multi-service/HTTP operation reattachment, provider billing
   reconciliation, and progress streaming require independent contracts.
+
+## Installed runtime and native acceptance
+
+- Release source `a5ceb4119078407f7ef8e0c967fd044db86212a6`
+  installed into the resident CAPT 0.5.0 runtime and signed native app.
+- Pre-upgrade checkpoint `cp-cmd-40c4345a39585621` accepted; no
+  nonterminal DriverRuns were observed before runtime restart.
+- After restart, `pi_request_status` is advertised in the authenticated
+  runtime query catalog and EventStore integrity is `ok`.
+- The installed Swift app was verified signature-valid and byte-matched
+  to the staged executable. Executable SHA-256:
+  `92770ad5e0f1cb8439528af45de616f7837ba4f028b06f851f037b60ee1eeabc`.
+- TIA opened the installed app's restored Chat and navigated to Missions
+  and back successfully. App returned to 0% CPU while idle.
+- The recovery control was tested by Swift session/UI compilation and
+  isolated request-reconciliation tests; no new paid provider execution
+  was launched, so no live post-disconnect paid-result reattachment
+  was asserted as tested.
