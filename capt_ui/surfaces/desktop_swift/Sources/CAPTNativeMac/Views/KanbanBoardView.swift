@@ -186,7 +186,7 @@ struct KanbanBoardView: View {
                     .help("Inspect exact bounded authorization before deciding")
             }
             if card.task.state == "awaiting_verification", card.run?.state == "completed" {
-                Button("Review verified evidence…") {
+                Button("Review result and evidence…") {
                     inspectID = card.id
                     store.inspectMissionTask(card.id, runID: card.run?.id)
                     reviewCard = card
