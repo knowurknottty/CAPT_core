@@ -43,6 +43,13 @@ if [[ ! -x "$RUNTIME_CLI" || "$INSTALLED_HEAD" != "$SOURCE_HEAD" ]]; then
   fi
   CAPT_STATE_DIR="$STATE_DIR" "$ROOT/script/install_local_runtime.sh"
 fi
+# Product release version is the installed CAPT package version. The
+# RuntimeService checkpoint compatibility identifier is versioned separately.
+CAPT_PACKAGE_VERSION="$("$RUNTIME_CLI" --version | awk '{print $2}')"
+if ! print -r -- "$CAPT_PACKAGE_VERSION" | grep -Eq '^[0-9]+(\.[0-9]+){1,3}$'; then
+  echo "Invalid CAPT package version: $CAPT_PACKAGE_VERSION" >&2
+  exit 1
+fi
 cd "$ROOT"
 swift build --product "$EXECUTABLE"
 
@@ -50,7 +57,7 @@ rm -rf "$BUNDLE"
 mkdir -p "$BUNDLE/Contents/MacOS"
 cp "$BINARY" "$BUNDLE/Contents/MacOS/$EXECUTABLE"
 chmod +x "$BUNDLE/Contents/MacOS/$EXECUTABLE"
-cat > "$BUNDLE/Contents/Info.plist" <<'PLIST'
+cat > "$BUNDLE/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -61,7 +68,7 @@ cat > "$BUNDLE/Contents/Info.plist" <<'PLIST'
   <key>CFBundleName</key><string>CAPT</string>
   <key>CFBundleDisplayName</key><string>CAPT</string>
   <key>CFBundleVersion</key><string>1</string>
-  <key>CFBundleShortVersionString</key><string>0.1</string>
+  <key>CFBundleShortVersionString</key><string>${CAPT_PACKAGE_VERSION}</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>NSPrincipalClass</key><string>NSApplication</string>
 </dict>
