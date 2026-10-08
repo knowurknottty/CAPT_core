@@ -91,3 +91,43 @@ No billable model inference or media generation was executed in these tests.
 **Release interpretation:** R2B adds real governed runtime pathways and
 local no-cost integration tests; production provider capability requires
 independent live tests, never represented as complete by this document.
+
+
+## Final signed R2B acceptance (2026-10-08)
+
+- Committed executable source:
+  `d2ee83d21a407a225b5559b7ad89cf9eb8e95243`,
+  rebased onto CAPT Core PR #169 (`f5aef2f`) for physical provider-call
+  accounting and council diagnostic changes.
+- Combined full Core regression after rebase:
+  **2,049 passed, 70 skipped, 13 deselected**.
+  Local log: `~/capt-node-workspace/media-r2b-rebased-python.log`.
+  The final code-only request-format adjustment for image URL output was
+  subsequently verified by **12 passing R2B focused tests**.
+- Native Swift suite after rebase: **164 passed, 9 skipped,
+  zero failures**. Local log:
+  `~/capt-node-workspace/media-r2b-rebased-swift.log`.
+- Authenticated Unix-socket integration exercised
+  local HTTP Gemini-shaped PDF consumption, explicit HumanApproval,
+  direct file bytes, and zero repeat provider requests.
+- A pre-upgrade checkpoint was accepted:
+  `cp-cmd-9ae7c10f66158ae5`. There were no nonterminal DriverRuns.
+- Resident RuntimeService source marker matches executable revision.
+  Runtime remained **HEALTHY**, distribution **0.5.0**,
+  checkpoint compatibility **0.1.0**, EventStore integrity `ok`.
+  Read-only media catalog is still empty because no operator-approved
+  media routes have been enabled.
+- The signed CAPT.app at `~/Applications/CAPT.app` was verified
+  strictly signed and byte-identical to the clean staged build.
+  Executable SHA-256:
+  `bb1c61f48417df019bb7415f5d4fe779fb0822320af0ac6659ff540713ce05b9`.
+- TIA inspected the installed app and opened **Media I/O**.
+  **Attach files** was available, and the no-routes configured notice
+  remained visible. One installed app process; observed **0% CPU at idle**.
+- Live provider registry contains OpenRouter with vision capability and
+  a separate image-configured provider, but no registered Gemini provider,
+  and no `media-routes.json`. The implementation does not invent
+  a missing credential, endpoint, supported model, capability, or price.
+- No real billable media or inference requests were sent. Consequently
+  remote-provider acceptance and physical invoice correctness remain
+  **unverified**, despite the complete local/runtime acceptance tests.
