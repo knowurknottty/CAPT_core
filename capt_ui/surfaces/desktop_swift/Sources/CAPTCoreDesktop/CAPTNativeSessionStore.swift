@@ -18,6 +18,9 @@ public struct CAPTNativeSession: Identifiable, Codable, Equatable, Sendable {
     // Stable PI attempt identity persisted before network dispatch.
     // Nil for older encrypted chat sessions.
     public var piRequestID: String?
+    // Local quarantine attachments, never implicit model/provider inputs.
+    // Optional to preserve decoding of legacy encrypted sessions.
+    public var attachments: [CAPTNativeAttachment]?
     public var promptProposal: CAPTPromptProposal?
     public var pendingApproval: CAPTPendingApproval?
     public var verificationDriverRunID: String?
@@ -42,6 +45,7 @@ public struct CAPTNativeSession: Identifiable, Codable, Equatable, Sendable {
         self.cohortVessels = cohortVessels
         self.councilReview = nil
         self.piRequestID = nil
+        self.attachments = nil
         self.promptProposal = promptProposal
         self.pendingApproval = pendingApproval
         self.verificationDriverRunID = verificationDriverRunID

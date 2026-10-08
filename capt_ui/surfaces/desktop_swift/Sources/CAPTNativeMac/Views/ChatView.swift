@@ -1,4 +1,6 @@
 import SwiftUI
+import AppKit
+import QuickLook
 import CAPTCoreDesktop
 
 struct ChatView: View {
@@ -25,7 +27,10 @@ struct ChatView: View {
                             .accessibilityIdentifier("chat-show-older-messages")
                         }
                         ForEach(CAPTTranscriptWindow.visible(store.messages, limit: visibleMessageLimit)) { message in
-                            MessageRow(message: message)
+                            MessageRow(message: message, artifactRoots: [
+                                URL(fileURLWithPath: store.targetRoot),
+                                URL(fileURLWithPath: store.runtimeStateDirectory)
+                            ])
                                 .id(message.id)
                         }
 
@@ -166,7 +171,12 @@ struct ChatView: View {
                 showRemotePromptCompilationControl: store.selectedProviderRequiresRemoteNetwork,
                 enabled: store.canComposeInActiveChat,
                 skillMode: store.skillSelectionMode,
-                highRiskAuthority: store.authoritySettings.isHighRisk
+                highRiskAuthority: store.authoritySettings.isHighRisk,
+                attachments: store.activeChatAttachments,
+                attachmentBusy: store.nativeAttachmentBusy,
+                attachmentMessage: store.nativeAttachmentMessage,
+                addFiles: store.stageNativeFiles,
+                removeAttachment: store.removeNativeAttachment
             ) {
                 guard store.canComposeInActiveChat else { return }
                 let text = draft
@@ -310,18 +320,32 @@ private struct ChatContextRail: View {
 
 private struct MessageRow: View {
     let message: CAPTChatMessage
+    let artifactRoots: [URL]
     @State private var showsExecutionDetails = false
+    @State private var generatedArtifact: CAPTGeneratedMediaArtifact?
+    @State private var previewArtifactURL: URL?
 
     var body: some View {
-        if message.role == .system {
-            systemMessage
-        } else {
-            HStack(alignment: .top) {
+        Group {
+            if message.role == .system {
+                systemMessage
+            } else {
+                HStack(alignment: .top) {
                 if message.role == .user { Spacer(minLength: 110) }
                 messageSurface
                     .frame(maxWidth: 760, alignment: message.role == .user ? .trailing : .leading)
                 if message.role != .user { Spacer(minLength: 110) }
+                }
             }
+        }
+        .quickLookPreview($previewArtifactURL)
+        .task(id: message.id) {
+            guard let details = message.executionDetailsJSON else { return }
+            generatedArtifact = await Task.detached(priority: .utility) {
+                CAPTGeneratedMediaLocator.inspect(
+                    detailsJSON: details, allowedRoots: artifactRoots
+                )
+            }.value
         }
     }
 
@@ -350,6 +374,23 @@ private struct MessageRow: View {
                     .textSelection(.enabled)
                     .font(.body)
                     .lineSpacing(2)
+                if let artifact = generatedArtifact {
+                    HStack(spacing: 8) {
+                        Image(systemName: artifact.kind == .image ? "photo" :
+                              artifact.kind == .video ? "film" : "waveform")
+                        Text("Unverified generated " + artifact.kind.rawValue +
+                             " · " + ByteCountFormatter.string(fromByteCount: artifact.byteCount, countStyle: .file))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Preview artifact") {
+                            previewArtifactURL = URL(fileURLWithPath: artifact.path)
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
+                    .help("Digest checked locally. Not independent result verification.")
+                }
                 if let details = message.executionDetailsJSON, !details.isEmpty {
                     DisclosureGroup("Execution details", isExpanded: $showsExecutionDetails) {
                         ScrollView([.vertical, .horizontal]) {
@@ -566,7 +607,13 @@ private struct ComposerView: View {
     let enabled: Bool
     let skillMode: String
     let highRiskAuthority: Bool
+    let attachments: [CAPTNativeAttachment]
+    let attachmentBusy: Bool
+    let attachmentMessage: String
+    let addFiles: ([URL]) -> Void
+    let removeAttachment: (UUID) -> Void
     let send: () -> Void
+    @State private var previewURL: URL?
 
     private let modes = ["AUTO", "OFF", "OMNI", "META", "FORGE", "SIGMA"]
     private let reasoningModes = ["", "none", "minimal", "low", "medium", "high", "xhigh"]
@@ -664,7 +711,64 @@ private struct ComposerView: View {
                         .foregroundStyle(InversionTone.amber.color)
                     }
 
+                    if !attachments.isEmpty {
+                        ScrollView(.horizontal) {
+                            HStack(spacing: 8) {
+                                ForEach(attachments) { item in
+                                    HStack(spacing: 6) {
+                                        Image(systemName: item.kind == .image ? "photo" :
+                                              item.kind == .video ? "film" :
+                                              item.kind == .audio ? "waveform" : "doc")
+                                        VStack(alignment: .leading, spacing: 1) {
+                                            Text(item.originalName).lineLimit(1)
+                                            Text(item.sizeLabel + " · " + item.kind.rawValue)
+                                                .font(.caption2).foregroundStyle(.secondary)
+                                        }
+                                        Button("Preview") {
+                                            previewURL = URL(fileURLWithPath: item.stagedPath)
+                                        }
+                                        .controlSize(.mini)
+                                        Button {
+                                            removeAttachment(item.id)
+                                        } label: {
+                                            Image(systemName: "xmark.circle")
+                                        }
+                                        .buttonStyle(.plain)
+                                        .help("Discard the local attachment")
+                                    }
+                                    .padding(8)
+                                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 9))
+                                }
+                            }
+                        }
+                    }
+                    if !attachmentMessage.isEmpty || !attachments.isEmpty {
+                        Text(attachments.isEmpty
+                             ? attachmentMessage
+                             : "Local-only quarantine · files are not sent to models. " + attachmentMessage)
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
                     HStack(alignment: .bottom, spacing: 10) {
+                        Button {
+                            let picker = NSOpenPanel()
+                            picker.canChooseFiles = true
+                            picker.canChooseDirectories = false
+                            picker.allowsMultipleSelection = true
+                            picker.treatsFilePackagesAsDirectories = false
+                            picker.message = "Files are copied into private local staging; not uploaded to models."
+                            if picker.runModal() == .OK { addFiles(picker.urls) }
+                        } label: {
+                            Label("Attach files", systemImage: "paperclip")
+                                .labelStyle(.iconOnly)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(!enabled || attachmentBusy || attachments.count >= 16)
+                        .help("Choose any regular file type for private local staging (2 GiB per file).")
+                        .accessibilityIdentifier("chat-attach-files")
+
                         TextField("Message CAPT…", text: $draft, axis: .vertical)
                             .lineLimit(1...8)
                             .textFieldStyle(.plain)
@@ -689,14 +793,17 @@ private struct ComposerView: View {
                         }
                         .buttonStyle(.borderedProminent)
                         .keyboardShortcut(.return, modifiers: [.command])
-                        .disabled(!enabled || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                        .help("Send (⌘↩)")
+                        .disabled(!enabled || !attachments.isEmpty ||
+                                  draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .help(attachments.isEmpty ? "Send (⌘↩)" :
+                              "Remove local-only attachments before sending; provider media routing is not yet admitted.")
                     }
                 }
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 13)
             .background(.regularMaterial)
+            .quickLookPreview($previewURL)
         }
     }
 }

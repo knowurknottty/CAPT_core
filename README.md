@@ -10,6 +10,24 @@ The model is an inference component. Tools are effect adapters. **RuntimeService
 
 ---
 
+## Native file/media intake — 2026-10-08
+
+Native Swift Chat now supports private **local staging** of user-selected
+files across extensions, with SHA-256 provenance, size/type chips, Quick
+Look and safe removal. Generated image/audio/video **artifact candidates**
+from existing governed execution receipts can be previewed after local
+digest and scoped-path verification. See
+[Native Multimodal R1 and Provider Adapters](docs/NATIVE_MULTIMODAL_R1_AND_PROVIDER_ADAPTERS_2026-10-08.md).
+
+**Do not confuse staging with model upload.** Pending local attachments
+block text-only Send rather than silently discarding media. The provider
+adapter schema is a tested metadata contract, not yet a production
+multimodal upload/generation engine. Image provider artifact support
+pre-existed; audio/video generation, alternate endpoints, asynchronous
+jobs and media intake authority remain open R2 gates.
+
+---
+
 ## Operator status update — 2026-10-08
 
 The native Swift CAPT **0.5.0** app has an evidence-derived

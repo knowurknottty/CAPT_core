@@ -146,7 +146,8 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
               let id = activeSessionID,
               let index = index(of: id),
               sessions[index].pendingApproval == nil,
-              sessions[index].promptProposal == nil else { return nil }
+              sessions[index].promptProposal == nil,
+              (sessions[index].attachments ?? []).isEmpty else { return nil }
 
         var currentFlow = flow(for: id)
         guard currentFlow.canCompose else { return nil }
@@ -185,6 +186,34 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         var currentFlow = flow(for: id)
         currentFlow.proposalPrepared(proposal)
         flows[id] = currentFlow
+    }
+
+    /// Adds local-only user-selected file metadata. This does not modify the
+    /// governed request, invoke any provider or authorize filesystem tools.
+    @discardableResult
+    public mutating func addLocalAttachment(
+        _ item: CAPTNativeAttachment, for id: UUID
+    ) -> Bool {
+        guard let index = index(of: id),
+              flow(for: id).canCompose,
+              (sessions[index].attachments ?? []).count < 16 else { return false }
+        if sessions[index].attachments == nil { sessions[index].attachments = [] }
+        sessions[index].attachments?.append(item)
+        sessions[index].updatedAt = Date()
+        return true
+    }
+
+    @discardableResult
+    public mutating func removeLocalAttachment(
+        _ id: UUID, from sessionID: UUID
+    ) -> CAPTNativeAttachment? {
+        guard let index = index(of: sessionID),
+              flow(for: sessionID).canCompose,
+              let position = sessions[index].attachments?.firstIndex(where: { $0.id == id })
+        else { return nil }
+        let removed = sessions[index].attachments?.remove(at: position)
+        sessions[index].updatedAt = Date()
+        return removed
     }
 
     public mutating func failProposalRequest(message: String, for id: UUID) {

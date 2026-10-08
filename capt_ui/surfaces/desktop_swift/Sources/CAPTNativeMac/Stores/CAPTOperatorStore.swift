@@ -38,6 +38,8 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var lastError: String?
     @Published var piRecoveryMessage: String?
     @Published var piRecoveryBusy = false
+    @Published var nativeAttachmentBusy = false
+    @Published var nativeAttachmentMessage = ""
     @Published var missions: [CAPTMissionSummary] = []
     @Published var evidenceItems: [CAPTEvidenceSummary] = []
     @Published var approvals: [CAPTApprovalSummary] = []
@@ -114,6 +116,10 @@ final class CAPTOperatorStore: ObservableObject {
         }
         restoreSessionsAsync()
         refreshOperatorState()
+    }
+
+    var activeChatAttachments: [CAPTNativeAttachment] {
+        chatWorkspace.activeSession?.attachments ?? []
     }
 
     var messages: [CAPTChatMessage] {
@@ -296,6 +302,12 @@ final class CAPTOperatorStore: ObservableObject {
 
     func submitPrompt(_ text: String) {
         guard connectionState == .connected else { return }
+        // A locally staged file is NOT a governed provider input yet.
+        // Fail closed rather than silently send text while ignoring files.
+        guard activeChatAttachments.isEmpty else {
+            nativeAttachmentMessage = "Attachments are staged locally only. Remove them before text-only submission; model media-input routing is not admitted yet."
+            return
+        }
 
         if activeSessionID == nil {
             let defaults = newChatDefaults
@@ -1615,6 +1627,65 @@ extension CAPTOperatorStore {
                         ". No new model call was sent."
                 }
             }
+        }
+    }
+}
+
+
+extension CAPTOperatorStore {
+    /// Explicit user-selected files enter a bounded private local quarantine.
+    /// There is no model/tool upload or filesystem authority on this path.
+    func stageNativeFiles(_ urls: [URL]) {
+        guard let sessionID = activeSessionID, canComposeInActiveChat,
+              !nativeAttachmentBusy, !urls.isEmpty else { return }
+        nativeAttachmentBusy = true
+        nativeAttachmentMessage = "Copying selected files into private local staging…"
+        let root = URL(fileURLWithPath: runtimeStateDirectory)
+            .appendingPathComponent("native-media-intake/v1", isDirectory: true)
+        Task {
+            defer { nativeAttachmentBusy = false }
+            var imported = 0
+            var errors: [String] = []
+            for url in urls.prefix(16) {
+                do {
+                    let item = try await Task.detached(priority: .utility) {
+                        try CAPTNativeAttachmentStager.stage(
+                            source: url, sessionID: sessionID, root: root
+                        )
+                    }.value
+                    if mutateWorkspace({ $0.addLocalAttachment(item, for: sessionID) }) {
+                        imported += 1
+                        saveSessions()
+                    } else {
+                        try? CAPTNativeAttachmentStager.discard(
+                            item, sessionID: sessionID, root: root
+                        )
+                        errors.append("Attachment limit or session changed")
+                    }
+                } catch {
+                    errors.append(url.lastPathComponent + ": " + error.localizedDescription)
+                }
+            }
+            nativeAttachmentMessage = "\(imported) file(s) privately staged. No file contents were sent to a model." +
+                (errors.isEmpty ? "" : " Errors: " + errors.joined(separator: "; "))
+        }
+    }
+
+    func removeNativeAttachment(_ id: UUID) {
+        guard let sessionID = activeSessionID,
+              let item = mutateWorkspace({ $0.removeLocalAttachment(id, from: sessionID) })
+        else { return }
+        saveSessions()
+        let root = URL(fileURLWithPath: runtimeStateDirectory)
+            .appendingPathComponent("native-media-intake/v1", isDirectory: true)
+        do {
+            try CAPTNativeAttachmentStager.discard(
+                item, sessionID: sessionID, root: root
+            )
+            nativeAttachmentMessage = "Attachment discarded from local staging."
+        } catch {
+            nativeAttachmentMessage = "Removed from chat, but local staging cleanup needs attention: " +
+                error.localizedDescription
         }
     }
 }
