@@ -63,3 +63,26 @@
 
 **Disposition:** resident daemon and native Kanban R1 verified.
 Neither full R5 nor unrestricted multi-actor Kanban are certified.
+
+## Final native wording/installation addendum
+
+After the base Kanban acceptance tests, commit
+`76c6b4b2302d3891ab1c73387a6622acbcc6845d`
+corrected the review button to **Review result and evidence…** (rather than
+implying unreviewed output was already verified). The same 148-test Swift
+suite passed again with nine gated skips from an isolated checkout at this
+exact revision.
+
+The signed `CAPT.app` 0.5.0 installed at
+`~/Applications/CAPT.app` was verified byte-identical to this clean
+release build. Final installed executable SHA-256:
+`f36df84e5558e7321a67354310d7636436b9bb5ce1a7fc257344b4eae7ffc72b`.
+TIA re-opened the final installed **Kanban** board, confirmed its status
+lanes and **Inspect/Continue** controls. One installed app instance was
+observed running. RuntimeService remained **HEALTHY** and reports
+package version 0.5.0 with checkpoint compatibility contract 0.1.0.
+
+This addendum supersedes the prior *app binary digest* only. The full
+Python test evidence was obtained against predecessor source
+`783f06b`; the only executable change thereafter was that button
+label, and only the Swift suite was freshly rerun on `76c6b4b`.
