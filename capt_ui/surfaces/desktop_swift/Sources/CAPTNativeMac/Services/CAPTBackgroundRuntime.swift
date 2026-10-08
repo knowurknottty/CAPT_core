@@ -375,4 +375,24 @@ actor CAPTBackgroundRuntime {
     func approveAndRun(_ pending: CAPTPendingApproval) throws -> CAPTExecutionResult {
         try coordinator.approveAndRun(pending)
     }
+
+    func prepareCouncilCohort(
+        _ review: CAPTCouncilReview, index: Int
+    ) throws -> CAPTCouncilCohort {
+        try CAPTCouncilCoordinator(client: client).requestApproval(review, at: index)
+    }
+
+    func councilCohortState(_ cohort: CAPTCouncilCohort) throws -> CAPTCouncilCohort {
+        try CAPTCouncilCoordinator(client: client).refreshState(cohort)
+    }
+
+    func decideCouncilCohort(
+        _ cohort: CAPTCouncilCohort, approve: Bool
+    ) throws -> CAPTCouncilCohort {
+        try CAPTCouncilCoordinator(client: client).decide(cohort, approve: approve)
+    }
+
+    func runCouncil(_ review: CAPTCouncilReview) throws -> String {
+        try CAPTCouncilCoordinator(client: client).run(review)
+    }
 }

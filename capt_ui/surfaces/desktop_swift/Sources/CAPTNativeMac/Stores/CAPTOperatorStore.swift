@@ -21,6 +21,8 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var reasoningEffort = ""
     @Published var cohortEnabled = false
     @Published var vesselsPerCohort = 6
+    @Published var councilBusy = false
+    @Published var councilError: String?
     @Published var runtimeIdentity = "Not connected"
     @Published var taskState = "—"
     @Published var isBusy = false
@@ -56,6 +58,7 @@ final class CAPTOperatorStore: ObservableObject {
     private let runtime: CAPTBackgroundRuntime
     private let runtimeProfile: CAPTRuntimeProfile
     private let historyRuntime: CAPTBackgroundRuntime
+    private let councilRuntime: CAPTBackgroundRuntime
     private var historyRefreshPending = false
     private var compilingTasks: [UUID: Task<Void, Never>] = [:]
     private var compilationVersions: [UUID: UUID] = [:]
@@ -73,6 +76,7 @@ final class CAPTOperatorStore: ObservableObject {
         self.runtime = runtime ?? CAPTBackgroundRuntime(profile: profile)
         self.runtimeProfile = profile
         self.historyRuntime = CAPTBackgroundRuntime(profile: profile)
+        self.councilRuntime = CAPTBackgroundRuntime(profile: profile)
         self.sessionStore = sessionStore ?? CAPTEncryptedSessionStore(
             fileURL: CAPTEncryptedSessionStore.defaultFileURL(profile: profile)
         )
@@ -1233,6 +1237,151 @@ final class CAPTOperatorStore: ObservableObject {
         let addStatus = SecItemAdd(add as CFDictionary, nil)
         guard addStatus == errSecSuccess else {
             throw NSError(domain: NSOSStatusErrorDomain, code: Int(addStatus))
+        }
+    }
+}
+
+
+// MARK: - Native governed multi-cohort council
+// Council state belongs to the originating encrypted chat session. Human
+// decisions remain explicit; RuntimeService, not Swift, authorizes dispatch.
+extension CAPTOperatorStore {
+    var activeCouncil: CAPTCouncilReview? {
+        chatWorkspace.activeSession?.councilReview
+    }
+
+    func prepareCouncil(
+        objective: String, configurations: [(provider: String, model: String)],
+        vessels: Int, concurrency: Int
+    ) {
+        guard connectionState == .connected, !councilBusy,
+              canComposeInActiveChat else { return }
+        if activeSessionID == nil { newChat() }
+        guard let sessionID = activeSessionID,
+              chatWorkspace.session(sessionID)?.councilReview == nil else { return }
+        let cleaned = objective.trimmingCharacters(in: .whitespacesAndNewlines)
+        let suffix = UUID().uuidString.lowercased()
+        do {
+            let cohorts = configurations.enumerated().map { index, selection in
+                CAPTCouncilCohort(
+                    id: "cohort-" + suffix + "-" + String(index + 1),
+                    provider: selection.provider.trimmingCharacters(in: .whitespacesAndNewlines),
+                    model: selection.model.trimmingCharacters(in: .whitespacesAndNewlines),
+                    vessels: vessels
+                )
+            }
+            let review = try CAPTCouncilReview(
+                id: "council-native-" + suffix,
+                missionID: "m-native-council-" + suffix,
+                objective: cleaned, targetRoot: targetRoot,
+                maxConcurrentCohorts: concurrency, cohorts: cohorts
+            )
+            mutateWorkspace { $0.updateCouncil(review, for: sessionID) }
+            saveSessions()
+            prepareRemainingCouncilCohorts(sessionID: sessionID)
+        } catch {
+            councilError = error.localizedDescription
+        }
+    }
+
+    func prepareRemainingCouncilCohorts(sessionID: UUID? = nil) {
+        guard !councilBusy,
+              let id = sessionID ?? activeSessionID,
+              let initial = chatWorkspace.session(id)?.councilReview else { return }
+        councilBusy = true
+        councilError = nil
+        Task {
+            defer { councilBusy = false }
+            do {
+                _ = try await councilRuntime.connect()
+                for index in initial.cohorts.indices {
+                    guard var latest = chatWorkspace.session(id)?.councilReview,
+                          latest.id == initial.id else { return }
+                    if latest.cohorts[index].requestID != nil { continue }
+                    let prepared = try await councilRuntime.prepareCouncilCohort(latest, index: index)
+                    latest.cohorts[index] = prepared
+                    mutateWorkspace { $0.updateCouncil(latest, for: id) }
+                    saveSessions() // durable partial requests; never duplicate on retry
+                }
+                refreshCouncil(sessionID: id)
+            } catch {
+                councilError = error.localizedDescription
+            }
+        }
+    }
+
+    func refreshCouncil(sessionID: UUID? = nil) {
+        guard !councilBusy || sessionID != nil,
+              let id = sessionID ?? activeSessionID,
+              let initial = chatWorkspace.session(id)?.councilReview else { return }
+        Task {
+            do {
+                _ = try await councilRuntime.connect()
+                for index in initial.cohorts.indices {
+                    guard var latest = chatWorkspace.session(id)?.councilReview,
+                          latest.id == initial.id else { return }
+                    let state = try await councilRuntime.councilCohortState(latest.cohorts[index])
+                    latest.cohorts[index] = state
+                    mutateWorkspace { $0.updateCouncil(latest, for: id) }
+                    saveSessions()
+                }
+            } catch {
+                councilError = error.localizedDescription
+            }
+        }
+    }
+
+    func decideCouncilCohort(at index: Int, approve: Bool) {
+        guard !councilBusy,
+              let id = activeSessionID,
+              let review = chatWorkspace.session(id)?.councilReview,
+              review.cohorts.indices.contains(index) else { return }
+        councilBusy = true
+        councilError = nil
+        Task {
+            defer { councilBusy = false }
+            do {
+                _ = try await councilRuntime.connect()
+                let updated = try await councilRuntime.decideCouncilCohort(
+                    review.cohorts[index], approve: approve
+                )
+                guard var latest = chatWorkspace.session(id)?.councilReview,
+                      latest.id == review.id else { return }
+                latest.cohorts[index] = updated
+                mutateWorkspace { $0.updateCouncil(latest, for: id) }
+                saveSessions()
+                refreshHistory()
+            } catch {
+                councilError = error.localizedDescription
+            }
+        }
+    }
+
+    func runCouncil() {
+        guard !councilBusy,
+              let id = activeSessionID,
+              let review = chatWorkspace.session(id)?.councilReview,
+              review.canRunOrReattach else { return }
+        councilBusy = true
+        councilError = nil
+        Task {
+            defer { councilBusy = false }
+            do {
+                _ = try await councilRuntime.connect()
+                let receipt = try await councilRuntime.runCouncil(review)
+                guard var latest = chatWorkspace.session(id)?.councilReview,
+                      latest.id == review.id else { return }
+                // Complete evidence and receipts remain in RuntimeService.
+                // Limit the native encrypted preview, not the authoritative record.
+                latest.executionReceipt = String(receipt.prefix(32_000))
+                latest.message = "Council dispatch receipt recorded. Inspect Missions and Evidence for independent verification."
+                mutateWorkspace { $0.updateCouncil(latest, for: id) }
+                saveSessions()
+                refreshHistory()
+            } catch {
+                councilError = error.localizedDescription
+                refreshCouncil(sessionID: id)
+            }
         }
     }
 }

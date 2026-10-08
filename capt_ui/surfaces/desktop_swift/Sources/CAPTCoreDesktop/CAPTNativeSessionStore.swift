@@ -14,6 +14,7 @@ public struct CAPTNativeSession: Identifiable, Codable, Equatable, Sendable {
     public var targetRoot: String
     // Nil means cohorts disabled. Optional for lossless decoding of older sessions.
     public var cohortVessels: Int?
+    public var councilReview: CAPTCouncilReview?
     public var promptProposal: CAPTPromptProposal?
     public var pendingApproval: CAPTPendingApproval?
     public var verificationDriverRunID: String?
@@ -36,6 +37,7 @@ public struct CAPTNativeSession: Identifiable, Codable, Equatable, Sendable {
         self.model = model
         self.targetRoot = targetRoot
         self.cohortVessels = cohortVessels
+        self.councilReview = nil
         self.promptProposal = promptProposal
         self.pendingApproval = pendingApproval
         self.verificationDriverRunID = verificationDriverRunID

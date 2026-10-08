@@ -117,6 +117,7 @@ struct ChatView: View {
             }
 
             InversionDivider()
+            CouncilReviewView(store: store, draft: $draft)
             ComposerView(
                 draft: $draft,
                 promptIntelligence: $store.promptIntelligence,

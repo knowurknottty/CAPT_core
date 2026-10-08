@@ -105,6 +105,21 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         return true
     }
 
+    /// Persist one council per originating chat, including partial approvals.
+    @discardableResult
+    public mutating func updateCouncil(_ review: CAPTCouncilReview, for id: UUID) -> Bool {
+        guard let index = index(of: id) else { return false }
+        if sessions[index].councilReview == nil {
+            sessions[index].messages.append(CAPTChatMessage(role: .user, text: review.objective))
+        }
+        sessions[index].councilReview = review
+        sessions[index].updatedAt = Date()
+        if sessions[index].title == "New Chat" {
+            sessions[index].title = String(review.objective.prefix(72))
+        }
+        return true
+    }
+
     @discardableResult
     public mutating func setActiveCohortVessels(_ count: Int?) -> Bool {
         if let count, !(1...1000).contains(count) { return false }
