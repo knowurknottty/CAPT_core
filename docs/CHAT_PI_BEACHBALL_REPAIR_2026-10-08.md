@@ -72,3 +72,25 @@ remote compiler/model stage completed.
   credentials, full prompts or provider response bodies.
 - This repair targets the native Swift layout busy loop; no new
   provider invoices, new model inferences, or mission state transitions.
+
+## Final installed-build acceptance
+
+- Source-only fix: `e7388fd11578b402e3c61d256812ac59d5d6c9a2`.
+- Rebuilt and Apple Developer-signed `~/Applications/CAPT.app` **0.5.0**
+  from the exact commit; verified strict signature and byte identity with
+  the clean staged executable.
+- Installed executable SHA-256:
+  `5389ea9eda52d37608bfbf61bf4dac95cf74585bab7bc0208f0535f6be03da1f`.
+- After removing a stale duplicate app process, one installed instance
+  remained. On this final installed build, TIA activated the restored
+  chat, navigated Chat → Missions → Chat, and identified the existing
+  **Prepare continuation in Chat** control.
+- CPU returned to **0.0% idle** after that navigation; no main-thread
+  layout beachball observed in the original restored chat scenario.
+- Resident RuntimeService was responsive with `status=HEALTHY`,
+  distribution `0.5.0`, EventStore head 23370; no daemon restart was
+  required for this Swift-only layout change.
+- Historical `CAPT socket closed mid-frame` system message remained
+  in restored history; this message is not a claim of new IPC failure
+  in the replacement build. Its original transport cause is unverified.
+- No additional paid provider calls were issued as part of this fix.
