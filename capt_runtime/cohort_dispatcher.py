@@ -173,7 +173,8 @@ class CohortCouncilDispatchResult:
             "cohortCount": len(self.records),
             "logicalVessels": self.logical_vessels,
             "providerCallCount": self.provider_call_count,
-            "providerCallInvariant": "one_call_per_cohort",
+            "providerCallInvariant": "one_governed_execution_per_cohort",
+            "physicalHttpCallsCountedSeparately": True,
             "dispositionCounts": self.disposition_counts,
             "governor": dict(self.governor_evidence),
             "cohorts": [record.as_evidence() for record in self.records],
@@ -181,7 +182,7 @@ class CohortCouncilDispatchResult:
 
 
 class CohortDispatcher:
-    """Dispatch independent cohorts concurrently; one provider call per cohort."""
+    """Dispatch independent cohorts concurrently; one governed invocation per cohort."""
 
     def __init__(
         self,

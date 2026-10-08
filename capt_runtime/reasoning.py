@@ -38,3 +38,19 @@ def openai_reasoning_fields(provider_id: str, base_url: str, effort: Any) -> dic
     if provider == "openrouter" or "openrouter.ai" in endpoint:
         return {"reasoning": {"effort": normalized}}
     return {"reasoning_effort": normalized}
+
+
+
+def legacy_cohort_configuration_reasoning_effort(configuration_id: Any) -> str:
+    """Return an effort only for the historical explicit effort aliases.
+
+    A cohort configuration ID is otherwise an opaque identity (e.g.
+    ouro-repair-v1), not a model reasoning option. Never reject a valid
+    council because an arbitrary configuration ID is not a provider knob.
+    """
+    if not isinstance(configuration_id, str):
+        return ""
+    hint = configuration_id.strip().lower()
+    if hint in SUPPORTED_REASONING_EFFORTS or hint == "max":
+        return normalize_reasoning_effort(hint)
+    return ""

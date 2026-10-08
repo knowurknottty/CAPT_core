@@ -1,0 +1,51 @@
+{
+  "externalBillingVerification": "not_available_from_event_boundaries",
+  "generatedAt": "2026-10-08T07:58:45.448166+00:00",
+  "items": [
+    {
+      "artifactVerified": false,
+      "attemptsReservedByEvent": 7,
+      "automaticReplayPermitted": false,
+      "billingOfUnresolvedCalls": "unknown",
+      "cohort": "GLM 5.3 Flash",
+      "disposition": "retry_forbidden",
+      "driverRunId": "dr-model-de984803e1535f1399c9a5eb",
+      "driverRunState": "lost",
+      "durableDispatchBoundary": "request_started",
+      "eventCount": 23,
+      "eventDigest": "sha256:9bd9968bf0ef6545b094e099b34793e965041ea6f9fb32739920fdaf0e5e4f41",
+      "finalResultPersisted": false,
+      "note": "request_started precedes network I/O; counts do not prove provider billing",
+      "requestsWithoutCompletedResponses": 1,
+      "responsesCompleted": 6,
+      "responsesStarted": 6,
+      "schemaVersion": "capt.provider-reconciliation.1",
+      "streamId": "driverrun-dr-model-de984803e1535f1399c9a5eb"
+    },
+    {
+      "artifactVerified": false,
+      "attemptsReservedByEvent": 3,
+      "automaticReplayPermitted": false,
+      "billingOfUnresolvedCalls": "unknown",
+      "cohort": "Qwen 3.8 Flash",
+      "disposition": "retry_forbidden",
+      "driverRunId": "dr-model-717f593634c83f8d5133368b",
+      "driverRunState": "lost",
+      "durableDispatchBoundary": "request_started",
+      "eventCount": 11,
+      "eventDigest": "sha256:ae22fe118312920e2b7579a38b14c24862e31bac54d4c7c98c4146a971939d13",
+      "finalResultPersisted": false,
+      "note": "request_started precedes network I/O; counts do not prove provider billing",
+      "requestsWithoutCompletedResponses": 1,
+      "responsesCompleted": 2,
+      "responsesStarted": 2,
+      "schemaVersion": "capt.provider-reconciliation.1",
+      "streamId": "driverrun-dr-model-717f593634c83f8d5133368b"
+    }
+  ],
+  "reinvokedProvider": false,
+  "schemaVersion": "capt.ouroboros-lost-reconciliation.1",
+  "source": "live authenticated CAPT RuntimeService EventStore",
+  "stateMutated": false,
+  "userAction": "preserve retry prohibition; verify provider-side usage independently if exact accounting is required"
+}

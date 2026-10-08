@@ -36,6 +36,7 @@ class TokenCostGovernor:
         self.consumed_tokens: int = 0
         self.consumed_cost_usd: float = 0.0
         self.consumed_requests: int = 0
+        self.provider_cost_unknown_responses: int = 0
         self._cost_alert_emitted = False
         self._lock = threading.RLock()
 
@@ -54,12 +55,37 @@ class TokenCostGovernor:
                     f"COST_CEILING_BREACHED: ${self.consumed_cost_usd:.4f} >= ${self.max_cost_usd_per_session:.2f}"
                 )
 
+    def reserve_provider_request(self, estimated_prompt_tokens: int = 0) -> None:
+        """Reserve one physical HTTP attempt atomically before dispatch.
+
+        An interrupted attempt conservatively keeps the request slot consumed,
+        even when a response never arrives. This is a local-session ceiling;
+        authoritative per-DriverRun count is recorded in EventStore.
+        """
+        with self._lock:
+            self.check_pre_dispatch(estimated_prompt_tokens)
+            self.consumed_requests += 1
+
+    def snapshot(self) -> Dict[str, Any]:
+        with self._lock:
+            return {
+                "consumedTokens": self.consumed_tokens,
+                "consumedCostUsd": self.consumed_cost_usd,
+                "consumedRequests": self.consumed_requests,
+                "providerCostUnknownResponses": self.provider_cost_unknown_responses,
+                "maxTokens": self.max_tokens_per_session,
+                "maxCostUsd": self.max_cost_usd_per_session,
+                "maxRequests": self.max_requests_per_session,
+            }
+
     def record_usage(
         self,
         *,
         prompt_tokens: int,
         completion_tokens: int,
         cost_usd: float = 0.0,
+        request_already_counted: bool = False,
+        cost_known: bool = True,
     ) -> Dict[str, Any]:
         callback = None
         alert = None
@@ -67,7 +93,10 @@ class TokenCostGovernor:
             total_tokens = prompt_tokens + completion_tokens
             self.consumed_tokens += total_tokens
             self.consumed_cost_usd += cost_usd
-            self.consumed_requests += 1
+            if not request_already_counted:
+                self.consumed_requests += 1
+            if not cost_known:
+                self.provider_cost_unknown_responses += 1
 
             if (
                 self.alert_cost_usd is not None
@@ -88,6 +117,7 @@ class TokenCostGovernor:
                 "consumedTokens": self.consumed_tokens,
                 "consumedCostUsd": self.consumed_cost_usd,
                 "consumedRequests": self.consumed_requests,
+                "providerCostUnknownResponses": self.provider_cost_unknown_responses,
                 "maxTokens": self.max_tokens_per_session,
                 "maxCostUsd": self.max_cost_usd_per_session,
                 "maxRequests": self.max_requests_per_session,
