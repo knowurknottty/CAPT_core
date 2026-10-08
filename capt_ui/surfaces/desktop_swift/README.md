@@ -80,7 +80,7 @@ Implemented and exercised on macOS:
 - live RuntimeService capability inventory for queries, commands, components, and lifecycle operations;
 - bounded 4 MiB framed Unix-socket transport;
 - `script/install_local_runtime.sh` builds/installs the exact local CAPT wheel into a private venv;
-- `script/build_and_run.sh --verify` installs that runtime if needed, stages, signs, verifies, and launches `dist/CAPT.app`.
+- `script/build_and_run.sh --verify` installs or refreshes that runtime when it is missing or stale relative to the current source HEAD, then stages, signs, verifies, and launches `dist/CAPT.app`.
 
 The meaningful current RuntimeService operator surface is represented. Low-level
 `create_mission` and fixed OpenHarness commands remain visible in the live

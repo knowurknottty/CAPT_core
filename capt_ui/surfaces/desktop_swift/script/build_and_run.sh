@@ -26,8 +26,22 @@ while IFS= read -r pid; do
   [[ -z "$pid" ]] && continue
   kill "$pid" 2>/dev/null || true
 done < <(bundle_pids)
-if [[ ! -x "$HOME/.capt/runtime-venv/bin/capt" ]]; then
-  "$ROOT/script/install_local_runtime.sh"
+STATE_DIR="${CAPT_STATE_DIR:-$HOME/.capt}"
+RUNTIME_VENV="$STATE_DIR/runtime-venv"
+RUNTIME_CLI="$RUNTIME_VENV/bin/capt"
+RUNTIME_HEAD_FILE="$RUNTIME_VENV/CAPT_SOURCE_HEAD"
+SOURCE_HEAD="$(git -C "$ROOT" rev-parse HEAD)"
+INSTALLED_HEAD=""
+if [[ -r "$RUNTIME_HEAD_FILE" ]]; then
+  INSTALLED_HEAD="$(<"$RUNTIME_HEAD_FILE")"
+fi
+if [[ ! -x "$RUNTIME_CLI" || "$INSTALLED_HEAD" != "$SOURCE_HEAD" ]]; then
+  if [[ -x "$RUNTIME_CLI" ]]; then
+    echo "CAPT private runtime is stale; refreshing $INSTALLED_HEAD -> $SOURCE_HEAD"
+  else
+    echo "CAPT private runtime is missing; installing $SOURCE_HEAD"
+  fi
+  CAPT_STATE_DIR="$STATE_DIR" "$ROOT/script/install_local_runtime.sh"
 fi
 cd "$ROOT"
 swift build --product "$EXECUTABLE"
