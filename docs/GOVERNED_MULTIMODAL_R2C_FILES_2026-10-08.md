@@ -116,3 +116,50 @@ polling, independent reference approval, no duplicate dispatch after
 failure/restart, unsafe URL rejection, Swift native-session roundtrip,
 and the full Python/Swift regression gates. Installed/live acceptance
 requires a separate signed-build and RuntimeService verification.
+
+
+## Final R2C source and installed acceptance — 2026-10-08
+
+- Executable CAPT Core source:
+  `bfcfd4b67449b8bf0325952dc7bb7c89b7b88ea3`, committed
+  to `origin/main`.
+- Full source Python regression: **2,060 passed, 70 skipped,
+  13 deselected**. Log:
+  `~/capt-node-workspace/media-r2c-final-full-python.log`.
+- Native Swift suite: **165 passed, 9 skipped, 0 failed**. Log:
+  `~/capt-node-workspace/media-r2c-swift-v2.log`.
+- Authenticated Unix-socket integration exercised **two separate
+  HumanApprovals**, local HTTP resumable start, streamed 13 MiB PDF
+  upload/finalize, processing-state GET, and reference-based model
+  consumption. A second same-identity dispatch performed **zero extra
+  POSTs**. All external endpoints were local fixtures, not billed.
+- Production transport exercised local streaming of an independently
+  bounded 15 MiB file with an explicit byte count, no bearer forwarding
+  to the upload-session URL, and exact-origin upload URL validation.
+- Resident daemon checkpoint `cp-cmd-d2b3108aaacdeb97` accepted at
+  EventStore head 23503 with **zero nonterminal DriverRuns**.
+- RuntimeService restarted from this exact source, **HEALTHY**,
+  EventStore integrity `ok`, CAPT distribution 0.5.0; compatibility
+  `runtimeVersion=0.1.0` is **not** the package version.
+- Apple-signed CAPT.app at `~/Applications/CAPT.app` is verified
+  byte-identical to the staged build. Installed executable SHA256:
+  `c9fdc081ae6902bdeaaf54bdc2e5838418e572be678827475f1b4666f517c2ba`.
+  A rollback of the original app is retained under
+  `~/capt-node-workspace/worktree-archive/CAPT.app-pre-media-r2c-bfcfd4b`.
+- TIA activated installed Chat, identified Attach files and Media I/O,
+  opened the workbench, and verified its truthful **no enabled routes**
+  notice. One installed app instance returned to 0% CPU at idle.
+- Safely scaffolded a **disabled** Gemini provider and two **disabled**
+  media routes in the user's `~/.capt/ui` directory; existing entries
+  were preserved, edits were atomically written with mode 0600 and
+  backups stored under `~/.capt/ui/config-backups/20261008-media-r2c`.
+  `load_media_routes` validates the configuration with **0 enabled
+  routes** and no credential refs exposed to the runtime catalog.
+- Keychain lookup of account `gemini-ai-studio` under service
+  `capt-provider` did not find a credential. No model pricing,
+  credentials, or provider capabilities were fabricated.
+- No paid provider inference, no real Google file upload, no
+  video/image/audio generation, and no HumanApproval decisions on
+  the live user ledger were made. **Live Gemini acceptance remains gated**
+  on a securely connected key, verified model support, explicit
+  model-cost ceiling and one intentionally approved smoke test.
