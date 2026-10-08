@@ -31,7 +31,7 @@ MAX_PROMPT_LENGTH = 32_768
 _ALLOWED_OUTPUTS = ("image/png", "image/jpeg", "image/webp", "audio/mpeg", "audio/wav", "video/mp4")
 _SUPPORTED_OPERATIONS = frozenset({
     "image_input", "document_input", "video_input", "image_generate", "audio_generate",
-    "audio_transcribe", "video_generate",
+    "audio_transcribe", "video_generate", "file_upload", "file_reference_input",
 })
 _JOB_RE = re.compile(r"^dr-media-[A-Za-z0-9-]{8,96}$")
 _FILENAME_RE = re.compile(r"^[0-9a-f-]{36}-[A-Za-z0-9_]{1,60}(?:\.[A-Za-z0-9]{1,16})?$")
@@ -75,10 +75,12 @@ def _verified_files(
 ) -> list[dict[str, Any]]:
     if not isinstance(entries, list) or len(entries) > MAX_INPUT_FILES:
         raise AuthorityViolation("MEDIA_INTAKE_COUNT_INVALID")
-    if operation in ("image_input", "document_input", "video_input", "audio_transcribe") and not entries:
+    if operation in ("image_input", "document_input", "video_input", "audio_transcribe", "file_upload") and not entries:
         raise AuthorityViolation("MEDIA_INPUT_REQUIRED")
-    if operation not in ("image_input", "document_input", "video_input", "audio_transcribe") and entries:
+    if operation not in ("image_input", "document_input", "video_input", "audio_transcribe", "file_upload") and entries:
         raise AuthorityViolation("MEDIA_INPUT_NOT_IMPLEMENTED_FOR_OPERATION")
+    if operation == "file_upload" and len(entries) != 1:
+        raise AuthorityViolation("MEDIA_UPLOAD_REQUIRES_ONE_FILE")
     root = state_root / "native-media-intake" / "v1"
     result = []
     total = 0
@@ -93,6 +95,11 @@ def _verified_files(
         if digest != item.get("sha256") or size != item.get("sizeBytes"):
             raise AuthorityViolation("MEDIA_INTAKE_DIGEST_OR_SIZE_MISMATCH")
         mime = str(item.get("mediaType") or "")
+        if operation == "file_upload" and mime not in (
+            "application/pdf", "video/mp4", "audio/mpeg", "audio/mp4",
+            "audio/wav", "image/png", "image/jpeg", "image/webp"
+        ):
+            raise AuthorityViolation("MEDIA_UPLOAD_MIME_UNSUPPORTED")
         if operation == "document_input" and mime != "application/pdf":
             raise AuthorityViolation("MEDIA_MODEL_DOCUMENT_TYPE_UNSUPPORTED")
         if operation == "video_input" and mime != "video/mp4":
@@ -154,10 +161,13 @@ class MediaRoute:
             "audio_generate": ("json", "raw_binary"),
             "audio_transcribe": ("multipart", "json_text"),
             "video_generate": ("async_job", "job_receipt"),
+            "file_upload": ("gemini_resumable", "file_receipt"),
+            "file_reference_input": ("gemini_interactions", "json_text"),
         }
         expected = required_wire.get(self.contract.operation)
         mime_family = {'image_input': 'image/', 'document_input': 'application/',
-                       'video_input': 'video/', 'image_generate': 'image/', 'audio_generate': 'audio/', 'audio_transcribe': 'audio/', 'video_generate': 'video/'}.get(self.contract.operation)
+                       'video_input': 'video/', 'file_reference_input': None,
+                       'file_upload': None, 'image_generate': 'image/', 'audio_generate': 'audio/', 'audio_transcribe': 'audio/', 'video_generate': 'video/'}.get(self.contract.operation)
         if mime_family and not all(m.startswith(mime_family) for m in self.contract.media_types):
             raise AuthorityViolation('MEDIA_ROUTE_MIME_FAMILY_MISMATCH')
         if expected is not None and (
@@ -172,6 +182,10 @@ class MediaRoute:
             not self.contract.download_origins
         ):
             raise AuthorityViolation("MEDIA_IMAGE_URL_REQUIRES_DOWNLOAD_ALLOWLIST")
+        if self.contract.operation in ("file_upload", "file_reference_input") and self.auth_style != "x-goog-api-key" and not self.contract.allow_loopback:
+            raise AuthorityViolation("MEDIA_GEMINI_FILE_AUTH_STYLE_INVALID")
+        if self.contract.operation == "file_upload" and self.maximum_price_usd != 0:
+            raise AuthorityViolation("MEDIA_UPLOAD_MUST_HAVE_ZERO_BILLABLE_CEILING")
         if self.auth_style not in ("bearer", "x-goog-api-key", "none"):
             raise AuthorityViolation("MEDIA_AUTH_STYLE_INVALID")
 
@@ -195,7 +209,8 @@ class MediaRouteRegistry:
 
 
 def _freeze_request(
-    intent: dict[str, Any], *, registry: MediaRouteRegistry, state_root: Path
+    intent: dict[str, Any], *, registry: MediaRouteRegistry, state_root: Path,
+    store: Any | None = None
 ) -> dict[str, Any]:
     operation = str(intent.get("operation") or "")
     if operation not in _SUPPORTED_OPERATIONS:
@@ -215,9 +230,36 @@ def _freeze_request(
     if not prompt or len(prompt) > MAX_PROMPT_LENGTH:
         raise AuthorityViolation("MEDIA_PROMPT_INVALID")
     files = _verified_files(intent.get("files", []), state_root=state_root,
-                            operation=operation, max_input_bytes=MAX_INLINE_BYTES)
+                            operation=operation, max_input_bytes=(
+                                2 * 1024 * 1024 * 1024 if operation == "file_upload"
+                                else MAX_INLINE_BYTES))
     if any(item["mediaType"] not in route.contract.media_types for item in files):
         raise AuthorityViolation("MEDIA_MODEL_INPUT_MIME_NOT_ADVERTISED")
+    file_reference = None
+    if operation == "file_reference_input":
+        if store is None:
+            raise AuthorityViolation("MEDIA_UPLOAD_LEDGER_REQUIRED")
+        prior_id = str(intent.get("uploadedDriverRunId") or "")
+        if not _JOB_RE.fullmatch(prior_id):
+            raise AuthorityViolation("MEDIA_UPLOAD_REFERENCE_ID_INVALID")
+        prior = store.idempotent_result("media-job:" + prior_id)
+        if not isinstance(prior, dict) or prior.get("state") != "file_active":
+            raise AuthorityViolation("MEDIA_UPLOAD_REFERENCE_NOT_ACTIVE")
+        if prior.get("provider") != provider or prior.get("model") != model:
+            raise AuthorityViolation("MEDIA_UPLOAD_REFERENCE_PROVIDER_MISMATCH")
+        if prior.get("fileMime") not in route.contract.media_types:
+            raise AuthorityViolation("MEDIA_UPLOAD_REFERENCE_MIME_MISMATCH")
+        try:
+            expires = datetime.fromisoformat(prior["expiresAt"])
+        except (ValueError, KeyError, TypeError):
+            raise AuthorityViolation("MEDIA_UPLOAD_REFERENCE_EXPIRY_INVALID") from None
+        if expires <= datetime.now(timezone.utc):
+            raise AuthorityViolation("MEDIA_UPLOAD_REFERENCE_EXPIRED")
+        file_reference = {
+            "uploadedDriverRunId": prior_id, "fileName": prior["fileName"],
+            "fileUri": prior["fileUri"], "fileMime": prior["fileMime"],
+            "fileDigest": prior["fileDigest"], "expiresAt": prior["expiresAt"],
+        }
     binding = {
         "operation": operation, "adapterId": route.adapter_id,
         "provider": provider, "model": model, "prompt": prompt,
@@ -233,6 +275,7 @@ def _freeze_request(
         "maxOutputBytes": min(route.contract.max_asset_bytes,
             512 * 1024 * 1024 if operation == "video_generate" else 64 * 1024 * 1024),
         "outputRoot": str((state_root / "media-output" / "v2").resolve()),
+        "fileReference": file_reference,
     }
     return binding
 
@@ -252,7 +295,8 @@ def prepare_media_approval(
     if metadata.get("actor", {}).get("kind") != "human":
         raise AuthorityViolation("MEDIA_PREPARE_HUMAN_ONLY")
     state_root = Path(service.store.path).parent.resolve()
-    binding = _freeze_request(intent, registry=registry, state_root=state_root)
+    binding = _freeze_request(intent, registry=registry, state_root=state_root,
+                              store=service.store)
     digest = _hash(binding)
     suffix = hashlib.sha256(metadata["idempotencyKey"].encode()).hexdigest()[:20]
     mission = "m-media-" + suffix
@@ -405,7 +449,7 @@ def _result_bytes(operation: str, response: bytes, response_type: str) -> tuple[
         else:
             raise AuthorityViolation("MEDIA_IMAGE_OUTPUT_SIGNATURE_INVALID")
         return data, mime, None
-    if operation in ("document_input", "video_input"):
+    if operation in ("document_input", "video_input", "file_reference_input"):
         # Gemini Interactions REST output: never treat a queued interaction
         # as completed media understanding. One paid dispatch has already
         # crossed the external boundary and may require manual reconciliation.
@@ -507,6 +551,19 @@ def _build_request(
     operation = binding["operation"]
     prompt = binding["prompt"]
     model = binding["model"]
+    if operation == "file_reference_input":
+        reference = binding.get("fileReference") or {}
+        if not reference.get("fileUri") or not reference.get("fileMime"):
+            raise AuthorityViolation("MEDIA_UPLOAD_REFERENCE_MISSING")
+        block_type = ("document" if reference["fileMime"] == "application/pdf"
+                      else "video" if reference["fileMime"].startswith("video/")
+                      else "audio" if reference["fileMime"].startswith("audio/")
+                      else "image")
+        return _canonical({"model": model, "input": [
+            {"type": "text", "text": prompt},
+            {"type": block_type, "uri": reference["fileUri"],
+             "mime_type": reference["fileMime"]}
+        ]}), "application/json"
     if operation in ("document_input", "video_input"):
         # Google Gemini Interactions API uses typed inline media blocks.
         # This route is intentionally limited to 12 MiB of governed bytes.
@@ -536,6 +593,9 @@ def _build_request(
             }})
         return _canonical({"model": model, "messages": [
             {"role": "user", "content": content}]}), "application/json"
+    if operation == "file_upload":
+        source = binding["files"][0]
+        return _canonical({"file": {"display_name": source["originalName"]}}), "application/json"
     if operation == "image_generate":
         return _canonical({
             "model": model, "prompt": prompt,
@@ -622,6 +682,7 @@ def submit_approved_media(
     *, registry: MediaRouteRegistry,
     transport: MediaHTTPTransport,
     credential_resolver,
+    upload_transport: Any | None = None,
 ) -> dict[str, Any]:
     """Single dispatch. HumanApproval consumed+DriverRun persisted BEFORE HTTP."""
     approved, binding = _get_binding(service, request_id)
@@ -642,11 +703,24 @@ def submit_approved_media(
         route.contract.submit_path != binding["endpointPath"]
     ):
         raise AuthorityViolation("MEDIA_ROUTE_CHANGED_SINCE_APPROVAL")
-    if not binding.get("files") and binding["operation"] in ("image_input", "document_input", "video_input", "audio_transcribe"):
+    if not binding.get("files") and binding["operation"] in ("image_input", "document_input", "video_input", "audio_transcribe", "file_upload"):
         raise AuthorityViolation("MEDIA_SOURCE_MISSING")
     # TOCTOU: recheck every source file/digest before consuming one-use approval.
     _verified_files(binding["files"], state_root=Path(service.store.path).parent,
-                    operation=binding["operation"], max_input_bytes=MAX_INLINE_BYTES)
+                    operation=binding["operation"], max_input_bytes=(
+                        2 * 1024 * 1024 * 1024 if binding["operation"] == "file_upload"
+                        else MAX_INLINE_BYTES))
+    if binding["operation"] == "file_reference_input":
+        prior = binding.get("fileReference") or {}
+        previous = service.store.idempotent_result("media-job:" + str(prior.get("uploadedDriverRunId")))
+        if not isinstance(previous, dict) or previous.get("state") != "file_active" or any(
+            previous.get(k) != prior.get(v) for k, v in (
+                ("fileUri", "fileUri"), ("fileMime", "fileMime"),
+                ("fileDigest", "fileDigest"), ("fileName", "fileName"))
+        ):
+            raise AuthorityViolation("MEDIA_FILE_REFERENCE_REVOKED_OR_CHANGED")
+        if datetime.fromisoformat(prior["expiresAt"]) <= datetime.now(timezone.utc):
+            raise AuthorityViolation("MEDIA_FILE_REFERENCE_EXPIRED")
     body, content_type = _build_request(binding, route)
     token = "" if route.auth_style == "none" else credential_resolver(route.provider)
     auth = _authorization(route, token)
@@ -682,6 +756,36 @@ def submit_approved_media(
     )
     service.record_driver_dispatch_boundary(driver, "request_started", boundary_meta)
     try:
+        if binding["operation"] == "file_upload":
+            from .media_file_upload import GeminiResumableUploadTransport, validate_file_receipt
+            uploader = upload_transport or GeminiResumableUploadTransport()
+            item = binding["files"][0]
+            # Validate immutable staged contents again before upload start.
+            path = Path(item["stagedPath"])
+            digest, counted = _sha256_file(path, 2 * 1024 * 1024 * 1024)
+            if digest != item["sha256"] or counted != item["sizeBytes"]:
+                raise AuthorityViolation("MEDIA_INPUT_CHANGED_AFTER_ADMISSION")
+            upload_url = uploader.start(
+                origin=route.contract.origin, path=route.contract.submit_path,
+                credential=token, mime=item["mediaType"],
+                size=item["sizeBytes"], original_name=item["originalName"]
+            )
+            raw_receipt = uploader.upload_and_finalize(
+                session_url=upload_url, origin=route.contract.origin,
+                source=path, mime=item["mediaType"], size=item["sizeBytes"]
+            )
+            file_receipt = validate_file_receipt(
+                raw_receipt, mime=item["mediaType"], origin=route.contract.origin
+            )
+            state = {
+                **file_receipt, "provider": binding["provider"],
+                "model": binding["model"], "fileDigest": item["sha256"],
+                "fileLength": item["sizeBytes"],
+                "operationId": file_receipt["fileName"],
+                "manifestDigest": binding["manifestDigest"]
+            }
+            _job_update(service.store, job_key, fingerprint, state)
+            return media_job_status(service.store, driver)
         headers = {**auth, "Content-Type": content_type}
         raw, mime = transport.send("POST",
             route.contract.origin + route.contract.submit_path,
@@ -779,10 +883,40 @@ def _extract_video_url(document: dict[str, Any]) -> str:
 
 def poll_media_job(
     service: Any, request_id: str, *, registry: MediaRouteRegistry,
-    transport: MediaHTTPTransport, credential_resolver
+    transport: MediaHTTPTransport, credential_resolver,
+    upload_transport: Any | None = None
 ) -> dict[str, Any]:
     """GET only. An operation ID exists; never calls generation submit path."""
     binding, route, driver, receipt = _job_binding(service, request_id, registry)
+    if binding["operation"] == "file_upload":
+        if receipt["state"] in ("file_active", "file_expired", "indeterminate", "failed"):
+            return media_job_status(service.store, driver)
+        if receipt["state"] != "file_processing":
+            raise AuthorityViolation("MEDIA_UPLOAD_STATE_INVALID")
+        try:
+            expires = datetime.fromisoformat(receipt["expiresAt"])
+        except (ValueError, KeyError, TypeError):
+            raise AuthorityViolation("MEDIA_UPLOAD_EXPIRY_INVALID") from None
+        if datetime.now(timezone.utc) >= expires:
+            updated = {**receipt, "state": "file_expired"}
+        else:
+            from .media_file_upload import GeminiResumableUploadTransport, validate_file_receipt
+            uploader = upload_transport or GeminiResumableUploadTransport()
+            token = credential_resolver(route.provider)
+            raw = uploader.file_status(
+                origin=route.contract.origin, file_name=receipt["fileName"], credential=token
+            )
+            checked = validate_file_receipt(
+                raw, mime=receipt["fileMime"], origin=route.contract.origin
+            )
+            if (checked["fileName"] != receipt["fileName"] or
+                    checked["fileUri"] != receipt["fileUri"]):
+                raise AuthorityViolation("MEDIA_UPLOAD_FILE_STATUS_IDENTITY_MISMATCH")
+            updated = {**receipt, "state": checked["state"]}
+        _job_update(service.store, "media-job:" + driver,
+                    _hash({"driver": driver, "manifestDigest": binding["manifestDigest"]}),
+                    updated)
+        return media_job_status(service.store, driver)
     if binding["operation"] != "video_generate" or route.contract.transport != "async_job":
         raise AuthorityViolation("MEDIA_POLL_NOT_VIDEO_JOB")
     if receipt["state"] in ("completed", "ready_to_download", "indeterminate", "failed"):

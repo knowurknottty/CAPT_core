@@ -1769,6 +1769,46 @@ extension CAPTOperatorStore {
         }
     }
 
+    func prepareMediaReferenceApproval(
+        route: CAPTMediaRouteDescriptor, prompt: String, maxCostUSD: Double
+    ) {
+        guard !mediaWorkflowBusy, route.operation == "file_reference_input",
+              mediaResultState == "file_active",
+              let sessionID = activeSessionID,
+              let uploadRun = activeMediaDriverRunID,
+              maxCostUSD >= route.maximumPriceUSD,
+              authoritySettings.providerNetwork == .remoteAllowed else {
+            mediaWorkflowMessage = "Uploaded file must be active and a matching model-reference route selected."
+            return
+        }
+        mediaWorkflowBusy = true
+        Task {
+            defer { mediaWorkflowBusy = false }
+            do {
+                try await mediaRuntime.connectReadOnly()
+                let receipt = try await mediaRuntime.prepareMedia(
+                    adapter: route, prompt: prompt, attachments: [],
+                    maxCostUSD: maxCostUSD, uploadedDriverRunID: uploadRun
+                )
+                guard let requestID = receipt["requestId"] as? String,
+                      let driverID = receipt["driverRunId"] as? String,
+                      mutateWorkspace({ $0.bindMediaReferenceApproval(
+                          requestID: requestID, driverRunID: driverID, for: sessionID
+                      ) }) else {
+                    throw CAPTRuntimeClientError.malformedResponse("File reference approval binding failed")
+                }
+                saveSessions()
+                if activeSessionID == sessionID {
+                    mediaApprovalState = "requested"
+                    mediaResultState = "not_started"
+                    mediaWorkflowMessage = "Second approval requested for model consumption of the exact uploaded file. No model inference yet."
+                }
+            } catch {
+                mediaWorkflowMessage = "File-reference approval failed: " + error.localizedDescription
+            }
+        }
+    }
+
     func refreshMediaWorkflow() {
         guard !mediaWorkflowBusy, let requestID = activeMediaApprovalID else { return }
         let driver = activeMediaDriverRunID

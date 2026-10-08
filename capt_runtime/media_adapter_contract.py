@@ -14,13 +14,14 @@ from urllib.parse import urlsplit
 
 _ALLOWED_OPERATIONS = frozenset({
     "image_input", "audio_input", "video_input", "file_input", "document_input",
+    "file_upload", "file_reference_input",
     "image_generate", "audio_generate", "video_generate", "audio_transcribe",
 })
 _ALLOWED_TRANSPORTS = frozenset({
-    "chat_completions", "responses", "gemini_interactions", "json", "multipart", "async_job",
+    "chat_completions", "responses", "gemini_interactions", "gemini_resumable", "json", "multipart", "async_job",
 })
 _ALLOWED_RESPONSE_TYPES = frozenset({
-    "json_base64", "json_text", "json_url", "raw_binary", "multipart", "job_receipt",
+    "json_base64", "json_text", "json_url", "raw_binary", "multipart", "job_receipt", "file_receipt",
 })
 _TEMPLATE_NAMES = frozenset({"job_id", "file_id", "generation_id"})
 

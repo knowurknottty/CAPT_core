@@ -234,6 +234,28 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         return true
     }
 
+    @discardableResult
+    public mutating func bindMediaReferenceApproval(
+        requestID: String, driverRunID: String, for sessionID: UUID
+    ) -> Bool {
+        guard let index = index(of: sessionID),
+              sessions[index].mediaApprovalRequestID != nil,
+              sessions[index].mediaUploadedDriverRunID == nil,
+              let uploadRun = sessions[index].mediaDriverRunID else { return false }
+        sessions[index].mediaUploadedDriverRunID = uploadRun
+        sessions[index].mediaApprovalRequestID = requestID
+        sessions[index].mediaDriverRunID = driverRunID
+        sessions[index].updatedAt = Date()
+        sessions[index].messages.append(CAPTChatMessage(
+            role: .system,
+            text: "Separate file-reference HumanApproval requested: " + requestID +
+                ". The original upload run " + uploadRun +
+                " remains durable; no model consumption authorized yet.",
+            authorityState: "media_file_reference_approval_requested"
+        ))
+        return true
+    }
+
     public mutating func addMediaResult(
         _ details: [String: Any], for sessionID: UUID
     ) {

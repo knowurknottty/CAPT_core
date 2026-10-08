@@ -132,7 +132,8 @@ actor CAPTBackgroundRuntime {
 
     func prepareMedia(
         adapter: CAPTMediaRouteDescriptor, prompt: String,
-        attachments: [CAPTNativeAttachment], maxCostUSD: Double
+        attachments: [CAPTNativeAttachment], maxCostUSD: Double,
+        uploadedDriverRunID: String? = nil
     ) throws -> [String: Any] {
         let files: [[String: Any]] = attachments.map {
             ["stagedPath": $0.stagedPath, "sha256": $0.sha256,
@@ -149,6 +150,7 @@ actor CAPTBackgroundRuntime {
                 "files": files,
                 "providerNetworkPolicy": "remote_allowed",
                 "maxCostUSD": maxCostUSD,
+                "uploadedDriverRunId": uploadedDriverRunID ?? "",
             ])
     }
 

@@ -20,6 +20,8 @@ _ALLOWED_CAPS = {
     "image_input": {"vision"},
     "document_input": {"document", "pdf", "document_understanding"},
     "video_input": {"video", "video_understanding"},
+    "file_upload": {"file_upload"},
+    "file_reference_input": {"file_reference"},
     "image_generate": {"image", "image_generation"},
     "audio_generate": {"audio", "audio_generation", "tts"},
     "audio_transcribe": {"audio", "transcription"},

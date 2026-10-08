@@ -24,6 +24,9 @@ public struct CAPTNativeSession: Identifiable, Codable, Equatable, Sendable {
     // Media approval references are persisted for read-only reattachment.
     public var mediaApprovalRequestID: String?
     public var mediaDriverRunID: String?
+    // Upload ID retained when a second, distinct model-consumption approval
+    // replaces the active media approval in this chat.
+    public var mediaUploadedDriverRunID: String?
     public var mediaManifestDigest: String?
     public var promptProposal: CAPTPromptProposal?
     public var pendingApproval: CAPTPendingApproval?
@@ -52,6 +55,7 @@ public struct CAPTNativeSession: Identifiable, Codable, Equatable, Sendable {
         self.attachments = nil
         self.mediaApprovalRequestID = nil
         self.mediaDriverRunID = nil
+        self.mediaUploadedDriverRunID = nil
         self.promptProposal = promptProposal
         self.pendingApproval = pendingApproval
         self.verificationDriverRunID = verificationDriverRunID

@@ -10,6 +10,21 @@ The model is an inference component. Tools are effect adapters. **RuntimeService
 
 ---
 
+## Governed large-file media R2C — 2026-10-08
+
+[Gemini Files API large-file R2C](docs/GOVERNED_MULTIMODAL_R2C_FILES_2026-10-08.md)
+adds approved resumable streaming uploads, file-processing status polling,
+persisted provider file identities and an **independent second HumanApproval**
+before any model consumes the uploaded file URI. It preserves source digests,
+keeps uploaded files separate from model inference, and never resubmits an
+indeterminate external operation automatically. The offline authenticated
+socket and HTTP fixtures verify the entire two-approval workflow.
+
+**Cloud use remains disabled** pending direct Gemini credentials, verified
+model availability, and a deliberately authorized model-cost ceiling.
+A disabled configuration example is provided; no external inference is
+permitted merely by installing this revision.
+
 ## Governed media R2B — 2026-10-08
 
 [Media R2B](docs/GOVERNED_MULTIMODAL_R2B_INLINE_AND_URL_2026-10-08.md) extends the approved

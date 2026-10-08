@@ -1,0 +1,75 @@
+{
+  "notes": "DISABLED sample. Merge provider into ~/.capt/ui/providers.json and routes into ~/.capt/ui/media-routes.json. Validate live models, credential and current inference pricing before enabling.",
+  "provider": {
+    "id": "gemini-direct",
+    "enabled": false,
+    "kind": "cloud",
+    "transport": "gemini_interactions",
+    "base_url": "https://generativelanguage.googleapis.com/v1beta",
+    "models": [
+      "gemini-3.8-flash"
+    ],
+    "capabilities": [
+      "document",
+      "video",
+      "audio",
+      "vision",
+      "file_upload",
+      "file_reference"
+    ],
+    "key_ref": "keychain:gemini-ai-studio"
+  },
+  "mediaRoutes": {
+    "schemaVersion": "1.0.0",
+    "routes": [
+      {
+        "enabled": false,
+        "adapterId": "gemini-files-upload",
+        "provider": "gemini-direct",
+        "model": "gemini-3.8-flash",
+        "operation": "file_upload",
+        "origin": "https://generativelanguage.googleapis.com",
+        "transport": "gemini_resumable",
+        "submitPath": "/upload/v1beta/files",
+        "responseType": "file_receipt",
+        "mediaTypes": [
+          "application/pdf",
+          "video/mp4",
+          "audio/mpeg",
+          "audio/mp4",
+          "audio/wav",
+          "image/png",
+          "image/jpeg",
+          "image/webp"
+        ],
+        "authStyle": "x-goog-api-key",
+        "maximumPriceUSD": 0,
+        "maxAssetBytes": 2147483648
+      },
+      {
+        "enabled": false,
+        "adapterId": "gemini-files-reference",
+        "provider": "gemini-direct",
+        "model": "gemini-3.8-flash",
+        "operation": "file_reference_input",
+        "origin": "https://generativelanguage.googleapis.com",
+        "transport": "gemini_interactions",
+        "submitPath": "/v1beta/interactions",
+        "responseType": "json_text",
+        "mediaTypes": [
+          "application/pdf",
+          "video/mp4",
+          "audio/mpeg",
+          "audio/mp4",
+          "audio/wav",
+          "image/png",
+          "image/jpeg",
+          "image/webp"
+        ],
+        "authStyle": "x-goog-api-key",
+        "maximumPriceUSD": null,
+        "maxAssetBytes": 67108864
+      }
+    ]
+  }
+}

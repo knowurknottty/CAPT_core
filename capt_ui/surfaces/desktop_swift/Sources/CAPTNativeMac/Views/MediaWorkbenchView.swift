@@ -61,7 +61,9 @@ struct MediaWorkbenchView: View {
                             .foregroundStyle(.secondary)
                     }
                     .font(.caption)
-                    if !route.supports(store.activeChatAttachments) {
+                    if !route.supports(store.activeChatAttachments) &&
+                       !(route.operation == "file_reference_input" &&
+                         store.mediaResultState == "file_active") {
                         Text("Selected route cannot consume this attachment set. Input routes require compatible staged files and the approved inline size limit; generation routes require no input files.")
                             .font(.caption).foregroundStyle(.orange)
                     }
@@ -94,6 +96,30 @@ struct MediaWorkbenchView: View {
                     }
                 }
                 .font(.caption)
+                if store.mediaResultState == "file_processing" {
+                    Button("Check uploaded file processing") {
+                        store.advanceMediaJob(download: false)
+                    }
+                    .disabled(store.mediaWorkflowBusy)
+                    .buttonStyle(.bordered)
+                }
+                if store.mediaResultState == "file_active" {
+                    Text("File uploaded and active. Choose a file_reference_input route above to prepare a separate HumanApproval for model reading. Upload completion alone grants no model access.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("Prepare separate file-consumption approval") {
+                        if let route, let budget {
+                            store.prepareMediaReferenceApproval(
+                                route: route, prompt: draft, maxCostUSD: budget)
+                        }
+                    }
+                    .disabled(store.mediaWorkflowBusy ||
+                              route?.operation != "file_reference_input" ||
+                              budget == nil ||
+                              draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                              (budget ?? 0) < (route?.maximumPriceUSD ?? 0))
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("media-file-reference-approval")
+                }
                 if store.mediaResultState == "submitted" ||
                    store.mediaResultState == "processing" {
                     Button("Poll existing video job") { store.advanceMediaJob(download: false) }
@@ -132,7 +158,7 @@ struct MediaWorkbenchView: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
-            Text("Files remain quarantined until one human-approved model request. Model results are unverified candidates. No automatic retries or charges.")
+            Text("Uploads and model consumption have separate HumanApprovals. Files remain private until an approved operation; remote calls may incur usage. Indeterminate operations never auto-retry.")
                 .font(.caption2).foregroundStyle(.secondary)
         }
         .padding(13)

@@ -7,7 +7,9 @@ final class CAPTMediaWorkflowTests: XCTestCase {
             "adapterId": "media-" + operation,
             "provider": "mock", "model": "model",
             "operation": operation, "transport": "json",
-            "mediaTypes": [operation == "video_generate" ? "video/mp4" : "image/png"],
+            "mediaTypes": [operation == "video_generate" ? "video/mp4" :
+                           operation == "file_upload" || operation == "file_reference_input" ?
+                           "application/pdf" : "image/png"],
             "maximumPriceUSD": 0.50
         ])
     }
@@ -37,6 +39,41 @@ final class CAPTMediaWorkflowTests: XCTestCase {
         XCTAssertFalse(video.supports([file]))
         XCTAssertFalse(pdf.supports([]))
         XCTAssertFalse(video.supports([clip, file]))
+    }
+
+    func testResumableUploadAndReferenceHaveIndependentApprovalLineage() throws {
+        let upload = try route("file_upload")
+        let reference = try route("file_reference_input")
+        let file = CAPTNativeAttachment(
+            id: UUID(), originalName: "large.pdf", stagedPath: "/tmp/fake-large",
+            sizeBytes: 25 * 1024 * 1024,
+            sha256: "sha256:" + String(repeating: "0", count: 64),
+            mediaType: "application/pdf", kind: .document, admittedAt: Date())
+        XCTAssertTrue(upload.supports([file]))
+        XCTAssertFalse(upload.supports([]))
+        XCTAssertFalse(reference.supports([]),
+                       "No direct file-reference approval without uploaded identity")
+
+        var workspace = CAPTNativeChatWorkspace()
+        let id = workspace.newChat(provider: "gemini-fixture",
+                                   model: "gemini-3.8-flash", targetRoot: "/tmp")
+        XCTAssertTrue(workspace.bindMediaApproval(
+            requestID: "approval-media-upload-original",
+            driverRunID: "dr-media-upload-original", for: id))
+        XCTAssertTrue(workspace.bindMediaReferenceApproval(
+            requestID: "approval-media-ref-next",
+            driverRunID: "dr-media-ref-next", for: id))
+        let saved = try XCTUnwrap(workspace.session(id))
+        XCTAssertEqual(saved.mediaUploadedDriverRunID, "dr-media-upload-original")
+        XCTAssertEqual(saved.mediaDriverRunID, "dr-media-ref-next")
+        XCTAssertEqual(saved.mediaApprovalRequestID, "approval-media-ref-next")
+        XCTAssertFalse(workspace.bindMediaReferenceApproval(
+            requestID: "approval-media-third",
+            driverRunID: "dr-media-third", for: id))
+        let restored = try JSONDecoder().decode(
+            CAPTNativeSession.self, from: JSONEncoder().encode(saved))
+        XCTAssertEqual(restored.mediaUploadedDriverRunID, "dr-media-upload-original")
+        XCTAssertEqual(restored.mediaDriverRunID, "dr-media-ref-next")
     }
 
     func testCapabilitiesRequireExactFileModality() throws {

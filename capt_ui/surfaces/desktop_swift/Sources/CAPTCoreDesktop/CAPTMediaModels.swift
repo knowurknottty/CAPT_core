@@ -34,6 +34,16 @@ public struct CAPTMediaRouteDescriptor: Identifiable, Equatable, Sendable {
 
     public func supports(_ attachments: [CAPTNativeAttachment]) -> Bool {
         switch operation {
+        case "file_upload":
+            return attachments.count == 1 &&
+                mediaTypes.contains(attachments[0].mediaType) &&
+                ["application/pdf", "video/mp4", "audio/mpeg", "audio/mp4",
+                 "audio/wav", "image/png", "image/jpeg", "image/webp"]
+                    .contains(attachments[0].mediaType)
+        case "file_reference_input":
+            // Never prepare from the generic first-approval action. This
+            // operation requires a durable, active upload and second consent.
+            return false
         case "image_input":
             return !attachments.isEmpty && attachments.count <= 8 &&
                 attachments.allSatisfy { $0.kind == .image }
