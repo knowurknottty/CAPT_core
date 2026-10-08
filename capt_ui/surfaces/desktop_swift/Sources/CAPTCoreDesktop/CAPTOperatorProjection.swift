@@ -32,7 +32,9 @@ public struct CAPTMissionSummary: Identifiable, Sendable, Equatable {
     public var completedTaskCount: Int { succeededTaskCount }
     public var isMultiTask: Bool { tasks.count > 1 }
     public var hasActiveExecution: Bool {
-        tasks.contains { ["ready", "assigned", "running", "suspended"].contains($0.state) }
+        // Suspended/ready/assigned are not running work; this is a stored
+        // running marker, not an independently verified worker heartbeat.
+        tasks.contains { $0.state == "running" }
     }
 }
 

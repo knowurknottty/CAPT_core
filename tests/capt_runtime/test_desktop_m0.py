@@ -81,6 +81,7 @@ def test_authenticated_connect_and_identity(runtime):
     client = RuntimeClient(str(runtime["sock"]), str(runtime["token"]))
     ident = client.connect()
     assert ident["runtimeVersion"]
+    assert ident["packageVersion"]  # release identity, distinct from checkpoint format
     assert ident["contractSchemaVersion"] == "1.0.0"
     assert ident["integrity"] == "ok"
     assert ident["ledgerChainDigest"].startswith("sha256:")

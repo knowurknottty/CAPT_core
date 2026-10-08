@@ -2,6 +2,7 @@ import Foundation
 
 public struct CAPTRuntimeIdentitySnapshot: Hashable, Sendable {
     public let runtimeVersion: String
+    public let packageVersion: String
     public let integrity: String
     public let headSequence: Int
 }
@@ -86,7 +87,8 @@ public enum CAPTRuntimeControlProjection {
     public static func identity(_ response: [String: Any]) -> CAPTRuntimeIdentitySnapshot {
         let result = response["result"] as? [String: Any] ?? response
         return CAPTRuntimeIdentitySnapshot(
-            runtimeVersion: result["runtimeVersion"] as? String ?? "CAPT",
+            runtimeVersion: result["runtimeVersion"] as? String ?? "unknown",
+            packageVersion: result["packageVersion"] as? String ?? "unknown",
             integrity: result["integrity"] as? String ?? "unknown",
             headSequence: result["headSequence"] as? Int ?? 0
         )

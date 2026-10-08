@@ -26,6 +26,9 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var runtimeQueryOutput = ""
     @Published var runtimeQueryError: String?
     @Published var runtimeQueryBusy = false
+    @Published var inspectedTaskID: String?
+    @Published var inspectedTaskJSON = ""
+    @Published var inspectingTask = false
     @Published var runtimeIdentity = "Not connected"
     @Published var taskState = "—"
     @Published var isBusy = false
@@ -249,7 +252,7 @@ final class CAPTOperatorStore: ObservableObject {
             defer { isBusy = false }
             do {
                 let identity = try await runtime.connect()
-                runtimeIdentity = "\(identity.runtimeVersion) · integrity \(identity.integrity)"
+                runtimeIdentity = "CAPT \(identity.packageVersion) · kernel contract \(identity.runtimeVersion) · integrity \(identity.integrity)"
                 connectionState = .connected
                 let operatorSnapshot = try await runtime.operatorSnapshot()
                 applyOperatorSnapshot(operatorSnapshot)
@@ -545,7 +548,7 @@ final class CAPTOperatorStore: ObservableObject {
         Task {
             do {
                 let identity = try await runtime.identity()
-                runtimeIdentity = "\(identity.runtimeVersion) · integrity \(identity.integrity)"
+                runtimeIdentity = "CAPT \(identity.packageVersion) · kernel contract \(identity.runtimeVersion) · integrity \(identity.integrity)"
             } catch {
                 handleGlobal(error)
             }
@@ -1407,6 +1410,43 @@ extension CAPTOperatorStore {
                 )
             } catch {
                 runtimeQueryError = error.localizedDescription
+            }
+        }
+    }
+}
+
+
+extension CAPTOperatorStore {
+    /// Read a task and its run from RuntimeService, never local ledger SQL.
+    func inspectMissionTask(_ taskID: String, runID: String?) {
+        guard !inspectingTask, connectionState == .connected else { return }
+        inspectingTask = true
+        inspectedTaskID = taskID
+        inspectedTaskJSON = "Reading authoritative task state…"
+        Task {
+            defer { inspectingTask = false }
+            do {
+                _ = try await queryRuntime.connect()
+                let taskPayload = try JSONSerialization.data(
+                    withJSONObject: ["streamId": "task-" + taskID]
+                )
+                var text = try await queryRuntime.readRuntimeQuery(
+                    operation: "get_state",
+                    payloadJSON: String(decoding: taskPayload, as: UTF8.self)
+                )
+                if let runID {
+                    let runPayload = try JSONSerialization.data(
+                        withJSONObject: ["streamId": "driverrun-" + runID]
+                    )
+                    let runText = try await queryRuntime.readRuntimeQuery(
+                        operation: "get_state",
+                        payloadJSON: String(decoding: runPayload, as: UTF8.self)
+                    )
+                    text += "\n\nDRIVER RUN STATE\n" + runText
+                }
+                inspectedTaskJSON = text
+            } catch {
+                inspectedTaskJSON = "Runtime read failed: " + error.localizedDescription
             }
         }
     }

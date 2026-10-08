@@ -4,24 +4,42 @@ import CAPTCoreDesktop
 struct LedgerView: View {
     @ObservedObject var store: CAPTOperatorStore
     @State private var showTransportPhases = false
-
-    private let routinePhases: Set<String> = [
-        "ToolExecutionPrepared", "ToolExecutionAdmitted",
-        "ToolExecutionDispatching", "ToolExecutionSettling",
-    ]
+    @State private var showOnlyDecisions = false
+    @State private var searchText = ""
 
     private var visibleEvents: [CAPTEventSummary] {
-        showTransportPhases ? store.recentEvents : store.recentEvents.filter {
-            !routinePhases.contains($0.type)
+        store.recentEvents.filter { event in
+            (showTransportPhases || !CAPTLedgerSemantics.transportNoise.contains(event.type)) &&
+            (!showOnlyDecisions || CAPTLedgerSemantics.isDecisionOrResult(event)) &&
+            (searchText.isEmpty || event.type.localizedCaseInsensitiveContains(searchText) ||
+             event.streamID.localizedCaseInsensitiveContains(searchText) ||
+             (event.missionID ?? "").localizedCaseInsensitiveContains(searchText) ||
+             String(event.sequence).contains(searchText))
         }
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            Toggle("Show routine tool transport phases", isOn: $showTransportPhases)
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Event Ledger").font(.title2.bold())
+                    Text("What CAPT actually recorded · chronological evidence, not current task status")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Refresh") { store.refreshHistory() }
+            }.padding(.horizontal, 18).padding(.top, 12)
+            TextField("Search event, stream, mission, or sequence", text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("ledger-search")
+                .padding(.horizontal, 18)
+            HStack(spacing: 14) {
+                Toggle("Decisions and results only", isOn: $showOnlyDecisions)
+                Toggle("Show tool transport phases", isOn: $showTransportPhases)
+            }
                 .toggleStyle(.switch).controlSize(.small)
                 .padding(.horizontal, 18).padding(.vertical, 10)
-            Text("\(visibleEvents.count) shown from the latest \(store.recentEvents.count) events · all events remain in the immutable ledger")
+            Text("\(visibleEvents.count) shown · latest \(store.recentEvents.count) of the immutable ledger · filtering does not delete history")
                 .font(.caption).foregroundStyle(.secondary).padding(.bottom, 4)
             List(visibleEvents) { event in
             HStack(alignment: .top, spacing: 12) {
@@ -30,7 +48,10 @@ struct LedgerView: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 58, alignment: .trailing)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(event.type).font(.headline)
+                    Text(CAPTLedgerSemantics.readableName(event.type)).font(.callout.weight(.semibold))
+                    if CAPTLedgerSemantics.readableName(event.type) != event.type {
+                        Text(event.type).font(.caption2.monospaced()).foregroundStyle(.tertiary)
+                    }
                     HStack(spacing: 8) {
                         Text(event.actorKind)
                         if let missionID = event.missionID {
@@ -52,7 +73,7 @@ struct LedgerView: View {
                 VStack(spacing: 12) {
                     Image(systemName: "list.bullet.rectangle.portrait")
                         .font(.system(size: 30))
-                    Text("No runtime events loaded").font(.headline)
+                    Text("No matching ledger events").font(.headline)
                     Text("Reconnect or refresh to project the authoritative EventStore timeline.")
                         .foregroundStyle(.secondary)
                 }

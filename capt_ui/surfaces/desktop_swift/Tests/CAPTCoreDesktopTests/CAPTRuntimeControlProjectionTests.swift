@@ -6,12 +6,14 @@ final class CAPTRuntimeControlProjectionTests: XCTestCase {
         let response: [String: Any] = [
             "result": [
                 "runtimeVersion": "0.1.0",
+                "packageVersion": "0.5.0",
                 "integrity": "ok",
                 "headSequence": 937
             ]
         ]
         let identity = CAPTRuntimeControlProjection.identity(response)
         XCTAssertEqual(identity.runtimeVersion, "0.1.0")
+        XCTAssertEqual(identity.packageVersion, "0.5.0")
         XCTAssertEqual(identity.integrity, "ok")
         XCTAssertEqual(identity.headSequence, 937)
     }

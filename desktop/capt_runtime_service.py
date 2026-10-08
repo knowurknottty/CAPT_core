@@ -36,6 +36,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from importlib.metadata import PackageNotFoundError, version as distribution_version
 from typing import Any, Dict, List, Optional
 
 import capt_runtime
@@ -498,6 +499,14 @@ def _seed_memory_store(mem_store) -> None:
 # Read-only IPC query handlers (authoritative state only)
 # --------------------------------------------------------------------------
 
+def _installed_package_version() -> str:
+    """Release identity, distinct from the checkpoint compatibility version."""
+    try:
+        return distribution_version("capt-solo")
+    except PackageNotFoundError:
+        return "unknown"
+
+
 class RuntimeQueryService:
     def __init__(
         self, store: EventStore, demo: Optional[Dict[str, Any]] = None,
@@ -512,7 +521,8 @@ class RuntimeQueryService:
 
     def identity(self) -> Dict[str, Any]:
         return {
-            "runtimeVersion": RUNTIME_VERSION,
+            "runtimeVersion": RUNTIME_VERSION,  # checkpoint compatibility; not app release
+            "packageVersion": _installed_package_version(),
             "contractSchemaVersion": CONTRACT_SCHEMA_VERSION,
             "ledgerPath": self.store.path,
             "headSequence": self.store.head_sequence(),

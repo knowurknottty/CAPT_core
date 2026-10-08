@@ -692,6 +692,8 @@ def _status_view(client, identity) -> dict:
     return {
         "status": "HEALTHY" if identity.get("integrity") == "ok" else "UNHEALTHY",
         "runtimeVersion": identity.get("runtimeVersion"),
+        "packageVersion": identity.get("packageVersion"),
+        "versionNote": "runtimeVersion identifies checkpoint compatibility; packageVersion identifies the installed CAPT release",
         "ledgerPath": identity.get("ledgerPath"),
         "headSequence": identity.get("headSequence"),
         "ledgerDigest": identity.get("ledgerChainDigest"),

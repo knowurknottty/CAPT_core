@@ -2,16 +2,18 @@ import SwiftUI
 import CAPTCoreDesktop
 
 private enum MissionScope: String, CaseIterable, Identifiable {
-    case missionGrade = "Mission-grade"
-    case active = "Executing"
-    case all = "All activity"
+    case attention = "Needs action"
+    case active = "Marked running"
+    case missionGrade = "Multi-task"
+    case all = "All history"
     var id: String { rawValue }
 }
 
 struct MissionBrowserView: View {
     @ObservedObject var store: CAPTOperatorStore
     @State private var selectedID: String?
-    @State private var scope: MissionScope = .missionGrade
+    @State private var scope: MissionScope = .attention
+    @State private var searchText = ""
     @State private var cancelTaskID: String?
     @State private var cancelRunID: String?
 
@@ -55,11 +57,11 @@ struct MissionBrowserView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("MISSION CONTROL")
+                    Text("WORK QUEUE")
                         .font(.caption2.weight(.semibold))
                         .tracking(1.2)
                         .foregroundStyle(InversionTone.cyan.color)
-                    Text("Governed work, not chat history")
+                    Text("Unfinished work, with an honest status")
                         .font(.callout.weight(.semibold))
                 }
                 Spacer()
@@ -73,6 +75,15 @@ struct MissionBrowserView: View {
             .labelsHidden()
             .controlSize(.small)
 
+            TextField("Search missions, task descriptions, or IDs", text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("mission-search")
+            HStack {
+                Text("\(store.missions.count) recorded · \(store.missions.filter { CAPTMissionTriage.classify($0).needsHumanAttention }.count) need review or recovery")
+                    .font(.caption2).foregroundStyle(.secondary)
+                Spacer()
+                Button("Refresh") { store.refreshHistory() }.controlSize(.small)
+            }
             Text(scopeHelp)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -88,9 +99,7 @@ struct MissionBrowserView: View {
             EmptyMissionState(
                 title: "No \(scope.rawValue.lowercased()) missions",
                 systemImage: "scope",
-                detail: scope == .missionGrade
-                    ? "Mission-grade isolates multi-task governed work. One-turn chat activity remains available under All activity."
-                    : "No missions currently match this execution filter."
+                detail: "No matching items. Change the filter or clear search to inspect the complete historical ledger."
             )
         } else {
             List(visibleMissions, selection: $selectedID) { mission in
@@ -109,6 +118,7 @@ struct MissionBrowserView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     missionHeader(mission)
+                    missionNextAction(mission)
                     taskTree(mission)
                 }
                 .padding(InversionVisualLanguage.pagePadding)
@@ -131,13 +141,13 @@ struct MissionBrowserView: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top) {
                     InversionSectionHeader(
-                        mission.title,
+                        CAPTMissionTriage.readableTitle(mission.title, maxLength: 150),
                         eyebrow: "MISSION",
                         detail: mission.id,
                         symbol: "scope",
                         tone: tone
                     )
-                    InversionStatusBadge(mission.missionState, tone: tone)
+                    InversionStatusBadge(CAPTMissionTriage.classify(mission).rawValue, tone: tone)
                 }
 
                 HStack(spacing: 9) {
@@ -162,8 +172,8 @@ struct MissionBrowserView: View {
                             : (mission.cancelledTaskCount > 0 ? .amber : .neutral)
                     )
                     InversionMetric(
-                        "execution",
-                        value: mission.hasActiveExecution ? "active" : "quiescent",
+                        "running marker",
+                        value: mission.hasActiveExecution ? "1+ tasks" : "none",
                         symbol: "waveform.path.ecg",
                         tone: mission.hasActiveExecution ? .cyan : .neutral
                     )
@@ -175,6 +185,43 @@ struct MissionBrowserView: View {
                         total: Double(mission.taskCount)
                     )
                     .tint(InversionTone.success.color)
+                }
+            }
+        }
+    }
+
+    private func missionNextAction(_ mission: CAPTMissionSummary) -> some View {
+        let triage = CAPTMissionTriage.classify(mission)
+        return InversionPanel(tone: .cyan, padding: 15) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("WHAT'S ACTUALLY HAPPENING")
+                        .font(.caption.bold()).foregroundStyle(.secondary)
+                    Spacer()
+                    InversionStatusBadge(triage.rawValue)
+                }
+                Text(triage.explanation).font(.callout)
+                Text("Next: " + triage.nextStep)
+                    .font(.callout.weight(.medium))
+                Text(CAPTMissionTriage.counts(mission))
+                    .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                Text("Stored mission state: " + mission.missionState
+                    + " · derived status: " + triage.rawValue
+                    + " · no external worker heartbeat attested")
+                    .font(.caption2).foregroundStyle(.secondary)
+                let waiting = store.approvals.filter {
+                    $0.missionID == mission.id && $0.isActionable()
+                }
+                if !waiting.isEmpty {
+                    Text(String(waiting.count) + " actionable HumanApproval requests; inspect Approvals before any execution.")
+                        .font(.caption).foregroundStyle(.orange)
+                }
+                let lost = store.driverRuns.filter {
+                    $0.missionID == mission.id && $0.state == "lost"
+                }
+                if !lost.isEmpty {
+                    Text(String(lost.count) + " lost DriverRun receipts. Do not automatically replay these providers.")
+                        .font(.caption).foregroundStyle(.orange)
                 }
             }
         }
@@ -199,6 +246,11 @@ struct MissionBrowserView: View {
                     run: store.driverRuns.first { $0.taskID == task.id },
                     canCancelTask: canCancel(task),
                     canCancelRun: canCancelRun(for: task),
+                    inspect: {
+                        let runID = store.driverRuns.first { $0.taskID == task.id }?.id
+                        store.inspectMissionTask(task.id, runID: runID)
+                    },
+                    inspectedJSON: store.inspectedTaskID == task.id ? store.inspectedTaskJSON : nil,
                     cancelTask: { cancelTaskID = task.id },
                     cancelRun: {
                         if let run = store.driverRuns.first(where: { $0.taskID == task.id }) {
@@ -211,10 +263,26 @@ struct MissionBrowserView: View {
     }
 
     private var visibleMissions: [CAPTMissionSummary] {
+        let base: [CAPTMissionSummary]
         switch scope {
-        case .missionGrade: return store.missions.filter(\.isMultiTask)
-        case .active: return store.missions.filter(\.hasActiveExecution)
-        case .all: return store.missions
+        case .attention:
+            base = store.missions.filter {
+                let triage = CAPTMissionTriage.classify($0)
+                return ($0.isMultiTask && triage.needsHumanAttention) || $0.hasActiveExecution
+            }
+        case .missionGrade: base = store.missions.filter(\.isMultiTask)
+        case .active: base = store.missions.filter(\.hasActiveExecution)
+        case .all: base = store.missions
+        }
+        let filtered = base.filter { mission in
+            searchText.isEmpty || mission.id.localizedCaseInsensitiveContains(searchText) ||
+            mission.title.localizedCaseInsensitiveContains(searchText) ||
+            mission.tasks.contains { $0.title.localizedCaseInsensitiveContains(searchText) }
+        }
+        return filtered.sorted {
+            let a = CAPTMissionTriage.classify($0).priority
+            let b = CAPTMissionTriage.classify($1).priority
+            return a == b ? $0.id < $1.id : a < b
         }
     }
 
@@ -227,12 +295,14 @@ struct MissionBrowserView: View {
 
     private var scopeHelp: String {
         switch scope {
+        case .attention:
+            return "Interrupted runs, unverified results, and failed work. Stored 'executing' alone does not mean a worker is alive."
         case .missionGrade:
-            return "Multi-task work only — the view intended for long-running requests and orchestration."
+            return "Every multi-task mission, including completed and interrupted history."
         case .active:
-            return "Missions containing ready, assigned, running, or suspended execution right now."
+            return "Tasks stored as running (external worker heartbeat has NOT been checked)."
         case .all:
-            return "Forensic history, including one-turn chat executions and legacy drafts."
+            return "Complete mission history, including one-turn chat sessions and old drafts."
         }
     }
 
@@ -251,6 +321,7 @@ private struct MissionRow: View {
     let mission: CAPTMissionSummary
 
     var body: some View {
+        let triage = CAPTMissionTriage.classify(mission)
         let tone = InversionVisualLanguage.tone(forState: mission.missionState)
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top, spacing: 8) {
@@ -258,7 +329,7 @@ private struct MissionRow: View {
                     .fill(tone.color)
                     .frame(width: 7, height: 7)
                     .padding(.top, 5)
-                Text(mission.title)
+                Text(CAPTMissionTriage.readableTitle(mission.title, maxLength: 105))
                     .font(.callout.weight(.semibold))
                     .lineLimit(2)
                 Spacer(minLength: 4)
@@ -270,7 +341,7 @@ private struct MissionRow: View {
             }
 
             HStack(spacing: 7) {
-                InversionStatusBadge(mission.missionState, tone: tone)
+                InversionStatusBadge(triage.rawValue, tone: tone)
                 Text("\(mission.taskCount) tasks")
                 Text("·").foregroundStyle(.tertiary)
                 Text("\(mission.succeededTaskCount)/\(mission.taskCount) succeeded")
@@ -298,6 +369,9 @@ private struct MissionRow: View {
                 .tint(InversionTone.success.color)
             }
 
+            Text(CAPTMissionTriage.counts(mission))
+                .font(.caption2).foregroundStyle(.secondary)
+                .lineLimit(2)
             Text(shortID(mission.id))
                 .font(.caption2.monospaced())
                 .foregroundStyle(.tertiary)
@@ -317,9 +391,11 @@ private struct TaskCard: View {
     let run: CAPTDriverRunSummary?
     let canCancelTask: Bool
     let canCancelRun: Bool
+    let inspect: () -> Void
+    let inspectedJSON: String?
     let cancelTask: () -> Void
     let cancelRun: () -> Void
-    @State private var expanded = true
+    @State private var expanded = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 13) {
@@ -354,6 +430,19 @@ private struct TaskCard: View {
                                 .foregroundStyle(.tertiary)
                         }
 
+                        Button("Inspect stored task + DriverRun state", action: inspect)
+                            .buttonStyle(.bordered)
+                            .help("Read authoritative aggregate state; no execution or approval")
+                        if let inspectedJSON {
+                            ScrollView {
+                                Text(inspectedJSON).font(.caption2.monospaced())
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(maxHeight: 220)
+                            .padding(8)
+                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                        }
                         if canCancelTask || canCancelRun {
                             HStack {
                                 Spacer()
@@ -370,7 +459,7 @@ private struct TaskCard: View {
                 } label: {
                     HStack(alignment: .top, spacing: 10) {
                         VStack(alignment: .leading, spacing: 5) {
-                            Text(task.title)
+                            Text(CAPTMissionTriage.readableTitle(task.title, maxLength: 170))
                                 .font(.body.weight(.semibold))
                             HStack(spacing: 8) {
                                 InversionStatusBadge(task.state, tone: tone)

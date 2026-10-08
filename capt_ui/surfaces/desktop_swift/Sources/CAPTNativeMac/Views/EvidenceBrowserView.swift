@@ -2,35 +2,53 @@ import SwiftUI
 import CAPTCoreDesktop
 
 private enum EvidenceScope: String, CaseIterable, Identifiable {
-    case verified = "Verified"
-    case pending = "Pending review"
+    case accepted = "Accepted claims"
+    case pending = "Not accepted"
     case all = "All evidence"
     var id: String { rawValue }
 }
 
 struct EvidenceBrowserView: View {
     @ObservedObject var store: CAPTOperatorStore
-    @State private var scope: EvidenceScope = .verified
+    @State private var scope: EvidenceScope = .accepted
+    @State private var searchText = ""
 
     private var visibleEvidence: [CAPTEvidenceSummary] {
-        switch scope {
-        case .verified:
-            return store.evidenceItems.filter { $0.promotionState.lowercased() == "accepted" }
-        case .pending:
-            return store.evidenceItems.filter { $0.promotionState.lowercased() != "accepted" }
-        case .all:
-            return store.evidenceItems
+        store.evidenceItems.filter { item in
+            let inScope: Bool
+            switch scope {
+            case .accepted: inScope = item.promotionState.lowercased() == "accepted"
+            case .pending: inScope = item.promotionState.lowercased() != "accepted"
+            case .all: inScope = true
+            }
+            return inScope && (searchText.isEmpty ||
+                item.statement.localizedCaseInsensitiveContains(searchText) ||
+                item.id.localizedCaseInsensitiveContains(searchText) ||
+                (item.missionID ?? "").localizedCaseInsensitiveContains(searchText))
         }
     }
 
     var body: some View {
         VStack(spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Evidence & Claims").font(.title2.bold())
+                    Text("Accepted claims are not automatically verified. Inspect their evidence before relying on them.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Refresh") { store.refreshHistory() }
+            }.padding(.horizontal, 18).padding(.top, 14)
+            TextField("Search claim, mission, or evidence ID", text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("evidence-search")
+                .padding(.horizontal, 18)
             Picker("Evidence status", selection: $scope) {
                 ForEach(EvidenceScope.allCases) { item in Text(item.rawValue).tag(item) }
             }
             .pickerStyle(.segmented)
             .padding(.horizontal, 18).padding(.top, 12)
-            Text("\(visibleEvidence.count) shown · \(store.evidenceItems.count) total · unverified claims remain preserved")
+            Text("\(visibleEvidence.count) shown · \(store.evidenceItems.count) total · read-only · no claims discarded")
                 .font(.caption).foregroundStyle(.secondary).padding(.vertical, 6)
             List(visibleEvidence) { item in
             VStack(alignment: .leading, spacing: 8) {
@@ -66,7 +84,7 @@ struct EvidenceBrowserView: View {
             if visibleEvidence.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "checkmark.seal").font(.system(size: 30))
-                    Text("No claim evidence yet").font(.headline)
+                    Text("No matching claims").font(.headline)
                     Text("Provider output appears here as evidence before verification or claim acceptance.")
                         .foregroundStyle(.secondary).multilineTextAlignment(.center)
                 }
