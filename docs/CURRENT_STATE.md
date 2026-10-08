@@ -2,7 +2,7 @@
 
 This is the concise public status source for the repository. It separates package version, merged source state, exact-head engineering evidence, release-security authorization, and independent work.
 
-Snapshot date: **2026-09-15**. Reconciled source HEAD: `1e85bac5d17cde342a1ae55e6ee3da5fa681ff61`.
+Snapshot date: **2026-10-08**. Reconciled source HEAD: `80d3b82` (media R2C attestation). Governed execution evidence for this snapshot was harvested on the operator Mac under CAPT Node (see §3).
 
 ## Truth classes
 
@@ -26,6 +26,8 @@ The pinned source contains the August convergence and subsequent merged work:
 - **PR #156** — SOMA M0 contract closure, merge `4f1c0a1`: trajectory/reducer contracts, compression receipts, and local benchmark/reconstruction primitives; this does not establish live runtime integration or competition readiness.
 - **`d33a5e4`** — native model-answer rendering separated from the execution receipt, with retained disclosure/persistence of execution details.
 - **`1e85bac`** — expands AUTO routing signals to include list/match and other actionable requests; the four-word minimum and operator-selected engine/mode still apply. This is routing, not proof of a Search/Deep Research product surface.
+- **PR #169** — durable Model Council + per-boundary provider dispatch accounting, merge `f5aef2f` (feature `abfd658`): durable council receipts, provider request/cost accounting at the dispatch boundary, and reconciliation classification (`request_started`/`response_started` → `retry_forbidden`; never blind-replay lost or ambiguous runs).
+- **Media R2A→R2C** — governed media execution: `1da2fa5` R2A governed execution + durable video jobs; `d2ee83d` Gemini PDF/video inline + allowlisted image-URL outputs; `bfcfd4b` Gemini Files upload with separate model-reference approval; `80d3b82` R2C installed/offline two-approval acceptance attestation.
 
 Merged runtime capabilities therefore include:
 
@@ -48,6 +50,8 @@ Historical facts remain historical:
 - ToolBroker PR #126 exact head `b21ed6e7ff3996d48c756e342b278b69af0d666f`: hosted M0-A and Release Security both PASS; its squash merge `bcfdff9…` is tree-identical but is a different commit SHA, so the PR-head security receipt is not relabeled as a merge-SHA receipt.
 
 Historical August 27 audit: `3aee737…` had a mixed M0-A push run (`32958741310`): Python 3.12, contract drift, and TypeScript parity passed; Python 3.10 failed during the Docker availability probe. A retry was recorded by that audit; no retry outcome or current-HEAD CI result is established here. This is historical evidence, not status for `1e85bac…`.
+
+Governed local evidence at `80d3b82` (CAPT Node operations on the operator Mac, 2026-10-08): full `tests/capt_runtime` suite **1435 passed / 13 skipped / 12 deselected**; UPG probe suites **33/33** unit tests plus `scripts/upgrade_probe_suite.py` **exit 0** (810 KB `CAPTUpgradeProbeEvidence`; all cache/semantic-equivalence claim boundaries remain `false`). This is exact-head engineering evidence, not a release-security receipt.
 
 A descendant of an authorized SHA is not automatically release-security authorized. Final public artifacts must be rebuilt and re-hashed from the exact source commit selected for release, with signing/notarization/distribution evidence handled separately.
 

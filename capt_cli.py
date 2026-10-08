@@ -52,7 +52,7 @@ from importlib.metadata import PackageNotFoundError, version as distribution_ver
 from typing import Any, Dict, List, Optional
 
 # Make the package importable when run as a script.
-_SRC = Path(__file__).resolve().parent.parent
+_SRC = Path(__file__).resolve().parent
 sys.path.insert(0, str(_SRC))
 
 from capt_solo.api import (  # noqa: E402
