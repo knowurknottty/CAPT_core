@@ -358,8 +358,10 @@ def test_composition_provider_host_wires_model_tool_bridge(tmp_path: Path) -> No
             model="tool-model",
             base_url="http://127.0.0.1:9/v1",
             tool_bridge=sentinel_bridge,
+            reasoning_effort="high",
         )
         assert host._driver.tool_bridge is sentinel_bridge
+        assert host._driver.reasoning_effort == "high"
     finally:
         runtime.close()
 

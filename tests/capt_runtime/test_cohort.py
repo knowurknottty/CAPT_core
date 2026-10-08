@@ -176,5 +176,51 @@ def test_text_cohort_preserves_and_compiles_strict_v2_charter_policy():
     )
     assert "CAPT deep Vessel Charter contract v2:" in text
     assert "at least 132 surviving candidate charters" in text
-    assert "CAPT_CANDIDATE CNNNN" in text
+    assert "CAPT_CANDIDATE C0001" in text
     assert "CAPT_VESSEL deepseek0731-vNNNN" in text
+
+
+def test_v2_charter_accepts_cn_candidate_id_alias_with_lint():
+    from capt_runtime.vessel_charter import validate_vessel_text
+
+    spec = {
+        "cohortId": "alias",
+        "vesselsPerCohort": 1,
+        "configurationId": "high",
+        "vesselCharterPolicy": {
+            "schemaVersion": "2.0.0",
+            "candidateMultiplier": 2,
+            "candidateMaxWords": 48,
+        },
+    }
+    text = """CAPT_CANDIDATE CN0001 | AXIS=graph-neighborhood | MECH=widen cosine neighborhood to forty peers | FALSIFIER=score unchanged across noisy subsets | DELTA=test graph smoothing
+CAPT_CANDIDATE CN0002 | AXIS=merge-threshold | MECH=lower agglomerative branch threshold to point ten | FALSIFIER=cluster fragmentation rises on short text | DELTA=test finer partitioning
+CAPT_CHARTER_AUDIT | candidates=2 | selected=1 | expansion_rounds=1
+CAPT_VESSEL alias-v0001 | SOURCE=CN0001 | WHO=w | WHAT=x | WHY=y | HOW=h | AGAINST=a | BIAS=b | EVIDENCE=e | INTERACTIONS=i | FALSIFIER=f | DELTA=d
+"""
+    result = validate_vessel_text(text, spec)
+    assert result["valid"] is True
+    assert result["observedCandidateCount"] == 2
+    assert result["selectedSources"]["alias-v0001"] == "C0001"
+    assert result["formatLintCount"] >= 2
+
+
+def test_v2_contract_uses_unambiguous_canonical_candidate_ids():
+    from capt_runtime.cohort_contract import compile_cohort_objective
+
+    spec = {
+        "cohortId": "canonical",
+        "vesselsPerCohort": 2,
+        "configurationId": "high",
+        "vesselCharterPolicy": {"schemaVersion": "2.0.0"},
+    }
+    out = compile_cohort_objective(
+        "Analyze.",
+        provider="openrouter",
+        model="test/model",
+        cohort_spec=spec,
+    )
+    assert "CAPT_CANDIDATE C0001" in out
+    assert "SOURCE=C0001" in out
+    assert "CNNNN" not in out
+    assert "physical_candidate_row_count" in out

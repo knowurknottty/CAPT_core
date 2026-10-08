@@ -11,7 +11,7 @@ _VESSEL_ROW = re.compile(
     r"^CAPT_VESSEL\s+(?P<id>[A-Za-z0-9._:-]+-v\d{4})\s*\|\s*(?P<body>.+)$"
 )
 _CANDIDATE_ROW = re.compile(
-    r"^CAPT_CANDIDATE\s+(?P<id>C\d{4})\s*\|\s*(?P<body>.+)$"
+    r"^CAPT_CANDIDATE\s+(?P<id>C(?:N)?\d{4})\s*\|\s*(?P<body>.+)$"
 )
 _AUDIT = re.compile(r"^CAPT_CHARTER_AUDIT\s*\|\s*(?P<body>.+)$")
 _INCOMPLETE = re.compile(r"^CAPT_COHORT_INCOMPLETE(?:\s|$)", re.I)
@@ -308,13 +308,19 @@ def _validate_v2(
             if match is None:
                 malformed.append(stripped[:240])
                 continue
-            candidate_id = match.group("id")
+            raw_candidate_id = match.group("id").upper()
+            candidate_id = raw_candidate_id
+            id_lint: list[str] = []
+            if raw_candidate_id.startswith("CN"):
+                candidate_id = "C" + raw_candidate_id[2:]
+                id_lint.append("candidate_id_alias:CN->C")
             if candidate_id in candidates:
                 candidate_duplicates.append(candidate_id)
                 continue
             fields, row_lint = _parse_fields_with_lint(
                 match.group("body"), known_fields=candidate_required
             )
+            row_lint = id_lint + row_lint
             candidates[candidate_id] = fields
             if row_lint:
                 format_lint[candidate_id] = row_lint
@@ -374,6 +380,11 @@ def _validate_v2(
     seen_sources: set[str] = set()
     for vessel_id, fields in vessels.items():
         source = fields.get("SOURCE", "").strip().upper()
+        if re.fullmatch(r"CN\d{4}", source):
+            source = "C" + source[2:]
+            format_lint.setdefault(vessel_id, []).append(
+                "source_candidate_id_alias:CN->C"
+            )
         if not source or source not in candidates:
             missing_sources.append(vessel_id)
             continue

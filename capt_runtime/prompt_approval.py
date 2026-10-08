@@ -157,9 +157,17 @@ def request_model_prompt_approval(
         },
         "riskClassification": authority_profile["riskClassification"],
         "policyReason": (
-            "Approve one concrete %s/%s model execution with exact tool authority %s "
-            "bound to exact dispatch text."
-            % (provider or "hermes", model or "hermes", ",".join(authority_profile["toolOperations"]))
+            (
+                "Approve one concrete %s/%s image-provider execution bound to exact "
+                "dispatch text; runtime model-tool phase is disabled for image output."
+                % (provider or "hermes", model or "hermes")
+            )
+            if (cohort_spec or {}).get("outputModality") == "image"
+            else (
+                "Approve one concrete %s/%s model execution with exact tool authority %s "
+                "bound to exact dispatch text."
+                % (provider or "hermes", model or "hermes", ",".join(authority_profile["toolOperations"]))
+            )
         ),
         "requestedBy": {"actorId": "exec-1", "kind": "execution_plane"},
         "expiresAt": expires_at,

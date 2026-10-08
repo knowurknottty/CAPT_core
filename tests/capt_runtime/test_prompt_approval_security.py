@@ -160,6 +160,8 @@ def test_planner_persists_one_use_execution_binding_and_exact_dispatch_digest(tm
         assert binding["targetRoot"] == str(Path("/tmp").resolve())
         assert binding["executable"] == "/opt/hermes/bin/hermes"
         assert binding["dispatchPromptDigest"] == result["dispatchPromptDigest"]
+        assert binding["contextPackDigest"].startswith("sha256:")
+        assert binding["continuationContext"] == []
         assert result["dispatchPromptDigest"].startswith("sha256:")
     finally:
         store.close()
