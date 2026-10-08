@@ -18,6 +18,8 @@ from capt_ui.operator.secrets import resolve as resolve_secret
 
 _ALLOWED_CAPS = {
     "image_input": {"vision"},
+    "document_input": {"document", "pdf", "document_understanding"},
+    "video_input": {"video", "video_understanding"},
     "image_generate": {"image", "image_generation"},
     "audio_generate": {"audio", "audio_generation", "tts"},
     "audio_transcribe": {"audio", "transcription"},

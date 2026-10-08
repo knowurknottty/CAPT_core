@@ -10,6 +10,15 @@ The model is an inference component. Tools are effect adapters. **RuntimeService
 
 ---
 
+## Governed media R2B — 2026-10-08
+
+[Media R2B](docs/GOVERNED_MULTIMODAL_R2B_INLINE_AND_URL_2026-10-08.md) extends the approved
+Media I/O workbench with typed Gemini inline PDF and MP4 understanding
+(up to the existing 12 MiB total ceiling), plus allowlisted image-generation
+URL downloads. Source and offline tests are green. This does **not** enable
+remote routes or certify billable providers, large-file Files API uploads,
+or provider file-ID lifecycles. Unknown modality or endpoints fail closed.
+
 ## Native file/media intake — 2026-10-08
 
 Native Swift Chat now supports private **local staging** of user-selected

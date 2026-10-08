@@ -62,7 +62,7 @@ struct MediaWorkbenchView: View {
                     }
                     .font(.caption)
                     if !route.supports(store.activeChatAttachments) {
-                        Text("Selected route cannot consume this attachment set. Input image/audio routes require matching files; generation routes require no input files in this release.")
+                        Text("Selected route cannot consume this attachment set. Input routes require compatible staged files and the approved inline size limit; generation routes require no input files.")
                             .font(.caption).foregroundStyle(.orange)
                     }
                 }

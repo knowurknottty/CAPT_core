@@ -37,6 +37,12 @@ public struct CAPTMediaRouteDescriptor: Identifiable, Equatable, Sendable {
         case "image_input":
             return !attachments.isEmpty && attachments.count <= 8 &&
                 attachments.allSatisfy { $0.kind == .image }
+        case "document_input":
+            return !attachments.isEmpty && attachments.count <= 8 &&
+                attachments.allSatisfy { $0.mediaType == "application/pdf" }
+        case "video_input":
+            return !attachments.isEmpty && attachments.count <= 8 &&
+                attachments.allSatisfy { $0.mediaType == "video/mp4" }
         case "audio_transcribe":
             return attachments.count == 1 && attachments.first?.kind == .audio
         case "image_generate", "audio_generate", "video_generate":

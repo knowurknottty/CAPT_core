@@ -30,7 +30,7 @@ MAX_INLINE_BYTES = 12 * 1024 * 1024
 MAX_PROMPT_LENGTH = 32_768
 _ALLOWED_OUTPUTS = ("image/png", "image/jpeg", "image/webp", "audio/mpeg", "audio/wav", "video/mp4")
 _SUPPORTED_OPERATIONS = frozenset({
-    "image_input", "image_generate", "audio_generate",
+    "image_input", "document_input", "video_input", "image_generate", "audio_generate",
     "audio_transcribe", "video_generate",
 })
 _JOB_RE = re.compile(r"^dr-media-[A-Za-z0-9-]{8,96}$")
@@ -75,9 +75,9 @@ def _verified_files(
 ) -> list[dict[str, Any]]:
     if not isinstance(entries, list) or len(entries) > MAX_INPUT_FILES:
         raise AuthorityViolation("MEDIA_INTAKE_COUNT_INVALID")
-    if operation in ("image_input", "audio_transcribe") and not entries:
+    if operation in ("image_input", "document_input", "video_input", "audio_transcribe") and not entries:
         raise AuthorityViolation("MEDIA_INPUT_REQUIRED")
-    if operation not in ("image_input", "audio_transcribe") and entries:
+    if operation not in ("image_input", "document_input", "video_input", "audio_transcribe") and entries:
         raise AuthorityViolation("MEDIA_INPUT_NOT_IMPLEMENTED_FOR_OPERATION")
     root = state_root / "native-media-intake" / "v1"
     result = []
@@ -93,6 +93,10 @@ def _verified_files(
         if digest != item.get("sha256") or size != item.get("sizeBytes"):
             raise AuthorityViolation("MEDIA_INTAKE_DIGEST_OR_SIZE_MISMATCH")
         mime = str(item.get("mediaType") or "")
+        if operation == "document_input" and mime != "application/pdf":
+            raise AuthorityViolation("MEDIA_MODEL_DOCUMENT_TYPE_UNSUPPORTED")
+        if operation == "video_input" and mime != "video/mp4":
+            raise AuthorityViolation("MEDIA_MODEL_VIDEO_TYPE_UNSUPPORTED")
         if operation == "image_input" and mime not in ("image/jpeg", "image/png", "image/webp", "image/gif"):
             raise AuthorityViolation("MEDIA_MODEL_IMAGE_TYPE_UNSUPPORTED")
         if operation == "audio_transcribe" and mime not in (
@@ -105,6 +109,8 @@ def _verified_files(
         with path.open("rb") as stream:
             magic = stream.read(24)
         signatures = {
+            "application/pdf": magic.startswith(b"%PDF-"),
+            "video/mp4": len(magic) >= 12 and magic[4:8] == b"ftyp",
             "image/png": magic.startswith(b"\x89PNG\r\n\x1a\n"),
             "image/jpeg": magic.startswith(b"\xff\xd8\xff"),
             "image/webp": magic.startswith(b"RIFF") and magic[8:12] == b"WEBP",
@@ -142,19 +148,30 @@ class MediaRoute:
             raise AuthorityViolation("MEDIA_ROUTE_PRICE_CEILING_INVALID")
         required_wire = {
             "image_input": ("chat_completions", "json_text"),
+            "document_input": ("gemini_interactions", "json_text"),
+            "video_input": ("gemini_interactions", "json_text"),
             "image_generate": ("json", "json_base64"),
             "audio_generate": ("json", "raw_binary"),
             "audio_transcribe": ("multipart", "json_text"),
             "video_generate": ("async_job", "job_receipt"),
         }
         expected = required_wire.get(self.contract.operation)
-        mime_family = {'image_input': 'image/', 'image_generate': 'image/', 'audio_generate': 'audio/', 'audio_transcribe': 'audio/', 'video_generate': 'video/'}.get(self.contract.operation)
+        mime_family = {'image_input': 'image/', 'document_input': 'application/',
+                       'video_input': 'video/', 'image_generate': 'image/', 'audio_generate': 'audio/', 'audio_transcribe': 'audio/', 'video_generate': 'video/'}.get(self.contract.operation)
         if mime_family and not all(m.startswith(mime_family) for m in self.contract.media_types):
             raise AuthorityViolation('MEDIA_ROUTE_MIME_FAMILY_MISMATCH')
         if expected is not None and (
             self.contract.transport, self.contract.response_type
         ) != expected:
-            raise AuthorityViolation("MEDIA_ROUTE_WIRE_FORMAT_NOT_IMPLEMENTED")
+            if not (self.contract.operation == "image_generate" and
+                    self.contract.transport == "json" and
+                    self.contract.response_type == "json_url"):
+                raise AuthorityViolation("MEDIA_ROUTE_WIRE_FORMAT_NOT_IMPLEMENTED")
+        if self.contract.operation == "image_generate" and (
+            self.contract.response_type == "json_url" and
+            not self.contract.download_origins
+        ):
+            raise AuthorityViolation("MEDIA_IMAGE_URL_REQUIRES_DOWNLOAD_ALLOWLIST")
         if self.auth_style not in ("bearer", "x-goog-api-key", "none"):
             raise AuthorityViolation("MEDIA_AUTH_STYLE_INVALID")
 
@@ -388,6 +405,42 @@ def _result_bytes(operation: str, response: bytes, response_type: str) -> tuple[
         else:
             raise AuthorityViolation("MEDIA_IMAGE_OUTPUT_SIGNATURE_INVALID")
         return data, mime, None
+    if operation in ("document_input", "video_input"):
+        # Gemini Interactions REST output: never treat a queued interaction
+        # as completed media understanding. One paid dispatch has already
+        # crossed the external boundary and may require manual reconciliation.
+        status = obj.get("status")
+        if status not in (None, "completed"):
+            raise AuthorityViolation("MEDIA_GEMINI_INTERACTION_NOT_COMPLETED")
+        result = obj.get("output_text")
+        if not isinstance(result, str) or not result.strip():
+            outputs = obj.get("outputs")
+            if isinstance(outputs, list):
+                result = "".join(
+                    x["text"] for x in outputs[:32]
+                    if isinstance(x, dict) and x.get("type") == "text"
+                    and isinstance(x.get("text"), str)
+                )
+        if not isinstance(result, str) or not result.strip():
+            # REST interaction has step outputs; only examine model text
+            # blocks (never echoed user inputs or tool call payloads).
+            steps = obj.get("steps")
+            chunks = []
+            if isinstance(steps, list):
+                for step in steps[-16:]:
+                    if not isinstance(step, dict) or step.get("type") != "model":
+                        continue
+                    for part in (step.get("content") or [])[:32]:
+                        if isinstance(part, dict) and part.get("type") == "text":
+                            value = part.get("text")
+                            if isinstance(value, str):
+                                chunks.append(value)
+            result = "".join(chunks)
+        if not result or not result.strip():
+            raise AuthorityViolation("MEDIA_GEMINI_TEXT_MISSING")
+        if len(result.encode("utf-8")) > 2 * 1024 * 1024:
+            raise AuthorityViolation("MEDIA_GEMINI_TEXT_OVER_LIMIT")
+        return result.encode("utf-8"), "text/plain", None
     if operation == "image_input":
         choices = obj.get("choices")
         text = choices[0].get("message", {}).get("content") if isinstance(choices, list) and choices and isinstance(choices[0], dict) else None
@@ -402,12 +455,75 @@ def _result_bytes(operation: str, response: bytes, response_type: str) -> tuple[
     raise AuthorityViolation("MEDIA_OPERATION_UNIMPLEMENTED")
 
 
+def _approved_image_url(raw: bytes, route: MediaRoute) -> str:
+    """Accept an image URL only from an explicit configured asset origin."""
+    try:
+        document = json.loads(raw)
+        files = document.get("data") if isinstance(document, dict) else None
+        address = files[0].get("url") if (
+            isinstance(files, list) and files and isinstance(files[0], dict)
+        ) else None
+    except (ValueError, UnicodeDecodeError, AttributeError, TypeError) as exc:
+        raise AuthorityViolation("MEDIA_IMAGE_URL_RESPONSE_INVALID") from exc
+    if not isinstance(address, str) or not route.contract.permits_download(address):
+        raise AuthorityViolation("MEDIA_IMAGE_URL_ORIGIN_REFUSED")
+    return address
+
+
+def _download_approved_image(
+    raw: bytes, route: MediaRoute, transport: MediaHTTPTransport,
+    credential: str, ceiling: int
+) -> tuple[bytes, str]:
+    """No redirects, no arbitrary URL, no cross-origin bearer token."""
+    address = _approved_image_url(raw, route)
+    candidate = urlsplit(address)
+    asset_origin = candidate.scheme + "://" + candidate.netloc
+    headers = (
+        _authorization(route, credential) if asset_origin == route.contract.origin
+        else {}
+    )
+    bytes_, content_type = transport.send(
+        "GET", address, None, headers, min(ceiling, 64 * 1024 * 1024)
+    )
+    declared = content_type.split(";", 1)[0].strip().lower()
+    if bytes_.startswith(b"\x89PNG\r\n\x1a\n"):
+        kind = "image/png"
+    elif bytes_.startswith(b"\xff\xd8\xff"):
+        kind = "image/jpeg"
+    elif bytes_.startswith(b"RIFF") and bytes_[8:12] == b"WEBP":
+        kind = "image/webp"
+    else:
+        raise AuthorityViolation("MEDIA_IMAGE_DOWNLOAD_MAGIC_INVALID")
+    if declared not in (kind, "application/octet-stream"):
+        raise AuthorityViolation("MEDIA_IMAGE_DOWNLOAD_MIME_INVALID")
+    if kind not in route.contract.media_types:
+        raise AuthorityViolation("MEDIA_PROVIDER_OUTPUT_MIME_NOT_ADVERTISED")
+    return bytes_, kind
+
+
 def _build_request(
     binding: dict[str, Any], route: MediaRoute
 ) -> tuple[bytes, str]:
     operation = binding["operation"]
     prompt = binding["prompt"]
     model = binding["model"]
+    if operation in ("document_input", "video_input"):
+        # Google Gemini Interactions API uses typed inline media blocks.
+        # This route is intentionally limited to 12 MiB of governed bytes.
+        # Larger media MUST use a separately approved file-upload workflow.
+        content = [{"type": "text", "text": prompt}]
+        for item in binding["files"]:
+            data = Path(item["stagedPath"]).read_bytes()
+            if len(data) != item["sizeBytes"] or (
+                "sha256:" + hashlib.sha256(data).hexdigest()
+            ) != item["sha256"]:
+                raise AuthorityViolation("MEDIA_INPUT_CHANGED_AFTER_ADMISSION")
+            content.append({
+                "type": "document" if operation == "document_input" else "video",
+                "data": base64.b64encode(data).decode("ascii"),
+                "mime_type": item["mediaType"],
+            })
+        return _canonical({"model": model, "input": content}), "application/json"
     if operation == "image_input":
         content = [{"type": "text", "text": prompt}]
         for item in binding["files"]:
@@ -421,8 +537,12 @@ def _build_request(
         return _canonical({"model": model, "messages": [
             {"role": "user", "content": content}]}), "application/json"
     if operation == "image_generate":
-        return _canonical({"model": model, "prompt": prompt,
-                           "response_format": "b64_json", "n": 1}), "application/json"
+        return _canonical({
+            "model": model, "prompt": prompt,
+            "response_format": "url" if route.contract.response_type == "json_url"
+                               else "b64_json",
+            "n": 1
+        }), "application/json"
     if operation == "audio_generate":
         return _canonical({"model": model, "input": prompt,
                            "voice": "alloy", "response_format": "mp3"}), "application/json"
@@ -522,7 +642,7 @@ def submit_approved_media(
         route.contract.submit_path != binding["endpointPath"]
     ):
         raise AuthorityViolation("MEDIA_ROUTE_CHANGED_SINCE_APPROVAL")
-    if not binding.get("files") and binding["operation"] in ("image_input", "audio_transcribe"):
+    if not binding.get("files") and binding["operation"] in ("image_input", "document_input", "video_input", "audio_transcribe"):
         raise AuthorityViolation("MEDIA_SOURCE_MISSING")
     # TOCTOU: recheck every source file/digest before consuming one-use approval.
     _verified_files(binding["files"], state_root=Path(service.store.path).parent,
@@ -566,9 +686,16 @@ def submit_approved_media(
         raw, mime = transport.send("POST",
             route.contract.origin + route.contract.submit_path,
             body, headers, 64 * 1024 * 1024)
-        content, media_type, operation_id = _result_bytes(
-            binding["operation"], raw, route.contract.response_type
-        )
+        if (binding["operation"] == "image_generate" and
+                route.contract.response_type == "json_url"):
+            content, media_type = _download_approved_image(
+                raw, route, transport, token, binding["maxOutputBytes"]
+            )
+            operation_id = None
+        else:
+            content, media_type, operation_id = _result_bytes(
+                binding["operation"], raw, route.contract.response_type
+            )
         if media_type not in (None, "text/plain") and media_type not in route.contract.media_types:
             raise AuthorityViolation("MEDIA_PROVIDER_OUTPUT_MIME_NOT_ADVERTISED")
         if operation_id:

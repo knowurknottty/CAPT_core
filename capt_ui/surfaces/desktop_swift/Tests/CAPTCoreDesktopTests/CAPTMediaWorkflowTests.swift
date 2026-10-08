@@ -20,6 +20,25 @@ final class CAPTMediaWorkflowTests: XCTestCase {
         )
     }
 
+    func testGeminiInlineDocumentAndVideoNeedMatchingAttachment() throws {
+        let pdf = try route("document_input")
+        let video = try route("video_input")
+        let file = CAPTNativeAttachment(
+            id: UUID(), originalName: "readme.pdf", stagedPath: "/tmp/pdf",
+            sizeBytes: 100, sha256: "sha256:" + String(repeating: "0", count: 64),
+            mediaType: "application/pdf", kind: .document, admittedAt: Date())
+        let clip = CAPTNativeAttachment(
+            id: UUID(), originalName: "clip.mp4", stagedPath: "/tmp/video",
+            sizeBytes: 100, sha256: "sha256:" + String(repeating: "0", count: 64),
+            mediaType: "video/mp4", kind: .video, admittedAt: Date())
+        XCTAssertTrue(pdf.supports([file]))
+        XCTAssertTrue(video.supports([clip]))
+        XCTAssertFalse(pdf.supports([clip]))
+        XCTAssertFalse(video.supports([file]))
+        XCTAssertFalse(pdf.supports([]))
+        XCTAssertFalse(video.supports([clip, file]))
+    }
+
     func testCapabilitiesRequireExactFileModality() throws {
         let vision = try route("image_input")
         let generate = try route("image_generate")
