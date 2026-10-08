@@ -224,3 +224,14 @@ def test_v2_contract_uses_unambiguous_canonical_candidate_ids():
     assert "SOURCE=C0001" in out
     assert "CNNNN" not in out
     assert "physical_candidate_row_count" in out
+
+
+
+def test_opaque_configuration_id_never_selects_reasoning_effort():
+    from capt_runtime.reasoning import legacy_cohort_configuration_reasoning_effort
+    assert legacy_cohort_configuration_reasoning_effort("ouro-repair-v1") == ""
+    assert legacy_cohort_configuration_reasoning_effort("deep-charter-r2") == ""
+    assert legacy_cohort_configuration_reasoning_effort("default") == ""
+    assert legacy_cohort_configuration_reasoning_effort("high") == "high"
+    assert legacy_cohort_configuration_reasoning_effort("max") == "xhigh"
+    assert legacy_cohort_configuration_reasoning_effort(None) == ""

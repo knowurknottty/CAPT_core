@@ -28,7 +28,14 @@ DESCRIPTOR = {
 
 
 class ProviderDriverFailure(RuntimeError):
-    pass
+    """Typed, sanitized diagnostic provenance kept separately from raw errors."""
+
+    def __init__(self, message: str, *, diagnostic_code: str = "PROVIDER_UNCLASSIFIED_FAILURE",
+                 diagnostic_phase: str = "unknown", http_status: int | None = None) -> None:
+        super().__init__(message)
+        self.diagnostic_code = diagnostic_code
+        self.diagnostic_phase = diagnostic_phase
+        self.http_status = http_status
 
 
 class DispatchBoundaryError(ProviderDriverFailure):
@@ -37,6 +44,12 @@ class DispatchBoundaryError(ProviderDriverFailure):
     Dispatch is aborted (fail closed): the run must not cross an external
     boundary its durable record does not show.
     """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(
+            message, diagnostic_code="PROVIDER_BOUNDARY_RECORDING_FAILURE",
+            diagnostic_phase="unknown",
+        )
 
 
 class ProviderDriver:
@@ -317,11 +330,22 @@ class ProviderDriver:
         *,
         reasoning_policy: str = "configured",
     ) -> dict[str, Any]:
-        # P0.3: durable record precedes the irreversible external request.
+        if reasoning_policy not in {"configured", "answer_only"}:
+            raise ProviderDriverFailure("unsupported provider reasoning policy")
+        # Physical request slots are reserved BEFORE each provider HTTP call,
+        # including subsequent tool rounds (not merely DriverRun admission).
+        estimate = max(1, len(json.dumps(body)) // 4)
+        try:
+            self.governor.reserve_provider_request(estimate)
+        except BudgetCeilingExceeded as exc:
+            raise ProviderDriverFailure(
+                "physical provider request budget exceeded",
+                diagnostic_code="PROVIDER_BUDGET_EXCEEDED", diagnostic_phase="pre_dispatch",
+            ) from exc
+        # The authoritative EventStore boundary is written before external I/O
+        # and enforces the per-DriverRun attempt ceiling.
         self._note_dispatch_boundary(rid, "request_started")
         try:
-            if reasoning_policy not in {"configured", "answer_only"}:
-                raise ProviderDriverFailure("unsupported provider reasoning policy")
             outbound = dict(body)
             if self.provider_id == "openrouter" and url.endswith("/chat/completions"):
                 if reasoning_policy == "answer_only":
@@ -341,6 +365,21 @@ class ProviderDriver:
                 completed_read = True
                 data = json.loads(raw_response.decode())
                 self._remaining_request_timeout(rid)
+                if not isinstance(data, dict):
+                    raise ProviderDriverFailure("provider returned non-object JSON")
+                usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+                p_token = usage.get("prompt_tokens", data.get("prompt_eval_count"))
+                c_token = usage.get("completion_tokens", data.get("eval_count"))
+                p_count = int(p_token) if isinstance(p_token, (int, float)) and p_token >= 0 else estimate
+                c_count = int(c_token) if isinstance(c_token, (int, float)) and c_token >= 0 else 0
+                raw_cost = usage.get("cost", usage.get("cost_usd"))
+                known_cost = isinstance(raw_cost, (int, float)) and raw_cost >= 0
+                self.governor.record_usage(
+                    prompt_tokens=p_count, completion_tokens=c_count,
+                    cost_usd=float(raw_cost) if known_cost else 0.0,
+                    request_already_counted=True,
+                    cost_known=known_cost or self.provider_id == "ollama",
+                )
                 self._note_dispatch_boundary(rid, "response_completed")
             finally:
                 if completed_read:
@@ -353,23 +392,19 @@ class ProviderDriver:
         except urllib.error.HTTPError as exc:
             with self._lock:
                 self.runs[rid]["state"] = "failed"
-            try:
-                raw_detail = exc.read(4096).decode("utf-8", errors="replace")
-            except Exception:
-                raw_detail = ""
-            detail = " ".join(raw_detail.split())[:1000]
-            if self.api_key and detail:
-                detail = detail.replace(self.api_key, "[REDACTED]")
             message = "provider HTTP %s" % exc.code
-            if detail:
-                message += ": " + detail
-            raise ProviderDriverFailure(message) from exc
+            # Never propagate upstream response bodies into receipts/logs.
+            raise ProviderDriverFailure(
+                message, diagnostic_code="PROVIDER_HTTP_ERROR",
+                diagnostic_phase="response_headers", http_status=int(exc.code),
+            ) from exc
         except TimeoutError as exc:
             with self._lock:
                 self.runs[rid]["state"] = "failed"
                 self.runs[rid]["dispatchBoundary"] = "request_timeout"
             raise ProviderDriverFailure(
-                "provider DriverRun wall-clock budget exhausted"
+                "provider DriverRun wall-clock budget exhausted",
+                diagnostic_code="PROVIDER_TIMEOUT", diagnostic_phase="response_body",
             ) from exc
         except ProviderDriverFailure:
             with self._lock:
@@ -378,8 +413,15 @@ class ProviderDriver:
         except Exception as exc:
             with self._lock:
                 self.runs[rid]["state"] = "failed"
+            if isinstance(exc, urllib.error.URLError):
+                code, phase = "PROVIDER_NETWORK_ERROR", "response_headers"
+            elif isinstance(exc, (ValueError, UnicodeError, json.JSONDecodeError)):
+                code, phase = "PROVIDER_RESPONSE_INVALID", "response_body"
+            else:
+                code, phase = "PROVIDER_UNCLASSIFIED_FAILURE", "unknown"
             raise ProviderDriverFailure(
-                "provider unavailable: %s" % type(exc).__name__
+                "provider interaction failed",
+                diagnostic_code=code, diagnostic_phase=phase,
             ) from exc
 
     @staticmethod
@@ -740,11 +782,7 @@ class ProviderDriver:
         )
         raw_cost = usage.get("cost", usage.get("cost_usd", 0.0))
         cost_usd = float(raw_cost) if isinstance(raw_cost, (int, float)) else 0.0
-        resource_receipt = self.governor.record_usage(
-            prompt_tokens=max(1, prompt_tokens),
-            completion_tokens=max(0, completion_tokens),
-            cost_usd=cost_usd,
-        )
+        resource_receipt = self.governor.snapshot()
 
         response_digest = "sha256:" + hashlib.sha256(image_bytes).hexdigest()
         extension = "jpg" if self.output_format == "jpeg" else self.output_format
@@ -898,9 +936,7 @@ class ProviderDriver:
             prompt_tokens = estimated_prompt_tokens
         if completion_tokens <= 0:
             completion_tokens = max(1, len(text) // 4)
-        resource_receipt = self.governor.record_usage(
-            prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, cost_usd=cost_usd
-        )
+        resource_receipt = self.governor.snapshot()
         response_digest = "sha256:" + hashlib.sha256(text.encode()).hexdigest()
         ep_class = endpoint_class(self.base_url)
         artifact = (

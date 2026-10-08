@@ -82,6 +82,7 @@ class DriverRunAggregate:
             "budgetConsumed": {"artifacts": 0, "observations": 0, "seconds": 0},
             "terminalDisposition": None,
             "dispatchBoundary": "not_dispatched",
+            "providerHttpRequestAttempts": 0,
         }
 
     @staticmethod
@@ -118,6 +119,7 @@ class DriverRunAggregate:
     # request after a completed response. "budget_rejected" is a terminal
     # pre-dispatch marker. Recording "unknown" is refused: it is the
     # classifier's fallback, never progress evidence.
+    MAX_PROVIDER_HTTP_REQUESTS_PER_RUN = 24
     _DISPATCH_BOUNDARY_ORDER = {
         "not_dispatched": 0,
         "prepared": 1,
@@ -163,6 +165,16 @@ class DriverRunAggregate:
             raise IllegalTransition(
                 "driver run %s" % state["driverRunId"], str(current), str(boundary))
         nxt = dict(state)
+        if boundary == "request_started":
+            # Each new physical HTTP attempt is recorded BEFORE external I/O.
+            # Repeat of the current boundary is idempotent (handled above).
+            used = int(state.get("providerHttpRequestAttempts", 0))
+            if used >= DriverRunAggregate.MAX_PROVIDER_HTTP_REQUESTS_PER_RUN:
+                raise IllegalTransition(
+                    "PROVIDER_HTTP_REQUEST_ATTEMPT_CAP_EXCEEDED",
+                    str(used), str(used + 1),
+                )
+            nxt["providerHttpRequestAttempts"] = used + 1
         nxt["dispatchBoundary"] = boundary
         nxt["dispatchBoundaryUpdatedAt"] = recorded_at
         return nxt

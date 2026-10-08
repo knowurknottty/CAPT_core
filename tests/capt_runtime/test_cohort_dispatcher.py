@@ -97,7 +97,8 @@ def test_20_by_111_means_20_provider_calls_not_2220():
     assert len(set(calls)) == 20
     assert peak == 6
     assert result.governor_evidence["peakProviderCalls"] == 6
-    assert result.as_evidence()["providerCallInvariant"] == "one_call_per_cohort"
+    assert result.as_evidence()["providerCallInvariant"] == "one_governed_execution_per_cohort"
+    assert result.as_evidence()["physicalHttpCallsCountedSeparately"] is True
     assert all(
         record.vessels_per_cohort == 111
         for record in result.records

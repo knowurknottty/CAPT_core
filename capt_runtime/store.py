@@ -86,6 +86,19 @@ CREATE TABLE IF NOT EXISTS security_rejections (
     details_json    TEXT NOT NULL
 );
 
+-- These encrypted local diagnostic projections are NOT chain events.
+-- They never establish a verified model completion or allow replay.
+CREATE TABLE IF NOT EXISTS provider_failure_diagnostics (
+    driver_run_id TEXT PRIMARY KEY,
+    record_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS council_receipts (
+    council_id TEXT PRIMARY KEY,
+    submission_digest TEXT NOT NULL,
+    command_id TEXT NOT NULL,
+    receipt_json TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_events_stream ON events (stream_id, stream_version);
 CREATE INDEX IF NOT EXISTS idx_outbox_pending ON outbox (status, global_sequence);
 CREATE INDEX IF NOT EXISTS idx_security_rejections ON security_rejections (rejection_kind, timestamp);
@@ -399,6 +412,122 @@ class EventStore(object):
                 "UPDATE idempotency SET result_json = ? WHERE idempotency_key = ?",
                 (self._seal_json(result, table="idempotency", column="result_json", key=idempotency_key), idempotency_key),
             )
+
+    # -- encrypted, explicitly non-chain diagnostic projections ------------
+    def store_provider_failure_diagnostic(self, driver_run_id: str, record: Dict[str, Any]) -> None:
+        """One immutable, non-secret failure record per DriverRun."""
+        if not isinstance(driver_run_id, str) or not driver_run_id.startswith("dr-"):
+            raise ValueError("INVALID_PROVIDER_DIAGNOSTIC_RUN_ID")
+        with self.transaction() as conn:
+            prior = conn.execute(
+                "SELECT record_json FROM provider_failure_diagnostics WHERE driver_run_id=?",
+                (driver_run_id,),
+            ).fetchone()
+            if prior:
+                existing = self._open_json(prior["record_json"], table="provider_failure_diagnostics",
+                                           column="record_json", key=driver_run_id)
+                if existing != record:
+                    raise IdempotencyConflict("PROVIDER_FAILURE_ALREADY_RECORDED")
+                return
+            conn.execute(
+                "INSERT INTO provider_failure_diagnostics(driver_run_id,record_json) VALUES (?,?)",
+                (driver_run_id, self._seal_json(record, table="provider_failure_diagnostics",
+                                                column="record_json", key=driver_run_id)),
+            )
+
+    def get_provider_failure_diagnostic(self, driver_run_id: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT record_json FROM provider_failure_diagnostics WHERE driver_run_id=?",
+                (driver_run_id,),
+            ).fetchone()
+            return self._open_json(row["record_json"], table="provider_failure_diagnostics",
+                                   column="record_json", key=driver_run_id) if row else None
+
+    def begin_council_receipt(
+        self, council_id: str, submission_digest: str, command_id: str,
+        members: List[Dict[str, Any]], timestamp: str,
+    ) -> Tuple[Dict[str, Any], bool]:
+        """Atomically claim a council ID BEFORE any cohort is dispatched."""
+        if not council_id or len(council_id) > 128 or not isinstance(command_id, str):
+            raise ValueError("INVALID_COUNCIL_ID")
+        with self.transaction() as conn:
+            row = conn.execute(
+                "SELECT submission_digest,receipt_json FROM council_receipts WHERE council_id=?",
+                (council_id,),
+            ).fetchone()
+            if row:
+                if row["submission_digest"] != submission_digest:
+                    raise IdempotencyConflict("COUNCIL_ID_REUSED_DIFFERENT_SUBMISSION")
+                old = self._open_json(row["receipt_json"], table="council_receipts",
+                                      column="receipt_json", key=council_id)
+                return old, False
+            record = {
+                "schemaVersion": "capt.council-receipt.v1",
+                "councilId": council_id,
+                "submissionDigest": submission_digest,
+                "commandId": command_id,
+                "state": "in_progress",
+                "createdAt": timestamp,
+                "updatedAt": timestamp,
+                "cohorts": [
+                    {"cohortId": member["cohortId"], "driverRunId": member["driverRunId"],
+                     "status": "pending"} for member in members
+                ],
+                "complete": False,
+                "replayForbidden": True,
+                "durability": "encrypted_local_projection_not_event_chain",
+            }
+            conn.execute(
+                "INSERT INTO council_receipts(council_id,submission_digest,command_id,receipt_json) "
+                "VALUES (?,?,?,?)",
+                (council_id, submission_digest, command_id,
+                 self._seal_json(record, table="council_receipts",
+                                 column="receipt_json", key=council_id)),
+            )
+            return record, True
+
+    def record_council_member_receipt(
+        self, council_id: str, member: Dict[str, Any], timestamp: str,
+    ) -> Dict[str, Any]:
+        """Persist each cohort immediately; safe under concurrent completions."""
+        with self.transaction() as conn:
+            row = conn.execute(
+                "SELECT receipt_json FROM council_receipts WHERE council_id=?", (council_id,)
+            ).fetchone()
+            if row is None:
+                raise NotFound("COUNCIL_RECEIPT_NOT_FOUND")
+            receipt = self._open_json(row["receipt_json"], table="council_receipts",
+                                      column="receipt_json", key=council_id)
+            matched = [i for i, x in enumerate(receipt["cohorts"])
+                       if x["cohortId"] == member["cohortId"]]
+            if len(matched) != 1:
+                raise IntegrityViolation("COUNCIL_MEMBER_NOT_IN_ADMITTED_MANIFEST")
+            position = matched[0]
+            previous = receipt["cohorts"][position]
+            if previous.get("status") != "pending":
+                if previous == member:
+                    return receipt
+                raise IdempotencyConflict("COUNCIL_MEMBER_RECEIPT_IMMUTABLE")
+            receipt["cohorts"][position] = dict(member)
+            receipt["updatedAt"] = timestamp
+            receipt["complete"] = all(x["status"] != "pending" for x in receipt["cohorts"])
+            if receipt["complete"]:
+                receipt["state"] = "terminal"
+            conn.execute(
+                "UPDATE council_receipts SET receipt_json=? WHERE council_id=?",
+                (self._seal_json(receipt, table="council_receipts",
+                                 column="receipt_json", key=council_id), council_id),
+            )
+            return receipt
+
+    def get_council_receipt(self, council_id: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT receipt_json FROM council_receipts WHERE council_id=?", (council_id,)
+            ).fetchone()
+            return self._open_json(row["receipt_json"], table="council_receipts",
+                                   column="receipt_json", key=council_id) if row else None
 
     # -- the single write path --------------------------------------------
 

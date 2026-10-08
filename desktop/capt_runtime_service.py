@@ -53,7 +53,7 @@ from capt_runtime.errors import AuthorityViolation
 from capt_runtime.store import EventStore
 from capt_runtime.ipc_framing import FrameProtocolError, recv_json, send_json
 from capt_runtime.resource_governor import TokenCostGovernor
-from capt_runtime.reasoning import ReasoningConfigurationError, normalize_reasoning_effort
+from capt_runtime.reasoning import ReasoningConfigurationError, normalize_reasoning_effort, legacy_cohort_configuration_reasoning_effort
 from capt_runtime.cohort_contract import compile_cohort_objective, normalize_cohort_spec
 from capt_runtime.vessel_charter import validate_vessel_artifact
 from capt_runtime.replay import replay_to_sequence
@@ -1113,7 +1113,7 @@ class RuntimeQueryService:
             if op == "capabilities":
                 return {"ok": True, "result": {
                     "schemaVersion": CONTRACT_SCHEMA_VERSION,
-                    "queryOperations": ["identity", "capabilities", "list_aggregates", "bots", "approvals", "missions", "tasks", "checkpoints", "security_rejections", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers", "managed_skills", "operator_control_snapshot", "operator_session_get", "operator_proposal_get", "operator_execution_state", "pi_request_status", "media_route_catalog", "media_job_status"],
+                    "queryOperations": ["council_receipt", "provider_failure_diagnostic", "identity", "capabilities", "list_aggregates", "bots", "approvals", "missions", "tasks", "checkpoints", "security_rejections", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers", "managed_skills", "operator_control_snapshot", "operator_session_get", "operator_proposal_get", "operator_execution_state", "pi_request_status", "media_route_catalog", "media_job_status"],
                     "commandOperations": ["create_mission", "prepare_media_approval", "submit_approved_media", "poll_media_job", "fetch_media_artifact", "register_bot", "operator_chat_new", "operator_execution_config_set", "operator_prompt_submit", "operator_proposal_select", "compile_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "activate_approved_capability", "submit_provider_result_review", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "run_approved_council_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool", "install_managed_skill", "create_managed_skill"],
                     "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True, "toolRegistry": True, "toolBroker": True, "mcpClient": self.mcp_manager is not None, "promptCompiler": True, "botFoundation": True},
                     "lifecycleOperations": {"checkpoint": True, "shutdown": True, "resume": True},
@@ -1158,6 +1158,16 @@ class RuntimeQueryService:
                 return {"ok": True, "result": self.checkpoints(request)}
             if op == "security_rejections":
                 return {"ok": True, "result": self.security_rejections(request)}
+            if op == "council_receipt":
+                council_id = str(request.get("councilId") or "")
+                if not council_id or len(council_id) > 128:
+                    return {"ok": False, "error": "COUNCIL_ID_REQUIRED"}
+                return {"ok": True, "result": self.store.get_council_receipt(council_id)}
+            if op == "provider_failure_diagnostic":
+                run_id = str(request.get("driverRunId") or "")
+                if not run_id.startswith("dr-") or len(run_id) > 128:
+                    return {"ok": False, "error": "DRIVER_RUN_ID_REQUIRED"}
+                return {"ok": True, "result": self.store.get_provider_failure_diagnostic(run_id)}
             if op == "get_state":
                 st = self.get_state(request["streamId"])
                 if st is None:
@@ -1611,7 +1621,7 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 output_modality = str((cohort_spec or {}).get("outputModality") or "text")
                 output_format = str((cohort_spec or {}).get("outputFormat") or "")
                 if not reasoning_effort:
-                    reasoning_effort = normalize_reasoning_effort(
+                    reasoning_effort = legacy_cohort_configuration_reasoning_effort(
                         (cohort_spec or {}).get("configurationId")
                     )
                 prompt_assembly = prepared.data["promptAssembly"]
@@ -1948,7 +1958,25 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                                 reason="provider tool phase closed",
                                 metadata=gk_meta("revoke_model_tools"),
                             )
-                except Exception:
+                except Exception as exc:
+                    # Durable, bounded diagnostic BEFORE the indeterminate-state
+                    # transition. Never write raw exception strings, prompts,
+                    # provider bodies, credentials, or tool responses.
+                    from capt_runtime.diagnostic_receipts import safe_provider_failure
+                    observed_run = store.load_state("driverrun-" + str(run_id)) or {}
+                    diagnostic = safe_provider_failure(
+                        exc, driver_run_id=str(run_id),
+                        provider=str(provider_id or "local"),
+                        model=str(provider_model or ""),
+                        dispatch_boundary=str(observed_run.get("dispatchBoundary") or "unknown"),
+                        request_attempts=observed_run.get("providerHttpRequestAttempts"),
+                    )
+                    try:
+                        store.store_provider_failure_diagnostic(str(run_id), diagnostic)
+                    except Exception:
+                        # Failure of a diagnostic projection must not erase the
+                        # original exception or grant a second external attempt.
+                        pass
                     # Dispatch reached an external boundary after reservation. The
                     # absence of a result is not proof that no side effect occurred:
                     # consume indeterminately and require recovery rather than retry.

@@ -23,6 +23,9 @@ from capt_runtime import commands
 from capt_runtime.approved_capability_authority import issue_approved_capability_authority
 from capt_runtime.errors import AuthorityViolation, CaptRuntimeError, IdempotencyConflict
 from capt_runtime.approval_dispatch import register_expected_prompt_digest
+from capt_runtime.diagnostic_receipts import (
+    safe_cohort_receipt, council_submission_digest, safe_model_authority_reason,
+)
 from capt_runtime.prompt_approval import request_model_prompt_approval
 from capt_runtime.cohort_contract import MAX_COHORTS, normalize_cohort_spec
 from capt_runtime.prompt_compiler import PromptCompiler
@@ -869,6 +872,24 @@ class RuntimeCommandService:
                 if not 1 <= raw_limit <= MAX_COHORTS:
                     raise ValueError("COUNCIL_CONCURRENCY_RANGE")
 
+                council_id = str(payload.get("councilId") or ("council-" + hashlib.sha256(
+                    cmd["commandId"].encode()).hexdigest()[:24]))
+                manifest = [
+                    {"cohortId": spec["cohortId"], "driverRunId": str(item.get("driverRunId", ""))}
+                    for spec, item in normalized
+                ]
+                admitted, is_new = self.store.begin_council_receipt(
+                    council_id, council_submission_digest(cmd), cmd["commandId"],
+                    manifest, _now_rfc3339(),
+                )
+                if not is_new:
+                    # Repeated or crash-recovered council submissions are read-only.
+                    # Never dispatch a second set of provider calls.
+                    return self._receipt(
+                        cmd, status="idempotent", classification="duplicate",
+                        result=admitted,
+                    )
+
                 lock = threading.Lock()
                 active = 0
                 peak = 0
@@ -896,7 +917,23 @@ class RuntimeCommandService:
                         active += 1
                         peak = max(peak, active)
                     try:
-                        return spec["cohortId"], self.execute(sub)
+                        receipt = self.execute(sub)
+                        run_id = item.get("driverRunId")
+                        state = (
+                            self.store.load_state("driverrun-" + run_id)
+                            if isinstance(run_id, str) and run_id else None
+                        )
+                        diagnostic = (
+                            self.store.get_provider_failure_diagnostic(run_id)
+                            if isinstance(run_id, str) and run_id else None
+                        )
+                        self.store.record_council_member_receipt(
+                            council_id, safe_cohort_receipt(
+                                spec["cohortId"], item, receipt, state, diagnostic
+                            ),
+                            _now_rfc3339(),
+                        )
+                        return spec["cohortId"], receipt
                     finally:
                         with lock:
                             active -= 1
@@ -919,11 +956,15 @@ class RuntimeCommandService:
                     for spec, _item in normalized
                 ]
                 result = {
-                    "councilId": str(payload.get("councilId") or ""),
+                    "councilId": council_id,
+                    "durableReceiptQuery": {"op": "council_receipt", "councilId": council_id},
+                    "durableReceiptState": "terminal",
+                    "durability": "encrypted_local_projection_not_event_chain",
                     "cohortCount": len(normalized),
                     "vesselsPerCohort": next(iter(vessel_counts)),
                     "logicalVessels": len(normalized) * next(iter(vessel_counts)),
-                    "providerCallInvariant": "one_call_per_cohort",
+                    "providerCallInvariant": "one_governed_execution_per_cohort",
+                    "physicalHttpCallsCountedSeparately": True,
                     "maxConcurrentCohorts": raw_limit,
                     "peakConcurrentCohortExecutions": peak,
                     "cohorts": ordered,
@@ -1116,7 +1157,11 @@ class RuntimeCommandService:
                 status="rejected",
                 classification="internal",
                 error=self._error_envelope(cmd, "internal", "TOOL_UNAVAILABLE"),
-                detail=str(exc)[:240],
+                detail=(
+                    "MODEL_TOOL_FAILURE_DETAILS_REDACTED"
+                    if cmd.get("op") == "run_approved_hermes_inspection"
+                    else str(exc)[:240]
+                ),
             )
         except UnknownToolId as exc:
             return self._receipt(
@@ -1132,7 +1177,11 @@ class RuntimeCommandService:
                 status="rejected",
                 classification="internal",
                 error=self._error_envelope(cmd, "internal", "TOOL_BROKER_ERROR"),
-                detail=str(exc)[:240],
+                detail=(
+                    "MODEL_TOOL_BROKER_DETAILS_REDACTED"
+                    if cmd.get("op") == "run_approved_hermes_inspection"
+                    else str(exc)[:240]
+                ),
             )
         except CaptRuntimeError as exc:
             classification = getattr(exc, "category", "internal_failure")
@@ -1143,9 +1192,17 @@ class RuntimeCommandService:
                 error=self._error_envelope(
                     cmd, classification, type(exc).__name__.upper()
                 ),
-                detail=str(exc)[:240],
+                detail=(
+                    safe_model_authority_reason(exc)
+                    if cmd.get("op") == "run_approved_hermes_inspection"
+                    and isinstance(exc, AuthorityViolation)
+                    else "MODEL_AUTHORITY_FAILURE_DETAILS_REDACTED"
+                    if cmd.get("op") == "run_approved_hermes_inspection"
+                    else str(exc)[:240]
+                ),
             )
         except Exception as exc:  # noqa: BLE001
+            provider_exc = type(exc).__name__ in {"ProviderDriverFailure", "DispatchBoundaryError"}
             return self._receipt(
                 cmd,
                 status="rejected",
@@ -1153,7 +1210,13 @@ class RuntimeCommandService:
                 error=self._error_envelope(
                     cmd, "internal_failure", type(exc).__name__.upper()
                 ),
-                detail=str(exc)[:240],
+                detail=(
+                    "PROVIDER_FAILURE_DIAGNOSTIC_AVAILABLE_OR_OUTCOME_UNKNOWN"
+                    if provider_exc
+                    else "MODEL_FAILURE_DETAILS_REDACTED"
+                    if cmd.get("op") == "run_approved_hermes_inspection"
+                    else str(exc)[:240]
+                ),
             )
 
     def _receipt_from_runtime(

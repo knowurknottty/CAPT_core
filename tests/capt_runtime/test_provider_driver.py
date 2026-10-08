@@ -854,11 +854,12 @@ def test_provider_http_error_body_is_bounded_and_secret_redacted(tmp_path: Path)
             }))
         except ProviderDriverFailure as exc:
             message = str(exc)
-            assert message.startswith("provider HTTP 404:")
-            assert "route missing" in message
+            assert message == "provider HTTP 404"
+            assert "route missing" not in message
             assert secret not in message
-            assert "[REDACTED]" in message
-            assert len(message) < 1100
+            assert exc.diagnostic_code == "PROVIDER_HTTP_ERROR"
+            assert exc.diagnostic_phase == "response_headers"
+            assert exc.http_status == 404
         else:
             raise AssertionError("HTTP 404 must fail closed")
     finally:

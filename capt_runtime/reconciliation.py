@@ -172,3 +172,65 @@ def _conflicting_observations(observations: List[Dict[str, Any]]) -> List[str]:
         else:
             seen[oid] = o
     return conflicts
+
+
+def reconcile_provider_http_attempts(
+    driver_run_state: Dict[str, Any],
+    events: List[Dict[str, Any]],
+    *,
+    artifact_verified: bool = False,
+) -> Dict[str, Any]:
+    """Read-only, conservative provider HTTP reconciliation from CAPT's ledger.
+
+    An event emitted immediately before urlopen records an authorized attempt,
+    not definitive provider receipt or billable usage. No outgoing requests,
+    state promotions, retries, or fabricated cost figures occur here.
+    """
+    rid = driver_run_state["driverRunId"]
+    counts: Dict[str, int] = {
+        "request_started": 0, "response_started": 0,
+        "response_completed": 0, "result_persisted": 0,
+    }
+    for event in events:
+        if event.get("eventType") != "DriverRunDispatchBoundaryRecorded":
+            continue
+        payload = event.get("payload") or {}
+        if payload.get("driverRunId") != rid:
+            raise ReconciliationError("PROVIDER_RECONCILIATION_RUN_MISMATCH")
+        boundary = payload.get("dispatchBoundary")
+        if boundary in counts:
+            counts[boundary] += 1
+    attempts = counts["request_started"]
+    responses = counts["response_completed"]
+    if responses > attempts:
+        raise ReconciliationError("PROVIDER_RECONCILIATION_INVALID_EVENT_SEQUENCE")
+    last = driver_run_state.get("dispatchBoundary", "unknown")
+    original = classify_dispatch_boundary(last)
+    persisted = bool(counts["result_persisted"])
+    if driver_run_state.get("state") == "lost":
+        if original == "reconciled_completed" and artifact_verified and persisted:
+            disposition = "reconciled_completed"
+        elif original == "safe_to_retry" and not attempts:
+            disposition = "safe_to_retry_under_new_approval"
+        else:
+            disposition = "retry_forbidden"
+    elif driver_run_state.get("state") == "completed" and artifact_verified and persisted:
+        disposition = "reconciled_completed"
+    else:
+        disposition = "requires_verification"
+    return {
+        "schemaVersion": "capt.provider-reconciliation.1",
+        "driverRunId": rid,
+        "driverRunState": driver_run_state.get("state"),
+        "durableDispatchBoundary": last,
+        "attemptsReservedByEvent": attempts,
+        "responsesStarted": counts["response_started"],
+        "responsesCompleted": responses,
+        "requestsWithoutCompletedResponses": attempts - responses,
+        "finalResultPersisted": persisted,
+        "artifactVerified": bool(artifact_verified),
+        "disposition": disposition,
+        "automaticReplayPermitted": False,
+        "billingOfUnresolvedCalls": "unknown",
+        "note": "request_started precedes network I/O; counts do not prove provider billing",
+    }

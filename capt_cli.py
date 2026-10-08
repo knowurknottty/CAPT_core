@@ -662,6 +662,7 @@ def _cmd_ramp_start(args, paths, as_json) -> int:
     try:
         proc = subprocess.Popen(
             argv, stdout=devnull, stderr=logf, start_new_session=True,
+            cwd=str(Path(__file__).resolve().parent),
             env=_runtime_child_environment(),
         )
     finally:
