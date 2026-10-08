@@ -1,8 +1,8 @@
 # CAPT Functionality Matrix
 
-Source snapshot: `1e85bac5d17cde342a1ae55e6ee3da5fa681ff61`. Package remains `capt-solo 0.5.0`.
+Source snapshot: `80d3b82` (docs refreshed 2026-10-08; `capt_cli` fix + this refresh merged via PR #170 at `1e5244f`). Package remains `capt-solo 0.5.0`.
 
-This matrix describes **merged Core `main` as of 2026-09-15**. Implementation presence, exact-head engineering verification, installed-runtime proof, and public-release authorization are distinct states.
+This matrix describes **merged Core `main` as of 2026-10-08**. Governed exact-head evidence: `tests/capt_runtime` 1435 passed / 13 skipped / 12 deselected; Swift package 165 tests / 9 skipped / 0 failures with `CAPTNativeMac` building clean. Implementation presence, exact-head engineering verification, installed-runtime proof, and public-release authorization are distinct states.
 
 | Capability | Merged `main` | Release/evidence boundary |
 |---|---|---|
