@@ -226,6 +226,77 @@ def _reconcile_stranded_driver_runs(runtime: RuntimeComposition, now: str) -> No
             svc.transition_task(task_id, "suspended", "restart requires governed reconciliation", recovery_meta("task-suspended"))
 
 
+def _reconcile_legacy_issue_task_marker(runtime: RuntimeComposition, now: str) -> bool:
+    """Conservatively suspend the one historical manual task with no run lineage.
+
+    This narrow migration does not discover a worker or assert completion.
+    Other running tasks are never touched. Repeated startups are no-ops.
+    """
+    task_id = "m-capt-issues-20260924-live-task-1"
+    mission_id = "m-capt-issues-20260924-live"
+    store, svc = runtime.store, runtime.service
+    task_stream = "task-" + task_id
+    task = store.load_state(task_stream)
+    if not task or task.get("state") not in ("running", "suspended"):
+        return False
+    if task.get("missionId") != mission_id or task.get("assignedDriverId") != "capt-node":
+        return False
+    if task.get("resultRefs") or task.get("attempt") != 1:
+        return False
+    events = store.read_stream(task_stream)
+    if not events or events[-1].get("eventType") != "TaskTransitioned":
+        return False
+    if events[-1].get("payload", {}).get("toState") not in ("running", "suspended"):
+        return False
+    try:
+        last = datetime.fromisoformat(events[-1]["occurredAt"].replace("Z", "+00:00"))
+        current = datetime.fromisoformat(now.replace("Z", "+00:00"))
+        if (current - last).total_seconds() < 86400:
+            return False
+    except (TypeError, ValueError):
+        return False
+    # No stable driver/effect identity means we cannot invent one or replay.
+    # Refuse recovery if *any* durable DriverRun/ToolExecution was associated
+    # with this exact task, even if now terminal; such cases need manual review.
+    for stream_id, kind, _ in store.all_aggregates():
+        if kind not in ("driverrun", "tool_execution"):
+            continue
+        effect = store.load_state(stream_id)
+        if effect and effect.get("taskId") == task_id:
+            return False
+    def metadata(step: str) -> Dict[str, Any]:
+        return commands.command(
+            command_id="cmd-reconcile-20261008-legacy-issue-task-" + step,
+            idempotency_key="idem-reconcile-20261008-legacy-issue-task-" + step,
+            operation_fingerprint=commands.fingerprint(
+                "reconcile_legacy_issue_task_marker", {"taskId": task_id, "step": step}
+            ),
+            correlation_id="corr-reconcile-20261008-legacy-issue-task",
+            actor_id="capt-recovery", actor_kind="system",
+            issued_at=now, replay_policy="never",
+        )
+    changed = False
+    if task["state"] == "running":
+        svc.transition_task(
+            task_id, "suspended",
+            "historical manual running marker has no durable DriverRun/ToolExecution; "
+            "actual worker completion unknown; inspect external work before resumption",
+            metadata("task"), expected_version=store.aggregate_version(task_stream),
+        )
+        changed = True
+    mission_stream = "mission-" + mission_id
+    mission = store.load_state(mission_stream)
+    if mission and mission.get("state") == "executing":
+        svc.transition_mission(
+            mission_id, "suspended",
+            "the only historical issue task requires governed reconciliation; "
+            "no completion is asserted",
+            metadata("mission"), expected_version=store.aggregate_version(mission_stream),
+        )
+        changed = True
+    return changed
+
+
 DEMO_MISSION_ID = "m-desktop-m0-demo"
 DEMO_TASK_ID = "t-desktop-m0-demo"
 DEMO_DRIVER_RUN_ID = "dr-desktop-m0-demo"
@@ -1187,7 +1258,9 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
 
     runtime = create_runtime(str(ledger_path), enable_mcp=True)
     prompt_compiler = build_prompt_compiler(Path(ledger_path).parent / "ui")
-    _reconcile_stranded_driver_runs(runtime, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    recovery_now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    _reconcile_stranded_driver_runs(runtime, recovery_now)
+    _reconcile_legacy_issue_task_marker(runtime, recovery_now)
     runtime.reconcile_stranded_tools()
     store = runtime.store
     svc = runtime.service
