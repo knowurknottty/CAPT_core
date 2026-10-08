@@ -3,6 +3,7 @@ import SwiftUI
 enum CAPTSidebarSection: String, CaseIterable, Identifiable {
     case chat = "Chat"
     case missions = "Missions"
+    case kanban = "Kanban"
     case bots = "Bots"
     case approvals = "Approvals"
     case providers = "Providers"
@@ -19,6 +20,7 @@ enum CAPTSidebarSection: String, CaseIterable, Identifiable {
         switch self {
         case .chat: return "bubble.left.and.bubble.right"
         case .missions: return "scope"
+        case .kanban: return "rectangle.split.3x1"
         case .bots: return "person.2"
         case .approvals: return "checkmark.circle.badge.questionmark"
         case .providers: return "cpu"
@@ -33,6 +35,7 @@ enum CAPTSidebarSection: String, CaseIterable, Identifiable {
 
     var tone: InversionTone {
         switch self {
+        case .kanban: return .cyan
         case .bots: return .cyan
         case .approvals: return .amber
         case .skills: return .violet
@@ -178,6 +181,7 @@ struct SidebarView: View {
     private func count(for item: CAPTSidebarSection) -> Int? {
         switch item {
         case .missions: return store.missions.filter(\.isMultiTask).count
+        case .kanban: return store.missions.reduce(0) { $0 + $1.tasks.filter { ["suspended", "failed", "awaiting_verification"].contains($0.state) }.count }
         case .bots: return store.bots.count
         case .approvals: return store.pendingApprovals.count
         case .skills: return store.managedSkills?.skills.count

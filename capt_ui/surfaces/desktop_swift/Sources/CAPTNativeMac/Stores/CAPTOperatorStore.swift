@@ -44,6 +44,8 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var bots: [CAPTBotSummary] = []
     @Published var botCreationBusy = false
     @Published var botCreationMessage = ""
+    @Published var kanbanMessage = ""
+    @Published var kanbanBusy = false
     @Published var providers: [CAPTProviderSnapshot] = []
     @Published var modelSnapshot: CAPTModelSelectionSnapshot?
     @Published var operatorStateError: String?
@@ -1479,6 +1481,63 @@ extension CAPTOperatorStore {
                 refreshBots()
             } catch {
                 botCreationMessage = "Registration refused: " + error.localizedDescription
+            }
+        }
+    }
+}
+
+extension CAPTOperatorStore {
+    /// Prepare a governed successor request in Chat. Merely navigating here
+    /// never changes task state or dispatches a model/tool.
+    func prepareKanbanContinuation(_ card: CAPTKanbanCard) {
+        composerSeed = """
+        Continue the existing CAPT mission with authoritative provenance:
+        Mission: \(card.task.missionID)
+        Task: \(card.task.id)
+        Stored task state: \(card.task.state)
+        Stored mission state: \(card.missionState)
+        Existing driver run: \(card.run?.id ?? "none")
+        Dependencies: \(card.task.dependencies.joined(separator: ", "))
+        Original objective: \(card.task.title)
+
+        First inspect EventStore task/mission/DriverRun receipts, current GitHub
+        issue status and any prior artifacts before proposing any new work.
+        Distinguish previously completed work from unverified work. Provide
+        a smallest-next-step plan, exact requirements, bounded authority, and
+        human approval requests as needed. Never assume a suspended task is
+        running or automatically retry an indeterminate external effect.
+        Do not claim verified completion without independent evidence.
+        """
+        newChat()
+    }
+
+    /// Human-only verification pathway. Caller must inspect the receipt and
+    /// explicitly enter an evidence-based note; this does not auto-approve.
+    func reviewKanbanResult(_ card: CAPTKanbanCard, decision: String, note: String) {
+        let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard ["accept", "reject"].contains(decision),
+              card.task.state == "awaiting_verification",
+              let run = card.run, run.state == "completed",
+              !trimmed.isEmpty,
+              connectionState == .connected,
+              !kanbanBusy else {
+            kanbanMessage = "Review requires a completed DriverRun, an awaiting-verification task, and an explicit evidence note."
+            return
+        }
+        kanbanBusy = true
+        kanbanMessage = "Recording human verification for " + card.task.id + "…"
+        Task {
+            defer { kanbanBusy = false }
+            do {
+                let response = try await runtime.reviewProviderResult(
+                    driverRunID: run.id, disposition: decision, note: trimmed
+                )
+                kanbanMessage = "RuntimeService response for " + card.task.id +
+                    ": " + (response["taskState"] as? String ?? "unknown") +
+                    ". Check Evidence before asserting mission completion."
+                refreshHistory()
+            } catch {
+                kanbanMessage = "Human verification refused: " + error.localizedDescription
             }
         }
     }

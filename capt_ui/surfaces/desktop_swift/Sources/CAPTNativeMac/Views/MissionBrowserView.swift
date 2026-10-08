@@ -11,6 +11,7 @@ private enum MissionScope: String, CaseIterable, Identifiable {
 
 struct MissionBrowserView: View {
     @ObservedObject var store: CAPTOperatorStore
+    @Binding var selection: CAPTSidebarSection
     @State private var selectedID: String?
     @State private var scope: MissionScope = .attention
     @State private var searchText = ""
@@ -203,6 +204,22 @@ struct MissionBrowserView: View {
                 Text(triage.explanation).font(.callout)
                 Text("Next: " + triage.nextStep)
                     .font(.callout.weight(.medium))
+                HStack {
+                    Button("Open Kanban") { selection = .kanban }
+                        .buttonStyle(.bordered)
+                    Button("Prepare continuation in Chat") {
+                        let cards = CAPTKanbanProjection.cards(
+                            missions: [mission], runs: store.driverRuns,
+                            approvals: store.approvals, council: store.activeCouncil)
+                        if let card = cards.first(where: { $0.needsAttention }) ?? cards.first {
+                            store.prepareKanbanContinuation(card)
+                            selection = .chat
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(mission.tasks.isEmpty)
+                }
+                .controlSize(.small)
                 Text(CAPTMissionTriage.counts(mission))
                     .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 Text("Stored mission state: " + mission.missionState

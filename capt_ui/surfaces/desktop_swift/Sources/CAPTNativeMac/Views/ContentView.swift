@@ -57,7 +57,9 @@ struct ContentView: View {
         case .chat:
             ChatView(store: store)
         case .missions:
-            MissionBrowserView(store: store)
+            MissionBrowserView(store: store, selection: $selection)
+        case .kanban:
+            KanbanBoardView(store: store, selection: $selection)
         case .bots:
             BotBrowserView(store: store)
         case .approvals:
