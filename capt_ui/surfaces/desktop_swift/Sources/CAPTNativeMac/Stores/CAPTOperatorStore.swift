@@ -5,6 +5,9 @@ import Security
 
 @MainActor
 final class CAPTOperatorStore: ObservableObject {
+    private static let appBundleVersion = Bundle.main.object(
+        forInfoDictionaryKey: "CFBundleShortVersionString"
+    ) as? String ?? "unknown"
     private static let startupMessage = CAPTChatMessage(
         role: .system,
         text: "CAPT native surface ready. Connect to RuntimeService to begin."
@@ -252,7 +255,7 @@ final class CAPTOperatorStore: ObservableObject {
             defer { isBusy = false }
             do {
                 let identity = try await runtime.connect()
-                runtimeIdentity = "CAPT \(identity.packageVersion) · kernel contract \(identity.runtimeVersion) · integrity \(identity.integrity)"
+                runtimeIdentity = "CAPT app \(Self.appBundleVersion) · checkpoint contract \(identity.runtimeVersion) · integrity \(identity.integrity)"
                 connectionState = .connected
                 let operatorSnapshot = try await runtime.operatorSnapshot()
                 applyOperatorSnapshot(operatorSnapshot)
@@ -548,7 +551,7 @@ final class CAPTOperatorStore: ObservableObject {
         Task {
             do {
                 let identity = try await runtime.identity()
-                runtimeIdentity = "CAPT \(identity.packageVersion) · kernel contract \(identity.runtimeVersion) · integrity \(identity.integrity)"
+                runtimeIdentity = "CAPT app \(Self.appBundleVersion) · checkpoint contract \(identity.runtimeVersion) · integrity \(identity.integrity)"
             } catch {
                 handleGlobal(error)
             }

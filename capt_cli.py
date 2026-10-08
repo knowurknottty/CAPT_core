@@ -48,6 +48,7 @@ import uuid
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+from importlib.metadata import PackageNotFoundError, version as distribution_version
 from typing import Any, Dict, List, Optional
 
 # Make the package importable when run as a script.
@@ -686,13 +687,21 @@ def _cmd_ramp_start(args, paths, as_json) -> int:
     return _fail("runtime start timed out before becoming healthy")
 
 
+def _installed_cli_package_version() -> str:
+    try:
+        return distribution_version("capt-solo")
+    except PackageNotFoundError:
+        return "unknown"
+
+
 def _status_view(client, identity) -> dict:
     """Small human/operator status projection."""
     caps = client.capabilities()
     return {
         "status": "HEALTHY" if identity.get("integrity") == "ok" else "UNHEALTHY",
         "runtimeVersion": identity.get("runtimeVersion"),
-        "packageVersion": identity.get("packageVersion"),
+        "packageVersion": identity.get("packageVersion") or _installed_cli_package_version(),
+        "packageVersionSource": "runtime_service" if identity.get("packageVersion") else "installed_cli_distribution",
         "versionNote": "runtimeVersion identifies checkpoint compatibility; packageVersion identifies the installed CAPT release",
         "ledgerPath": identity.get("ledgerPath"),
         "headSequence": identity.get("headSequence"),
