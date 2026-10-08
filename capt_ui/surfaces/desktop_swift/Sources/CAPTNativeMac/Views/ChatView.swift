@@ -5,6 +5,9 @@ struct ChatView: View {
     @ObservedObject var store: CAPTOperatorStore
     @State private var draft = ""
     @State private var verificationNote = ""
+    // Bound the mounted transcript views. Retain every message in the
+    // encrypted session store and reveal earlier pages only on demand.
+    @State private var visibleMessageLimit = 40
 
     var body: some View {
         VStack(spacing: 0) {
@@ -13,8 +16,15 @@ struct ChatView: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: 16) {
-                        ForEach(store.messages) { message in
+                    VStack(spacing: 16) {
+                        if store.messages.count > visibleMessageLimit {
+                            Button("Show older messages (\(store.messages.count - visibleMessageLimit) hidden)") {
+                                visibleMessageLimit += 40
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("chat-show-older-messages")
+                        }
+                        ForEach(CAPTTranscriptWindow.visible(store.messages, limit: visibleMessageLimit)) { message in
                             MessageRow(message: message)
                                 .id(message.id)
                         }
@@ -101,17 +111,13 @@ struct ChatView: View {
                 }
                 .onChange(of: store.messages.count) { _ in
                     if let id = store.messages.last?.id {
-                        withAnimation(.easeInOut(duration: 0.18)) {
-                            proxy.scrollTo(id, anchor: .bottom)
-                        }
+                        proxy.scrollTo(id, anchor: .bottom)
                     }
                 }
                 .onChange(of: store.pendingApproval?.requestID) { requestID in
                     guard requestID != nil else { return }
                     DispatchQueue.main.async {
-                        withAnimation(.easeInOut(duration: 0.18)) {
-                            proxy.scrollTo("pending-approval", anchor: .center)
-                        }
+                        proxy.scrollTo("pending-approval", anchor: .center)
                     }
                 }
             }
@@ -153,7 +159,9 @@ struct ChatView: View {
             }
         }
         .navigationTitle(store.activeSessionTitle)
-        .animation(.easeInOut(duration: 0.16), value: store.activeChatFlow.phase)
+        .onChange(of: store.activeSessionID) { _ in visibleMessageLimit = 40 }
+        // Avoid animating an entire variable-height transcript when the
+        // compiler changes phase; only animate local, bounded controls.
         .onAppear { seedComposerIfNeeded() }
         .onChange(of: store.composerSeed) { _ in seedComposerIfNeeded() }
         .task(id: store.pendingApproval?.requestID) {
