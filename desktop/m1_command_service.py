@@ -54,6 +54,7 @@ _REQUIRED_ENVELOPE = (
 
 _VALID_OPS = (
     "create_mission",
+    "register_bot",
     "operator_chat_new",
     "operator_execution_config_set",
     "operator_prompt_submit",
@@ -520,6 +521,33 @@ class RuntimeCommandService:
                     classification="duplicate" if status == "idempotent" else "accepted",
                     result=result,
                     stream_id="human_approval-" + str(result.get("requestId", "")),
+                )
+
+            elif op == "register_bot":
+                # Runtime-authenticated human is the author; never trust an
+                # untrusted manifest to choose actor identity or timestamps.
+                payload = cmd["payload"]
+                if not isinstance(payload, dict) or set(payload) != {"bot"}:
+                    raise AuthorityViolation("BOT_REGISTRATION_PAYLOAD_INVALID")
+                bot = payload["bot"]
+                if not isinstance(bot, dict):
+                    raise AuthorityViolation("BOT_REGISTRATION_MANIFEST_REQUIRED")
+                if "createdBy" in bot or "createdAt" in bot:
+                    raise AuthorityViolation("BOT_REGISTRATION_ACTOR_SPOOFING")
+                manifest = {
+                    **bot,
+                    "createdBy": {"actorId": self.operator_id, "kind": "human", "displayName": None},
+                    "createdAt": _now_rfc3339(),
+                }
+                result = self.svc.register_bot(manifest, meta)
+                return self._receipt(
+                    cmd,
+                    status="idempotent" if result.get("status") == "idempotent" else "accepted",
+                    classification="duplicate" if result.get("status") == "idempotent" else "accepted",
+                    result={"botId": manifest["botId"], "displayName": manifest["displayName"],
+                            "identityOnly": True,
+                            "note": "Bot identity and policy created; no tools, lease or autonomous run granted."},
+                    stream_id="bot-" + str(manifest["botId"]),
                 )
 
             elif op == "create_mission":

@@ -392,6 +392,10 @@ actor CAPTBackgroundRuntime {
         try CAPTCouncilCoordinator(client: client).decide(cohort, approve: approve)
     }
 
+    func registerBot(_ draft: CAPTBotDraft) throws -> String {
+        try CAPTBotRegistration(client: client).register(draft)
+    }
+
     func runCouncil(_ review: CAPTCouncilReview) throws -> String {
         try CAPTCouncilCoordinator(client: client).run(review)
     }

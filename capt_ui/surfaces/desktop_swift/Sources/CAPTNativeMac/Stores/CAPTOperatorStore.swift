@@ -42,6 +42,8 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var driverRuns: [CAPTDriverRunSummary] = []
     @Published var recentEvents: [CAPTEventSummary] = []
     @Published var bots: [CAPTBotSummary] = []
+    @Published var botCreationBusy = false
+    @Published var botCreationMessage = ""
     @Published var providers: [CAPTProviderSnapshot] = []
     @Published var modelSnapshot: CAPTModelSelectionSnapshot?
     @Published var operatorStateError: String?
@@ -69,6 +71,7 @@ final class CAPTOperatorStore: ObservableObject {
     private let historyRuntime: CAPTBackgroundRuntime
     private let councilRuntime: CAPTBackgroundRuntime
     private let queryRuntime: CAPTBackgroundRuntime
+    private let botRuntime: CAPTBackgroundRuntime
     private var historyRefreshPending = false
     private var compilingTasks: [UUID: Task<Void, Never>] = [:]
     private var compilationVersions: [UUID: UUID] = [:]
@@ -88,6 +91,7 @@ final class CAPTOperatorStore: ObservableObject {
         self.historyRuntime = CAPTBackgroundRuntime(profile: profile)
         self.councilRuntime = CAPTBackgroundRuntime(profile: profile)
         self.queryRuntime = CAPTBackgroundRuntime(profile: profile)
+        self.botRuntime = CAPTBackgroundRuntime(profile: profile)
         self.sessionStore = sessionStore ?? CAPTEncryptedSessionStore(
             fileURL: CAPTEncryptedSessionStore.defaultFileURL(profile: profile)
         )
@@ -1450,6 +1454,31 @@ extension CAPTOperatorStore {
                 inspectedTaskJSON = text
             } catch {
                 inspectedTaskJSON = "Runtime read failed: " + error.localizedDescription
+            }
+        }
+    }
+}
+
+extension CAPTOperatorStore {
+    func createBot(_ draft: CAPTBotDraft) {
+        guard connectionState == .connected,
+              !botCreationBusy,
+              runtimeCapabilities?.supportsCommand("register_bot") == true else {
+            botCreationMessage = "RuntimeService Bot registration is unavailable. Reconnect to the updated governed runtime."
+            return
+        }
+        botCreationBusy = true
+        botCreationMessage = "Registering identity and policy…"
+        Task {
+            defer { botCreationBusy = false }
+            do {
+                _ = try await botRuntime.connect()
+                let id = try await botRuntime.registerBot(draft)
+                botCreationMessage = "Registered " + id +
+                    ". No tools or autonomous execution are granted by registration."
+                refreshBots()
+            } catch {
+                botCreationMessage = "Registration refused: " + error.localizedDescription
             }
         }
     }

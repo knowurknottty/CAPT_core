@@ -4,6 +4,7 @@ import CAPTCoreDesktop
 struct BotBrowserView: View {
     @ObservedObject var store: CAPTOperatorStore
     @State private var selectedID: String?
+    @State private var showCreate = false
 
     var body: some View {
         HSplitView {
@@ -13,7 +14,11 @@ struct BotBrowserView: View {
                 .frame(minWidth: 470)
         }
         .navigationTitle("Bots")
-        .onAppear { store.refreshBots() }
+        .onAppear { store.refreshBots(); store.refreshCapabilities() }
+        .sheet(isPresented: $showCreate) {
+            BotCreateForm(store: store)
+                .frame(minWidth: 520, minHeight: 460)
+        }
     }
 
     private var botList: some View {
@@ -29,6 +34,15 @@ struct BotBrowserView: View {
                 }
                 Spacer()
                 InversionStatusBadge("\(store.bots.count) registered", tone: .cyan, monospaced: true)
+                Button {
+                    showCreate = true
+                } label: {
+                    Label("Create Bot", systemImage: "plus")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(store.connectionState != .connected ||
+                          store.runtimeCapabilities?.supportsCommand("register_bot") != true)
+                .help("Create a governed Bot identity; this does not grant execution rights.")
             }
             .padding(14)
             .background(.ultraThinMaterial)
@@ -168,5 +182,59 @@ struct BotBrowserView: View {
             return exact
         }
         return store.bots.first
+    }
+}
+
+
+private struct BotCreateForm: View {
+    @ObservedObject var store: CAPTOperatorStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var botID = "issue-steward"
+    @State private var displayName = "Issue Steward"
+    @State private var role = "Review and resolve GitHub issues one at a time; verify tests and artifacts before completion."
+    @State private var model = "deepseek/deepseek-v4.1-flash"
+    @State private var runtime = "either"
+    @State private var cloudAllowed = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Create governed Bot").font(.title2.bold())
+            Text("Registers a durable Bot identity and cognition policy. It does not execute, grant shell/GitHub access, or start a mission.")
+                .font(.callout).foregroundStyle(.secondary)
+            Form {
+                TextField("Bot ID", text: $botID)
+                    .accessibilityIdentifier("create-bot-id")
+                TextField("Display name", text: $displayName)
+                TextField("Role (max 128 characters)", text: $role)
+                TextField("Primary model (optional)", text: $model)
+                Picker("Preferred runtime", selection: $runtime) {
+                    Text("Local").tag("local")
+                    Text("Cloud").tag("cloud")
+                    Text("Either").tag("either")
+                }
+                Toggle("Permit cloud data handling in Bot policy", isOn: $cloudAllowed)
+            }
+            Text("Policy: governed promotion, no delegation, no authority lease; exact scope and permissions are required before work begins.")
+                .font(.caption).foregroundStyle(.secondary)
+            if !store.botCreationMessage.isEmpty {
+                Text(store.botCreationMessage)
+                    .font(.caption).textSelection(.enabled)
+            }
+            HStack {
+                Button("Cancel") { dismiss() }
+                Spacer()
+                Button("Register Bot") {
+                    store.createBot(CAPTBotDraft(
+                        identifier: botID, displayName: displayName,
+                        role: role, model: model,
+                        locality: runtime, allowCloud: cloudAllowed
+                    ))
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(store.botCreationBusy || botID.isEmpty || displayName.isEmpty ||
+                          role.isEmpty || role.count > 128 || model.count > 256)
+            }
+        }
+        .padding(22)
     }
 }

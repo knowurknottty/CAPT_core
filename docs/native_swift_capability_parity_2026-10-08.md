@@ -35,7 +35,12 @@ operation in the runtime contract is **not** proof of end-to-end Swift UX.
   operations as read-only JSON queries, with guarded authentication/op fields,
   16 KiB input limit, 64 KiB bounded response preview, and isolated socket.
   Does not expose any of the 28 command operations as raw mutation actions.
-- Bots, providers, memory, skills, approvals, Runtime: surfaced in native views;
+- Bots: native identity creation is wired to authenticated RuntimeService `register_bot`,
+  with manifest-only scope and no implicit execution authority. CAPT-Bot R5
+  (`knowurknottty/CAPT-Bot`) owns the rest of the Bot product lifecycle;
+  the current resident daemon must advertise this newly added command before
+  creation can be used live. Full R5 convergence is not yet release-proven.
+- Providers, memory, skills, approvals, Runtime: surfaced in native views;
   coverage and permission boundaries require separate acceptance tests.
 
 ## Remaining substantive parity work — NOT complete
