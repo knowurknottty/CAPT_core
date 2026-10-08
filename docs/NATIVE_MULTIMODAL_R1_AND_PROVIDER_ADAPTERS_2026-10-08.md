@@ -117,3 +117,37 @@ R1 is a functional **local intake and preview** milestone, not a
 multi-provider media generation release. It does not request paid
 inference, modify HumanApproval, or invoke media services. Keep the
 legacy image provider adapter behind its existing authority boundaries.
+
+## R1 installation and test acceptance
+
+- Exact committed native source with asynchronous file picker:
+  `1da2b5543a25c09ae29c5deb1bba88fa70bac85e`.
+- Core Python full suite prior to the final picker-only change:
+  **1,998 passed, 70 skipped, 13 deselected** (82.71 s).
+  Log `~/capt-node-workspace/native-media-r1-python-full.log`.
+  After endpoint-validator hardening, the exact-focused validation suite
+  passed **20 tests**. No post-picker Python regression was required
+  because this commit changes only Swift view code.
+- Exact-source native Swift suite after the picker correction:
+  **159 passed, 9 skipped, 0 failed**.
+  Log `~/capt-node-workspace/native-media-nonblocking-test.log`.
+- Signed Swift CAPT.app 0.5.0 installed at `~/Applications/CAPT.app`;
+  verified strict Apple signing and executable byte equality with the
+  clean staged build. Executable SHA256:
+  `b6057a1bbedf50a2972fdcee95d2c6885a5b55239c2590dffc40f95e0185216c`.
+- TIA activated the installed app, observed an enabled native
+  **Attach files** accessibility button, and successfully pressed
+  it using the nonblocking macOS panel implementation.
+  Full manual file selection was **not** completed through TIA;
+  source-level tests stage arbitrary files, preserve SHA-256 and file
+  permissions, and verify removal without model dispatch.
+- One installed CAPT app process was observed; returned to **0% CPU
+  while idle** after the picker interaction. Resident RuntimeService
+  stayed HEALTHY, integrity `ok`, EventStore head 23497.
+- A temporary picker opened during the TIA test was dismissed.
+  No paid model requests, media generation, GitHub issue mutations,
+  or HumanApproval decisions were made by this acceptance.
+
+**Disposition:** Native local media intake, preview and typed provider
+adapter metadata R1 shipped. Real provider media uploads/async outputs
+remain R2 implementation gates, not accepted tests.
