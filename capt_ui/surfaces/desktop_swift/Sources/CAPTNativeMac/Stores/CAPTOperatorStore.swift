@@ -23,6 +23,9 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var vesselsPerCohort = 6
     @Published var councilBusy = false
     @Published var councilError: String?
+    @Published var runtimeQueryOutput = ""
+    @Published var runtimeQueryError: String?
+    @Published var runtimeQueryBusy = false
     @Published var runtimeIdentity = "Not connected"
     @Published var taskState = "—"
     @Published var isBusy = false
@@ -59,6 +62,7 @@ final class CAPTOperatorStore: ObservableObject {
     private let runtimeProfile: CAPTRuntimeProfile
     private let historyRuntime: CAPTBackgroundRuntime
     private let councilRuntime: CAPTBackgroundRuntime
+    private let queryRuntime: CAPTBackgroundRuntime
     private var historyRefreshPending = false
     private var compilingTasks: [UUID: Task<Void, Never>] = [:]
     private var compilationVersions: [UUID: UUID] = [:]
@@ -77,6 +81,7 @@ final class CAPTOperatorStore: ObservableObject {
         self.runtimeProfile = profile
         self.historyRuntime = CAPTBackgroundRuntime(profile: profile)
         self.councilRuntime = CAPTBackgroundRuntime(profile: profile)
+        self.queryRuntime = CAPTBackgroundRuntime(profile: profile)
         self.sessionStore = sessionStore ?? CAPTEncryptedSessionStore(
             fileURL: CAPTEncryptedSessionStore.defaultFileURL(profile: profile)
         )
@@ -1381,6 +1386,27 @@ extension CAPTOperatorStore {
             } catch {
                 councilError = error.localizedDescription
                 refreshCouncil(sessionID: id)
+            }
+        }
+    }
+}
+
+
+extension CAPTOperatorStore {
+    func performReadOnlyRuntimeQuery(_ operation: String, payloadJSON: String) {
+        guard connectionState == .connected, !runtimeQueryBusy else { return }
+        runtimeQueryBusy = true
+        runtimeQueryError = nil
+        runtimeQueryOutput = ""
+        Task {
+            defer { runtimeQueryBusy = false }
+            do {
+                _ = try await queryRuntime.connect()
+                runtimeQueryOutput = try await queryRuntime.readRuntimeQuery(
+                    operation: operation, payloadJSON: payloadJSON
+                )
+            } catch {
+                runtimeQueryError = error.localizedDescription
             }
         }
     }

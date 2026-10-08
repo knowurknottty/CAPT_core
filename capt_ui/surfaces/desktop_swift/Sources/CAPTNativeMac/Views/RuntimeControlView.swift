@@ -25,6 +25,7 @@ struct RuntimeControlView: View {
                 }
                 checkpointCard
                 capabilityCard
+                RuntimeQueryExplorerView(store: store)
             }
             .padding(24).frame(maxWidth: .infinity, alignment: .leading)
         }

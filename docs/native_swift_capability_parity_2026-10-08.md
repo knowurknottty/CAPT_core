@@ -31,6 +31,10 @@ operation in the runtime contract is **not** proof of end-to-end Swift UX.
 - Missions: list scoped mission-grade/active/history, task graph, task/run cancel.
 - Evidence: accepted/pending/all filter and independent claim verification read.
 - Ledger: bounded timeline and optional low-level event filtering.
+- Runtime Query Explorer: dynamically exposes all 23 runtime-advertised query
+  operations as read-only JSON queries, with guarded authentication/op fields,
+  16 KiB input limit, 64 KiB bounded response preview, and isolated socket.
+  Does not expose any of the 28 command operations as raw mutation actions.
 - Bots, providers, memory, skills, approvals, Runtime: surfaced in native views;
   coverage and permission boundaries require separate acceptance tests.
 
@@ -59,9 +63,11 @@ operation in the runtime contract is **not** proof of end-to-end Swift UX.
 
 ## Verification evidence for this slice
 
-- 131 Swift tests passed; 9 explicitly skipped live/integration tests.
+- 135 Swift tests passed; 9 explicitly skipped live/integration tests.
 - TIA on staged signed CAPT.app observed the new Council disclosure control,
-  the approval-preparation button, Add Cohort and vessel count.
+  the approval-preparation button, Add Cohort and vessel count; and executed
+  a read-only RuntimeService identity query, confirming the returned live
+  head sequence and integrity status in the actual native UI.
 - No paid inference was dispatched, no HumanApproval was auto-decided.
 - This change does not claim full feature parity until the remaining items
   each pass source/test/install/live/release gates.

@@ -395,4 +395,10 @@ actor CAPTBackgroundRuntime {
     func runCouncil(_ review: CAPTCouncilReview) throws -> String {
         try CAPTCouncilCoordinator(client: client).run(review)
     }
+
+    func readRuntimeQuery(operation: String, payloadJSON: String) throws -> String {
+        try CAPTRuntimeQueryExplorer(client: client).perform(
+            operation: operation, payloadJSON: payloadJSON
+        )
+    }
 }
