@@ -20,7 +20,7 @@ _ALLOWED_TRANSPORTS = frozenset({
     "chat_completions", "responses", "json", "multipart", "async_job",
 })
 _ALLOWED_RESPONSE_TYPES = frozenset({
-    "json_base64", "json_url", "raw_binary", "multipart", "job_receipt",
+    "json_base64", "json_text", "json_url", "raw_binary", "multipart", "job_receipt",
 })
 _TEMPLATE_NAMES = frozenset({"job_id", "file_id", "generation_id"})
 

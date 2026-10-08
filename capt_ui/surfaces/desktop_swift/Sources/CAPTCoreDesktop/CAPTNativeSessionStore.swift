@@ -21,6 +21,10 @@ public struct CAPTNativeSession: Identifiable, Codable, Equatable, Sendable {
     // Local quarantine attachments, never implicit model/provider inputs.
     // Optional to preserve decoding of legacy encrypted sessions.
     public var attachments: [CAPTNativeAttachment]?
+    // Media approval references are persisted for read-only reattachment.
+    public var mediaApprovalRequestID: String?
+    public var mediaDriverRunID: String?
+    public var mediaManifestDigest: String?
     public var promptProposal: CAPTPromptProposal?
     public var pendingApproval: CAPTPendingApproval?
     public var verificationDriverRunID: String?
@@ -46,6 +50,8 @@ public struct CAPTNativeSession: Identifiable, Codable, Equatable, Sendable {
         self.councilReview = nil
         self.piRequestID = nil
         self.attachments = nil
+        self.mediaApprovalRequestID = nil
+        self.mediaDriverRunID = nil
         self.promptProposal = promptProposal
         self.pendingApproval = pendingApproval
         self.verificationDriverRunID = verificationDriverRunID

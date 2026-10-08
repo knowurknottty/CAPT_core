@@ -54,6 +54,10 @@ _REQUIRED_ENVELOPE = (
 
 _VALID_OPS = (
     "create_mission",
+    "prepare_media_approval",
+    "submit_approved_media",
+    "poll_media_job",
+    "fetch_media_artifact",
     "register_bot",
     "operator_chat_new",
     "operator_execution_config_set",
@@ -102,6 +106,9 @@ class RuntimeCommandService:
         tool_broker: Any = None,
         prompt_compiler: Optional[PromptCompiler] = None,
         operator_control: Optional[OperatorControlStore] = None,
+        media_registry: Any = None,
+        media_transport: Any = None,
+        media_credential_resolver: Any = None,
     ) -> None:
         self.store = store
         self.svc = runtime_service or RuntimeService(store)
@@ -114,6 +121,9 @@ class RuntimeCommandService:
         # execution after RuntimeService restarts.
         self.pi_active_attempts: set[str] = set()
         self.operator_control = operator_control
+        self.media_registry = media_registry
+        self.media_transport = media_transport
+        self.media_credential_resolver = media_credential_resolver
         self.fixed_openharness_runner = None
         self.approved_hermes_runner: Any = None
         self.runtime_checkpoint_runner = None
@@ -282,6 +292,37 @@ class RuntimeCommandService:
         op = cmd["op"]
         meta = self._operator_metadata(cmd)
         try:
+            if op in ("prepare_media_approval", "submit_approved_media",
+                      "poll_media_job", "fetch_media_artifact"):
+                from capt_runtime.media_execution import (
+                    MediaHTTPTransport, MediaRouteRegistry, fetch_media_artifact,
+                    poll_media_job, prepare_media_approval, submit_approved_media,
+                )
+                routes = self.media_registry or MediaRouteRegistry({})
+                http = self.media_transport or MediaHTTPTransport()
+                resolver = self.media_credential_resolver or (lambda _provider: "")
+                if op == "prepare_media_approval":
+                    result = prepare_media_approval(
+                        self.svc, cmd["payload"], meta, registry=routes)
+                    return self._receipt(cmd, status="accepted", classification="accepted",
+                        result=result, stream_id="human_approval-" + result["requestId"])
+                request_id = str(cmd["payload"].get("requestId") or "")
+                if not request_id.startswith("approval-media-"):
+                    raise AuthorityViolation("MEDIA_REQUEST_ID_INVALID")
+                if op == "submit_approved_media":
+                    result = submit_approved_media(
+                        self.svc, request_id, meta, registry=routes,
+                        transport=http, credential_resolver=resolver)
+                elif op == "poll_media_job":
+                    result = poll_media_job(
+                        self.svc, request_id, registry=routes,
+                        transport=http, credential_resolver=resolver)
+                else:
+                    result = fetch_media_artifact(
+                        self.svc, request_id, registry=routes,
+                        transport=http, credential_resolver=resolver)
+                return self._receipt(cmd, status="accepted", classification="accepted",
+                    result=result, stream_id="driverrun-" + result["driverRunId"])
             if op == "operator_chat_new":
                 payload = cmd["payload"]
                 result = self._control().new_chat(

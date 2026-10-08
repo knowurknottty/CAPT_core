@@ -121,6 +121,96 @@ actor CAPTBackgroundRuntime {
         return try CAPTManagedSkillMutationResult(dictionary: result)
     }
 
+    func mediaRoutes() throws -> [CAPTMediaRouteDescriptor] {
+        let response = try client.query(op: "media_route_catalog", payload: [:])
+        guard response["ok"] as? Bool == true,
+              let rows = response["result"] as? [[String: Any]] else {
+            throw CAPTRuntimeClientError.malformedResponse("Media route catalog unavailable")
+        }
+        return try rows.map(CAPTMediaRouteDescriptor.init(dictionary:))
+    }
+
+    func prepareMedia(
+        adapter: CAPTMediaRouteDescriptor, prompt: String,
+        attachments: [CAPTNativeAttachment], maxCostUSD: Double
+    ) throws -> [String: Any] {
+        let files: [[String: Any]] = attachments.map {
+            ["stagedPath": $0.stagedPath, "sha256": $0.sha256,
+             "sizeBytes": $0.sizeBytes, "mediaType": $0.mediaType,
+             "originalName": $0.originalName]
+        }
+        return try mediaCommand(op: "prepare_media_approval",
+            payload: [
+                "adapterId": adapter.adapterID,
+                "operation": adapter.operation,
+                "provider": adapter.provider,
+                "model": adapter.model,
+                "prompt": prompt,
+                "files": files,
+                "providerNetworkPolicy": "remote_allowed",
+                "maxCostUSD": maxCostUSD,
+            ])
+    }
+
+    func approveMedia(_ requestID: String) throws -> [String: Any] {
+        try mediaCommand(
+            op: "submit_approval_decision",
+            payload: ["requestId": requestID, "decision": "approve",
+                      "note": "Explicit operator approval for bound media execution"]
+        )
+    }
+
+    func mediaApprovalState(_ requestID: String) throws -> String {
+        let response = try client.query(op: "get_state",
+            payload: ["streamId": "human_approval-" + requestID])
+        guard response["ok"] as? Bool == true,
+              let state = response["result"] as? [String: Any] else {
+            throw CAPTRuntimeClientError.malformedResponse("Media approval missing")
+        }
+        return state["state"] as? String ?? "unknown"
+    }
+
+    func submitApprovedMedia(_ requestID: String) throws -> [String: Any] {
+        try mediaCommand(op: "submit_approved_media",
+            payload: ["requestId": requestID],
+            key: "native-media-dispatch-" + requestID)
+    }
+
+    func pollMedia(_ requestID: String) throws -> [String: Any] {
+        try mediaCommand(op: "poll_media_job", payload: ["requestId": requestID])
+    }
+
+    func fetchMedia(_ requestID: String) throws -> [String: Any] {
+        try mediaCommand(op: "fetch_media_artifact", payload: ["requestId": requestID])
+    }
+
+    func mediaStatus(_ driverRunID: String) throws -> [String: Any] {
+        let response = try client.query(op: "media_job_status",
+            payload: ["driverRunId": driverRunID])
+        guard response["ok"] as? Bool == true,
+              let result = response["result"] as? [String: Any] else {
+            throw CAPTRuntimeClientError.malformedResponse("Media status unavailable")
+        }
+        return result
+    }
+
+    private func mediaCommand(
+        op: String, payload: [String: Any], key: String? = nil
+    ) throws -> [String: Any] {
+        let receipt = try client.command(
+            op: op, payload: payload,
+            idempotencyKey: key ?? "native-media-" + UUID().uuidString.lowercased()
+        )
+        guard let status = receipt["status"] as? String,
+              status == "accepted" || status == "idempotent",
+              let result = receipt["result"] as? [String: Any] else {
+            let error = receipt["detail"] as? String ??
+                "Governed media action refused by RuntimeService"
+            throw CAPTRuntimeClientError.malformedResponse(error)
+        }
+        return result
+    }
+
     func historySnapshot() throws -> CAPTHistorySnapshot {
         let aggregateResponse = try client.query(op: "list_aggregates", payload: [:])
         let aggregates = aggregateResponse["result"] as? [[String: Any]] ?? []

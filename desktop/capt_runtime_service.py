@@ -584,9 +584,13 @@ class RuntimeQueryService:
         memory_engine: Any = None, mcp_manager: Any = None,
         operator_control: OperatorControlStore | None = None,
         pi_active_attempts: set[str] | None = None,
+        media_registry: Any = None,
+        media_config_error: str | None = None,
     ) -> None:
         self.store = store
         self.pi_active_attempts = pi_active_attempts
+        self.media_registry = media_registry
+        self.media_config_error = media_config_error
         self.demo = demo or {}
         self.memory_engine = memory_engine
         self.mcp_manager = mcp_manager
@@ -1109,8 +1113,8 @@ class RuntimeQueryService:
             if op == "capabilities":
                 return {"ok": True, "result": {
                     "schemaVersion": CONTRACT_SCHEMA_VERSION,
-                    "queryOperations": ["identity", "capabilities", "list_aggregates", "bots", "approvals", "missions", "tasks", "checkpoints", "security_rejections", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers", "managed_skills", "operator_control_snapshot", "operator_session_get", "operator_proposal_get", "operator_execution_state", "pi_request_status"],
-                    "commandOperations": ["create_mission", "register_bot", "operator_chat_new", "operator_execution_config_set", "operator_prompt_submit", "operator_proposal_select", "compile_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "activate_approved_capability", "submit_provider_result_review", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "run_approved_council_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool", "install_managed_skill", "create_managed_skill"],
+                    "queryOperations": ["identity", "capabilities", "list_aggregates", "bots", "approvals", "missions", "tasks", "checkpoints", "security_rejections", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers", "managed_skills", "operator_control_snapshot", "operator_session_get", "operator_proposal_get", "operator_execution_state", "pi_request_status", "media_route_catalog", "media_job_status"],
+                    "commandOperations": ["create_mission", "prepare_media_approval", "submit_approved_media", "poll_media_job", "fetch_media_artifact", "register_bot", "operator_chat_new", "operator_execution_config_set", "operator_prompt_submit", "operator_proposal_select", "compile_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "activate_approved_capability", "submit_provider_result_review", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "run_approved_council_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool", "install_managed_skill", "create_managed_skill"],
                     "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True, "toolRegistry": True, "toolBroker": True, "mcpClient": self.mcp_manager is not None, "promptCompiler": True, "botFoundation": True},
                     "lifecycleOperations": {"checkpoint": True, "shutdown": True, "resume": True},
                 }}
@@ -1122,6 +1126,17 @@ class RuntimeQueryService:
                 return {"ok": True, "result": self.operator_proposal_get(request.get("proposalId"))}
             if op == "operator_execution_state":
                 return {"ok": True, "result": self.operator_execution_state()}
+            if op == "media_route_catalog":
+                if self.media_config_error:
+                    return {"ok": False, "error": "MEDIA_CONFIGURATION_INVALID"}
+                from desktop.media_registry import media_route_catalog
+                from capt_runtime.media_execution import MediaRouteRegistry
+                return {"ok": True, "result": media_route_catalog(
+                    self.media_registry or MediaRouteRegistry({}))}
+            if op == "media_job_status":
+                from capt_runtime.media_execution import media_job_status
+                return {"ok": True, "result": media_job_status(
+                    self.store, str(request["driverRunId"]))}
             if op == "pi_request_status":
                 from capt_runtime.prompt_proposals import pi_attempt_status
                 return {"ok": True, "result": pi_attempt_status(
@@ -1292,9 +1307,22 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
     )
 
     pi_active_attempts: set[str] = set()
+    from desktop.media_registry import load_media_routes, media_credential_provider
+    from capt_runtime.media_execution import MediaRouteRegistry
+    media_config_error = None
+    try:
+        media_registry, media_key_refs = load_media_routes(Path(ledger_path).parent / "ui")
+    except Exception:
+        # Optional malformed media settings cannot take down the resident daemon.
+        # Fail closed: ZERO routes, no provider authority, no secret-bearing logs.
+        media_registry, media_key_refs = MediaRouteRegistry({}), {}
+        media_config_error = "MEDIA_CONFIGURATION_INVALID"
+    media_credential_resolver = media_credential_provider(media_key_refs)
     query = RuntimeQueryService(
         store, demo, memory_engine, runtime.mcp_manager, operator_control,
         pi_active_attempts=pi_active_attempts,
+        media_registry=media_registry,
+        media_config_error=media_config_error,
     )
 
     token = secrets.token_hex(32)
@@ -1344,6 +1372,8 @@ def serve(ledger_path: str, sock_path: Path, token_file: str, seed: bool) -> Non
                 operator_control=operator_control,
             )
             cmd_svc.pi_active_attempts = pi_active_attempts
+            cmd_svc.media_registry = media_registry
+            cmd_svc.media_credential_resolver = media_credential_resolver
             provider_governor = _build_provider_governor(store)
             # Fixed v0.5 OpenHarness inspection: service-owned runner uses the
             # already-created canonical RuntimeComposition; no duplicate runtime.

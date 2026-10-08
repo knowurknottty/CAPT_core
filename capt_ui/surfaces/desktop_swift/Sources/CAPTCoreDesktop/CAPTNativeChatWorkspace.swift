@@ -216,6 +216,50 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
         return removed
     }
 
+    @discardableResult
+    public mutating func bindMediaApproval(
+        requestID: String, driverRunID: String, for sessionID: UUID
+    ) -> Bool {
+        guard let index = index(of: sessionID),
+              sessions[index].mediaApprovalRequestID == nil else { return false }
+        sessions[index].mediaApprovalRequestID = requestID
+        sessions[index].mediaDriverRunID = driverRunID
+        sessions[index].updatedAt = Date()
+        sessions[index].messages.append(CAPTChatMessage(
+            role: .system,
+            text: "Media HumanApproval requested: " + requestID +
+                ". Exact asset bytes and route are frozen; no provider call yet.",
+            authorityState: "media_approval_requested"
+        ))
+        return true
+    }
+
+    public mutating func addMediaResult(
+        _ details: [String: Any], for sessionID: UUID
+    ) {
+        guard let index = index(of: sessionID) else { return }
+        let state = details["state"] as? String ?? "indeterminate"
+        if state != "completed" { return }
+        // Strictly a provider artifact CANDIDATE, not a human verification.
+        let representation = (try? JSONSerialization.data(
+            withJSONObject: ["artifactCandidate": details["artifactCandidate"] ?? [:]],
+            options: [.sortedKeys]
+        )).flatMap { String(data: $0, encoding: .utf8) }
+        let driverID = details["driverRunId"] as? String ?? ""
+        if sessions[index].messages.contains(where: {
+            $0.authorityState == "unverified_media_" + driverID
+        }) { return }
+        let assistantText = details["resultText"] as? String ??
+            "Generated media is available for local preview; independent verification is still pending."
+        sessions[index].messages.append(CAPTChatMessage(
+            role: .assistant,
+            text: assistantText,
+            authorityState: "unverified_media_" + driverID,
+            executionDetailsJSON: representation
+        ))
+        sessions[index].updatedAt = Date()
+    }
+
     public mutating func failProposalRequest(message: String, for id: UUID) {
         guard let index = index(of: id) else { return }
         sessions[index].promptProposal = nil

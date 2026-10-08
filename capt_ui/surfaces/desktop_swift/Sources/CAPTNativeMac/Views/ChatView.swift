@@ -10,6 +10,7 @@ struct ChatView: View {
     // Bound the mounted transcript views. Retain every message in the
     // encrypted session store and reveal earlier pages only on demand.
     @State private var visibleMessageLimit = 40
+    @State private var showMediaWorkbench = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -145,6 +146,27 @@ struct ChatView: View {
 
             InversionDivider()
             CouncilReviewView(store: store, draft: $draft)
+            HStack {
+                Button {
+                    showMediaWorkbench.toggle()
+                } label: {
+                    Label("Media I/O", systemImage: "photo.stack")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .accessibilityIdentifier("media-open-workbench")
+                Spacer()
+                if !store.activeChatAttachments.isEmpty {
+                    Text("Local attachments require governed media execution")
+                        .font(.caption2).foregroundStyle(.orange)
+                }
+            }
+            .padding(.horizontal, 18)
+            if showMediaWorkbench || !store.activeChatAttachments.isEmpty ||
+               store.activeMediaApprovalID != nil {
+                MediaWorkbenchView(store: store, draft: $draft)
+                    .padding(.horizontal, 18)
+            }
             ComposerView(
                 draft: $draft,
                 promptIntelligence: $store.promptIntelligence,

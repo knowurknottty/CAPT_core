@@ -40,6 +40,11 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var piRecoveryBusy = false
     @Published var nativeAttachmentBusy = false
     @Published var nativeAttachmentMessage = ""
+    @Published var mediaRoutes: [CAPTMediaRouteDescriptor] = []
+    @Published var mediaWorkflowBusy = false
+    @Published var mediaWorkflowMessage = ""
+    @Published var mediaApprovalState = ""
+    @Published var mediaResultState = ""
     @Published var missions: [CAPTMissionSummary] = []
     @Published var evidenceItems: [CAPTEvidenceSummary] = []
     @Published var approvals: [CAPTApprovalSummary] = []
@@ -79,6 +84,7 @@ final class CAPTOperatorStore: ObservableObject {
     private let councilRuntime: CAPTBackgroundRuntime
     private let queryRuntime: CAPTBackgroundRuntime
     private let botRuntime: CAPTBackgroundRuntime
+    private let mediaRuntime: CAPTBackgroundRuntime
     private var historyRefreshPending = false
     private var compilingTasks: [UUID: Task<Void, Never>] = [:]
     private var compilationVersions: [UUID: UUID] = [:]
@@ -99,6 +105,7 @@ final class CAPTOperatorStore: ObservableObject {
         self.councilRuntime = CAPTBackgroundRuntime(profile: profile)
         self.queryRuntime = CAPTBackgroundRuntime(profile: profile)
         self.botRuntime = CAPTBackgroundRuntime(profile: profile)
+        self.mediaRuntime = CAPTBackgroundRuntime(profile: profile)
         self.sessionStore = sessionStore ?? CAPTEncryptedSessionStore(
             fileURL: CAPTEncryptedSessionStore.defaultFileURL(profile: profile)
         )
@@ -116,6 +123,13 @@ final class CAPTOperatorStore: ObservableObject {
         }
         restoreSessionsAsync()
         refreshOperatorState()
+    }
+
+    var activeMediaApprovalID: String? {
+        chatWorkspace.activeSession?.mediaApprovalRequestID
+    }
+    var activeMediaDriverRunID: String? {
+        chatWorkspace.activeSession?.mediaDriverRunID
     }
 
     var activeChatAttachments: [CAPTNativeAttachment] {
@@ -159,7 +173,7 @@ final class CAPTOperatorStore: ObservableObject {
             providerWarmState != "warming" &&
             pendingApproval == nil &&
             promptProposal == nil &&
-            activeChatFlow.canCompose
+            activeChatFlow.canCompose && activeMediaApprovalID == nil
     }
 
     func setExecutionProvider(_ value: String) {
@@ -1637,6 +1651,7 @@ extension CAPTOperatorStore {
     /// There is no model/tool upload or filesystem authority on this path.
     func stageNativeFiles(_ urls: [URL]) {
         guard let sessionID = activeSessionID, canComposeInActiveChat,
+              activeMediaApprovalID == nil,
               !nativeAttachmentBusy, !urls.isEmpty else { return }
         nativeAttachmentBusy = true
         nativeAttachmentMessage = "Copying selected files into private local staging…"
@@ -1672,7 +1687,8 @@ extension CAPTOperatorStore {
     }
 
     func removeNativeAttachment(_ id: UUID) {
-        guard let sessionID = activeSessionID,
+        guard activeMediaApprovalID == nil,
+              let sessionID = activeSessionID,
               let item = mutateWorkspace({ $0.removeLocalAttachment(id, from: sessionID) })
         else { return }
         saveSessions()
@@ -1686,6 +1702,164 @@ extension CAPTOperatorStore {
         } catch {
             nativeAttachmentMessage = "Removed from chat, but local staging cleanup needs attention: " +
                 error.localizedDescription
+        }
+    }
+}
+
+
+extension CAPTOperatorStore {
+    /// Read-only discovery. No cost, no new model request, no automatic route.
+    func refreshMediaRoutes() {
+        Task {
+            do {
+                try await mediaRuntime.connectReadOnly()
+                mediaRoutes = try await mediaRuntime.mediaRoutes()
+                if mediaRoutes.isEmpty {
+                    mediaWorkflowMessage = "No model-specific media routes are configured. " +
+                        "An attachment is still local-only until a route is declared and approved."
+                }
+            } catch {
+                mediaWorkflowMessage = "Media route catalog unavailable: " + error.localizedDescription
+            }
+        }
+    }
+
+    func prepareMediaApproval(
+        route: CAPTMediaRouteDescriptor, prompt: String, maxCostUSD: Double
+    ) {
+        guard !mediaWorkflowBusy,
+              let id = activeSessionID,
+              activeMediaApprovalID == nil,
+              route.supports(activeChatAttachments),
+              maxCostUSD >= route.maximumPriceUSD,
+              authoritySettings.providerNetwork == .remoteAllowed
+        else {
+            mediaWorkflowMessage = "Route, attachment type, budget, or remote network authority not eligible."
+            return
+        }
+        mediaWorkflowBusy = true
+        let files = activeChatAttachments
+        Task {
+            defer { mediaWorkflowBusy = false }
+            do {
+                try await mediaRuntime.connectReadOnly()
+                let result = try await mediaRuntime.prepareMedia(
+                    adapter: route, prompt: prompt, attachments: files,
+                    maxCostUSD: maxCostUSD
+                )
+                guard let requestID = result["requestId"] as? String,
+                      let driverRunID = result["driverRunId"] as? String else {
+                    throw CAPTRuntimeClientError.malformedResponse("Media approval receipt missing")
+                }
+                _ = mutateWorkspace {
+                    $0.bindMediaApproval(requestID: requestID,
+                                         driverRunID: driverRunID, for: id)
+                }
+                saveSessions()
+                if activeSessionID == id {
+                    mediaApprovalState = "requested"
+                    mediaResultState = "not_started"
+                    mediaWorkflowMessage = "Media approval requested. Verify exact route, bound bytes, and cost in Approvals; no provider call yet."
+                }
+            } catch {
+                if activeSessionID == id {
+                    mediaWorkflowMessage = "Media approval request failed: " + error.localizedDescription
+                }
+            }
+        }
+    }
+
+    func refreshMediaWorkflow() {
+        guard !mediaWorkflowBusy, let requestID = activeMediaApprovalID else { return }
+        let driver = activeMediaDriverRunID
+        mediaWorkflowBusy = true
+        Task {
+            defer { mediaWorkflowBusy = false }
+            do {
+                try await mediaRuntime.connectReadOnly()
+                mediaApprovalState = try await mediaRuntime.mediaApprovalState(requestID)
+                if let driver {
+                    let result = try await mediaRuntime.mediaStatus(driver)
+                    mediaResultState = result["state"] as? String ?? "indeterminate"
+                    if mediaResultState == "completed", let sid = activeSessionID {
+                        mutateWorkspace { $0.addMediaResult(result, for: sid) }
+                        saveSessions()
+                    }
+                }
+                mediaWorkflowMessage = "Authoritative media status refreshed without dispatch."
+            } catch {
+                mediaWorkflowMessage = "Media status unavailable: " + error.localizedDescription
+            }
+        }
+    }
+
+    func approveMediaRequest() {
+        guard !mediaWorkflowBusy, mediaApprovalState == "requested",
+              let requestID = activeMediaApprovalID else { return }
+        mediaWorkflowBusy = true
+        Task {
+            defer { mediaWorkflowBusy = false }
+            do {
+                try await mediaRuntime.connectReadOnly()
+                _ = try await mediaRuntime.approveMedia(requestID)
+                mediaApprovalState = "approved"
+                mediaWorkflowMessage = "HumanApproval approved. Dispatch requires a separate Run action."
+            } catch {
+                mediaWorkflowMessage = "Media approval refused: " + error.localizedDescription
+            }
+        }
+    }
+
+    func runApprovedMedia() {
+        guard !mediaWorkflowBusy, mediaApprovalState == "approved",
+              let requestID = activeMediaApprovalID,
+              let sessionID = activeSessionID else { return }
+        mediaWorkflowBusy = true
+        mediaWorkflowMessage = "Dispatching once with the exact approved model and media binding…"
+        Task {
+            defer { mediaWorkflowBusy = false }
+            do {
+                try await mediaRuntime.connectReadOnly()
+                let result = try await mediaRuntime.submitApprovedMedia(requestID)
+                mediaResultState = result["state"] as? String ?? "indeterminate"
+                if mediaResultState == "completed" {
+                    mutateWorkspace { $0.addMediaResult(result, for: sessionID) }
+                    saveSessions()
+                }
+                mediaApprovalState = "consumed"
+                mediaWorkflowMessage = "Provider dispatch receipt: " + mediaResultState +
+                    ". Reconciliation will never automatically send a duplicate generation request."
+            } catch {
+                mediaResultState = "indeterminate"
+                mediaWorkflowMessage = "Media dispatch indeterminate: " + error.localizedDescription +
+                    ". Check existing status before any new request; it may already have incurred usage."
+            }
+        }
+    }
+
+    func advanceMediaJob(download: Bool) {
+        guard !mediaWorkflowBusy,
+              let requestID = activeMediaApprovalID,
+              let sessionID = activeSessionID else { return }
+        mediaWorkflowBusy = true
+        Task {
+            defer { mediaWorkflowBusy = false }
+            do {
+                try await mediaRuntime.connectReadOnly()
+                let result = try await (
+                    download ? mediaRuntime.fetchMedia(requestID) :
+                               mediaRuntime.pollMedia(requestID)
+                )
+                mediaResultState = result["state"] as? String ?? "indeterminate"
+                if mediaResultState == "completed" {
+                    mutateWorkspace { $0.addMediaResult(result, for: sessionID) }
+                    saveSessions()
+                }
+                mediaWorkflowMessage = "Media job status: " + mediaResultState +
+                    ". Video generation has not been resubmitted."
+            } catch {
+                mediaWorkflowMessage = "Media job check failed: " + error.localizedDescription
+            }
         }
     }
 }
