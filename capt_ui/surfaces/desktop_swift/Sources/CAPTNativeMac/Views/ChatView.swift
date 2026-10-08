@@ -759,7 +759,9 @@ private struct ComposerView: View {
                             picker.allowsMultipleSelection = true
                             picker.treatsFilePackagesAsDirectories = false
                             picker.message = "Files are copied into private local staging; not uploaded to models."
-                            if picker.runModal() == .OK { addFiles(picker.urls) }
+                            picker.begin { response in
+                                if response == .OK { addFiles(picker.urls) }
+                            }
                         } label: {
                             Label("Attach files", systemImage: "paperclip")
                                 .labelStyle(.iconOnly)
