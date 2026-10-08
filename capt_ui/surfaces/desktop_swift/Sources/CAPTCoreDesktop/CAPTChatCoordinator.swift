@@ -75,6 +75,7 @@ public final class CAPTChatCoordinator {
         missionID: String? = nil,
         managedSkillNames: [String]? = nil,
         autoSelectSkills: Bool = true,
+        cohortSpec: [String: Any]? = nil,
         authoritySettings: CAPTExecutionAuthoritySettings = .default
     ) throws -> CAPTPendingApproval {
         let selected = proposal.selectedPrompt(selection, edited: editedPrompt)
@@ -89,6 +90,7 @@ public final class CAPTChatCoordinator {
             "humanVerificationRequired": true,
         ]
         if selection == .edited { payload["editedPrompt"] = selected }
+        if let cohortSpec { payload["cohortSpec"] = cohortSpec }
         if let missionID, !missionID.isEmpty { payload["missionId"] = missionID }
         guard let filesystemRoot = authoritySettings.effectiveFilesystemRoot(
             projectRoot: proposal.targetRoot

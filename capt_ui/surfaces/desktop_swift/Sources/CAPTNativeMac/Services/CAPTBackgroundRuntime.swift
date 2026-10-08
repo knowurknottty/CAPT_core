@@ -112,8 +112,13 @@ actor CAPTBackgroundRuntime {
         let aggregateResponse = try client.query(op: "list_aggregates", payload: [:])
         let aggregates = aggregateResponse["result"] as? [[String: Any]] ?? []
         var states: [String: [String: Any]] = [:]
+        let relevantKinds: Set<String> = [
+            "mission", "task", "driverrun", "claim", "human_approval"
+        ]
         for aggregate in aggregates {
-            guard let streamID = aggregate["streamId"] as? String else { continue }
+            guard let kind = aggregate["kind"] as? String,
+                  relevantKinds.contains(kind),
+                  let streamID = aggregate["streamId"] as? String else { continue }
             let response = try client.query(
                 op: "get_state", payload: ["streamId": streamID]
             )
@@ -328,12 +333,14 @@ actor CAPTBackgroundRuntime {
         missionID: String? = nil,
         managedSkillNames: [String]? = nil,
         autoSelectSkills: Bool = true,
+        cohortSpec: [String: Any]? = nil,
         authoritySettings: CAPTExecutionAuthoritySettings = .default
     ) throws -> CAPTPendingApproval {
         try coordinator.requestApproval(
             proposal: proposal, selection: selection, editedPrompt: editedPrompt,
             missionID: missionID, managedSkillNames: managedSkillNames,
-            autoSelectSkills: autoSelectSkills, authoritySettings: authoritySettings
+            autoSelectSkills: autoSelectSkills, cohortSpec: cohortSpec,
+            authoritySettings: authoritySettings
         )
     }
 

@@ -46,6 +46,29 @@ final class CAPTNativeChatWorkspaceTests: XCTestCase {
         XCTAssertEqual(workspace.session(oldID)?.pendingApproval?.requestID, "approval-1")
     }
 
+    func testCohortVesselsAreOptInPersistedAndFrozenDuringPI() throws {
+        var workspace = CAPTNativeChatWorkspace()
+        _ = workspace.newChat(
+            id: oldID, provider: "openrouter", model: "model-a", targetRoot: "/repo"
+        )
+        XCTAssertNil(workspace.activeSession?.cohortVessels)
+        XCTAssertTrue(workspace.setActiveCohortVessels(22))
+        XCTAssertEqual(workspace.activeSession?.cohortVessels, 22)
+        let encoded = try JSONEncoder().encode(workspace.activeSession!)
+        let decoded = try JSONDecoder().decode(CAPTNativeSession.self, from: encoded)
+        XCTAssertEqual(decoded.cohortVessels, 22)
+        _ = workspace.beginPrompt(
+            "inspect", provider: "openrouter", model: "model-a", targetRoot: "/repo"
+        )
+        XCTAssertFalse(workspace.setActiveCohortVessels(100))
+        XCTAssertEqual(workspace.activeSession?.cohortVessels, 22)
+        _ = workspace.newChat(
+            id: newID, provider: "openrouter", model: "model-a", targetRoot: "/repo"
+        )
+        XCTAssertNil(workspace.activeSession?.cohortVessels)
+        XCTAssertEqual(workspace.session(oldID)?.cohortVessels, 22)
+    }
+
     func testSwitchingAwayAndBackPreservesInFlightPromptCompilation() {
         var workspace = CAPTNativeChatWorkspace()
         _ = workspace.newChat(

@@ -19,6 +19,8 @@ final class CAPTOperatorStore: ObservableObject {
         .appendingPathComponent("CAPT_core", isDirectory: true).path
     @Published var promptIntelligence = "AUTO"
     @Published var reasoningEffort = ""
+    @Published var cohortEnabled = false
+    @Published var vesselsPerCohort = 6
     @Published var runtimeIdentity = "Not connected"
     @Published var taskState = "—"
     @Published var isBusy = false
@@ -52,6 +54,11 @@ final class CAPTOperatorStore: ObservableObject {
     @Published private var chatWorkspace = CAPTNativeChatWorkspace()
 
     private let runtime: CAPTBackgroundRuntime
+    private let runtimeProfile: CAPTRuntimeProfile
+    private let historyRuntime: CAPTBackgroundRuntime
+    private var historyRefreshPending = false
+    private var compilingTasks: [UUID: Task<Void, Never>] = [:]
+    private var compilationVersions: [UUID: UUID] = [:]
     private let sessionStore: CAPTEncryptedSessionStore
     let runtimeStateDirectory: String
     private var providerWarmIdentity: String?
@@ -64,6 +71,8 @@ final class CAPTOperatorStore: ObservableObject {
         sessionStore: CAPTEncryptedSessionStore? = nil
     ) {
         self.runtime = runtime ?? CAPTBackgroundRuntime(profile: profile)
+        self.runtimeProfile = profile
+        self.historyRuntime = CAPTBackgroundRuntime(profile: profile)
         self.sessionStore = sessionStore ?? CAPTEncryptedSessionStore(
             fileURL: CAPTEncryptedSessionStore.defaultFileURL(profile: profile)
         )
@@ -139,6 +148,26 @@ final class CAPTOperatorStore: ObservableObject {
         persistConfiguration(
             for: activeSessionID, provider: provider, model: model, targetRoot: value
         )
+    }
+
+    func setCohortEnabled(_ enabled: Bool) {
+        let count = enabled ? vesselsPerCohort : nil
+        if activeSessionID == nil {
+            cohortEnabled = enabled
+            return
+        }
+        guard mutateWorkspace({ $0.setActiveCohortVessels(count) }) else { return }
+        cohortEnabled = enabled
+        saveSessions()
+    }
+
+    func setVesselsPerCohort(_ count: Int) {
+        guard (1...1000).contains(count) else { return }
+        if activeSessionID != nil, cohortEnabled {
+            guard mutateWorkspace({ $0.setActiveCohortVessels(count) }) else { return }
+            saveSessions()
+        }
+        vesselsPerCohort = count
     }
 
     func setReasoningEffort(_ value: String) {
@@ -269,14 +298,30 @@ final class CAPTOperatorStore: ObservableObject {
         let remoteCompilationAuthorized = authoritySettings.remotePromptCompilationAllowed &&
             authoritySettings.providerNetwork == .remoteAllowed
 
-        Task {
+        // Each submitted PI request has its own authenticated actor and socket.
+        // Abandoning one wait must not queue every future chat behind it.
+        let proposalRuntime = CAPTBackgroundRuntime(profile: runtimeProfile)
+        let compilationVersion = UUID()
+        compilationVersions[sessionID] = compilationVersion
+        compilingTasks[sessionID] = Task {
+            defer {
+                if compilationVersions[sessionID] == compilationVersion {
+                    compilationVersions.removeValue(forKey: sessionID)
+                    compilingTasks.removeValue(forKey: sessionID)
+                }
+            }
             do {
-                let proposal = try await runtime.compileProposal(
+                // PI uses an isolated actor/socket; never serialize the whole
+                // operator control plane behind a remote compiler request.
+                _ = try await proposalRuntime.connect()
+                let proposal = try await proposalRuntime.compileProposal(
                     original: trimmed, targetRoot: root, provider: selectedProvider,
                     model: selectedModel, promptIntelligence: intelligence,
                     reasoningEffort: selectedReasoningEffort,
                     remoteCompilationAuthorized: remoteCompilationAuthorized
                 )
+                guard !Task.isCancelled,
+                      compilationVersions[sessionID] == compilationVersion else { return }
                 mutateWorkspace { $0.receiveProposal(proposal, for: sessionID) }
                 if activeSessionID == sessionID {
                     updateTaskStateFromActiveFlow()
@@ -287,6 +332,8 @@ final class CAPTOperatorStore: ObservableObject {
                 saveSessions()
                 refreshHistory()
             } catch {
+                guard !Task.isCancelled,
+                      compilationVersions[sessionID] == compilationVersion else { return }
                 let message = error.localizedDescription
                 mutateWorkspace { $0.failProposalRequest(message: message, for: sessionID) }
                 if activeSessionID == sessionID {
@@ -296,6 +343,18 @@ final class CAPTOperatorStore: ObservableObject {
                 saveSessions()
             }
         }
+    }
+
+    func abandonCompilingProposal() {
+        guard let sessionID = activeSessionID,
+              activeChatFlow.phase == .compilingProposal else { return }
+        compilationVersions.removeValue(forKey: sessionID)
+        compilingTasks.removeValue(forKey: sessionID)?.cancel()
+        let message = "Stopped waiting for Prompt Intelligence locally. A remote request may still finish; no model execution was authorized. You can retry or select PI OFF."
+        mutateWorkspace { $0.failProposalRequest(message: message, for: sessionID) }
+        taskState = "proposal_abandoned"
+        lastError = nil
+        saveSessions()
     }
 
     func selectPromptProposal(
@@ -310,6 +369,17 @@ final class CAPTOperatorStore: ObservableObject {
         lastError = nil
         let missionID = chatWorkspace.session(sessionID)?.missionID
         let skillSelection = executionSkillSelection()
+        let cohortSpec: [String: Any]?
+        if let vessels = chatWorkspace.session(sessionID)?.cohortVessels {
+            cohortSpec = [
+                "cohortId": "native-" + proposal.proposalID,
+                "configurationId": "native-chat-v2",
+                "vesselsPerCohort": vessels,
+                "vesselCharterPolicy": ["schemaVersion": "2.0.0"]
+            ]
+        } else {
+            cohortSpec = nil
+        }
 
         Task {
             do {
@@ -317,6 +387,7 @@ final class CAPTOperatorStore: ObservableObject {
                     proposal: proposal, selection: selection, editedPrompt: editedPrompt,
                     missionID: missionID, managedSkillNames: skillSelection.names,
                     autoSelectSkills: skillSelection.autoSelect,
+                    cohortSpec: cohortSpec,
                     authoritySettings: authoritySettings
                 )
                 mutateWorkspace { $0.receiveApproval(pending, for: sessionID) }
@@ -473,10 +544,15 @@ final class CAPTOperatorStore: ObservableObject {
     }
 
     func refreshHistory() {
-        guard connectionState == .connected else { return }
+        guard connectionState == .connected, !historyRefreshPending else { return }
+        historyRefreshPending = true
         Task {
+            defer { historyRefreshPending = false }
             do {
-                let snapshot = try await runtime.historySnapshot()
+                // Expensive forensic projection uses its own authenticated socket;
+                // thousands of aggregate reads cannot block chat/control actions.
+                _ = try await historyRuntime.connect()
+                let snapshot = try await historyRuntime.historySnapshot()
                 missions = snapshot.missions
                 evidenceItems = snapshot.evidence
                 approvals = snapshot.approvals
@@ -1011,30 +1087,23 @@ final class CAPTOperatorStore: ObservableObject {
     }
 
     func newChat() {
-        Task {
-            do {
-                applyOperatorSnapshot(try await runtime.operatorSnapshot())
-            } catch {
-                runtimeControlMessage = "Using cached provider/model preference: " + error.localizedDescription
-            }
-
-            let defaults = newChatDefaults
-            _ = mutateWorkspace {
-                $0.newChat(
-                    provider: defaults.providerID,
-                    model: defaults.modelID,
-                    targetRoot: defaults.targetRoot
-                )
-            }
-            syncSelectionFromActiveSession()
-            taskState = "—"
-            lastError = nil
-            if !runtimeControlMessage.hasPrefix("Using cached provider/model preference:") {
-                runtimeControlMessage = ""
-            }
-            saveSessions()
-            scheduleSelectedProviderPrewarmIfNeeded()
+        // Never await RuntimeService or provider inference before opening a local
+        // session. A remote PI stage can occupy a runtime actor for minutes.
+        // Cached operator preferences are already refreshed independently.
+        let defaults = newChatDefaults
+        _ = mutateWorkspace {
+            $0.newChat(
+                provider: defaults.providerID,
+                model: defaults.modelID,
+                targetRoot: defaults.targetRoot
+            )
         }
+        syncSelectionFromActiveSession()
+        taskState = "—"
+        lastError = nil
+        runtimeControlMessage = ""
+        saveSessions()
+        scheduleSelectedProviderPrewarmIfNeeded()
     }
 
     func activateSession(_ id: UUID) {
@@ -1052,6 +1121,8 @@ final class CAPTOperatorStore: ObservableObject {
         provider = session.provider
         model = session.model
         targetRoot = session.targetRoot
+        cohortEnabled = session.cohortVessels != nil
+        vesselsPerCohort = session.cohortVessels ?? 6
     }
 
     private func persistConfiguration(

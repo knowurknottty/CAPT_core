@@ -3,9 +3,27 @@ import CAPTCoreDesktop
 
 struct LedgerView: View {
     @ObservedObject var store: CAPTOperatorStore
+    @State private var showTransportPhases = false
+
+    private let routinePhases: Set<String> = [
+        "ToolExecutionPrepared", "ToolExecutionAdmitted",
+        "ToolExecutionDispatching", "ToolExecutionSettling",
+    ]
+
+    private var visibleEvents: [CAPTEventSummary] {
+        showTransportPhases ? store.recentEvents : store.recentEvents.filter {
+            !routinePhases.contains($0.type)
+        }
+    }
 
     var body: some View {
-        List(store.recentEvents) { event in
+        VStack(spacing: 0) {
+            Toggle("Show routine tool transport phases", isOn: $showTransportPhases)
+                .toggleStyle(.switch).controlSize(.small)
+                .padding(.horizontal, 18).padding(.vertical, 10)
+            Text("\(visibleEvents.count) shown from the latest \(store.recentEvents.count) events · all events remain in the immutable ledger")
+                .font(.caption).foregroundStyle(.secondary).padding(.bottom, 4)
+            List(visibleEvents) { event in
             HStack(alignment: .top, spacing: 12) {
                 Text("#\(event.sequence)")
                     .font(.caption.monospacedDigit())
@@ -30,7 +48,7 @@ struct LedgerView: View {
             .padding(.vertical, 4)
         }
         .overlay {
-            if store.recentEvents.isEmpty {
+            if visibleEvents.isEmpty {
                 VStack(spacing: 12) {
                     Image(systemName: "list.bullet.rectangle.portrait")
                         .font(.system(size: 30))
@@ -41,6 +59,7 @@ struct LedgerView: View {
             }
         }
         .onAppear { store.refreshHistory() }
+        }
     }
 
     private func shortID(_ value: String) -> String {

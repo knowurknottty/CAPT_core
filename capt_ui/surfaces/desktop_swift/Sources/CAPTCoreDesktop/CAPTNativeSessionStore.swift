@@ -12,6 +12,8 @@ public struct CAPTNativeSession: Identifiable, Codable, Equatable, Sendable {
     public var provider: String
     public var model: String
     public var targetRoot: String
+    // Nil means cohorts disabled. Optional for lossless decoding of older sessions.
+    public var cohortVessels: Int?
     public var promptProposal: CAPTPromptProposal?
     public var pendingApproval: CAPTPendingApproval?
     public var verificationDriverRunID: String?
@@ -20,7 +22,8 @@ public struct CAPTNativeSession: Identifiable, Codable, Equatable, Sendable {
         id: UUID = UUID(), missionID: String? = nil, title: String,
         createdAt: Date = Date(), updatedAt: Date = Date(),
         messages: [CAPTChatMessage] = [], provider: String,
-        model: String, targetRoot: String, promptProposal: CAPTPromptProposal? = nil,
+        model: String, targetRoot: String, cohortVessels: Int? = nil,
+        promptProposal: CAPTPromptProposal? = nil,
         pendingApproval: CAPTPendingApproval? = nil, verificationDriverRunID: String? = nil
     ) {
         self.id = id
@@ -32,6 +35,7 @@ public struct CAPTNativeSession: Identifiable, Codable, Equatable, Sendable {
         self.provider = provider
         self.model = model
         self.targetRoot = targetRoot
+        self.cohortVessels = cohortVessels
         self.promptProposal = promptProposal
         self.pendingApproval = pendingApproval
         self.verificationDriverRunID = verificationDriverRunID

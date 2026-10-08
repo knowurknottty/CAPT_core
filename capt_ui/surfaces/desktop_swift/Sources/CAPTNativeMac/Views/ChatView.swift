@@ -25,6 +25,11 @@ struct ChatView: View {
                                 detail: "CAPT is running the governed prompt stage chain before any HumanApproval exists.",
                                 tone: .violet
                             )
+                            Button("Stop waiting for PI") {
+                                store.abandonCompilingProposal()
+                            }
+                            .buttonStyle(.bordered)
+                            .help("Abandon this local wait. A remote compiler request may continue; no model execution is approved.")
                             .id("chat-compiling-proposal")
                         }
 
@@ -115,6 +120,12 @@ struct ChatView: View {
             ComposerView(
                 draft: $draft,
                 promptIntelligence: $store.promptIntelligence,
+                cohortEnabled: Binding(
+                    get: { store.cohortEnabled }, set: { store.setCohortEnabled($0) }
+                ),
+                vesselsPerCohort: Binding(
+                    get: { store.vesselsPerCohort }, set: { store.setVesselsPerCohort($0) }
+                ),
                 reasoningEffort: Binding(
                     get: { store.reasoningEffort },
                     set: { store.setReasoningEffort($0) }
@@ -521,6 +532,8 @@ private struct ApprovalCard: View {
 private struct ComposerView: View {
     @Binding var draft: String
     @Binding var promptIntelligence: String
+    @Binding var cohortEnabled: Bool
+    @Binding var vesselsPerCohort: Int
     @Binding var reasoningEffort: String
     @Binding var remotePromptCompilationAllowed: Bool
     let remotePromptCompilationAvailable: Bool
@@ -587,6 +600,30 @@ private struct ComposerView: View {
                         if highRiskAuthority {
                             InversionStatusBadge("elevated authority", tone: .amber)
                         }
+                    }
+
+                    HStack(spacing: 12) {
+                        Toggle("COHORT CHARTER", isOn: $cohortEnabled)
+                            .toggleStyle(.switch)
+                            .controlSize(.mini)
+                            .disabled(!enabled)
+                            .help("Opt in to one verified deep-charter cohort for this model task. Vessels are independent analytical perspectives, not extra inference calls.")
+                        if cohortEnabled {
+                            Stepper(value: $vesselsPerCohort, in: 1...1000) {
+                                Text("\(vesselsPerCohort) vessels")
+                                    .monospacedDigit()
+                            }
+                            .frame(width: 150)
+                            .disabled(!enabled)
+                            Text("1 cohort per approval · parallel perspectives · no extra inference calls")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Cohorts and vessels disabled by default")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
                     }
 
                     if showRemotePromptCompilationControl &&

@@ -286,6 +286,31 @@ extension CAPTChatCoordinatorTests {
         XCTAssertEqual(payload["missionId"] as? String, "mission-1")
     }
 
+    func testProposalApprovalBindsRealVesselCharterWithoutDispatch() throws {
+        let client = MockRuntimeClient()
+        client.responses["request_prompt_proposal_approval"] = approvalResponse()
+        let coordinator = CAPTChatCoordinator(client: client)
+        let proposal = try CAPTPromptProposal(
+            dictionary: promptProposalResponse()["result"] as! [String: Any]
+        )
+        _ = try coordinator.requestApproval(
+            proposal: proposal, selection: .original,
+            cohortSpec: [
+                "cohortId": "native-pp-1", "configurationId": "native-chat-v2",
+                "vesselsPerCohort": 22,
+                "vesselCharterPolicy": ["schemaVersion": "2.0.0"]
+            ]
+        )
+        XCTAssertEqual(client.calls.map(\.0), ["request_prompt_proposal_approval"])
+        let spec = try XCTUnwrap(client.calls[0].1["cohortSpec"] as? [String: Any])
+        XCTAssertEqual(spec["cohortId"] as? String, "native-pp-1")
+        XCTAssertEqual(spec["vesselsPerCohort"] as? Int, 22)
+        XCTAssertEqual(
+            (spec["vesselCharterPolicy"] as? [String: String])?["schemaVersion"],
+            "2.0.0"
+        )
+    }
+
     func testProposalApprovalPropagatesManualManagedSkillSelection() throws {
         let client = MockRuntimeClient()
         client.responses["request_prompt_proposal_approval"] = approvalResponse()

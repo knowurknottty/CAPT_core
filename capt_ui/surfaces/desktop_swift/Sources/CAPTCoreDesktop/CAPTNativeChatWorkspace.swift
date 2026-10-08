@@ -106,6 +106,19 @@ public struct CAPTNativeChatWorkspace: Equatable, Sendable {
     }
 
     @discardableResult
+    public mutating func setActiveCohortVessels(_ count: Int?) -> Bool {
+        if let count, !(1...1000).contains(count) { return false }
+        guard let id = activeSessionID,
+              let index = index(of: id),
+              sessions[index].promptProposal == nil,
+              sessions[index].pendingApproval == nil,
+              !flow(for: id).isBusy else { return false }
+        sessions[index].cohortVessels = count
+        sessions[index].updatedAt = Date()
+        return true
+    }
+
+    @discardableResult
     public mutating func beginPrompt(
         _ objective: String,
         provider: String,
