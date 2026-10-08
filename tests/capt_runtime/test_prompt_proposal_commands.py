@@ -398,3 +398,31 @@ def test_compile_persists_compiler_disposition_for_reconnect_and_replay(tmp_path
     replayed = full_replay(store).aggregates["prompt_proposal-" + result["proposalId"]]
     assert replayed == state
     store.close()
+
+
+def test_safe_compiler_failure_diagnostic_survives_ledger_replay(tmp_path):
+    from desktop.prompt_compiler_provider import UnavailablePromptCompiler
+
+    root = tmp_path / "repo"
+    root.mkdir()
+    store = EventStore(str(tmp_path / "ledger.db"))
+    relay = RuntimeCommandService(
+        store, "operator", "session",
+        runtime_service=RuntimeService(store),
+        prompt_compiler=UnavailablePromptCompiler("openrouter: HTTP_400"),
+    )
+    payload = _compile_payload(str(root))
+    receipt = relay.execute(_cmd("compile_prompt_proposal", payload, "unavailable-diagnostic"))
+    assert receipt["status"] == "accepted"
+    result = receipt["result"]
+    assert result["status"] == "compiler_unavailable"
+    assert result["proposedPrompt"] == result["originalPrompt"]
+    assert "openrouter: HTTP_400" in result["rationale"]
+    assert "Original operator prompt preserved" in result["rationale"]
+    assert all(not record["executionEnabled"] for record in result["stageRecords"])
+    state = store.require_state("prompt_proposal-" + result["proposalId"])
+    assert state["rationale"] == result["rationale"]
+    replayed = full_replay(store).aggregates["prompt_proposal-" + result["proposalId"]]
+    assert replayed["rationale"] == result["rationale"]
+    assert replayed["compilationStatus"] == "compiler_unavailable"
+    store.close()

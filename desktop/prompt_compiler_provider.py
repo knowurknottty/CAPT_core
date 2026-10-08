@@ -9,7 +9,7 @@ import json
 import http.client
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
@@ -367,6 +367,48 @@ def _compiler_from_selection(selection: PromptCompilerSelection):
     )
 
 
+def _failure_code(exc: BaseException) -> str:
+    """Safe diagnostic classification; never persist provider response bodies.
+
+    Upstream HTTP exceptions can include credentials, URLs, and echoed prompt
+    fragments in their text. This function deliberately stores none of them.
+    """
+    if isinstance(exc, urllib.error.HTTPError):
+        return "HTTP_" + str(exc.code)
+    if isinstance(exc, (TimeoutError,)):
+        return "TIMEOUT"
+    if isinstance(exc, urllib.error.URLError):
+        return "NETWORK_UNREACHABLE"
+    if isinstance(exc, OSError):
+        return "TRANSPORT_UNAVAILABLE"
+    if isinstance(exc, ValueError):
+        return "STRUCTURED_RESPONSE_INVALID"
+    return "UNKNOWN_FAILURE"
+
+
+def _unavailable_result(request: Any, diagnostics: list[str]):
+    from capt_runtime.prompt_compiler import PromptCompiler
+    proposal = PromptCompiler().compile(request)
+    if proposal.status != "compiler_unavailable":
+        return proposal
+    note = (
+        "No complete model-backed Prompt Intelligence upgrade was recorded. "
+        + "; ".join(diagnostics[:8])
+        + ". Original operator prompt preserved. An attempted remote call may have incurred usage; repair the compiler or select Use Original."
+    )
+    return replace(proposal, rationale=proposal.rationale + " " + note)
+
+
+class UnavailablePromptCompiler:
+    """Persist a truthful proposal when operator-selected compilers cannot run."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+
+    def compile(self, request):
+        return _unavailable_result(request, [self.reason])
+
+
 class FailoverPromptCompiler:
     """Try configured compiler preferences in order without weakening authority checks."""
 
@@ -374,21 +416,21 @@ class FailoverPromptCompiler:
         self._compilers = tuple(compilers)
 
     def compile(self, request):
-        last_error: Optional[BaseException] = None
+        diagnostics: list[str] = []
         for compiler in self._compilers:
             try:
                 return compiler.compile(request)
             except AuthorityViolation:
                 raise
             except (OSError, TimeoutError, ValueError) as exc:
-                last_error = exc
-        if last_error is not None:
-            # Prompt enhancement is optional. Preserve the literal human prompt in
-            # a durable compiler_unavailable proposal instead of turning compiler
-            # availability into an execution dependency.
-            from capt_runtime.prompt_compiler import PromptCompiler
-            return PromptCompiler().compile(request)
-        raise ValueError("no configured prompt compiler available")
+                provider = getattr(compiler, "_provider", None)
+                provider_id = getattr(provider, "provider_id", "unknown") or "unknown"
+                # Provider IDs are from the local registry; exception strings
+                # are never copied into the durable prompt/ledger.
+                diagnostics.append(provider_id + ": " + _failure_code(exc))
+        return _unavailable_result(
+            request, diagnostics or ["No usable configured Prompt Intelligence compiler"]
+        )
 
 
 class RequestBoundPromptCompiler:
@@ -408,21 +450,24 @@ class RequestBoundPromptCompiler:
             reasoning_effort=str(getattr(request, "reasoning_effort", "") or ""),
         )
         if selection is None:
-            return PromptCompiler().compile(request)
+            return _unavailable_result(request, ["Selected provider/model is not configured as a compiler"])
         if selection.endpoint_class == "remote" and not bool(
             getattr(request, "remote_compilation_authorized", False)
         ):
             raise AuthorityViolation("REMOTE_COMPILATION_NOT_AUTHORIZED")
         compiler = _compiler_from_selection(selection)
         if compiler is None:
-            return PromptCompiler().compile(request)
+            return _unavailable_result(request, ["Compiler credential unavailable"])
         try:
             return compiler.compile(request)
         except AuthorityViolation:
             raise
-        except (OSError, TimeoutError, ValueError):
-            # Enhancement is advisory. Never silently switch to a different provider.
-            return PromptCompiler().compile(request)
+        except (OSError, TimeoutError, ValueError) as exc:
+            # Enhancement is advisory; expose a safe, actionable reason.
+            # Never silently switch execution providers or copy error bodies.
+            return _unavailable_result(
+                request, [selection.provider_id + ": " + _failure_code(exc)]
+            )
 
 
 def build_prompt_compiler(ui_config_dir: Path):
@@ -437,7 +482,9 @@ def build_prompt_compiler(ui_config_dir: Path):
     if explicit.exists():
         if not compilers:
             from capt_runtime.prompt_compiler import PromptCompiler
-            return PromptCompiler()
+            return UnavailablePromptCompiler(
+                "No compatible configured compiler (check provider, model, credential and network policy)"
+            )
         return FailoverPromptCompiler(compilers)
     return RequestBoundPromptCompiler(ui)
 

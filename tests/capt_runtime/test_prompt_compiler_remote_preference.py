@@ -296,3 +296,124 @@ def test_unreachable_local_preference_fails_over_before_chat_dispatch(monkeypatc
     assert proposal.status == "ready_for_approval"
     assert proposal.stage_records[0].provider_id == "live"
     assert "http://127.0.0.1:18085/v1/chat/completions" not in calls
+
+
+def test_openrouter_strict_schema_has_required_every_property():
+    from capt_runtime.prompt_compiler.stages import stage_response_schema
+
+    schema = stage_response_schema()
+    assert set(schema["properties"]) == set(schema["required"])
+    assert schema["additionalProperties"] is False
+    assert "requestedCapabilities" in schema["required"]
+    # Local stage decoder still owns the 32-element admission bound.
+    assert "maxItems" not in schema["properties"]["requestedCapabilities"]
+
+
+def test_all_compilers_fail_with_safe_persistable_failure_codes(monkeypatch, tmp_path):
+    import io
+    from urllib.error import HTTPError, URLError
+    from desktop.prompt_compiler_provider import build_prompt_compiler
+    from capt_runtime.prompt_compiler import PromptCompileRequest
+
+    ui = _write_ui(tmp_path)
+    calls = []
+
+    def failing_urlopen(request, timeout):
+        calls.append(request.full_url)
+        if request.full_url.startswith("https://openrouter.ai/"):
+            raise HTTPError(request.full_url, 400,
+                            "SECRET-REFLECTED-ERROR-BODY", None,
+                            io.BytesIO(b"sensitive response"))
+        raise URLError("SECRET-REFLECTED-LOCAL-ERROR")
+
+    monkeypatch.setattr("desktop.prompt_compiler_provider.resolve_secret",
+                        lambda *_a, **_k: "secret-test-key")
+    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen",
+                        failing_urlopen)
+    compiler = build_prompt_compiler(ui)
+    proposal = compiler.compile(PromptCompileRequest(
+        original_prompt="Review this governed mission with evidence.",
+        requested_engine="OMNI",
+        execution_provider="openrouter", execution_model="xiaomi/mimo-v2.6-flash",
+        remote_compilation_authorized=True,
+    ))
+
+    assert proposal.status == "compiler_unavailable"
+    assert proposal.proposed_prompt == proposal.original_prompt
+    assert "openrouter: HTTP_400" in proposal.rationale
+    assert "mtplx: TRANSPORT_UNAVAILABLE" in proposal.rationale
+    assert "SECRET" not in proposal.rationale
+    assert "sensitive" not in proposal.rationale
+    assert any("openrouter" in url for url in calls)
+    assert all(not record.execution_enabled for record in proposal.stage_records)
+
+
+def test_usable_compiler_configuration_error_is_visible(monkeypatch, tmp_path):
+    from desktop.prompt_compiler_provider import build_prompt_compiler
+    from capt_runtime.prompt_compiler import PromptCompileRequest
+
+    ui = _write_ui(tmp_path)
+    providers = _providers()
+    providers["providers"] = [providers["providers"][0]]
+    (ui / "providers.json").write_text(json.dumps(providers))
+    monkeypatch.setattr("desktop.prompt_compiler_provider.resolve_secret",
+                        lambda *_a, **_k: "")
+    compiler = build_prompt_compiler(ui)
+    proposal = compiler.compile(PromptCompileRequest(
+        original_prompt="Review the mission scope and evidence.",
+        requested_engine="OMNI",
+    ))
+    assert proposal.status == "compiler_unavailable"
+    assert "No compatible configured compiler" in proposal.rationale
+
+
+def test_two_stage_pipeline_runs_with_strict_schema_in_mock_transport(monkeypatch, tmp_path):
+    from desktop.prompt_compiler_provider import build_prompt_compiler
+    from capt_runtime.prompt_compiler import PromptCompileRequest
+
+    ui = _write_ui(tmp_path)
+    captured = []
+    class Response:
+        def __init__(self, obj): self.obj = obj
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+        def read(self, _=-1): return json.dumps(self.obj).encode()
+
+    def fake_urlopen(request, timeout):
+        body = json.loads(request.data.decode())
+        wire = body["response_format"]["json_schema"]["schema"]
+        assert set(wire["required"]) == set(wire["properties"])
+        stage_input = json.loads(body["messages"][1]["content"])
+        stage = stage_input["stage"]
+        captured.append(stage)
+        response = {
+            "stage": stage,
+            "outcome": "Review mission requirements and preserve provenance",
+            "scope": "local repository, no write authority",
+            "inputs": ["operator prompt"],
+            "outputs": ["task-scoped review plan"],
+            "constraints": ["No speculative completion"],
+            "successCriteria": ["Evidence-backed issue coverage"],
+            "ambiguities": [],
+            "requestedCapabilities": [],
+        }
+        return Response({"choices": [{"message": {"content": json.dumps(response)}}]})
+
+    monkeypatch.setattr("desktop.prompt_compiler_provider.resolve_secret",
+                        lambda *_a, **_k: "dummy-key")
+    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen",
+                        fake_urlopen)
+    compiler = build_prompt_compiler(ui)
+    proposal = compiler.compile(PromptCompileRequest(
+        original_prompt="Review the existing mission evidence and dependencies.",
+        requested_engine="AUTO",
+        execution_provider="openrouter",
+        execution_model="xiaomi/mimo-v2.6-flash",
+        remote_compilation_authorized=True,
+    ))
+    assert captured == ["OMNI", "META"]
+    assert proposal.status == "ready_for_approval"
+    assert all(record.execution_enabled for record in proposal.stage_records)
+    assert proposal.proposed_prompt != proposal.original_prompt
+    assert proposal.verification_contract.acceptance_criteria == (
+        "Evidence-backed issue coverage",)

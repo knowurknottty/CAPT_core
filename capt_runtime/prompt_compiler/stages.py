@@ -95,13 +95,19 @@ def stage_instructions(stage: PromptStageName) -> str:
 
 
 def stage_response_schema() -> dict[str, Any]:
-    string_array = {"type": "array", "items": {"type": "string"}, "maxItems": 32}
+    # OpenAI-compatible strict JSON schema subsets may reject maxItems;
+    # StructuredStageResult._bounded_strings enforces the 32-item limit
+    # after decoding, so the wire schema can remain provider-portable.
+    string_array = {"type": "array", "items": {"type": "string"}}
     return {
         "type": "object",
         "additionalProperties": False,
+        # OpenAI/OpenRouter strict structured outputs require *all* property
+        # names under required. The local validator still accepts legacy
+        # optional requestedCapabilities in non-provider test fixtures.
         "required": [
             "stage", "outcome", "scope", "inputs", "outputs", "constraints",
-            "successCriteria", "ambiguities",
+            "successCriteria", "ambiguities", "requestedCapabilities",
         ],
         "properties": {
             "stage": {"type": "string", "enum": [stage.value for stage in PromptStageName]},

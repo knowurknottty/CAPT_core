@@ -31,7 +31,10 @@ struct PromptProposalCard: View {
 
     private var compilerLabel: String {
         let enabled = proposal.stageRecords.first(where: { $0.executionEnabled })
-        guard let enabled else { return "deterministic · no model stage" }
+        guard let enabled else {
+            return proposal.status == "compiler_unavailable"
+                ? "unavailable · no completed upgrade" : "deterministic · no model stage"
+        }
         let location = (enabled.endpointClass ?? "unknown").lowercased()
         let provider = enabled.provider ?? "unknown-provider"
         let model = enabled.model ?? "unknown-model"
@@ -62,7 +65,9 @@ struct PromptProposalCard: View {
                 InversionSectionHeader(
                     "Prompt Intelligence proposal",
                     eyebrow: "PRE-EXECUTION",
-                    detail: "CAPT has transformed the operator request, but no execution authority has been consumed. Choose the exact prompt bytes that should become the HumanApproval basis.",
+                    detail: proposal.status == "compiler_unavailable"
+                        ? "Prompt enhancement did not produce an approvable upgrade. The original request was preserved; earlier transport attempts may have incurred usage. Use the original, or cancel and retry after repairing the compiler."
+                        : "Review the Prompt Intelligence result before choosing the exact prompt bytes for HumanApproval. No execution authority has been consumed.",
                     symbol: "brain.head.profile",
                     tone: statusTone
                 )
@@ -80,6 +85,12 @@ struct PromptProposalCard: View {
 
             InversionKeyValueRow("compiler", value: compilerLabel, tone: .cyan, monospaced: true)
             InversionKeyValueRow("proposal", value: proposal.proposalID, monospaced: true)
+            if proposal.status == "compiler_unavailable" {
+                Label("No upgrade was retained. Use Original or cancel and retry after fixing the configured compiler.", systemImage: "exclamationmark.triangle")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.orange)
+                    .accessibilityIdentifier("pi-compiler-unavailable")
+            }
             if !proposal.rationale.isEmpty {
                 Text(proposal.rationale)
                     .font(.caption)
