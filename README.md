@@ -10,7 +10,31 @@ The model is an inference component. Tools are effect adapters. **RuntimeService
 
 ---
 
-## Current repository status — 2026-09-15
+## Operator status update — 2026-10-08
+
+The native Swift CAPT **0.5.0** app has an evidence-derived
+[Collaborative Kanban R1](docs/architecture/CAPT_KANBAN_COLLABORATION_R1_2026-10-08.md)
+alongside Missions, Evidence, Ledger, Approvals and the governed Council.
+The [exact-head verification record](docs/verification/CAPT_KANBAN_R1_ACCEPTANCE_2026-10-08.md)
+documents the signed installed build, TIA interactions, and the Python/Swift
+tests. **Do not interpret the presence of board cards or a running marker as
+proof of live execution or end-to-end Bot autonomy.**
+
+The historic CAPT Core issue-resolution task and mission were conservatively
+reconciled to **suspended**, with original history and evidence preserved.
+RuntimeService is healthy and advertises Bot identity registration. The
+human path forward is **Missions → Prepare continuation in Chat** or
+**Kanban → Inspect → Continue**; consequential actions still require their
+original CAPT authority and verification boundaries.
+
+[CAPT-Bot](https://github.com/knowurknottty/CAPT-Bot) R5 operational
+convergence and Kanban R2 durable multi-actor write/claim APIs are **open
+release gates**. A passing historical Bot compatibility suite is not R5
+production composition or release certification.
+
+---
+
+## Historical repository status — 2026-09-15
 
 CAPT Core deliberately distinguishes source state from proof state:
 
