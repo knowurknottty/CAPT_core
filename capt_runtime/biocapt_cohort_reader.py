@@ -152,11 +152,25 @@ class BioCAPTLocalCohortReader:
             outputs = completed.get("module_outputs")
             if not isinstance(outputs, dict):
                 raise ValueError("BIOCAPT_MODULE_RECEIPTS_INVALID")
-            # Module presence and PULSE completion are observable; not truth.
+            # A recently polled process may still hold an OLD cogitation.
+            completed_at = completed.get("observed_at")
+            if (not isinstance(completed_at, (float, int))
+                    or isinstance(completed_at, bool)
+                    or abs(time.time() - completed_at) > self.max_age_seconds):
+                return self._result("UNKNOWN", "UNKNOWN", timestamp,
+                                    ("STALE_COGITATION",), pid)
+            # Observe algorithm status without promoting it to factual truth.
             processed = bool(outputs) and completed.get("pulse_success") is True
-            status = "PROPOSED" if processed else "UNKNOWN"
+            uber = outputs.get("UBER_QIPC")
+            observed_state = uber.get("consensus_state") if isinstance(uber, dict) else None
+            states = {"no_vote": "NO_VOTE", "skipped": "SKIPPED",
+                      "proposed": "PROPOSED", "converged": "CONVERGED",
+                      "divergent": "DIVERGENT", "unhealthy": "UNHEALTHY",
+                      "unknown": "UNKNOWN"}
+            status = states.get(observed_state, "PROPOSED" if processed else "UNKNOWN")
             subset = {"pid": pid, "sequence": snapshot.get("sequence"),
-                      "observed_at": sampled, "module_names": sorted(outputs.keys()),
+                      "observed_at": sampled, "cogitation_observed_at": completed_at,
+                      "module_summaries": outputs,
                       "pulse_success": completed.get("pulse_success")}
             receipt = hashlib.sha256(json.dumps(subset, sort_keys=True,
                                                  separators=(",", ":")).encode()).hexdigest()
