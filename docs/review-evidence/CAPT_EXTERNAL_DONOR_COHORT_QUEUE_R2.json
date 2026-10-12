@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "capt.external-donor-review-queue.v2",
+  "updatedAt": "2026-10-12",
+  "purpose": "Append-only next-batch external donor intake; does not alter archived/approved frozen council inputs.",
+  "upstreamReference": {
+    "historicalManifest": "docs/missions/CAPT_DONOR_CHERRYPICK_INTEGRATION_R1.json",
+    "historicalQueueCount": 40,
+    "sourceStatus": "historical donor worktree, not main; preserve without rewriting"
+  },
+  "executionPolicy": {
+    "desiredCohorts": [
+      {
+        "cohortId": "deepseek-v4.1-flash",
+        "provider": "openrouter",
+        "role": "architecture and mechanism scrutiny"
+      },
+      {
+        "cohortId": "mimo-v2.6-flash",
+        "provider": "openrouter",
+        "role": "adversarial/privacy/licensing review"
+      },
+      {
+        "cohortId": "glm-5.3-flash",
+        "provider": "openrouter",
+        "role": "integration and regression feasibility"
+      }
+    ],
+    "vesselsPerCohort": 22,
+    "maxConcurrentCohorts": 1,
+    "physicalProviderCalls": "One per cohort unless tool rounds are explicitly approved and recorded.",
+    "approval": "New HumanApproval for each bounded execution; never reuse or mutate a frozen approval.",
+    "scope": "NEXT external donor review, not the frozen CAPT-UPG-025..074 six-file council objective.",
+    "completion": "Require RRDS-1 verified full-tree census, 100% in-scope source inspection, complete documented dispositions, independent verifier receipts and grounded tests before any cherry-pick."
+  },
+  "additions": [
+    {
+      "repository": "RenyunLi0116/agent-memory-galaxy",
+      "url": "https://github.com/RenyunLi0116/agent-memory-galaxy",
+      "defaultBranch": "main",
+      "observedHead": "17b5279189e4c97462a9f59324593802e0e61e9f",
+      "observedAt": "2026-10-12",
+      "licenseStatus": "UNVERIFIED_OR_ABSENT",
+      "licenseEvidence": "GitHub repository metadata reports license=null; no LICENSE file was in the observed root listing.",
+      "classification": "CHERRY_PICK_CANDIDATE_PENDING_RRDS_1_AND_LICENSE",
+      "integrationPreference": "Reimplement bounded mechanisms under CAPT RuntimeService/EventStore/ToolBroker/ClaimGuard, not wholesale runtime import.",
+      "mechanisms": [
+        "agent-memory.md ingest/normalization",
+        "safe agent-session metadata distillation",
+        "cross-machine memory provenance graph",
+        "presence heartbeat and live multi-agent status",
+        "governed memory relay and inbox",
+        "static evidence viewer"
+      ],
+      "relevantPaths": [
+        "collect.py",
+        "distill.py",
+        "auto_presence.py",
+        "relay.py",
+        "sync_watch.sh",
+        "encrypt.py",
+        "viewer/"
+      ],
+      "preliminaryRisks": [
+        "Session and memory metadata leaks across users/machines",
+        "SYNC_INBOX prompt-injection/trust escalation",
+        "plaintext graph in private hubs or public deployment",
+        "file scanning and git push outside CAPT scope",
+        "unsafe replication/ownership/provenance ambiguity",
+        "missing verifiable upstream license for code copying"
+      ],
+      "redTeamTargets": [
+        "untrusted memory entry prompt injection",
+        "plaintext/ciphertext publication separation",
+        "host/agent/user attribution spoofing",
+        "unauthorized background sync and multi-machine egress",
+        "credential scrubbing",
+        "same-UID agent bypass"
+      ],
+      "disposition": "QUEUED_NOT_REVIEWED",
+      "lastReviewReceipt": null,
+      "sourceAuditReceipt": null,
+      "integrated": false
+    }
+  ]
+}
