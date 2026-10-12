@@ -100,4 +100,3 @@ def execution_projection(client: Any, executions: list[dict[str, Any]]) -> list[
             "reconciliation": str(state.get("reconciliationStatus") or "unknown"),
         })
     return rows
-
