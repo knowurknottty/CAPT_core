@@ -62,6 +62,7 @@ def normalize_model_authority(
     raw: Mapping[str, Any] | None,
     *,
     target_root: str,
+    provider: str = "",
 ) -> dict[str, Any]:
     """Return the exact bounded authority profile eligible for approval.
 
@@ -71,13 +72,16 @@ def normalize_model_authority(
     turn a serialization bug into accidental authority.
     """
     target = _directory(target_root, label="MODEL_TARGET_ROOT")
+    # OpenRouter is unambiguously a remote transport. Bind egress authority
+    # *before* HumanApproval, never broaden a previously approved profile.
+    openrouter = str(provider).strip().lower() == "openrouter"
     if raw is None:
         values: dict[str, Any] = {
             "filesystemScope": "project",
             "filesystemRoot": str(target),
             "fileMutationAllowed": False,
             "shellAccessAllowed": False,
-            "providerNetworkPolicy": "local_only",
+            "providerNetworkPolicy": "remote_allowed" if openrouter else "local_only",
         }
     else:
         if not isinstance(raw, Mapping):
@@ -114,6 +118,8 @@ def normalize_model_authority(
     network = values["providerNetworkPolicy"]
     if network not in _NETWORK_VALUES:
         raise AuthorityViolation("AUTHORITY_PROVIDER_NETWORK_POLICY_INVALID")
+    if openrouter and network != "remote_allowed":
+        raise AuthorityViolation("OPENROUTER_REQUIRES_REMOTE_NETWORK_AUTHORITY")
 
     operations = ["file.read", "file.search"]
     if mutation:

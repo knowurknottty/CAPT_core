@@ -92,7 +92,7 @@ def request_model_prompt_approval(
     human_verification_required = bool(intent.get("humanVerificationRequired", True))
     executable = str(intent.get("executable", "") or "")
     authority_profile = normalize_model_authority(
-        intent.get("authorityProfile"), target_root=target_root
+        intent.get("authorityProfile"), target_root=target_root, provider=provider
     )
     # Explicit authored-skill selection is verified before approval state exists.
     # The resulting exact bytes are included in the approved model-visible prompt.

@@ -886,7 +886,8 @@ final class CAPTOperatorStore: ObservableObject {
     }
 
     var selectedProviderBlockedByNetworkAuthority: Bool {
-        authoritySettings.providerNetwork == .localOnly && selectedProviderRequiresRemoteNetwork
+        authoritySettings.effectiveProviderNetwork(for: provider) == .localOnly
+            && selectedProviderRequiresRemoteNetwork
     }
 
     var runtimeCompatibilityIssue: String? {

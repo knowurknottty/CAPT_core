@@ -44,6 +44,14 @@ public struct CAPTExecutionAuthoritySettings: Codable, Equatable, Sendable {
         remotePromptCompilationAllowed: false
     )
 
+    /// OpenRouter has no local-only transport. The selected provider must be
+    /// shown to the operator as remote before HumanApproval is requested.
+    /// This does not change filesystem, shell, or write authority.
+    public func effectiveProviderNetwork(for provider: String) -> CAPTProviderNetworkPolicy {
+        provider.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "openrouter"
+            ? .remoteAllowed : providerNetwork
+    }
+
     public func effectiveFilesystemRoot(projectRoot: String) -> String? {
         switch filesystemScope {
         case .project:

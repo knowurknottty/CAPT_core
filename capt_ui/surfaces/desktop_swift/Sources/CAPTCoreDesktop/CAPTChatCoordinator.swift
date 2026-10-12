@@ -107,7 +107,7 @@ public final class CAPTChatCoordinator {
             "filesystemRoot": filesystemRoot,
             "fileMutationAllowed": authoritySettings.fileMutationAllowed,
             "shellAccessAllowed": authoritySettings.shellAccessAllowed,
-            "providerNetworkPolicy": authoritySettings.providerNetwork.rawValue,
+            "providerNetworkPolicy": authoritySettings.effectiveProviderNetwork(for: proposal.provider ?? "").rawValue,
         ]
         if let managedSkillNames, !managedSkillNames.isEmpty {
             payload["managedSkillNames"] = managedSkillNames
@@ -162,7 +162,7 @@ public final class CAPTChatCoordinator {
             "filesystemRoot": filesystemRoot,
             "fileMutationAllowed": authoritySettings.fileMutationAllowed,
             "shellAccessAllowed": authoritySettings.shellAccessAllowed,
-            "providerNetworkPolicy": authoritySettings.providerNetwork.rawValue,
+            "providerNetworkPolicy": authoritySettings.effectiveProviderNetwork(for: provider).rawValue,
         ]
         let response = try client.command(
             op: "request_model_prompt_approval",
