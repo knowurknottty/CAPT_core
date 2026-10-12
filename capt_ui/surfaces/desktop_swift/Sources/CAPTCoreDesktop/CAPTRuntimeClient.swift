@@ -107,6 +107,12 @@ public final class CAPTRuntimeClient: CAPTRuntimeCommanding {
         payload: [String: Any],
         idempotencyKey: String? = nil
     ) throws -> [String: Any] {
+        // A stale or never-connected desktop client may lose session identity
+        // while RuntimeService itself remains healthy. Authenticate before a
+        // NEW command only; never replay a command after a send/read failure.
+        if operatorID == nil || sessionID == nil {
+            _ = try connect()
+        }
         guard let operatorID, let sessionID else {
             throw CAPTRuntimeClientError.notAuthenticated
         }
