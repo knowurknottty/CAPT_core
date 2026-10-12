@@ -939,22 +939,48 @@ class RuntimeCommandService:
                             active -= 1
 
                 results = {}
-                with ThreadPoolExecutor(
-                    max_workers=min(raw_limit, len(normalized)),
-                    thread_name_prefix="capt-cohort",
-                ) as pool:
-                    futures = {
-                        pool.submit(run_one, index, spec, item): spec["cohortId"]
-                        for index, (spec, item) in enumerate(normalized)
-                    }
-                    for future in as_completed(futures):
-                        cohort_id, receipt = future.result()
+                if raw_limit == 1:
+                    # Sequential cohorts are dependent handoffs. After any
+                    # rejected precursor, persist sanitized blocked receipts
+                    # for remaining cohorts WITHOUT consuming their approvals
+                    # or dispatching additional (potentially billable) calls.
+                    failed_predecessor = ""
+                    for index, (spec, item) in enumerate(normalized):
+                        if failed_predecessor:
+                            receipt = {
+                                "status": "blocked",
+                                "classification": "predecessor_failed",
+                            }
+                            self.store.record_council_member_receipt(
+                                council_id, safe_cohort_receipt(
+                                    spec["cohortId"], item, receipt,
+                                ), _now_rfc3339(),
+                            )
+                            results[spec["cohortId"]] = receipt
+                            continue
+                        cohort_id, receipt = run_one(index, spec, item)
                         results[cohort_id] = receipt
+                        if receipt.get("status") not in ("accepted", "idempotent"):
+                            failed_predecessor = cohort_id
+                else:
+                    with ThreadPoolExecutor(
+                        max_workers=min(raw_limit, len(normalized)),
+                        thread_name_prefix="capt-cohort",
+                    ) as pool:
+                        futures = {
+                            pool.submit(run_one, index, spec, item): spec["cohortId"]
+                            for index, (spec, item) in enumerate(normalized)
+                        }
+                        for future in as_completed(futures):
+                            cohort_id, receipt = future.result()
+                            results[cohort_id] = receipt
 
                 ordered = [
                     {"cohortId": spec["cohortId"], "receipt": results[spec["cohortId"]]}
                     for spec, _item in normalized
                 ]
+                unresolved = [x["cohortId"] for x in ordered
+                              if x["receipt"].get("status") not in ("accepted", "idempotent")]
                 result = {
                     "councilId": council_id,
                     "durableReceiptQuery": {"op": "council_receipt", "councilId": council_id},
@@ -968,11 +994,16 @@ class RuntimeCommandService:
                     "maxConcurrentCohorts": raw_limit,
                     "peakConcurrentCohortExecutions": peak,
                     "cohorts": ordered,
+                    # Acceptance means the Council command was processed, not
+                    # that any provider output was verified. Expose failures
+                    # directly rather than incorrectly labeling them success.
+                    "outcome": "incomplete" if unresolved else "dispatched",
+                    "unresolvedCohortIds": unresolved,
                 }
                 return self._receipt(
                     cmd,
                     status="accepted",
-                    classification="accepted",
+                    classification="partial_failure" if unresolved else "accepted",
                     result=result,
                 )
 

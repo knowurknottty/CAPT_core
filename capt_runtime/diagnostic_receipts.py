@@ -125,7 +125,7 @@ def safe_cohort_receipt(
         "driverRunId": _text(item.get("driverRunId")),
         "missionId": _text(item.get("missionId")),
         "approvalRequestId": _text(item.get("approvalRequestId")),
-        "status": status if isinstance(status, str) and status in {"accepted", "rejected", "idempotent"} else "unknown",
+        "status": status if isinstance(status, str) and status in {"accepted", "rejected", "idempotent", "blocked"} else "unknown",
         "driverRunState": _text(observed.get("state"), 32),
         "dispatchBoundary": _text(observed.get("dispatchBoundary"), 48),
         "providerHttpRequestAttempts": (

@@ -250,3 +250,60 @@ def test_two_turn_failure_no_automatic_retry_and_explained_phase(tmp_path, monke
     assert record["failureCode"] == "PROVIDER_NETWORK_ERROR"
     assert "secret DNS value" not in json.dumps(record)
     assert record["retryAutomatically"] is False
+
+
+def test_sequential_council_halts_and_durably_marks_unattempted_cohorts(tmp_path):
+    store = _db(tmp_path)
+    svc = RuntimeCommandService(store, "operator-test", "session-test")
+    original = svc.execute
+    attempts = []
+
+    def simulate(cmd):
+        if cmd["op"] == "run_approved_hermes_inspection":
+            attempts.append(cmd["payload"]["cohortSpec"]["cohortId"])
+            return svc._receipt(cmd, status="rejected", classification="internal_failure",
+                                error={"category": "internal_failure",
+                                       "code": "PROVIDERDRIVERFAILURE"})
+        return original(cmd)
+
+    svc.execute = simulate
+    payload = {
+        "councilId": "council-sequential-halt",
+        "maxConcurrentCohorts": 1,
+        "executions": [
+            {"cohortSpec": {"cohortId": f"cohort-{i}", "vesselsPerCohort": 2,
+                            "configurationId": "review-v1",
+                            "vesselCharterPolicy": default_charter_policy(2)},
+             "driverRunId": f"dr-{i}", "missionId": "m-gated",
+             "approvalRequestId": f"approval-{i}"}
+            for i in range(3)
+        ],
+    }
+    envelope = {
+        "commandId": "cmd-sequential-halt", "operatorId": "operator-test",
+        "sessionId": "session-test", "schemaVersion": "1.0.0",
+        "correlationId": "corr-sequential-halt", "idempotencyKey": "idem-sequential-halt",
+        "timestamp": "2026-10-12T16:00:00Z",
+        "op": "run_approved_council_inspection", "payload": payload,
+    }
+    result = svc.execute(envelope)
+    assert result["status"] == "accepted"  # processed, not completed
+    assert result["classification"] == "partial_failure"
+    assert result["result"]["outcome"] == "incomplete"
+    assert result["result"]["unresolvedCohortIds"] == [
+        "cohort-0", "cohort-1", "cohort-2",
+    ]
+    assert attempts == ["cohort-0"]
+    receipt = store.get_council_receipt("council-sequential-halt")
+    assert receipt["complete"] and receipt["state"] == "terminal"
+    assert receipt["replayForbidden"] is True
+    assert [x["status"] for x in receipt["cohorts"]] == [
+        "rejected", "blocked", "blocked",
+    ]
+    assert receipt["cohorts"][1]["driverRunState"] is None
+    assert receipt["cohorts"][2]["providerHttpRequestAttempts"] is None
+    repeated = svc.execute({**envelope, "commandId": "cmd-sequential-halt-retry",
+                             "idempotencyKey": "idem-sequential-halt-retry"})
+    assert repeated["status"] == "idempotent"
+    assert attempts == ["cohort-0"]
+    store.close()
