@@ -130,22 +130,16 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
     body.add(cohort_frame, weight=3)
     summary_var = tk.StringVar(value="No cohorts configured")
     ttk.Label(cohort_frame, textvariable=summary_var, style="CouncilSummary.TLabel").pack(fill="x", pady=(0, 6))
-    columns = ("cohort", "provider", "model", "vessels", "configuration")
-    tree_wrap = ttk.Frame(cohort_frame)
-    tree_wrap.pack(fill="both", expand=True)
-    cohort_tree = ttk.Treeview(tree_wrap, columns=columns, show="headings", height=7, selectmode="browse")
-    widths = {"cohort": 150, "provider": 130, "model": 330, "vessels": 80, "configuration": 140}
-    for col in columns:
-        cohort_tree.heading(col, text=col.title())
-        cohort_tree.column(col, width=widths[col], minwidth=70, anchor="w", stretch=(col == "model"))
-    cohort_y = ttk.Scrollbar(tree_wrap, orient="vertical", command=cohort_tree.yview)
-    cohort_x = ttk.Scrollbar(tree_wrap, orient="horizontal", command=cohort_tree.xview)
-    cohort_tree.configure(yscrollcommand=cohort_y.set, xscrollcommand=cohort_x.set)
-    cohort_tree.grid(row=0, column=0, sticky="nsew")
-    cohort_y.grid(row=0, column=1, sticky="ns")
-    cohort_x.grid(row=1, column=0, sticky="ew")
-    tree_wrap.rowconfigure(0, weight=1)
-    tree_wrap.columnconfigure(0, weight=1)
+    card_canvas = tk.Canvas(cohort_frame, height=200, borderwidth=0, highlightthickness=0)
+    card_scroll = ttk.Scrollbar(cohort_frame, orient="vertical", command=card_canvas.yview)
+    card_canvas.configure(yscrollcommand=card_scroll.set)
+    card_scroll.pack(side="right", fill="y")
+    card_canvas.pack(fill="both", expand=True)
+    card_list = ttk.Frame(card_canvas)
+    card_window = card_canvas.create_window((0, 0), window=card_list, anchor="nw")
+    card_list.bind("<Configure>", lambda _e: card_canvas.configure(scrollregion=card_canvas.bbox("all")))
+    card_canvas.bind("<Configure>", lambda e: card_canvas.itemconfigure(card_window, width=e.width))
+    selected_cohort = tk.StringVar(value="")
 
     editor = ttk.Frame(cohort_frame)
     editor.pack(fill="x", pady=(8, 0))
@@ -156,14 +150,46 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
         "vessels": tk.StringVar(value="11"),
         "configuration": tk.StringVar(value="default"),
     }
-    for idx, (key, label) in enumerate((
-        ("cohort", "Cohort"), ("provider", "Provider"), ("model", "Model"),
-        ("vessels", "Vessels"), ("configuration", "Configuration"),
-    )):
-        ttk.Label(editor, text=label).grid(row=0, column=idx * 2, sticky="w", padx=3)
-        ttk.Entry(editor, textvariable=evars[key], width=22).grid(
-            row=0, column=idx * 2 + 1, sticky="ew", padx=3
-        )
+    from capt_ui.operator.providers import ProviderManager
+    from capt_ui.operator.council_ux import (
+        approval_presentation, draft_path, execution_projection, load_draft_snapshot,
+        provider_catalog, refresh_provider_models, save_draft_snapshot,
+    )
+    from capt_ui.operator.council_workflow import workflow_digest
+    providers = ProviderManager()
+    catalog = provider_catalog(providers)
+    ttk.Label(editor, text="Cohort ID").grid(row=0, column=0, sticky="w")
+    ttk.Entry(editor, textvariable=evars["cohort"], width=22).grid(row=0, column=1, sticky="ew")
+    ttk.Label(editor, text="Provider").grid(row=0, column=2, sticky="w")
+    ttk.Combobox(editor, textvariable=evars["provider"], width=19,
+                 values=tuple(catalog)).grid(row=0, column=3, sticky="ew")
+    ttk.Label(editor, text="Model").grid(row=0, column=4, sticky="w")
+    model_combo = ttk.Combobox(editor, textvariable=evars["model"], width=30)
+    model_combo.grid(row=0, column=5, sticky="ew")
+    ttk.Label(editor, text="Vessels").grid(row=0, column=6, sticky="w")
+    ttk.Entry(editor, textvariable=evars["vessels"], width=6).grid(row=0, column=7)
+    ttk.Label(editor, text="Config").grid(row=0, column=8, sticky="w")
+    ttk.Entry(editor, textvariable=evars["configuration"], width=10).grid(row=0, column=9)
+    def update_models(*_args) -> None:
+        model_combo.configure(values=catalog.get(evars["provider"].get().strip(), ()))
+    evars["provider"].trace_add("write", update_models)
+    def refresh_models() -> None:
+        name = evars["provider"].get().strip()
+        status_var.set("Refreshing registered models for " + name + "…")
+        def worker() -> None:
+            try:
+                fresh = refresh_provider_models(providers, name)
+            except Exception as exc:
+                root.after(0, lambda exc=exc: messagebox.showwarning("Model discovery", _friendly_error(exc)))
+            else:
+                def apply() -> None:
+                    catalog[name] = fresh
+                    update_models()
+                    status_var.set(f"{len(fresh)} models discovered for {name}; choose or type a model ID.")
+                root.after(0, apply)
+        threading.Thread(target=worker, daemon=True).start()
+    ttk.Button(editor, text="Refresh models", command=refresh_models).grid(row=0, column=10)
+    update_models()
     objective = tk.Text(editor, height=3, wrap="word", font=("SF Mono", 11), undo=True)
     ttk.Label(editor, text="Cohort objective").grid(row=1, column=0, sticky="nw", padx=3, pady=5)
     objective.grid(row=1, column=1, columnspan=9, sticky="ew", padx=3, pady=5)
@@ -187,25 +213,51 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
     approval_wrap.rowconfigure(0, weight=1)
     approval_wrap.columnconfigure(0, weight=1)
 
+    approval_tree.tag_configure("pending", foreground="#D9B76D")
+    approval_tree.tag_configure("approved", foreground="#5ABD97")
+    approval_tree.tag_configure("error", foreground="#E78989")
+    ttk.Label(approval_frame, text="Runtime execution receipts · unknown is not success",
+              style="CouncilSub.TLabel").pack(fill="x", pady=(8, 3))
+    lane_cols = ("cohort", "run", "state", "reconciliation")
+    lane_tree = ttk.Treeview(approval_frame, columns=lane_cols, show="headings", height=3)
+    for col, size in (("cohort", 170), ("run", 360), ("state", 190), ("reconciliation", 170)):
+        lane_tree.heading(col, text=col.title())
+        lane_tree.column(col, width=size, anchor="w", stretch=(col == "run"))
+    lane_tree.pack(fill="x", pady=(0, 4))
+
     status_var = tk.StringVar(value="Configure a workflow. Requesting approval does not approve it.")
     status_bar = ttk.Frame(root, padding=(12, 5))
     status_bar.pack(side="bottom", fill="x")
     ttk.Label(status_bar, textvariable=status_var).pack(side="left", fill="x", expand=True)
 
+    def select_cohort(cohort_id: str) -> None:
+        if cohort_id not in cohorts:
+            return
+        selected_cohort.set(cohort_id)
+        item = cohorts[cohort_id]
+        evars["cohort"].set(item.cohort_id)
+        evars["provider"].set(item.provider)
+        evars["model"].set(item.model)
+        evars["vessels"].set(str(item.vessels_per_cohort))
+        evars["configuration"].set(item.configuration_id)
+        objective.delete("1.0", "end")
+        objective.insert("1.0", item.objective)
+
     def redraw_cohorts() -> None:
-        for item in cohort_tree.get_children():
-            cohort_tree.delete(item)
-        for cohort in cohorts.values():
-            cohort_tree.insert("", "end", iid=cohort.cohort_id, values=(
-                cohort.cohort_id, cohort.provider, cohort.model,
-                cohort.vessels_per_cohort, cohort.configuration_id,
-            ))
+        for child in card_list.winfo_children():
+            child.destroy()
+        for ordinal, cohort in enumerate(cohorts.values(), 1):
+            card = ttk.LabelFrame(card_list, text=f"{ordinal:02d} · {cohort.cohort_id}", padding=7)
+            card.pack(fill="x", padx=5, pady=4)
+            ttk.Label(card, text=f"{cohort.provider} / {cohort.model}", style="CouncilSummary.TLabel").pack(anchor="w")
+            line = ttk.Frame(card)
+            line.pack(fill="x")
+            ttk.Label(line, text=f"{cohort.vessels_per_cohort} logical vessels · {cohort.configuration_id} · {cohort.objective[:115]}",
+                      wraplength=920).pack(side="left", fill="x", expand=True, anchor="w")
+            ttk.Button(line, text="Edit", command=lambda cid=cohort.cohort_id: select_cohort(cid)).pack(side="right", padx=6)
         logical = sum(item.vessels_per_cohort for item in cohorts.values())
         mode = "sequential" if fields["maxConcurrent"].get().strip() == "1" else "parallel-capable"
-        summary_var.set(
-            f"{len(cohorts)} cohort{'s' if len(cohorts) != 1 else ''}  •  "
-            f"{logical} logical vessels  •  {mode}  •  one provider call per cohort"
-        )
+        summary_var.set(f"{len(cohorts)} cohorts · {logical} logical vessels · {mode} · one provider call per cohort")
 
     fields["maxConcurrent"].trace_add("write", lambda *_: redraw_cohorts())
 
@@ -222,28 +274,22 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
         except Exception as exc:
             messagebox.showerror("Invalid cohort", _friendly_error(exc))
             return
+        previous = selected_cohort.get()
+        if previous and previous != item.cohort_id:
+            cohorts.pop(previous, None)
         cohorts[item.cohort_id] = item
+        selected_cohort.set(item.cohort_id)
         redraw_cohorts()
+        schedule_autosave()
 
     def remove_cohort() -> None:
-        for item in cohort_tree.selection():
-            cohorts.pop(str(item), None)
+        cohort_id = selected_cohort.get()
+        if cohort_id in cohorts:
+            cohorts.pop(cohort_id)
+            selected_cohort.set("")
         redraw_cohorts()
+        schedule_autosave()
 
-    def load_selected(_event=None) -> None:
-        selected = cohort_tree.selection()
-        if not selected:
-            return
-        item = cohorts[str(selected[0])]
-        evars["cohort"].set(item.cohort_id)
-        evars["provider"].set(item.provider)
-        evars["model"].set(item.model)
-        evars["vessels"].set(str(item.vessels_per_cohort))
-        evars["configuration"].set(item.configuration_id)
-        objective.delete("1.0", "end")
-        objective.insert("1.0", item.objective)
-
-    cohort_tree.bind("<<TreeviewSelect>>", load_selected)
     buttons = ttk.Frame(cohort_frame)
     buttons.pack(fill="x", pady=(6, 0))
     ttk.Button(buttons, text="Add / update cohort", command=upsert_cohort).pack(side="left")
@@ -278,6 +324,9 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
         cohorts.clear()
         cohorts.update((c.cohort_id, c) for c in workflow.cohorts)
         redraw_cohorts()
+        if cohorts:
+            select_cohort(next(iter(cohorts)))
+        schedule_autosave()
 
     def load_donor_template() -> None:
         try:
@@ -286,10 +335,132 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
         except Exception as exc:
             messagebox.showerror("Template error", _friendly_error(exc))
 
-    ttk.Button(buttons, text="Load donor 3×11 template", command=load_donor_template).pack(side="right")
+    preset_var = tk.StringVar(value="Donor convergence (3 × 11)")
+    ttk.Combobox(
+        buttons, textvariable=preset_var, width=27, state="readonly",
+        values=("Donor convergence (3 × 11)", "Blank Council", "Latest autosave"),
+    ).pack(side="right", padx=(6, 0))
+
+    def load_preset() -> None:
+        choice = preset_var.get()
+        if choice == "Donor convergence (3 × 11)":
+            load_donor_template()
+        elif choice == "Blank Council":
+            apply_workflow(CouncilWorkflow(
+                council_id="council-new", mission_id="m-new",
+                target_root=fields["targetRoot"].get(),
+                cohorts=(CohortWorkflow("cohort-1", "openrouter", "model-id",
+                                        "Describe the mission objective.", 1),),
+            ).validate())
+            status_var.set("Blank Council prepared; edit and validate before requesting approvals.")
+        elif choice == "Latest autosave":
+            recover_autosave()
+        schedule_autosave()
+    ttk.Button(buttons, text="Load preset", command=load_preset).pack(side="right")
 
     draft = ttk.Frame(root)
     draft.pack(fill="x", padx=10, pady=(0, 6))
+
+    autosave_file = draft_path()
+    autosave_job: dict[str, Any] = {"id": None, "paused": True}
+
+    def editor_snapshot() -> dict[str, str]:
+        return {**{key: var.get() for key, var in evars.items()},
+                "objective": objective.get("1.0", "end").strip()}
+
+    def persist_autosave() -> None:
+        autosave_job["id"] = None
+        if autosave_job["paused"]:
+            return
+        try:
+            # Keep even intermediate invalid edits as presentation-only metadata.
+            # The canonical workflow portion contains the last parseable values.
+            if autosave_file.exists():
+                record = json.loads(autosave_file.read_text())
+            else:
+                record = {}
+            try:
+                record.update(build_workflow().to_record())
+            except (ValueError, TypeError):
+                if not record:
+                    record = donor_convergence_workflow(str(Path.home())).to_record()
+                record["cohorts"] = [c.to_record() for c in cohorts.values()] or record["cohorts"]
+            record["selectedCohort"] = selected_cohort.get()
+            record["editorDraft"] = editor_snapshot()
+            record["pendingFields"] = {key: var.get() for key, var in fields.items()}
+            save_draft_snapshot(record, autosave_file)
+        except Exception as exc:
+            status_var.set("Autosave unavailable: " + _friendly_error(exc))
+
+    def schedule_autosave(*_args) -> None:
+        if autosave_job["paused"]:
+            return
+        if autosave_job["id"] is not None:
+            root.after_cancel(autosave_job["id"])
+        autosave_job["id"] = root.after(650, persist_autosave)
+
+    for var in (*fields.values(), *evars.values(), file_mut, shell, verify, network):
+        var.trace_add("write", schedule_autosave)
+    objective.bind("<KeyRelease>", schedule_autosave, add="+")
+
+    def recover_autosave() -> None:
+        if not autosave_file.exists():
+            return
+        try:
+            prior = load_draft_snapshot(autosave_file)
+        except Exception as exc:
+            status_var.set("Autosaved draft could not be validated: " + str(exc))
+            return
+        if prior and messagebox.askyesno(
+            "Recover Council draft",
+            "A saved Council draft exists. Recover it? This does not restore or approve any execution.",
+        ):
+            record = json.loads(autosave_file.read_text())
+            apply_workflow(prior)
+            if isinstance(record.get("pendingFields"), dict):
+                for key, value in record["pendingFields"].items():
+                    if key in fields:
+                        fields[key].set(str(value))
+            target = str(record.get("selectedCohort") or "")
+            if target in cohorts:
+                select_cohort(target)
+            editor_record = record.get("editorDraft") or {}
+            if isinstance(editor_record, dict):
+                for key in evars:
+                    if key in editor_record:
+                        evars[key].set(str(editor_record[key]))
+                if "objective" in editor_record:
+                    objective.delete("1.0", "end")
+                    objective.insert("1.0", str(editor_record["objective"]))
+            status_var.set("Draft recovered; approvals must be requested again.")
+
+    def ensure_session_matches_current_draft() -> bool:
+        if not session:
+            messagebox.showwarning("No approval session", "Request approvals first.")
+            return False
+        try:
+            current = build_workflow()
+        except Exception as exc:
+            messagebox.showerror("Invalid Council", _friendly_error(exc))
+            return False
+        if workflow_digest(current) != session.get("workflowDigest"):
+            messagebox.showwarning(
+                "Council configuration changed",
+                "This draft differs from the approved workflow. Request fresh approvals for the new configuration.",
+            )
+            return False
+        cohort_id = selected_cohort.get()
+        if cohort_id in cohorts and editor_snapshot() != {
+            "cohort": cohorts[cohort_id].cohort_id,
+            "provider": cohorts[cohort_id].provider,
+            "model": cohorts[cohort_id].model,
+            "vessels": str(cohorts[cohort_id].vessels_per_cohort),
+            "configuration": cohorts[cohort_id].configuration_id,
+            "objective": cohorts[cohort_id].objective,
+        }:
+            messagebox.showwarning("Unapplied cohort edits", "Apply the cohort edits and request fresh approvals.")
+            return False
+        return True
 
     def save_draft() -> None:
         try:
@@ -321,10 +492,43 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
         for item in approval_tree.get_children():
             approval_tree.delete(item)
         for row in rows:
-            approval_tree.insert("", "end", iid=row["requestId"], values=(
-                row.get("cohortId"), row.get("requestId"), row.get("state"),
+            label, kind = approval_presentation(row.get("state", ""))
+            approval_tree.insert("", "end", iid=row["requestId"], tags=(kind,), values=(
+                row.get("cohortId"), row.get("requestId"), label,
                 row.get("remainingUses"), row.get("expiresAt"),
             ))
+
+    def refresh_execution_lanes() -> None:
+        if not session:
+            return
+        # Query from a separate read-only client so a long provider command
+        # cannot monopolize the UI client's framed stream.
+        def worker() -> None:
+            from desktop.desktop_runtime_client import RuntimeClient
+            reader = RuntimeClient(sock, token_file, connect_timeout=3.0, command_timeout=8.0)
+            try:
+                reader.connect()
+                rows = execution_projection(reader, list(session.get("executions") or []))
+            except Exception as exc:
+                root.after(0, lambda exc=exc: status_var.set("Receipt refresh unavailable: " + _friendly_error(exc)))
+                return
+            finally:
+                reader.disconnect()
+            def render() -> None:
+                for child in lane_tree.get_children():
+                    lane_tree.delete(child)
+                for item in rows:
+                    lane_tree.insert("", "end", values=(
+                        item["cohortId"], item["driverRunId"],
+                        item["state"], item["reconciliation"],
+                    ))
+            root.after(0, render)
+        threading.Thread(target=worker, daemon=True).start()
+
+    def poll_receipts() -> None:
+        if run_active["value"] and session:
+            refresh_execution_lanes()
+        root.after(5000, poll_receipts)
 
     action_buttons: list[Any] = []
     run_active = {"value": False}
@@ -338,30 +542,56 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
                 button.state(["!disabled"])
 
     def request_approvals() -> None:
-        nonlocal session
         try:
+            cohort_id = selected_cohort.get()
+            if cohort_id in cohorts and editor_snapshot() != {
+                "cohort": cohorts[cohort_id].cohort_id,
+                "provider": cohorts[cohort_id].provider,
+                "model": cohorts[cohort_id].model,
+                "vessels": str(cohorts[cohort_id].vessels_per_cohort),
+                "configuration": cohorts[cohort_id].configuration_id,
+                "objective": cohorts[cohort_id].objective,
+            }:
+                messagebox.showwarning("Pending edits", "Apply cohort edits before requesting approvals.")
+                return
             workflow = build_workflow()
-            session = op.request_council_workflow(workflow)
-            rows = op.council_workflow_status(session)
-            redraw_approvals(rows)
-            status_var.set(
-                "Approval requests created. Human decision required before launch. "
-                f"logical vessels={workflow.logical_vessels}"
-            )
         except Exception as exc:
-            messagebox.showerror("Approval request failed", _friendly_error(exc))
+            messagebox.showerror("Invalid Council", _friendly_error(exc))
+            return
+        set_run_busy(True)
+        status_var.set("Requesting governed approvals; no execution dispatched.")
+        def worker() -> None:
+            try:
+                prepared = op.request_council_workflow(workflow)
+                rows = op.council_workflow_status(prepared)
+                def completed() -> None:
+                    nonlocal session
+                    session = prepared
+                    redraw_approvals(rows)
+                    refresh_execution_lanes()
+                    status_var.set(f"Approval requests created for {workflow.logical_vessels} logical vessels.")
+                root.after(0, completed)
+            except Exception as exc:
+                root.after(0, lambda exc=exc: messagebox.showerror("Approval request failed", _friendly_error(exc)))
+            finally:
+                root.after(0, lambda: set_run_busy(False))
+        threading.Thread(target=worker, daemon=True).start()
 
     def refresh_approvals() -> None:
         if not session:
             return
-        try:
-            redraw_approvals(op.council_workflow_status(session))
-        except Exception as exc:
-            messagebox.showerror("Refresh failed", _friendly_error(exc))
+        current = session
+        def worker() -> None:
+            try:
+                rows = op.council_workflow_status(current)
+                root.after(0, lambda: redraw_approvals(rows))
+                root.after(0, refresh_execution_lanes)
+            except Exception as exc:
+                root.after(0, lambda exc=exc: messagebox.showerror("Refresh failed", _friendly_error(exc)))
+        threading.Thread(target=worker, daemon=True).start()
 
     def decide(decision: str) -> None:
-        if not session:
-            messagebox.showwarning("No session", "Request approvals first.")
+        if not ensure_session_matches_current_draft():
             return
         label = "APPROVE" if decision == "approve" else "DENY"
         if not messagebox.askyesno(
@@ -369,15 +599,21 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
             f"{label} every currently requested cohort in this exact workflow?",
         ):
             return
-        try:
-            op.decide_council_workflow(session, decision, "Human decision from Council Workflow Builder.")
-            refresh_approvals()
-            status_var.set(f"Human decision recorded: {decision}.")
-        except Exception as exc:
-            messagebox.showerror("Decision failed", _friendly_error(exc))
+        set_run_busy(True)
+        def worker() -> None:
+            try:
+                op.decide_council_workflow(session, decision, "Human decision from Council Workflow Builder.")
+                rows = op.council_workflow_status(session)
+                root.after(0, lambda: redraw_approvals(rows))
+                root.after(0, lambda: status_var.set(f"Human decision recorded: {decision}."))
+            except Exception as exc:
+                root.after(0, lambda exc=exc: messagebox.showerror("Decision failed", _friendly_error(exc)))
+            finally:
+                root.after(0, lambda: set_run_busy(False))
+        threading.Thread(target=worker, daemon=True).start()
+
     def launch() -> None:
-        if not session:
-            messagebox.showwarning("No session", "Request approvals first.")
+        if not ensure_session_matches_current_draft():
             return
         try:
             rows = op.council_workflow_status(session)
@@ -407,6 +643,7 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
             finally:
                 root.after(0, lambda: set_run_busy(False))
         threading.Thread(target=worker, daemon=True).start()
+        refresh_execution_lanes()
 
     controls = ttk.Frame(root, padding=(12, 6))
     controls.pack(side="bottom", fill="x")
@@ -423,6 +660,9 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
     action_buttons.extend((request_button, approve_button, deny_button, launch_button, refresh_button))
 
     def close() -> None:
+        if autosave_job["id"] is not None:
+            root.after_cancel(autosave_job["id"])
+        persist_autosave()
         try:
             op.disconnect()
         finally:
@@ -432,8 +672,11 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
     if target_root:
         try:
             apply_workflow(donor_convergence_workflow(target_root))
-        except Exception:
-            pass
+        except Exception as exc:
+            status_var.set("Template unavailable: " + _friendly_error(exc))
+    recover_autosave()
+    autosave_job["paused"] = False
+    root.after(5000, poll_receipts)
     root.mainloop()
 
 
