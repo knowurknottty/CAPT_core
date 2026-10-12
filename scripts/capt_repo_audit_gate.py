@@ -150,7 +150,9 @@ def verify(c: dict, inspection: dict, minimum: float = 0.70) -> dict:
         problems.append("critical path declaration missing")
     fraction = len(reviewed) / len(source) if source else 1.0
     if fraction < minimum:
-        problems.append(f"source-file coverage {fraction:.1%} < {minimum:.1%}")
+        problems.append(f"source-file breadth {fraction:.1%} < diagnostic floor {minimum:.1%}")
+    if fraction < 1.0:
+        problems.append("incomplete first-party source-file receipts; deep review requires 100%")
     return dict(status="DEEP_COVERAGE_GATE_PASS" if not problems else "PARTIAL_OR_UNVERIFIED",
                 git_head=c.get("head"), source_files=len(source),
                 inspected_source_files=len(reviewed), source_directories=len(c["source_directories"]),

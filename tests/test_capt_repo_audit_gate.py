@@ -92,3 +92,20 @@ def test_ci_empty_index_claims_zero_covered(repo,tmp_path):
     index=ROOT/"docs"/"review-evidence"/"rrds-index.json"
     assert index.exists()
     assert json.loads(index.read_text())["reviews"]==[]
+
+
+def test_each_directory_inspected_but_not_every_source_file_fails(repo):
+    c = m.census(repo)
+    i = complete(c)
+    # Add a second source in a previously inspected directory at a new pinned HEAD.
+    p = repo/"src"/"deep"/"other.py"
+    p.write_text("def other(): pass\n")
+    subprocess.run(["git","-C",str(repo),"add","."],check=True)
+    subprocess.run(["git","-C",str(repo),"-c","user.name=Fixture","-c",
+                    "user.email=fixture@example.invalid","commit","-qm","more source"],check=True)
+    fresh=m.census(repo)
+    existing=[x["path"] for x in fresh["files"] if x["source"] and x["path"]!="src/deep/other.py"]
+    outcome=m.verify(fresh,inspection(fresh,existing),minimum=0.01)
+    assert outcome["status"]=="PARTIAL_OR_UNVERIFIED"
+    assert outcome["inspected_source_directories"]==3
+    assert any("100%" in p for p in outcome["problems"])

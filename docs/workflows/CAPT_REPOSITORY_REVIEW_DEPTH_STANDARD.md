@@ -62,7 +62,7 @@ The observations file shape:
 }
 ```
 
-The gate requires inspection receipts in **every direct source-bearing directory**, a declared review of all heuristic high-risk path candidates, and at least 70% source-file coverage by default. Any excluded subtree, symlink, inaccessible path, absent line evidence, or digest mismatch makes the deep-coverage verdict fail. **70% is only a configurable breadth floor, not a scientifically established sufficiency threshold.** The reviewer must still trace all security- and task-critical paths, and for a safety-sensitive task a stronger threshold is warranted.
+The gate requires inspection receipts in **every direct source-bearing directory**, a declared review of all heuristic high-risk path candidates, and 100% source-file coverage for a deep-review verdict. Any excluded subtree, symlink, inaccessible path, absent line evidence, or digest mismatch makes the deep-coverage verdict fail. **The configurable 70% threshold is diagnostic only; reducing it never permits a deep-review verdict below 100%.** The reviewer must still trace all security- and task-critical paths, and for a safety-sensitive task a stronger threshold is warranted.
 
 ### Limits and non-gameability
 
