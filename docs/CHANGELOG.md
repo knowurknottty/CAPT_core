@@ -1,5 +1,12 @@
 # CAPT Core Changelog
 
+## Unreleased / repository `main` — 2026-10-08
+
+- PR #169: durable Model Council with per-boundary provider dispatch accounting and reconciliation classification (`request_started`/`response_started` → `retry_forbidden`; lost/ambiguous runs are never blind-replayed).
+- Governed media R2A→R2C: durable video jobs, Gemini PDF/video inline + allowlisted image-URL outputs, Gemini Files upload with separate model-reference approval, R2C offline two-approval acceptance attestation (`80d3b82`).
+- fix(cli): `capt_cli` anchors `sys.path` at the repo root instead of its parent, so a stray `~/capt_runtime` fragment can no longer shadow the repo package and break `capt` from non-repo working directories (PR #170, merge `1e5244f`).
+- Governed exact-head evidence at `80d3b82`: `tests/capt_runtime` 1435 passed / 13 skipped / 12 deselected; UPG probe suites 33/33; `scripts/upgrade_probe_suite.py` exit 0. Issues #77, #88, #90, #92, #94, #96 closed on this evidence.
+
 ## Unreleased / repository `main` and active integration — 2026-08-17
 
 This section intentionally distinguishes merged `main` from open stacked integration.
