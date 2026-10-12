@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import queue
 import threading
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
@@ -52,7 +53,7 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
     op.connect()
 
     root = tk.Tk()
-    root.title("CAPT · Model Council")
+    root.title("CAPT · Model Council — Recovery R3")
     screen_w = root.winfo_screenwidth()
     screen_h = root.winfo_screenheight()
     width = max(1040, min(1480, screen_w - 64))
@@ -70,10 +71,34 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
     ttk.Label(header, text="Model Council", style="CouncilHero.TLabel").pack(side="left")
     ttk.Label(
         header,
-        text="  Human-configured cohorts · governed approval · one provider call per cohort",
+        text="  Human-configured cohorts · governed approval · HTTP requests may exceed cohort count",
         style="CouncilSub.TLabel",
     ).pack(side="left", padx=(8, 0))
     ttk.Label(header, text="RUNTIME CONNECTED", style="CouncilSummary.TLabel").pack(side="right")
+
+    # Tkinter widgets and scheduling APIs are owned exclusively by its main
+    # thread. Background runtime/model/registry work posts callbacks into this
+    # queue; it must never directly call root.after or modify Tk variables.
+    ui_callbacks: queue.Queue[Any] = queue.Queue()
+    ui_lifetime: dict[str, Any] = {"closing": False, "pump_id": None}
+
+    def post_ui(callback) -> None:
+        if not ui_lifetime["closing"]:
+            ui_callbacks.put(callback)
+
+    def drain_ui_callbacks() -> None:
+        if ui_lifetime["closing"]:
+            return
+        try:
+            for _ in range(80):
+                try:
+                    callback = ui_callbacks.get_nowait()
+                except queue.Empty:
+                    break
+                callback()
+        finally:
+            if not ui_lifetime["closing"]:
+                ui_lifetime["pump_id"] = root.after(50, drain_ui_callbacks)
 
     session: Dict[str, Any] = {}
     cohorts: Dict[str, CohortWorkflow] = {}
@@ -152,7 +177,10 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
     }
     from capt_ui.operator.providers import ProviderManager
     from capt_ui.operator.council_ux import (
-        approval_presentation, draft_path, execution_projection, load_draft_snapshot,
+        approval_presentation, council_receipt_summary, draft_path,
+        execution_summary, mission_execution_projection, existing_driver_run_conflicts,
+        existing_council_receipt_conflict,
+        load_draft_snapshot,
         provider_catalog, refresh_provider_models, save_draft_snapshot,
     )
     from capt_ui.operator.council_workflow import workflow_digest
@@ -180,13 +208,13 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
             try:
                 fresh = refresh_provider_models(providers, name)
             except Exception as exc:
-                root.after(0, lambda exc=exc: messagebox.showwarning("Model discovery", _friendly_error(exc)))
+                post_ui( lambda exc=exc: messagebox.showwarning("Model discovery", _friendly_error(exc)))
             else:
                 def apply() -> None:
                     catalog[name] = fresh
                     update_models()
                     status_var.set(f"{len(fresh)} models discovered for {name}; choose or type a model ID.")
-                root.after(0, apply)
+                post_ui( apply)
         threading.Thread(target=worker, daemon=True).start()
     ttk.Button(editor, text="Refresh models", command=refresh_models).grid(row=0, column=10)
     update_models()
@@ -218,9 +246,9 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
     approval_tree.tag_configure("error", foreground="#E78989")
     ttk.Label(approval_frame, text="Runtime execution receipts · unknown is not success",
               style="CouncilSub.TLabel").pack(fill="x", pady=(8, 3))
-    lane_cols = ("cohort", "run", "state", "reconciliation")
+    lane_cols = ("cohort", "run", "state", "reconciliation", "diagnostic")
     lane_tree = ttk.Treeview(approval_frame, columns=lane_cols, show="headings", height=3)
-    for col, size in (("cohort", 170), ("run", 360), ("state", 190), ("reconciliation", 170)):
+    for col, size in (("cohort", 170), ("run", 360), ("state", 120), ("reconciliation", 130), ("diagnostic", 260)):
         lane_tree.heading(col, text=col.title())
         lane_tree.column(col, width=size, anchor="w", stretch=(col == "run"))
     lane_tree.pack(fill="x", pady=(0, 4))
@@ -257,7 +285,7 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
             ttk.Button(line, text="Edit", command=lambda cid=cohort.cohort_id: select_cohort(cid)).pack(side="right", padx=6)
         logical = sum(item.vessels_per_cohort for item in cohorts.values())
         mode = "sequential" if fields["maxConcurrent"].get().strip() == "1" else "parallel-capable"
-        summary_var.set(f"{len(cohorts)} cohorts · {logical} logical vessels · {mode} · one provider call per cohort")
+        summary_var.set(f"{len(cohorts)} cohorts · {logical} logical vessels · {mode} · one governed execution per cohort (multiple HTTP requests possible)")
 
     fields["maxConcurrent"].trace_add("write", lambda *_: redraw_cohorts())
 
@@ -498,37 +526,59 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
                 row.get("remainingUses"), row.get("expiresAt"),
             ))
 
+    lane_refresh = {"inflight": False, "closing": False}
+
     def refresh_execution_lanes() -> None:
-        if not session:
+        if lane_refresh["closing"] or lane_refresh["inflight"]:
             return
-        # Query from a separate read-only client so a long provider command
-        # cannot monopolize the UI client's framed stream.
+        # Reattach by exact workflow mission/task/run IDs even after the window
+        # restarts. Never restore approvals or trigger a provider replay.
+        try:
+            workflow = CouncilWorkflow.from_mapping(session["workflow"]).validate() if session else build_workflow()
+        except Exception:
+            return
+        lane_refresh["inflight"] = True
         def worker() -> None:
             from desktop.desktop_runtime_client import RuntimeClient
             reader = RuntimeClient(sock, token_file, connect_timeout=3.0, command_timeout=8.0)
             try:
                 reader.connect()
-                rows = execution_projection(reader, list(session.get("executions") or []))
+                rows = mission_execution_projection(reader, workflow)
+                summary, severity = execution_summary(rows)
             except Exception as exc:
-                root.after(0, lambda exc=exc: status_var.set("Receipt refresh unavailable: " + _friendly_error(exc)))
+                error_text = _friendly_error(exc)
+                def unavailable() -> None:
+                    lane_refresh["inflight"] = False
+                    if not lane_refresh["closing"]:
+                        status_var.set("Runtime status unavailable: " + error_text)
+                post_ui( unavailable)
                 return
             finally:
                 reader.disconnect()
             def render() -> None:
+                lane_refresh["inflight"] = False
+                if lane_refresh["closing"]:
+                    return
                 for child in lane_tree.get_children():
                     lane_tree.delete(child)
                 for item in rows:
                     lane_tree.insert("", "end", values=(
                         item["cohortId"], item["driverRunId"],
-                        item["state"], item["reconciliation"],
+                        item["state"], item["reconciliation"], item.get("diagnostic", ""),
                     ))
-            root.after(0, render)
+                provenance = "" if session else "Historical mission IDs; current draft binding unverified. "
+                if severity in ("error", "review"):
+                    status_var.set(provenance + summary)
+                elif not run_active["value"] and severity != "unknown":
+                    status_var.set(provenance + summary)
+            post_ui( render)
         threading.Thread(target=worker, daemon=True).start()
 
     def poll_receipts() -> None:
-        if run_active["value"] and session:
-            refresh_execution_lanes()
-        root.after(5000, poll_receipts)
+        if lane_refresh["closing"]:
+            return
+        refresh_execution_lanes()
+        lane_refresh["poll_id"] = root.after(7000, poll_receipts)
 
     action_buttons: list[Any] = []
     run_active = {"value": False}
@@ -562,6 +612,19 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
         status_var.set("Requesting governed approvals; no execution dispatched.")
         def worker() -> None:
             try:
+                conflicts = existing_driver_run_conflicts(op.client, workflow)
+                council_conflict = existing_council_receipt_conflict(op.client, workflow)
+                if conflicts or council_conflict:
+                    detail = ", ".join(conflicts)
+                    if council_conflict:
+                        detail = (detail + "\n" if detail else "") + council_conflict
+                    post_ui(lambda detail=detail: messagebox.showwarning(
+                        "Durable execution identity already used",
+                        "These identities are immutable and cannot be safely replayed:\n"
+                        + detail + "\n\nFor a fresh execution, assign BOTH a new Council ID "
+                        "and a new Mission ID, then request fresh approvals.",
+                    ))
+                    return
                 prepared = op.request_council_workflow(workflow)
                 rows = op.council_workflow_status(prepared)
                 def completed() -> None:
@@ -570,24 +633,25 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
                     redraw_approvals(rows)
                     refresh_execution_lanes()
                     status_var.set(f"Approval requests created for {workflow.logical_vessels} logical vessels.")
-                root.after(0, completed)
+                post_ui( completed)
             except Exception as exc:
-                root.after(0, lambda exc=exc: messagebox.showerror("Approval request failed", _friendly_error(exc)))
+                post_ui( lambda exc=exc: messagebox.showerror("Approval request failed", _friendly_error(exc)))
             finally:
-                root.after(0, lambda: set_run_busy(False))
+                post_ui( lambda: set_run_busy(False))
         threading.Thread(target=worker, daemon=True).start()
 
     def refresh_approvals() -> None:
         if not session:
+            refresh_execution_lanes()
             return
         current = session
         def worker() -> None:
             try:
                 rows = op.council_workflow_status(current)
-                root.after(0, lambda: redraw_approvals(rows))
-                root.after(0, refresh_execution_lanes)
+                post_ui( lambda: redraw_approvals(rows))
+                post_ui( refresh_execution_lanes)
             except Exception as exc:
-                root.after(0, lambda exc=exc: messagebox.showerror("Refresh failed", _friendly_error(exc)))
+                post_ui( lambda exc=exc: messagebox.showerror("Refresh failed", _friendly_error(exc)))
         threading.Thread(target=worker, daemon=True).start()
 
     def decide(decision: str) -> None:
@@ -604,12 +668,12 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
             try:
                 op.decide_council_workflow(session, decision, "Human decision from Council Workflow Builder.")
                 rows = op.council_workflow_status(session)
-                root.after(0, lambda: redraw_approvals(rows))
-                root.after(0, lambda: status_var.set(f"Human decision recorded: {decision}."))
+                post_ui( lambda: redraw_approvals(rows))
+                post_ui( lambda: status_var.set(f"Human decision recorded: {decision}."))
             except Exception as exc:
-                root.after(0, lambda exc=exc: messagebox.showerror("Decision failed", _friendly_error(exc)))
+                post_ui( lambda exc=exc: messagebox.showerror("Decision failed", _friendly_error(exc)))
             finally:
-                root.after(0, lambda: set_run_busy(False))
+                post_ui( lambda: set_run_busy(False))
         threading.Thread(target=worker, daemon=True).start()
 
     def launch() -> None:
@@ -635,15 +699,38 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
         def worker() -> None:
             try:
                 receipt = op.run_council_workflow(session)
-                root.after(0, lambda: status_var.set(
-                    "Council finished: " + json.dumps(receipt.get("result") or {}, sort_keys=True)[:900]
+                post_ui( lambda receipt=receipt: status_var.set(
+                    council_receipt_summary(receipt)
                 ))
+                post_ui( refresh_execution_lanes)
             except Exception as exc:
-                root.after(0, lambda exc=exc: messagebox.showerror("Council run failed", _friendly_error(exc)))
+                post_ui( lambda exc=exc: messagebox.showerror("Council run failed", _friendly_error(exc)))
             finally:
-                root.after(0, lambda: set_run_busy(False))
+                post_ui( lambda: set_run_busy(False))
         threading.Thread(target=worker, daemon=True).start()
         refresh_execution_lanes()
+
+    def reconnect_runtime() -> None:
+        if run_active["value"]:
+            return
+        set_run_busy(True)
+        status_var.set("Reconnecting to CAPT RuntimeService...")
+        def worker() -> None:
+            try:
+                op.disconnect()
+                identity = op.connect()
+                post_ui(lambda: status_var.set(
+                    "Runtime reconnected; ledger sequence " +
+                    str(identity.get("headSequence", "?")) + "."
+                ))
+                post_ui(refresh_execution_lanes)
+            except Exception as exc:
+                post_ui(lambda exc=exc: messagebox.showerror(
+                    "CAPT runtime unavailable", _friendly_error(exc)
+                ))
+            finally:
+                post_ui(lambda: set_run_busy(False))
+        threading.Thread(target=worker, daemon=True).start()
 
     controls = ttk.Frame(root, padding=(12, 6))
     controls.pack(side="bottom", fill="x")
@@ -652,14 +739,28 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
     deny_button = ttk.Button(controls, text="Deny", command=lambda: decide("deny"))
     launch_button = ttk.Button(controls, text="3 · Launch Council", command=launch)
     refresh_button = ttk.Button(controls, text="Refresh", command=refresh_approvals)
+    reconnect_button = ttk.Button(controls, text="Reconnect", command=reconnect_runtime)
     request_button.pack(side="left")
     approve_button.pack(side="left", padx=6)
     deny_button.pack(side="left")
     launch_button.pack(side="left", padx=18)
     refresh_button.pack(side="right")
-    action_buttons.extend((request_button, approve_button, deny_button, launch_button, refresh_button))
+    reconnect_button.pack(side="right", padx=6)
+    action_buttons.extend((request_button, approve_button, deny_button, launch_button, refresh_button, reconnect_button))
 
     def close() -> None:
+        if run_active["value"] and not messagebox.askyesno(
+            "Detach from running Council",
+            "CAPT may still be processing provider requests. Closing only detaches the UI; "
+            "it does NOT cancel or replay any execution. Continue?",
+        ):
+            return
+        ui_lifetime["closing"] = True
+        if ui_lifetime["pump_id"] is not None:
+            root.after_cancel(ui_lifetime["pump_id"])
+        lane_refresh["closing"] = True
+        if lane_refresh.get("poll_id") is not None:
+            root.after_cancel(lane_refresh["poll_id"])
         if autosave_job["id"] is not None:
             root.after_cancel(autosave_job["id"])
         persist_autosave()
@@ -676,7 +777,8 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
             status_var.set("Template unavailable: " + _friendly_error(exc))
     recover_autosave()
     autosave_job["paused"] = False
-    root.after(5000, poll_receipts)
+    ui_lifetime["pump_id"] = root.after(50, drain_ui_callbacks)
+    root.after(1000, poll_receipts)
     root.mainloop()
 
 

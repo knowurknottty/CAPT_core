@@ -111,3 +111,41 @@ def test_human_configured_three_by_eleven_scheduler_is_exact_and_sequential(tmp_
         ]
     finally:
         runtime.close()
+
+
+def test_sequential_council_halts_after_failed_predecessor_without_consuming_later_cohorts(tmp_path):
+    class RejectedFirst(_CouncilHarness):
+        def execute(self, cmd):
+            if cmd.get("op") == "run_approved_hermes_inspection":
+                self.subcalls.append(dict(cmd["payload"]))
+                return {
+                    "status": "rejected",
+                    "classification": "provider_failure",
+                    "result": {},
+                }
+            return super().execute(cmd)
+
+    runtime = create_runtime(str(tmp_path / "runtime.db"))
+    try:
+        svc = RejectedFirst(runtime.store, "operator-human", "sess-human",
+                            runtime_service=runtime.service)
+        executions = [
+            _execution(tmp_path, "first", "model-1"),
+            _execution(tmp_path, "second", "model-2"),
+            _execution(tmp_path, "third", "model-3"),
+        ]
+        receipt = svc.execute(_envelope("run_approved_council_inspection", {
+            "councilId": "council-halt",
+            "maxConcurrentCohorts": 1,
+            "executions": executions,
+        }, "halt-on-first"))
+        assert receipt["status"] == "accepted"  # command processed, not success
+        assert receipt["classification"] == "partial_failure"
+        assert receipt["result"]["outcome"] == "incomplete"
+        assert len(svc.subcalls) == 1
+        assert receipt["result"]["unresolvedCohortIds"] == ["first", "second", "third"]
+        assert [x["receipt"]["status"] for x in receipt["result"]["cohorts"]] == [
+            "rejected", "blocked", "blocked",
+        ]
+    finally:
+        runtime.close()
