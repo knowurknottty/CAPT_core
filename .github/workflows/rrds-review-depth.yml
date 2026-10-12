@@ -1,0 +1,27 @@
+name: RRDS-1 Reviewer Evidence Gate
+on:
+  push:
+    paths:
+      - 'scripts/capt_repo_audit_gate.py'
+      - 'tests/test_capt_repo_audit_gate.py'
+      - 'docs/review-evidence/**'
+      - 'docs/workflows/CAPT_REVIEWER_VERIFIER_CONTRACT.md'
+      - 'docs/workflows/CAPT_REPOSITORY_REVIEW_DEPTH_STANDARD.md'
+      - '.github/workflows/rrds-review-depth.yml'
+  pull_request: {}
+jobs:
+  verify-coverage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install pytest
+      - run: python -m pytest -q tests/test_capt_repo_audit_gate.py
+      - run: python scripts/capt_repo_audit_gate.py ci --index docs/review-evidence/rrds-index.json

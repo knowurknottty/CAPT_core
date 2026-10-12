@@ -29,6 +29,10 @@ Use the distinction:
 
 `source present -> tested -> integrated -> installed -> live dependency proven -> release proven`.
 
+## Repository review evidence (RRDS-1)
+
+All deep-review claims require the pinned recursive census, source/line receipts, independent verifier, and CI gate defined in docs/workflows/CAPT_REVIEWER_VERIFIER_CONTRACT.md. If coverage is incomplete, report PARTIAL. One-directory sampling is not deep review. Do not cherry-pick solely from an unverified review.
+
 ## Agent behavior
 
 - Never bypass RuntimeService/EventStore authority in product code merely because direct file/SQLite mutation is easier.
