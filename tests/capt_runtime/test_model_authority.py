@@ -150,3 +150,35 @@ def test_revalidation_accepts_immutable_prepared_execution_representation(tmp_pa
     assert revalidate_normalized_model_authority(
         frozen, target_root=str(repo)
     ) == normalized
+
+
+def test_openrouter_no_profile_prebinds_remote_without_tool_or_scope_escalation(tmp_path: Path):
+    repo = tmp_path / "repo"; repo.mkdir()
+    profile = normalize_model_authority(
+        None, target_root=str(repo), provider="openrouter",
+    )
+    assert profile["providerNetworkPolicy"] == "remote_allowed"
+    assert profile["riskClassification"] == "consequential"
+    assert profile["filesystemScope"] == "project"
+    assert profile["toolOperations"] == ["file.read", "file.search"]
+    assert profile["fileMutationAllowed"] is False
+    assert profile["shellAccessAllowed"] is False
+
+
+def test_openrouter_explicit_local_only_is_invalid_before_approval(tmp_path: Path):
+    repo = tmp_path / "repo"; repo.mkdir()
+    with pytest.raises(AuthorityViolation, match="OPENROUTER_REQUIRES_REMOTE_NETWORK_AUTHORITY"):
+        normalize_model_authority(
+            {"filesystemScope": "project", "filesystemRoot": str(repo),
+             "fileMutationAllowed": False, "shellAccessAllowed": False,
+             "providerNetworkPolicy": "local_only"},
+            target_root=str(repo), provider="openrouter",
+        )
+
+
+def test_openrouter_remote_profile_is_accepted_and_local_provider_remains_local(tmp_path: Path):
+    repo = tmp_path / "repo"; repo.mkdir()
+    remote = normalize_model_authority(None, target_root=str(repo), provider="OpenRouter")
+    assert remote["providerNetworkPolicy"] == "remote_allowed"
+    local = normalize_model_authority(None, target_root=str(repo), provider="ollama")
+    assert local["providerNetworkPolicy"] == "local_only"

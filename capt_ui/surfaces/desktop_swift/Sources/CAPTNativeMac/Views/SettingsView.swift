@@ -72,9 +72,9 @@ struct SettingsView: View {
                     )
                     InversionMetric(
                         "provider net",
-                        value: store.authoritySettings.providerNetwork == .remoteAllowed ? "REMOTE" : "LOCAL",
+                        value: effectiveProviderNetwork == .remoteAllowed ? "REMOTE" : "LOCAL",
                         symbol: "network",
-                        tone: store.authoritySettings.providerNetwork == .remoteAllowed ? .amber : .cyan
+                        tone: effectiveProviderNetwork == .remoteAllowed ? .amber : .cyan
                     )
                     Spacer(minLength: 0)
                 }
@@ -115,6 +115,12 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(maxWidth: 560)
+                .disabled(store.provider.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "openrouter")
+                if store.provider.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "openrouter" {
+                    Text("OpenRouter requires remote provider network access. Local-only is not an available option.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
                 InversionDivider()
 
@@ -185,17 +191,33 @@ struct SettingsView: View {
         }
     }
 
+    private var effectiveProviderNetwork: CAPTProviderNetworkPolicy {
+        store.authoritySettings.effectiveProviderNetwork(for: store.provider)
+    }
+
+    private var effectiveNetworkBinding: Binding<CAPTProviderNetworkPolicy> {
+        Binding(
+            get: { effectiveProviderNetwork },
+            set: { next in
+                guard store.provider.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "openrouter" else { return }
+                var settings = store.authoritySettings
+                settings.providerNetwork = next
+                store.setAuthoritySettings(settings)
+            }
+        )
+    }
+
     private var networkSection: some View {
-        InversionPanel(tone: store.authoritySettings.providerNetwork == .remoteAllowed ? .amber : .cyan) {
+        InversionPanel(tone: effectiveProviderNetwork == .remoteAllowed ? .amber : .cyan) {
             VStack(alignment: .leading, spacing: 14) {
                 InversionSectionHeader(
                     "Provider network",
                     detail: "Controls which model and Prompt Intelligence endpoints may receive governed requests.",
                     symbol: "network",
-                    tone: store.authoritySettings.providerNetwork == .remoteAllowed ? .amber : .cyan
+                    tone: effectiveProviderNetwork == .remoteAllowed ? .amber : .cyan
                 )
 
-                Picker("Model endpoints", selection: settingsBinding(\.providerNetwork)) {
+                Picker("Model endpoints", selection: effectiveNetworkBinding) {
                     Text("Local providers only").tag(CAPTProviderNetworkPolicy.localOnly)
                     Text("Allow remote / cloud providers").tag(CAPTProviderNetworkPolicy.remoteAllowed)
                 }
@@ -209,7 +231,7 @@ struct SettingsView: View {
                     detail: "Permits Prompt Intelligence stages to use an approved remote compiler endpoint. Disabled automatically when provider network is local-only.",
                     symbol: "brain.head.profile",
                     isOn: settingsBinding(\.remotePromptCompilationAllowed),
-                    disabled: store.authoritySettings.providerNetwork != .remoteAllowed
+                    disabled: effectiveProviderNetwork != .remoteAllowed
                 )
 
                 Label(
@@ -251,8 +273,8 @@ struct SettingsView: View {
                 )
                 InversionKeyValueRow(
                     "provider",
-                    value: store.authoritySettings.providerNetwork.rawValue,
-                    tone: store.authoritySettings.providerNetwork == .remoteAllowed ? .amber : .cyan,
+                    value: effectiveProviderNetwork.rawValue,
+                    tone: effectiveProviderNetwork == .remoteAllowed ? .amber : .cyan,
                     monospaced: true
                 )
                 InversionKeyValueRow(
@@ -265,7 +287,7 @@ struct SettingsView: View {
     }
 
     private var authorityTone: InversionTone {
-        store.authoritySettings.isHighRisk ? .amber : .cyan
+        (store.authoritySettings.isHighRisk || effectiveProviderNetwork == .remoteAllowed) ? .amber : .cyan
     }
 
     private var filesystemPosture: String {

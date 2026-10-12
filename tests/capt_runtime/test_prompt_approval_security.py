@@ -463,3 +463,54 @@ def test_model_approval_defaults_to_safe_authority_for_legacy_client(tmp_path):
         assert bound["providerNetworkPolicy"] == "local_only"
     finally:
         store.close()
+
+
+def test_openrouter_approval_binds_remote_before_human_decision(tmp_path):
+    root = tmp_path / "repo"; root.mkdir()
+    store = EventStore(str(tmp_path / "openrouter-preflight.db"))
+    try:
+        svc = RuntimeService(store)
+        response = request_model_prompt_approval(
+            svc,
+            approval_intent(
+                requestId="approval-openrouter-correct-network",
+                targetRoot=str(root), provider="openrouter",
+                model="deepseek/deepseek-v4.1-flash",
+            ),
+            meta("cmd-openrouter-network", "human", "idem-openrouter-network"),
+        )
+        bound = store.require_state(
+            "human_approval-" + response["requestId"]
+        )["scope"]["approvalBinding"]["authorityProfile"]
+        assert bound["providerNetworkPolicy"] == "remote_allowed"
+        assert response["authorityProfile"] == bound
+        assert bound["toolOperations"] == ["file.read", "file.search"]
+        assert bound["fileMutationAllowed"] is False
+        assert bound["shellAccessAllowed"] is False
+        assert response["requestId"] == "approval-openrouter-correct-network"
+    finally:
+        store.close()
+
+
+def test_openrouter_explicit_local_policy_rejected_without_creating_approval(tmp_path):
+    root = tmp_path / "repo"; root.mkdir()
+    store = EventStore(str(tmp_path / "openrouter-deny.db"))
+    try:
+        svc = RuntimeService(store)
+        profile = {
+            "filesystemScope": "project", "filesystemRoot": str(root),
+            "fileMutationAllowed": False, "shellAccessAllowed": False,
+            "providerNetworkPolicy": "local_only",
+        }
+        with pytest.raises(AuthorityViolation, match="OPENROUTER_REQUIRES_REMOTE_NETWORK_AUTHORITY"):
+            request_model_prompt_approval(
+                svc, approval_intent(
+                    requestId="approval-openrouter-deny", targetRoot=str(root),
+                    provider="openrouter", model="xiaomi/mimo-v2.6-flash",
+                    authorityProfile=profile,
+                ),
+                meta("cmd-openrouter-deny", "human", "idem-openrouter-deny"),
+            )
+        assert store.load_state("human_approval-approval-openrouter-deny") is None
+    finally:
+        store.close()
