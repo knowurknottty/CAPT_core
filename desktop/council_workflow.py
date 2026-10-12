@@ -115,9 +115,11 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
         "executionSeconds": tk.StringVar(value="1800"),
     }
     ttk.Label(general, text="Council ID").grid(row=0, column=0, sticky="w", padx=4, pady=4)
-    ttk.Entry(general, textvariable=fields["councilId"]).grid(row=0, column=1, sticky="ew", padx=4, pady=4)
+    council_id_entry = ttk.Entry(general, textvariable=fields["councilId"])
+    council_id_entry.grid(row=0, column=1, sticky="ew", padx=4, pady=4)
     ttk.Label(general, text="Mission ID").grid(row=0, column=2, sticky="w", padx=4, pady=4)
-    ttk.Entry(general, textvariable=fields["missionId"]).grid(row=0, column=3, columnspan=3, sticky="ew", padx=4, pady=4)
+    mission_id_entry = ttk.Entry(general, textvariable=fields["missionId"])
+    mission_id_entry.grid(row=0, column=3, columnspan=3, sticky="ew", padx=4, pady=4)
 
     ttk.Label(general, text="Target root").grid(row=1, column=0, sticky="w", padx=4, pady=4)
     ttk.Entry(general, textvariable=fields["targetRoot"]).grid(row=1, column=1, columnspan=4, sticky="ew", padx=4, pady=4)
@@ -189,13 +191,15 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
     ttk.Label(editor, text="Cohort ID").grid(row=0, column=0, sticky="w")
     ttk.Entry(editor, textvariable=evars["cohort"], width=22).grid(row=0, column=1, sticky="ew")
     ttk.Label(editor, text="Provider").grid(row=0, column=2, sticky="w")
-    ttk.Combobox(editor, textvariable=evars["provider"], width=19,
-                 values=tuple(catalog)).grid(row=0, column=3, sticky="ew")
+    provider_combo = ttk.Combobox(editor, textvariable=evars["provider"], width=19,
+                                  values=tuple(catalog))
+    provider_combo.grid(row=0, column=3, sticky="ew")
     ttk.Label(editor, text="Model").grid(row=0, column=4, sticky="w")
     model_combo = ttk.Combobox(editor, textvariable=evars["model"], width=30)
     model_combo.grid(row=0, column=5, sticky="ew")
     ttk.Label(editor, text="Vessels").grid(row=0, column=6, sticky="w")
-    ttk.Entry(editor, textvariable=evars["vessels"], width=6).grid(row=0, column=7)
+    vessels_entry = ttk.Entry(editor, textvariable=evars["vessels"], width=6)
+    vessels_entry.grid(row=0, column=7)
     ttk.Label(editor, text="Config").grid(row=0, column=8, sticky="w")
     ttk.Entry(editor, textvariable=evars["configuration"], width=10).grid(row=0, column=9)
     def update_models(*_args) -> None:
@@ -216,7 +220,8 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
                     status_var.set(f"{len(fresh)} models discovered for {name}; choose or type a model ID.")
                 post_ui( apply)
         threading.Thread(target=worker, daemon=True).start()
-    ttk.Button(editor, text="Refresh models", command=refresh_models).grid(row=0, column=10)
+    refresh_models_button = ttk.Button(editor, text="Refresh models", command=refresh_models)
+    refresh_models_button.grid(row=0, column=10)
     update_models()
     objective = tk.Text(editor, height=3, wrap="word", font=("SF Mono", 11), undo=True)
     ttk.Label(editor, text="Cohort objective").grid(row=1, column=0, sticky="nw", padx=3, pady=5)
@@ -748,6 +753,22 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
     reconnect_button.pack(side="right", padx=6)
     action_buttons.extend((request_button, approve_button, deny_button, launch_button, refresh_button, reconnect_button))
 
+    # Tk 9.0 does not publish ttk form controls in the macOS AX tree.
+    # This bounded semantic supplement operates ONLY on these real UI widgets
+    # via the Tk main thread. The external native helper must independently
+    # authenticate the exact Council AXWindow + owner PID before any request.
+    from capt_ui.operator.tia_widget_surface import CouncilSemanticSurface
+    semantic = CouncilSemanticSurface(root)
+    semantic.register_field("Council ID", fields["councilId"], council_id_entry)
+    semantic.register_field("Mission ID", fields["missionId"], mission_id_entry)
+    semantic.register_field("Provider", evars["provider"], provider_combo, "AXComboBox")
+    semantic.register_field("Model", evars["model"], model_combo, "AXComboBox")
+    semantic.register_field("Vessels", evars["vessels"], vessels_entry)
+    semantic.register_safe_button("Refresh models", refresh_models_button)
+    semantic.register_safe_button("Refresh", refresh_button)
+    semantic.register_safe_button("Reconnect", reconnect_button)
+    semantic.start()
+
     def close() -> None:
         if run_active["value"] and not messagebox.askyesno(
             "Detach from running Council",
@@ -755,6 +776,7 @@ def run_window(sock: str, token_file: str, target_root: str = "") -> None:
             "it does NOT cancel or replay any execution. Continue?",
         ):
             return
+        semantic.stop()
         ui_lifetime["closing"] = True
         if ui_lifetime["pump_id"] is not None:
             root.after_cancel(ui_lifetime["pump_id"])
