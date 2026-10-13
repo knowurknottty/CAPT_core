@@ -38,6 +38,15 @@ _KIND_TO_FIELD = {
     "council": "councilVersions",
     "replay_fork": "replayForkVersions",
     "tool_execution": "toolExecutionVersions",
+    # Aggregate types introduced after the initial checkpoint schema. Every
+    # durable stream must be represented: do not silently omit new kinds.
+    "bot": "botVersions",
+    "cognitive_candidate": "cognitiveCandidateVersions",
+    "delegate_assignment": "delegateAssignmentVersions",
+    "skill_candidate": "skillCandidateVersions",
+    "lab_board": "labBoardVersions",
+    "sandbox_lease": "sandboxLeaseVersions",
+    "cloudflare_resource_binding": "cloudflareResourceBindingVersions",
 }
 
 
@@ -142,6 +151,15 @@ def create_checkpoint(
         "toolExecutionVersions": sorted(
             versions["toolExecutionVersions"], key=lambda e: e["streamId"]
         ),
+        **{
+            field: sorted(versions[field], key=lambda e: e["streamId"])
+            for field in (
+                "botVersions", "cognitiveCandidateVersions",
+                "delegateAssignmentVersions", "skillCandidateVersions",
+                "labBoardVersions", "sandboxLeaseVersions",
+                "cloudflareResourceBindingVersions",
+            )
+        },
         "activeLeaseIds": sorted(active_lease_ids),
         "activeReservationIds": sorted(open_reservation_ids),
         "pendingOutboxEventIds": store.pending_outbox(),
