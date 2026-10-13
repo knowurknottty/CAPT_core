@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:7cf4592b209b32df0c0e63050c236208ea99e112632105106ef1624f591ecbb1
+// source digest:  sha256:8d8213d0fd44f8b8935e24d9ea4158e5f52ae9e0ec4b461fbdc92d53d7106737
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -427,11 +427,18 @@ export interface CheckpointManifest {
   readonly schemaVersion: SchemaVersion;
   readonly taskVersions: readonly StreamVersionEntry[];
   readonly artifactPromotionVersions?: readonly StreamVersionEntry[];
+  readonly botVersions?: readonly StreamVersionEntry[];
+  readonly cloudflareResourceBindingVersions?: readonly StreamVersionEntry[];
+  readonly cognitiveCandidateVersions?: readonly StreamVersionEntry[];
   readonly cohortVersions?: readonly StreamVersionEntry[];
   readonly councilVersions?: readonly StreamVersionEntry[];
+  readonly delegateAssignmentVersions?: readonly StreamVersionEntry[];
   readonly humanApprovalVersions?: readonly StreamVersionEntry[];
+  readonly labBoardVersions?: readonly StreamVersionEntry[];
   readonly promptProposalVersions?: readonly StreamVersionEntry[];
   readonly replayForkVersions?: readonly StreamVersionEntry[];
+  readonly sandboxLeaseVersions?: readonly StreamVersionEntry[];
+  readonly skillCandidateVersions?: readonly StreamVersionEntry[];
   readonly toolExecutionVersions?: readonly StreamVersionEntry[];
 }
 

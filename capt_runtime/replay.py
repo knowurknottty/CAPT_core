@@ -347,6 +347,14 @@ def checkpoint_replay(store: EventStore, manifest: Dict[str, Any]) -> ReplayStat
         "cohortVersions",
         "councilVersions",
         "replayForkVersions",
+        "toolExecutionVersions",
+        "botVersions",
+        "cognitiveCandidateVersions",
+        "delegateAssignmentVersions",
+        "skillCandidateVersions",
+        "labBoardVersions",
+        "sandboxLeaseVersions",
+        "cloudflareResourceBindingVersions",
     )
     for field in fields:
         for entry in manifest.get(field, []):

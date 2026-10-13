@@ -290,6 +290,55 @@
           "items": {
             "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry"
           }
+        },
+        "botVersions": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry"
+          }
+        },
+        "cognitiveCandidateVersions": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry"
+          }
+        },
+        "delegateAssignmentVersions": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry"
+          }
+        },
+        "skillCandidateVersions": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry"
+          }
+        },
+        "labBoardVersions": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry"
+          }
+        },
+        "sandboxLeaseVersions": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry"
+          }
+        },
+        "cloudflareResourceBindingVersions": {
+          "type": "array",
+          "maxItems": 4096,
+          "items": {
+            "$ref": "checkpoint.schema.json#/$defs/StreamVersionEntry"
+          }
         }
       }
     }
