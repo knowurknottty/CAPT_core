@@ -29,7 +29,7 @@
     "maxConcurrentCohorts": 1,
     "physicalProviderCalls": "One per cohort unless tool rounds are explicitly approved and recorded.",
     "approval": "New HumanApproval for each bounded execution; never reuse or mutate a frozen approval.",
-    "scope": "NEXT external donor review, not the frozen CAPT-UPG-025..074 six-file council objective.",
+    "scope": "Next external donor review batch, not the frozen CAPT-UPG-025..074 six-file council objective; do not inject newly queued files into an existing approval.",
     "completion": "Require RRDS-1 verified full-tree census, 100% in-scope source inspection, complete documented dispositions, independent verifier receipts and grounded tests before any cherry-pick."
   },
   "additions": [
@@ -80,6 +80,452 @@
       "lastReviewReceipt": null,
       "sourceAuditReceipt": null,
       "integrated": false
+    },
+    {
+      "repository": "github/spec-kit",
+      "url": "https://github.com/github/spec-kit",
+      "defaultBranch": "main",
+      "observedHead": "6c62e10d5ab1d676c557eb2d0cee86be52c893d2",
+      "observedAt": "2026-10-12",
+      "licenseStatus": "MIT",
+      "licenseEvidence": "GitHub repository metadata reports MIT; verify exact pinned license text before source reuse",
+      "classification": "CHERRY_PICK_CANDIDATE",
+      "proposedSurfaces": "CAPT Core; project router; cohorts",
+      "mechanisms": [
+        "Spec-driven development templates, requirements-to-tasks workflow, reproducible mission specifications"
+      ],
+      "preliminaryRisks": [
+        "prompt injection via task specifications",
+        "false verification"
+      ],
+      "redTeamTargets": [
+        "prompt injection via task specifications",
+        "false verification"
+      ],
+      "integrationPreference": "Selectively cherry-pick or reimplement independently behind CAPT RuntimeService/EventStore/ToolBroker/ClaimGuard; do not transplant a new authority plane.",
+      "disposition": "QUEUED_NOT_REVIEWED",
+      "lastReviewReceipt": null,
+      "sourceAuditReceipt": null,
+      "integrated": false
+    },
+    {
+      "repository": "garrytan/gstack",
+      "url": "https://github.com/garrytan/gstack",
+      "defaultBranch": "main",
+      "observedHead": "dbf400ec3f1ffb96a429f0d0b29ca932b3d6c6f0",
+      "observedAt": "2026-10-12",
+      "licenseStatus": "MIT",
+      "licenseEvidence": "GitHub repository metadata reports MIT; verify exact pinned license text before source reuse",
+      "classification": "CHERRY_PICK_CANDIDATE",
+      "proposedSurfaces": "vessels; CAPT Bot; TUI",
+      "mechanisms": [
+        "Role and process skill patterns for product, engineering and release workflows"
+      ],
+      "preliminaryRisks": [
+        "skills overstepping governed runtime",
+        "model-role authority confusion"
+      ],
+      "redTeamTargets": [
+        "skills overstepping governed runtime",
+        "model-role authority confusion"
+      ],
+      "integrationPreference": "Selectively cherry-pick or reimplement independently behind CAPT RuntimeService/EventStore/ToolBroker/ClaimGuard; do not transplant a new authority plane.",
+      "disposition": "QUEUED_NOT_REVIEWED",
+      "lastReviewReceipt": null,
+      "sourceAuditReceipt": null,
+      "integrated": false
+    },
+    {
+      "repository": "msitarzewski/agency-agents",
+      "url": "https://github.com/msitarzewski/agency-agents",
+      "defaultBranch": "main",
+      "observedHead": "f99f6aa910a442b0197b768ce0ea7751e35e2060",
+      "observedAt": "2026-10-12",
+      "licenseStatus": "MIT",
+      "licenseEvidence": "GitHub repository metadata reports MIT; verify exact pinned license text before source reuse",
+      "classification": "VESSEL_AND_CAPTBOT_TEMPLATE_CANDIDATE",
+      "proposedSurfaces": "CAPT vessel charters; CAPT Bot personas",
+      "mechanisms": [
+        "Specialist agent profiles recast as bounded vessel perspectives and CAPT Bot templates"
+      ],
+      "preliminaryRisks": [
+        "personas impersonating approvals",
+        "prompt injection in instructions",
+        "cross-cohort contamination"
+      ],
+      "redTeamTargets": [
+        "personas impersonating approvals",
+        "prompt injection in instructions",
+        "cross-cohort contamination"
+      ],
+      "integrationPreference": "Selectively cherry-pick or reimplement independently behind CAPT RuntimeService/EventStore/ToolBroker/ClaimGuard; do not transplant a new authority plane.",
+      "disposition": "QUEUED_NOT_REVIEWED",
+      "lastReviewReceipt": null,
+      "sourceAuditReceipt": null,
+      "integrated": false
+    },
+    {
+      "repository": "lsdefine/GenericAgent",
+      "url": "https://github.com/lsdefine/GenericAgent",
+      "defaultBranch": "main",
+      "observedHead": "6e0c54f6ec72bf18ead57afb50fdd38ce703dba2",
+      "observedAt": "2026-10-12",
+      "licenseStatus": "MIT",
+      "licenseEvidence": "GitHub repository metadata reports MIT; verify exact pinned license text before source reuse",
+      "classification": "REIMPLEMENT_SEMANTICS",
+      "proposedSurfaces": "CAPT Core; Ouroboros; skill foundry",
+      "mechanisms": [
+        "Self-evolving skill-tree ideas and token-efficiency architecture, not its direct autonomous system control"
+      ],
+      "preliminaryRisks": [
+        "unbounded self-modification",
+        "shell and credential authority escalation"
+      ],
+      "redTeamTargets": [
+        "unbounded self-modification",
+        "shell and credential authority escalation"
+      ],
+      "integrationPreference": "Selectively cherry-pick or reimplement independently behind CAPT RuntimeService/EventStore/ToolBroker/ClaimGuard; do not transplant a new authority plane.",
+      "disposition": "QUEUED_NOT_REVIEWED",
+      "lastReviewReceipt": null,
+      "sourceAuditReceipt": null,
+      "integrated": false
+    },
+    {
+      "repository": "zilliztech/claude-context",
+      "url": "https://github.com/zilliztech/claude-context",
+      "defaultBranch": "master",
+      "observedHead": "6fc318b4e3ce58e2898b00a9c3538ead9e24dee5",
+      "observedAt": "2026-10-12",
+      "licenseStatus": "MIT",
+      "licenseEvidence": "GitHub repository metadata reports MIT; verify exact pinned license text before source reuse",
+      "classification": "CHERRY_PICK_CANDIDATE",
+      "proposedSurfaces": "CAPTMem; ContextPack; MCP",
+      "mechanisms": [
+        "Code indexing, retrieval and codebase-aware semantic context"
+      ],
+      "preliminaryRisks": [
+        "secret indexing",
+        "source poisoning",
+        "search-data isolation"
+      ],
+      "redTeamTargets": [
+        "secret indexing",
+        "source poisoning",
+        "search-data isolation"
+      ],
+      "integrationPreference": "Selectively cherry-pick or reimplement independently behind CAPT RuntimeService/EventStore/ToolBroker/ClaimGuard; do not transplant a new authority plane.",
+      "disposition": "QUEUED_NOT_REVIEWED",
+      "lastReviewReceipt": null,
+      "sourceAuditReceipt": null,
+      "integrated": false
+    },
+    {
+      "repository": "modimihir07/agentic-os",
+      "url": "https://github.com/modimihir07/agentic-os",
+      "defaultBranch": "main",
+      "observedHead": "c7ebbb41d85608e7b49e4f1f801c92c3991be254",
+      "observedAt": "2026-10-12",
+      "licenseStatus": "MIT",
+      "licenseEvidence": "GitHub repository metadata reports MIT; verify exact pinned license text before source reuse",
+      "classification": "CHERRY_PICK_CANDIDATE",
+      "proposedSurfaces": "CAPT cohorts; Hermes bridges; CAPT Bot",
+      "mechanisms": [
+        "Multi-agent scheduler, skills hub and provider cost visibility"
+      ],
+      "preliminaryRisks": [
+        "unscheduled provider spend",
+        "control-plane duplication"
+      ],
+      "redTeamTargets": [
+        "unscheduled provider spend",
+        "control-plane duplication"
+      ],
+      "integrationPreference": "Selectively cherry-pick or reimplement independently behind CAPT RuntimeService/EventStore/ToolBroker/ClaimGuard; do not transplant a new authority plane.",
+      "disposition": "QUEUED_NOT_REVIEWED",
+      "lastReviewReceipt": null,
+      "sourceAuditReceipt": null,
+      "integrated": false
+    },
+    {
+      "repository": "Imbad0202/academic-research-skills",
+      "url": "https://github.com/Imbad0202/academic-research-skills",
+      "defaultBranch": "main",
+      "observedHead": "d1e51716e53fc371727ea6164dd709fc8ea28c97",
+      "observedAt": "2026-10-12",
+      "licenseStatus": "LICENSE_REQUIRES_INSPECTION",
+      "licenseEvidence": "GitHub repository license classification NOASSERTION; inspect pinned license text before copying",
+      "classification": "DESIGN_REFERENCE_ONLY_PENDING_LICENSE",
+      "proposedSurfaces": "CAPTResearch; CAPTSciLab; vessels",
+      "mechanisms": [
+        "Research-to-review pipeline, evidence checking and synthesis skill patterns"
+      ],
+      "preliminaryRisks": [
+        "citation fabrication",
+        "copyrighted passage propagation",
+        "license ambiguity"
+      ],
+      "redTeamTargets": [
+        "citation fabrication",
+        "copyrighted passage propagation",
+        "license ambiguity"
+      ],
+      "integrationPreference": "Selectively cherry-pick or reimplement independently behind CAPT RuntimeService/EventStore/ToolBroker/ClaimGuard; do not transplant a new authority plane.",
+      "disposition": "QUEUED_NOT_REVIEWED",
+      "lastReviewReceipt": null,
+      "sourceAuditReceipt": null,
+      "integrated": false
+    },
+    {
+      "repository": "t8y2/dbx",
+      "url": "https://github.com/t8y2/dbx",
+      "defaultBranch": "main",
+      "observedHead": "9f6e9af6347085c91b72b0fbebe6ecc8a42152ff",
+      "observedAt": "2026-10-12",
+      "licenseStatus": "Apache-2.0",
+      "licenseEvidence": "GitHub repository metadata reports Apache-2.0; verify exact pinned license text before source reuse",
+      "classification": "DESIGN_REFERENCE_ONLY",
+      "proposedSurfaces": "CAPT Core; TUI; database adapters",
+      "mechanisms": [
+        "Database client ergonomics and query inspection as external bounded reference"
+      ],
+      "preliminaryRisks": [
+        "data exfiltration",
+        "direct database writes bypassing ToolBroker"
+      ],
+      "redTeamTargets": [
+        "data exfiltration",
+        "direct database writes bypassing ToolBroker"
+      ],
+      "integrationPreference": "Selectively cherry-pick or reimplement independently behind CAPT RuntimeService/EventStore/ToolBroker/ClaimGuard; do not transplant a new authority plane.",
+      "disposition": "QUEUED_NOT_REVIEWED",
+      "lastReviewReceipt": null,
+      "sourceAuditReceipt": null,
+      "integrated": false
+    },
+    {
+      "repository": "phuryn/pm-skills",
+      "url": "https://github.com/phuryn/pm-skills",
+      "defaultBranch": "main",
+      "observedHead": "c68487d721e419ec87af1ae6412a842978eab785",
+      "observedAt": "2026-10-12",
+      "licenseStatus": "MIT",
+      "licenseEvidence": "GitHub repository metadata reports MIT; verify exact pinned license text before source reuse",
+      "classification": "CHERRY_PICK_CANDIDATE",
+      "proposedSurfaces": "CAPT project router; CAPT Bot; vessels",
+      "mechanisms": [
+        "Product management skill templates for discovery through launch"
+      ],
+      "preliminaryRisks": [
+        "unverified success claims",
+        "tool effects without approvals"
+      ],
+      "redTeamTargets": [
+        "unverified success claims",
+        "tool effects without approvals"
+      ],
+      "integrationPreference": "Selectively cherry-pick or reimplement independently behind CAPT RuntimeService/EventStore/ToolBroker/ClaimGuard; do not transplant a new authority plane.",
+      "disposition": "QUEUED_NOT_REVIEWED",
+      "lastReviewReceipt": null,
+      "sourceAuditReceipt": null,
+      "integrated": false
+    },
+    {
+      "repository": "apple/container",
+      "url": "https://github.com/apple/container",
+      "defaultBranch": "main",
+      "observedHead": "aa8b830745858a5c3a59d78cd391045271a6d602",
+      "observedAt": "2026-10-12",
+      "licenseStatus": "Apache-2.0",
+      "licenseEvidence": "GitHub repository metadata reports Apache-2.0; verify exact pinned license text before source reuse",
+      "classification": "EXTERNAL_SERVICE_BOUNDARY",
+      "proposedSurfaces": "CAPTsec; macOS isolation; governance",
+      "mechanisms": [
+        "Apple Silicon container boundary implementation and CLI integration, not replacement authority"
+      ],
+      "preliminaryRisks": [
+        "VM isolation claims",
+        "host volume mounts",
+        "network egress and privileged access"
+      ],
+      "redTeamTargets": [
+        "VM isolation claims",
+        "host volume mounts",
+        "network egress and privileged access"
+      ],
+      "integrationPreference": "Selectively cherry-pick or reimplement independently behind CAPT RuntimeService/EventStore/ToolBroker/ClaimGuard; do not transplant a new authority plane.",
+      "disposition": "QUEUED_NOT_REVIEWED",
+      "lastReviewReceipt": null,
+      "sourceAuditReceipt": null,
+      "integrated": false
+    },
+    {
+      "repository": "modelcontextprotocol/ext-apps",
+      "url": "https://github.com/modelcontextprotocol/ext-apps",
+      "defaultBranch": "main",
+      "observedHead": "82221c0c8ce7661efa6771c9d461511b1650495f",
+      "observedAt": "2026-10-12",
+      "licenseStatus": "LICENSE_REQUIRES_INSPECTION",
+      "licenseEvidence": "GitHub repository license classification NOASSERTION; inspect pinned license text before copying",
+      "classification": "DESIGN_REFERENCE_ONLY_PENDING_LICENSE",
+      "proposedSurfaces": "CAPT MCP; macOS UI",
+      "mechanisms": [
+        "MCP Apps UI spec/SDK for authorized embedded interfaces"
+      ],
+      "preliminaryRisks": [
+        "embedded UI message spoofing",
+        "untrusted UI -> tool authority escalation"
+      ],
+      "redTeamTargets": [
+        "embedded UI message spoofing",
+        "untrusted UI -> tool authority escalation"
+      ],
+      "integrationPreference": "Selectively cherry-pick or reimplement independently behind CAPT RuntimeService/EventStore/ToolBroker/ClaimGuard; do not transplant a new authority plane.",
+      "disposition": "QUEUED_NOT_REVIEWED",
+      "lastReviewReceipt": null,
+      "sourceAuditReceipt": null,
+      "integrated": false
+    },
+    {
+      "repository": "yogesh-tessl/Security-Claw",
+      "url": "https://github.com/yogesh-tessl/Security-Claw",
+      "defaultBranch": "main",
+      "observedHead": "ff021dc3ab90e5adc580a6b40bdfb9b0fad0d23e",
+      "observedAt": "2026-10-12",
+      "licenseStatus": "MIT",
+      "licenseEvidence": "GitHub repository metadata reports MIT; verify exact pinned license text before source reuse",
+      "classification": "REDTEAM_ONLY",
+      "proposedSurfaces": "CAPTsec RedTeam",
+      "mechanisms": [
+        "Adversarial testing and security findings framework reviewed only in contained sandbox"
+      ],
+      "preliminaryRisks": [
+        "offensive automation",
+        "privilege escalation",
+        "unintended external targeting"
+      ],
+      "redTeamTargets": [
+        "offensive automation",
+        "privilege escalation",
+        "unintended external targeting"
+      ],
+      "integrationPreference": "Selectively cherry-pick or reimplement independently behind CAPT RuntimeService/EventStore/ToolBroker/ClaimGuard; do not transplant a new authority plane.",
+      "disposition": "QUEUED_NOT_REVIEWED",
+      "lastReviewReceipt": null,
+      "sourceAuditReceipt": null,
+      "integrated": false
+    },
+    {
+      "repository": "CronusL-1141/AI-company",
+      "url": "https://github.com/CronusL-1141/AI-company",
+      "defaultBranch": "master",
+      "observedHead": "01ae582d0d38f63d2669c240ca82cdd7b3fc08c4",
+      "observedAt": "2026-10-12",
+      "licenseStatus": "MIT",
+      "licenseEvidence": "GitHub repository metadata reports MIT; verify exact pinned license text before source reuse",
+      "classification": "VESSEL_AND_CAPTBOT_TEMPLATE_CANDIDATE",
+      "proposedSurfaces": "CAPT Bot; vessels; cohort orchestration",
+      "mechanisms": [
+        "Multi-agent roles, lifecycle hooks, workflow pipelines recast with CAPT authority"
+      ],
+      "preliminaryRisks": [
+        "agents assuming independent authority",
+        "automation sprawl"
+      ],
+      "redTeamTargets": [
+        "agents assuming independent authority",
+        "automation sprawl"
+      ],
+      "integrationPreference": "Selectively cherry-pick or reimplement independently behind CAPT RuntimeService/EventStore/ToolBroker/ClaimGuard; do not transplant a new authority plane.",
+      "disposition": "QUEUED_NOT_REVIEWED",
+      "lastReviewReceipt": null,
+      "sourceAuditReceipt": null,
+      "integrated": false
+    },
+    {
+      "repository": "23blocks-OS/ai-maestro",
+      "url": "https://github.com/23blocks-OS/ai-maestro",
+      "defaultBranch": "main",
+      "observedHead": "0d074504da6fd84ae6e556814822e473ae42929f",
+      "observedAt": "2026-10-12",
+      "licenseStatus": "MIT",
+      "licenseEvidence": "GitHub repository metadata reports MIT; verify exact pinned license text before source reuse",
+      "classification": "CHERRY_PICK_CANDIDATE",
+      "proposedSurfaces": "CAPT Core; cohorts; CAPTMem",
+      "mechanisms": [
+        "Agent orchestration, skill registry, memory search, code graph and handoff patterns"
+      ],
+      "preliminaryRisks": [
+        "alternate governance plane",
+        "untrusted inter-agent commands"
+      ],
+      "redTeamTargets": [
+        "alternate governance plane",
+        "untrusted inter-agent commands"
+      ],
+      "integrationPreference": "Selectively cherry-pick or reimplement independently behind CAPT RuntimeService/EventStore/ToolBroker/ClaimGuard; do not transplant a new authority plane.",
+      "disposition": "QUEUED_NOT_REVIEWED",
+      "lastReviewReceipt": null,
+      "sourceAuditReceipt": null,
+      "integrated": false
+    },
+    {
+      "repository": "locaith/bio-memory-ai-locaith",
+      "url": "https://github.com/locaith/bio-memory-ai-locaith",
+      "defaultBranch": "main",
+      "observedHead": "918682538c65530951171ddbff991fcf9848de0d",
+      "observedAt": "2026-10-12",
+      "licenseStatus": "MIT",
+      "licenseEvidence": "GitHub repository metadata reports MIT; verify exact pinned license text before source reuse",
+      "classification": "CHERRY_PICK_CANDIDATE",
+      "proposedSurfaces": "bioCAPT; CAPTMem",
+      "mechanisms": [
+        "Bio-inspired agent memory and retention semantics, critically compared to CAPTMem"
+      ],
+      "preliminaryRisks": [
+        "unsourced biomimetic efficacy claims",
+        "memory contamination"
+      ],
+      "redTeamTargets": [
+        "unsourced biomimetic efficacy claims",
+        "memory contamination"
+      ],
+      "integrationPreference": "Selectively cherry-pick or reimplement independently behind CAPT RuntimeService/EventStore/ToolBroker/ClaimGuard; do not transplant a new authority plane.",
+      "disposition": "QUEUED_NOT_REVIEWED",
+      "lastReviewReceipt": null,
+      "sourceAuditReceipt": null,
+      "integrated": false
+    },
+    {
+      "repository": "farion1231/cc-switch",
+      "url": "https://github.com/farion1231/cc-switch",
+      "defaultBranch": "main",
+      "observedHead": "90fb37ffb76bf06f2d021cd020b7f677216e916c",
+      "observedAt": "2026-10-12",
+      "licenseStatus": "MIT",
+      "licenseEvidence": "GitHub repository metadata reports MIT; verify exact pinned license text before source reuse",
+      "classification": "CHERRY_PICK_CANDIDATE",
+      "proposedSurfaces": "CAPT macOS; provider config",
+      "mechanisms": [
+        "Desktop provider switching, settings UX and configuration migration patterns"
+      ],
+      "preliminaryRisks": [
+        "credential leaks",
+        "provider mismatch",
+        "state persistence/restart side effects"
+      ],
+      "redTeamTargets": [
+        "credential leaks",
+        "provider mismatch",
+        "state persistence/restart side effects"
+      ],
+      "integrationPreference": "Selectively cherry-pick or reimplement independently behind CAPT RuntimeService/EventStore/ToolBroker/ClaimGuard; do not transplant a new authority plane.",
+      "disposition": "QUEUED_NOT_REVIEWED",
+      "lastReviewReceipt": null,
+      "sourceAuditReceipt": null,
+      "integrated": false
     }
-  ]
+  ],
+  "intakeBatch": "2026-10-12-sixteen-new-donors",
+  "readiness": "SOURCE_PINNED_PENDING_RRDS1_AND_LICENSE"
 }
