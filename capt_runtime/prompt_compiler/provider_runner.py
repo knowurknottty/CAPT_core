@@ -41,9 +41,17 @@ class BoundedPromptCompilerRunner:
         transport: Callable[[Mapping[str, Any]], Mapping[str, Any]],
         *,
         governor: Optional[TokenCostGovernor] = None,
+        max_estimated_prompt_tokens_per_request: Optional[int] = None,
     ) -> None:
         self._transport = transport
         self._governor = governor
+        if max_estimated_prompt_tokens_per_request is not None and (
+            isinstance(max_estimated_prompt_tokens_per_request, bool)
+            or not isinstance(max_estimated_prompt_tokens_per_request, int)
+            or max_estimated_prompt_tokens_per_request <= 0
+        ):
+            raise ValueError("COMPILER_PROMPT_TOKEN_BOUND_INVALID")
+        self._max_prompt_tokens = max_estimated_prompt_tokens_per_request
 
     @staticmethod
     def _estimate_tokens(value: Any) -> int:
@@ -78,6 +86,14 @@ class BoundedPromptCompilerRunner:
         if stage_context is not None:
             payload["stageContext"] = dict(stage_context)
         prompt_tokens = self._estimate_tokens(payload)
+        if self._max_prompt_tokens is not None and prompt_tokens > self._max_prompt_tokens:
+            # This is an independent per-request input bound. Never convert a
+            # failed bound into a fallback with unreported omitted evidence.
+            raise ValueError(
+                f"COMPILER_STAGE_CONTEXT_LIMIT: {prompt_tokens} estimated input tokens "
+                f"> {self._max_prompt_tokens} per-request budget; "
+                "reduce/partition the stage evidence or select a verified wider-context model"
+            )
         if self._governor is not None:
             self._governor.check_pre_dispatch(prompt_tokens)
         output = self._transport(payload)

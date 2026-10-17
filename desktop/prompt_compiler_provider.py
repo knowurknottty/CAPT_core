@@ -21,6 +21,14 @@ from capt_ui.operator.secrets import resolve as resolve_secret
 
 _MAX_RESPONSE_BYTES = 262_144
 _DEFAULT_COMPILER_MAX_OUTPUT_TOKENS = 32_768
+# TokenCostGovernor's session count is CUMULATIVE over the sequential
+# OMNI/META/FORGE/SIGMA stages, not the provider's per-request context window.
+# A 128K session cap wrongly rejects the later stages of an otherwise valid run.
+_COMPILER_SESSION_TOKEN_CAP = 1_000_000
+# Conservative fallback per-stage bound (token estimates, not model metadata):
+# 98K estimated input + up to 32K requested output <= 128K. This is separate
+# from the cumulative budget and still fails closed before any network call.
+_COMPILER_MAX_ESTIMATED_INPUT_TOKENS = 98_304
 
 
 @dataclass(frozen=True)
@@ -349,7 +357,7 @@ def _compiler_from_selection(selection: PromptCompilerSelection):
         if not api_key:
             return None
     governor = TokenCostGovernor(
-        max_tokens_per_session=131_072,
+        max_tokens_per_session=_COMPILER_SESSION_TOKEN_CAP,
         max_cost_usd_per_session=0.01,
         max_requests_per_session=32,
         max_output_tokens_per_request=_DEFAULT_COMPILER_MAX_OUTPUT_TOKENS,
@@ -361,6 +369,7 @@ def _compiler_from_selection(selection: PromptCompilerSelection):
                 max_output_tokens=_DEFAULT_COMPILER_MAX_OUTPUT_TOKENS,
             ),
             governor=governor,
+            max_estimated_prompt_tokens_per_request=_COMPILER_MAX_ESTIMATED_INPUT_TOKENS,
         ),
         provider=CompilerProvider(selection.provider_id, selection.model, selection.endpoint_class),
         remote_compilation_authorized=selection.remote_authorized,
