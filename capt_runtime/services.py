@@ -526,6 +526,158 @@ class RuntimeService(object):
             metadata,
         )
 
+    # -- reviewed mission disposition ---------------------------------------
+
+    def mission_disposition_preview(self, mission_id: str, target: str) -> Dict[str, Any]:
+        """Read-only review bound to the exact states that would be mutated."""
+        if target not in ("authorize", "cancel", "complete"):
+            raise AuthorityViolation("MISSION_DISPOSITION_INVALID")
+        mission_stream = MissionAggregate.stream_id(mission_id)
+        mission = self.store.require_state(mission_stream)
+        version = self.store.aggregate_version(mission_stream)
+        tasks, approvals, runs, accepted = [], [], [], []
+        for stream, kind, aggregate_version in self.store.all_aggregates():
+            if kind not in ("task", "human_approval", "driverrun", "claim"):
+                continue
+            state = self.store.load_state(stream)
+            if state is None or state.get("missionId") != mission_id:
+                continue
+            if kind == "task":
+                tasks.append((str(state["taskId"]), str(state["state"]), aggregate_version))
+            elif kind == "human_approval":
+                approvals.append((str(state["requestId"]), str(state["state"]), aggregate_version))
+            elif kind == "driverrun":
+                runs.append((str(state["driverRunId"]), str(state["state"]), aggregate_version,
+                             str(state.get("reconciliationStatus") or "")))
+            elif state.get("promotionState") == "accepted":
+                accepted.append((str(state["claimId"]), str(state.get("taskId")), aggregate_version))
+        tasks.sort()
+        approvals.sort()
+        runs.sort()
+        accepted.sort()
+        blockers = []
+        if mission["state"] in ("completed", "failed", "cancelled"):
+            blockers.append("MISSION_ALREADY_TERMINAL")
+        if target == "authorize" and mission["state"] != "draft":
+            blockers.append("MISSION_NOT_DRAFT")
+        if target == "cancel" and mission["state"] not in (
+            "draft", "authorized", "executing", "suspended"
+        ):
+            blockers.append("MISSION_CANCEL_STATE_INVALID")
+        if target == "complete":
+            if mission["state"] != "executing":
+                blockers.append("MISSION_NOT_EXECUTING")
+            if not tasks or any(t[1] not in ("succeeded", "failed", "cancelled") for t in tasks):
+                blockers.append("MISSION_TASKS_NOT_ALL_TERMINAL")
+            if not any(
+                task_id in {tid for tid, state, _ in tasks if state == "succeeded"}
+                for _, task_id, _ in accepted
+            ):
+                blockers.append("CLAIMGUARD_ACCEPTED_SUCCESSOR_REQUIRED")
+            if any(state in ("requested", "approved") for _, state, _ in approvals):
+                blockers.append("UNSETTLED_APPROVALS")
+        if target in ("cancel", "complete"):
+            if any(state in ("created", "submitted", "running") for _, state, _, _ in runs):
+                blockers.append("ACTIVE_DRIVER_RUN")
+            if target == "cancel" and any(
+                status == "reconciliation_required" for _, _, _, status in runs
+            ):
+                blockers.append("INDETERMINATE_RUN_RECONCILIATION_REQUIRED")
+            if target == "cancel" and any(state == "approved" for _, state, _ in approvals):
+                blockers.append("APPROVED_AUTHORITY_REQUIRES_REVOCATION")
+        subject = {
+            "missionId": mission_id, "version": version,
+            "state": mission["state"], "target": target,
+            "tasks": tasks, "approvals": approvals,
+            "runs": runs, "acceptedClaims": accepted,
+        }
+        return {
+            "missionId": mission_id, "currentState": mission["state"],
+            "target": target, "expectedVersion": version,
+            "previewDigest": digest(subject), "blocked": blockers,
+            "tasks": [{"taskId": tid, "state": state, "version": v} for tid, state, v in tasks],
+            "approvals": [{"requestId": rid, "state": state, "version": v} for rid, state, v in approvals],
+            "driverRuns": [{"driverRunId": rid, "state": state, "version": v,
+                            "reconciliationStatus": rs} for rid, state, v, rs in runs],
+            "acceptedClaimCount": len(accepted),
+            "historyPolicy": "append_only",
+        }
+
+    def dispose_mission(
+        self, mission_id: str, target: str, expected_version: int,
+        preview_digest: str, reason: str, metadata: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Atomic human-reviewed mission transition plus orphaned task/approval settlement."""
+        require("CommandMetadata", metadata)
+        require_authority("transition_mission", metadata["actor"]["kind"])
+        if metadata["actor"]["kind"] != "human":
+            raise AuthorityViolation("MISSION_DISPOSITION_HUMAN_REQUIRED")
+        prior = self.store.find_idempotent(metadata["idempotencyKey"])
+        if prior is not None:
+            return self._commit([], metadata)
+        if not reason or len(reason) > 1024:
+            raise AuthorityViolation("MISSION_DISPOSITION_REASON_REQUIRED")
+        preview = self.mission_disposition_preview(mission_id, target)
+        if preview["expectedVersion"] != expected_version or preview["previewDigest"] != preview_digest:
+            raise ConcurrencyError("MISSION_DISPOSITION_REVIEW_STALE")
+        if preview["blocked"]:
+            raise AuthorityViolation("MISSION_DISPOSITION_BLOCKED:" + ",".join(preview["blocked"]))
+        stream = MissionAggregate.stream_id(mission_id)
+        prior_state = self.store.require_state(stream)
+        target_state = {"authorize": "authorized", "cancel": "cancelled", "complete": "completed"}[target]
+        nxt = MissionAggregate.transition(prior_state, target_state)
+        appends: List[AppendRequest] = []
+        ordinal = 0
+        def add_event(stream_id: str, kind: str, prior_version: int, state: Dict[str, Any],
+                      event_type: str, payload: Dict[str, Any], task_id: Optional[str] = None) -> None:
+            nonlocal ordinal
+            ordinal += 1
+            event = commands.envelope(
+                event_id=metadata["commandId"] + "-ev" + str(ordinal),
+                stream_id=stream_id, event_type=event_type, payload=payload,
+                metadata=metadata, occurred_at=metadata["issuedAt"],
+                mission_id=mission_id, task_id=task_id,
+            )
+            appends.append(AppendRequest(stream_id, kind, prior_version, event, state))
+        if target == "cancel":
+            for task in preview["tasks"]:
+                if task["state"] in ("succeeded", "failed", "cancelled"):
+                    continue
+                task_id = task["taskId"]
+                task_stream = TaskAggregate.stream_id(task_id)
+                state = TaskAggregate.transition(self.store.require_state(task_stream), "cancelled")
+                add_event(task_stream, TaskAggregate.KIND, self.store.aggregate_version(task_stream),
+                          state, "TaskTransitioned",
+                          {"eventType": "TaskTransitioned", "taskId": task_id,
+                           "fromState": task["state"], "toState": "cancelled", "reason": reason},
+                          task_id=task_id)
+            for approval in preview["approvals"]:
+                if approval["state"] != "requested":
+                    continue
+                request_id = approval["requestId"]
+                approval_stream = HumanApprovalAggregate.stream_id(request_id)
+                current = self.store.require_state(approval_stream)
+                decision = {
+                    "schemaVersion": "1.0.0", "requestId": request_id,
+                    "decision": "deny", "operatorId": metadata["actor"]["actorId"],
+                    "decidedAt": metadata["issuedAt"], "note": reason,
+                    "idempotencyKey": metadata["idempotencyKey"],
+                    "correlationId": metadata["correlationId"],
+                }
+                require("HumanApprovalDecision", decision)
+                state = HumanApprovalAggregate.decide(current, decision, metadata["issuedAt"])
+                add_event(approval_stream, HumanApprovalAggregate.KIND,
+                          self.store.aggregate_version(approval_stream), state,
+                          "HumanApprovalDecided", {"eventType": "HumanApprovalDecided",
+                                                   "decision": decision}, current["taskId"])
+        add_event(stream, MissionAggregate.KIND, expected_version, nxt,
+                  "MissionStateChanged",
+                  {"eventType": "MissionStateChanged", "fromState": prior_state["state"],
+                   "toState": target_state, "reason": reason})
+        committed = self._commit(appends, metadata)
+        return {**committed, "missionId": mission_id,
+                "missionState": target_state, "settledEvents": len(appends)}
+
     # -- task --------------------------------------------------------------
 
     def create_task(

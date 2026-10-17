@@ -74,6 +74,7 @@ _VALID_OPS = (
     "submit_approval_decision",
     "activate_approved_capability",
     "submit_provider_result_review",
+    "mission_disposition",
     "cancel_task",
     "cancel_driver_run",
     "update_memory_trigger_policy",
@@ -621,6 +622,30 @@ class RuntimeCommandService:
                     classification="duplicate" if status == "idempotent" else "accepted",
                     result=result,
                     stream_id="human_approval-" + str(result.get("requestId", "")),
+                )
+
+            elif op == "mission_disposition":
+                p = cmd["payload"]
+                expected_fields = {
+                    "missionId", "target", "expectedVersion",
+                    "previewDigest", "reason", "confirmedMissionId",
+                }
+                if not isinstance(p, dict) or set(p) != expected_fields:
+                    raise AuthorityViolation("MISSION_DISPOSITION_PAYLOAD_INVALID")
+                mission_id = str(p["missionId"])
+                if p["confirmedMissionId"] != mission_id:
+                    raise AuthorityViolation("MISSION_DISPOSITION_EXPLICIT_CONFIRMATION_REQUIRED")
+                result = self.svc.dispose_mission(
+                    mission_id, str(p["target"]), int(p["expectedVersion"]),
+                    str(p["previewDigest"]), str(p["reason"]), meta,
+                )
+                status = "idempotent" if result.get("status") == "idempotent" else "accepted"
+                return self._receipt(
+                    cmd, status=status,
+                    classification="duplicate" if status == "idempotent" else "accepted",
+                    result={"missionId": mission_id, "missionState": result.get("missionState"),
+                            "settledEvents": result.get("settledEvents")},
+                    stream_id="mission-" + mission_id,
                 )
 
             elif op == "submit_approval_decision":

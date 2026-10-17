@@ -1113,8 +1113,8 @@ class RuntimeQueryService:
             if op == "capabilities":
                 return {"ok": True, "result": {
                     "schemaVersion": CONTRACT_SCHEMA_VERSION,
-                    "queryOperations": ["council_receipt", "provider_failure_diagnostic", "identity", "capabilities", "list_aggregates", "bots", "approvals", "missions", "tasks", "checkpoints", "security_rejections", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers", "managed_skills", "operator_control_snapshot", "operator_session_get", "operator_proposal_get", "operator_execution_state", "pi_request_status", "media_route_catalog", "media_job_status"],
-                    "commandOperations": ["create_mission", "prepare_media_approval", "submit_approved_media", "poll_media_job", "fetch_media_artifact", "register_bot", "operator_chat_new", "operator_execution_config_set", "operator_prompt_submit", "operator_proposal_select", "compile_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "activate_approved_capability", "submit_provider_result_review", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "run_approved_council_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool", "install_managed_skill", "create_managed_skill"],
+                    "queryOperations": ["mission_disposition_preview", "council_receipt", "provider_failure_diagnostic", "identity", "capabilities", "list_aggregates", "bots", "approvals", "missions", "tasks", "checkpoints", "security_rejections", "get_state", "get_stream_events", "event_timeline", "replay_state_at", "claimguard", "verification", "get_memory_policy", "get_memory_state", "mcp_servers", "managed_skills", "operator_control_snapshot", "operator_session_get", "operator_proposal_get", "operator_execution_state", "pi_request_status", "media_route_catalog", "media_job_status"],
+                    "commandOperations": ["create_mission", "prepare_media_approval", "submit_approved_media", "poll_media_job", "fetch_media_artifact", "register_bot", "operator_chat_new", "operator_execution_config_set", "operator_prompt_submit", "operator_proposal_select", "compile_prompt_proposal", "revise_prompt_proposal", "cancel_prompt_proposal", "request_prompt_proposal_approval", "request_model_prompt_approval", "submit_approval_decision", "mission_disposition", "activate_approved_capability", "submit_provider_result_review", "cancel_task", "cancel_driver_run", "steer_deliberation", "revoke_capability", "create_replay_fork", "update_memory_trigger_policy", "run_fixed_openharness_inspection", "run_approved_hermes_inspection", "run_approved_council_inspection", "checkpoint_runtime", "shutdown", "resume_runtime", "run_tool", "install_managed_skill", "create_managed_skill"],
                     "runtimeComponents": {"composition": True, "eventStore": True, "runtimeService": True, "driverRegistry": True, "driverHost": True, "memory": self.memory_engine is not None, "checkpointReplay": True, "khsb": True, "ctp": True, "toolRegistry": True, "toolBroker": True, "mcpClient": self.mcp_manager is not None, "promptCompiler": True, "botFoundation": True},
                     "lifecycleOperations": {"checkpoint": True, "shutdown": True, "resume": True},
                 }}
@@ -1150,6 +1150,12 @@ class RuntimeQueryService:
                 return {"ok": True, "result": self.bots(request)}
             if op == "approvals":
                 return {"ok": True, "result": self.approvals(request)}
+            if op == "mission_disposition_preview":
+                from capt_runtime.services import RuntimeService
+                return {"ok": True, "result": RuntimeService(self.store).mission_disposition_preview(
+                    str(request.get("missionId") or ""),
+                    str(request.get("target") or ""),
+                )}
             if op == "missions":
                 return {"ok": True, "result": self.missions(request)}
             if op == "tasks":
