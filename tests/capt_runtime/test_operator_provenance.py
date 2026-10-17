@@ -75,6 +75,7 @@ def test_unknown_provider_capacity_remains_unknown():
 
 
 def test_effective_context_budget_rejects_unsupported_selector_value():
+    assert effective_context_budget(4_096, 128_000) == 4_096
     assert effective_context_budget(32_000, 8_192) == 8_192
     with pytest.raises(ValueError, match="REQUESTED_CONTEXT_BUDGET_INVALID"):
         effective_context_budget(1, 8_192)
