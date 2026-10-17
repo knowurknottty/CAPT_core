@@ -597,6 +597,13 @@ def _build_request(
         source = binding["files"][0]
         return _canonical({"file": {"display_name": source["originalName"]}}), "application/json"
     if operation == "image_generate":
+        # OpenRouter's dedicated POST /api/v1/images uses its own request
+        # contract. OpenAI-style response_format is not a supported selector
+        # there: the endpoint returns data[].b64_json by default. Bind this
+        # exception to the exact HTTPS origin + endpoint, never a model name.
+        if (route.contract.origin == "https://openrouter.ai"
+                and route.contract.submit_path == "/api/v1/images"):
+            return _canonical({"model": model, "prompt": prompt, "n": 1}), "application/json"
         return _canonical({
             "model": model, "prompt": prompt,
             "response_format": "url" if route.contract.response_type == "json_url"

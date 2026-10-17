@@ -451,3 +451,44 @@ def test_production_video_download_streams_to_private_file(tmp_path):
     finally:
         server.shutdown()
         server.server_close()
+
+def test_openrouter_dedicated_image_endpoint_omits_incompatible_response_format():
+    from capt_runtime.media_execution import _build_request
+    from capt_runtime.media_adapter_contract import MediaAdapterContract
+    route_ = MediaRoute(
+        adapter_id="openrouter-ming-design",
+        provider="openrouter-image",
+        model="inclusionai/ming-image-0.1-design",
+        contract=MediaAdapterContract(
+            provider_id="openrouter-image",
+            origin="https://openrouter.ai",
+            operation="image_generate",
+            transport="json",
+            submit_path="/api/v1/images",
+            response_type="json_base64",
+            media_types=("image/png", "image/jpeg", "image/webp"),
+        ),
+        auth_style="bearer",
+        maximum_price_usd=0.0,
+    )
+    route_.validate()
+    blob, mime = _build_request(
+        {"operation": "image_generate", "model": route_.model, "prompt": "A small icon"},
+        route_,
+    )
+    assert mime == "application/json"
+    assert json.loads(blob) == {
+        "model": "inclusionai/ming-image-0.1-design",
+        "prompt": "A small icon",
+        "n": 1,
+    }
+
+
+def test_other_image_endpoints_preserve_existing_response_format():
+    from capt_runtime.media_execution import _build_request
+    other = route("image_generate")
+    blob, content_type = _build_request(
+        {"operation": "image_generate", "model": other.model, "prompt": "A sketch"}, other
+    )
+    assert content_type == "application/json"
+    assert json.loads(blob)["response_format"] == "b64_json"
