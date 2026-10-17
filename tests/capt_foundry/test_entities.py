@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from capt_foundry import Entity, EntityAlias
+from capt_foundry.entities import AliasRegistry, EntityRegistry
 from capt_foundry.errors import (
     AmbiguousAlias,
     DuplicateIdentity,
@@ -12,7 +13,6 @@ from capt_foundry.errors import (
     ValidationError,
 )
 from capt_foundry.storage import FoundryStore
-from capt_foundry.entities import AliasRegistry, EntityRegistry
 
 ACTOR = "human:captain"
 

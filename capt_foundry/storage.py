@@ -14,7 +14,8 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Optional, Union
+
+from typing_extensions import Self
 
 from capt_foundry.canonical import FOUNDRY_SCHEMA_VERSION
 from capt_foundry.errors import PathEscape, ValidationError
@@ -112,18 +113,18 @@ def _check_path(db_path: Path, root: Path) -> None:
     try:
         db_path.resolve().relative_to(root.resolve())
     except ValueError:
-        raise PathEscape("database path %s escapes root %s" % (db_path, root))
+        raise PathEscape(f"database path {db_path} escapes root {root}")
     cur = db_path
     root_resolved = root.resolve()
     while True:
         if cur.is_symlink():
-            raise PathEscape("symlink in database path at %s" % cur)
+            raise PathEscape(f"symlink in database path at {cur}")
         if cur.resolve() == root_resolved or cur.parent == cur:
             break
         cur = cur.parent
 
 
-class FoundryStore(object):
+class FoundryStore:
     """Owns the Foundry SQLite connection and schema.
 
     Pass ``":memory:"`` for an ephemeral store (tests). A filesystem path is
@@ -132,8 +133,8 @@ class FoundryStore(object):
 
     def __init__(
         self,
-        db_path: Union[str, Path] = ":memory:",
-        allowed_root: Optional[Union[str, Path]] = None,
+        db_path: str | Path = ":memory:",
+        allowed_root: str | Path | None = None,
     ) -> None:
         if str(db_path) == ":memory:":
             self.db_path = ":memory:"
@@ -164,8 +165,8 @@ class FoundryStore(object):
             raise ValidationError(
                 "foundry_schema_version",
                 [
-                    "store was created by schema %r, this code speaks %r; a "
-                    "migration is required" % (row["version"], FOUNDRY_SCHEMA_VERSION)
+                    "store was created by schema {!r}, this code speaks {!r}; a "
+                    "migration is required".format(row["version"], FOUNDRY_SCHEMA_VERSION)
                 ],
             )
 
@@ -179,7 +180,7 @@ class FoundryStore(object):
     def close(self) -> None:
         self.conn.close()
 
-    def __enter__(self) -> "FoundryStore":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *exc: object) -> None:

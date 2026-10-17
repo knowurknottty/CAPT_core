@@ -126,10 +126,10 @@ def test_foundry_does_not_import_seal():
         text = path.read_text(encoding="utf-8")
         for line in text.splitlines():
             s = line.strip()
-            if s.startswith(("import ", "from ")) and "seal" in s.lower():
-                if "seal_export" not in s and "capt_foundry" not in s:
-                    hits.append("%s: %s" % (path.name, s))
-    assert hits == [], "capt_foundry must not import SEAL: %s" % hits
+            if (s.startswith(("import ", "from ")) and "seal" in s.lower()
+                    and "seal_export" not in s and "capt_foundry" not in s):
+                    hits.append(f"{path.name}: {s}")
+    assert hits == [], f"capt_foundry must not import SEAL: {hits}"
 
 
 def test_foundry_makes_no_network_imports():
@@ -141,9 +141,9 @@ def test_foundry_makes_no_network_imports():
             s = line.strip()
             if s.startswith(("import ", "from ")):
                 for b in banned:
-                    if s.startswith("import %s" % b) or s.startswith("from %s" % b):
-                        hits.append("%s: %s" % (path.name, s))
-    assert hits == [], "network import in Foundry: %s" % hits
+                    if s.startswith((f"import {b}", f"from {b}")):
+                        hits.append(f"{path.name}: {s}")
+    assert hits == [], f"network import in Foundry: {hits}"
 
 
 def test_foundry_imports_without_capt_runtime_present():
@@ -154,7 +154,7 @@ def test_foundry_imports_without_capt_runtime_present():
         "import capt_foundry;"
         "print(capt_foundry.FOUNDRY_SCHEMA_VERSION)"
     )
-    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=str(REPO))
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=str(REPO), check=False)
     assert r.returncode == 0, r.stderr
     assert "capt-foundry.v1" in r.stdout
 

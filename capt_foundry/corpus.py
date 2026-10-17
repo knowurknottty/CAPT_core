@@ -16,7 +16,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Union
+from typing import Any, Iterable
 
 from capt_foundry.canonical import (
     digest,
@@ -38,19 +38,19 @@ _READ_CHUNK = 1024 * 1024
 def _safe_resolve(root: Path, relative: str) -> Path:
     """Resolve ``relative`` under ``root``, refusing every escape route."""
     if Path(relative).is_absolute():
-        raise PathEscape("absolute path not permitted: %r" % relative)
+        raise PathEscape(f"absolute path not permitted: {relative!r}")
     root_resolved = root.resolve()
     target = (root_resolved / relative).resolve()
     try:
         target.relative_to(root_resolved)
     except ValueError:
-        raise PathEscape("%r escapes corpus root %s" % (relative, root_resolved))
+        raise PathEscape(f"{relative!r} escapes corpus root {root_resolved}")
     # Reject a symlink anywhere between root and target, even if the resolved
     # destination happens to land back inside the root.
     cur = root_resolved / relative
     while cur != root_resolved and cur.parent != cur:
         if cur.is_symlink():
-            raise PathEscape("symlink in path at %s" % cur)
+            raise PathEscape(f"symlink in path at {cur}")
         cur = cur.parent
     return target
 
@@ -67,7 +67,7 @@ class Document:
     locator: str = ""
 
     def __post_init__(self) -> None:
-        problems: List[str] = []
+        problems: list[str] = []
         if not is_identifier(self.document_id):
             problems.append("document_id must match Identifier pattern")
         if not self.relative_path.strip():
@@ -79,7 +79,7 @@ class Document:
         if problems:
             raise ValidationError("Document", problems)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "document_id": self.document_id,
             "relative_path": self.relative_path,
@@ -101,10 +101,10 @@ class CorpusManifest:
     name: str
     root_label: str
     description: str = ""
-    documents: List[Document] = field(default_factory=list)
+    documents: list[Document] = field(default_factory=list)
 
     def __post_init__(self) -> None:
-        problems: List[str] = []
+        problems: list[str] = []
         if not is_identifier(self.corpus_id):
             problems.append("corpus_id must match Identifier pattern")
         if not self.name.strip():
@@ -114,9 +114,9 @@ class CorpusManifest:
         seen_ids, seen_paths = set(), set()
         for doc in self.documents:
             if doc.document_id in seen_ids:
-                problems.append("duplicate document_id %s" % doc.document_id)
+                problems.append(f"duplicate document_id {doc.document_id}")
             if doc.relative_path in seen_paths:
-                problems.append("duplicate relative_path %s" % doc.relative_path)
+                problems.append(f"duplicate relative_path {doc.relative_path}")
             seen_ids.add(doc.document_id)
             seen_paths.add(doc.relative_path)
         if problems:
@@ -140,15 +140,15 @@ class CorpusManifest:
             }
         )
 
-    def duplicate_groups(self) -> Dict[str, List[str]]:
+    def duplicate_groups(self) -> dict[str, list[str]]:
         """content_digest -> document_ids, for digests appearing more than once."""
-        by_digest: Dict[str, List[str]] = {}
+        by_digest: dict[str, list[str]] = {}
         for doc in self.documents:
             by_digest.setdefault(doc.content_digest, []).append(doc.document_id)
         return {k: sorted(v) for k, v in by_digest.items() if len(v) > 1}
 
 
-class CorpusRegistry(object):
+class CorpusRegistry:
     """Registers corpora and their document metadata."""
 
     def __init__(self, store: FoundryStore, clock=utc_now) -> None:
@@ -168,8 +168,7 @@ class CorpusRegistry(object):
             if existing["manifest_digest"] == md:
                 return manifest.corpus_id  # idempotent
             raise DuplicateIdentity(
-                "corpus %s already registered with a different manifest digest"
-                % manifest.corpus_id
+                f"corpus {manifest.corpus_id} already registered with a different manifest digest"
             )
         now = self._clock()
         conn.execute(
@@ -211,26 +210,26 @@ class CorpusRegistry(object):
         conn.commit()
         return manifest.corpus_id
 
-    def get(self, corpus_id: str) -> Optional[Dict[str, Any]]:
+    def get(self, corpus_id: str) -> dict[str, Any] | None:
         row = self.store.conn.execute(
             "SELECT * FROM corpora WHERE corpus_id = ?", (corpus_id,)
         ).fetchone()
         return dict(row) if row is not None else None
 
-    def require(self, corpus_id: str) -> Dict[str, Any]:
+    def require(self, corpus_id: str) -> dict[str, Any]:
         found = self.get(corpus_id)
         if found is None:
-            raise UnknownEntity("corpus %s is not registered" % corpus_id)
+            raise UnknownEntity(f"corpus {corpus_id} is not registered")
         return found
 
-    def documents(self, corpus_id: str) -> List[Dict[str, Any]]:
+    def documents(self, corpus_id: str) -> list[dict[str, Any]]:
         rows = self.store.conn.execute(
             "SELECT * FROM documents WHERE corpus_id = ? ORDER BY document_id",
             (corpus_id,),
         ).fetchall()
         return [dict(r) for r in rows]
 
-    def find_by_content_digest(self, content_digest: str) -> List[Dict[str, Any]]:
+    def find_by_content_digest(self, content_digest: str) -> list[dict[str, Any]]:
         """Cross-corpus duplicate detection: never re-ingest the same bytes."""
         rows = self.store.conn.execute(
             "SELECT * FROM documents WHERE content_digest = ?"
@@ -255,7 +254,7 @@ class CorpusRegistry(object):
         )
         self.store.conn.commit()
 
-    def verify_against_manifest(self, manifest: CorpusManifest) -> Dict[str, Any]:
+    def verify_against_manifest(self, manifest: CorpusManifest) -> dict[str, Any]:
         """Compare a freshly built manifest with what is stored.
 
         Returns a difference report. Does not mutate; the caller decides.
@@ -282,10 +281,10 @@ class CorpusRegistry(object):
 def index_directory(
     corpus_id: str,
     name: str,
-    root: Union[str, Path],
+    root: str | Path,
     *,
     relative_paths: Iterable[str],
-    root_label: Optional[str] = None,
+    root_label: str | None = None,
     description: str = "",
     media_type: str = "application/octet-stream",
 ) -> CorpusManifest:
@@ -298,12 +297,12 @@ def index_directory(
     """
     root_path = Path(root)
     if not root_path.is_dir():
-        raise ValidationError("index_directory", ["root %s is not a directory" % root])
-    docs: List[Document] = []
+        raise ValidationError("index_directory", [f"root {root} is not a directory"])
+    docs: list[Document] = []
     for idx, rel in enumerate(sorted(set(relative_paths))):
         target = _safe_resolve(root_path, rel)
         if not target.is_file():
-            raise ValidationError("index_directory", ["not a regular file: %s" % rel])
+            raise ValidationError("index_directory", [f"not a regular file: {rel}"])
         h_total = 0
         sha = hashlib.sha256()
         with open(target, "rb") as fh:
@@ -315,7 +314,7 @@ def index_directory(
                 sha.update(chunk)
         docs.append(
             Document(
-                document_id="%s.d%04d" % (corpus_id, idx),
+                document_id=f"{corpus_id}.d{idx:04d}",
                 relative_path=rel,
                 content_digest="sha256:" + sha.hexdigest(),
                 byte_size=h_total,

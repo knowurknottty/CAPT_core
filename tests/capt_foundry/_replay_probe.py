@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Fresh-process replay probe.
 
 Opens an existing Foundry database in a NEW interpreter and re-derives every
@@ -18,14 +17,14 @@ REPO = Path(__file__).resolve().parents[2]
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
-from capt_foundry import (  # noqa: E402
+from capt_foundry import (
     AliasRegistry,
     CorpusRegistry,
     EntityRegistry,
     FoundryStore,
 )
-from capt_foundry.publisher import ArtifactPublisher  # noqa: E402
-from capt_foundry.seal_export import SealAssetExporter  # noqa: E402
+from capt_foundry.publisher import ArtifactPublisher
+from capt_foundry.seal_export import SealAssetExporter
 
 STAMP = "2026-08-03T00:00:00Z"
 

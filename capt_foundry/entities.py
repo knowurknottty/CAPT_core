@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from capt_foundry.canonical import (
     digest,
@@ -52,17 +52,17 @@ class Entity:
     entity_type: str
     canonical_name: str
     description: str = ""
-    evidence_ids: List[str] = field(default_factory=list)
-    attributes: Dict[str, Any] = field(default_factory=dict)
+    evidence_ids: list[str] = field(default_factory=list)
+    attributes: dict[str, Any] = field(default_factory=dict)
     status: str = "active"
-    superseded_by: Optional[str] = None
+    superseded_by: str | None = None
 
     def __post_init__(self) -> None:
-        problems: List[str] = []
+        problems: list[str] = []
         if not is_identifier(self.entity_id):
             problems.append("entity_id must match Identifier pattern")
         if self.entity_type not in ENTITY_TYPES:
-            problems.append("entity_type must be one of %s" % (ENTITY_TYPES,))
+            problems.append(f"entity_type must be one of {ENTITY_TYPES}")
         if not self.canonical_name.strip():
             problems.append("canonical_name required")
         if self.status not in ("active", "superseded"):
@@ -78,7 +78,7 @@ class Entity:
     def normalized_name(self) -> str:
         return normalize_name(self.canonical_name)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "entity_id": self.entity_id,
             "entity_type": self.entity_type,
@@ -104,10 +104,10 @@ class EntityAlias:
     alias: str
     alias_kind: str = "also_known_as"
     confidence: str = "asserted"
-    evidence_ids: List[str] = field(default_factory=list)
+    evidence_ids: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
-        problems: List[str] = []
+        problems: list[str] = []
         if not is_identifier(self.alias_id):
             problems.append("alias_id must match Identifier pattern")
         if not is_identifier(self.entity_id):
@@ -115,9 +115,9 @@ class EntityAlias:
         if not self.alias.strip():
             problems.append("alias required")
         if self.alias_kind not in ALIAS_KINDS:
-            problems.append("alias_kind must be one of %s" % (ALIAS_KINDS,))
+            problems.append(f"alias_kind must be one of {ALIAS_KINDS}")
         if self.confidence not in ALIAS_CONFIDENCE:
-            problems.append("confidence must be one of %s" % (ALIAS_CONFIDENCE,))
+            problems.append(f"confidence must be one of {ALIAS_CONFIDENCE}")
         if self.confidence == "evidence_backed" and not self.evidence_ids:
             problems.append("confidence 'evidence_backed' requires evidence_ids")
         if problems:
@@ -127,7 +127,7 @@ class EntityAlias:
     def normalized_alias(self) -> str:
         return normalize_name(self.alias)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "alias_id": self.alias_id,
             "entity_id": self.entity_id,
@@ -142,7 +142,7 @@ class EntityAlias:
         return digest(self.to_dict())
 
 
-class EntityRegistry(object):
+class EntityRegistry:
     """Durable identity for research subjects."""
 
     def __init__(self, store: FoundryStore, clock=utc_now) -> None:
@@ -158,8 +158,7 @@ class EntityRegistry(object):
             if existing["record_digest"] == entity.digest():
                 return entity.entity_id
             raise DuplicateIdentity(
-                "entity %s already registered with different content"
-                % entity.entity_id
+                f"entity {entity.entity_id} already registered with different content"
             )
         now = self._clock()
         d = entity.to_dict()
@@ -186,25 +185,25 @@ class EntityRegistry(object):
         self.store.conn.commit()
         return entity.entity_id
 
-    def get(self, entity_id: str) -> Optional[Dict[str, Any]]:
+    def get(self, entity_id: str) -> dict[str, Any] | None:
         row = self.store.conn.execute(
             "SELECT * FROM entities WHERE entity_id = ?", (entity_id,)
         ).fetchone()
         return self._row(row) if row is not None else None
 
-    def require(self, entity_id: str) -> Dict[str, Any]:
+    def require(self, entity_id: str) -> dict[str, Any]:
         found = self.get(entity_id)
         if found is None:
-            raise UnknownEntity("entity %s is not registered" % entity_id)
+            raise UnknownEntity(f"entity {entity_id} is not registered")
         return found
 
-    def all(self) -> List[Dict[str, Any]]:
+    def all(self) -> list[dict[str, Any]]:
         rows = self.store.conn.execute(
             "SELECT * FROM entities ORDER BY entity_id"
         ).fetchall()
         return [self._row(r) for r in rows]
 
-    def find_by_name(self, name: str) -> List[Dict[str, Any]]:
+    def find_by_name(self, name: str) -> list[dict[str, Any]]:
         """Exact match on the normalized canonical name. Active entities only."""
         rows = self.store.conn.execute(
             "SELECT * FROM entities WHERE normalized_name = ? AND status = 'active'"
@@ -246,14 +245,14 @@ class EntityRegistry(object):
         conn.commit()
 
     @staticmethod
-    def _row(row) -> Dict[str, Any]:
+    def _row(row) -> dict[str, Any]:
         d = dict(row)
         d["evidence_ids"] = json.loads(d["evidence_ids"])
         d["attributes"] = json.loads(d["attributes"])
         return d
 
 
-class AliasRegistry(object):
+class AliasRegistry:
     """Name resolution for research subjects. Refuses to guess."""
 
     def __init__(self, store: FoundryStore, entities: EntityRegistry, clock=utc_now) -> None:
@@ -272,7 +271,7 @@ class AliasRegistry(object):
             if existing["record_digest"] == alias.digest():
                 return alias.alias_id
             raise DuplicateIdentity(
-                "alias %s already registered with different content" % alias.alias_id
+                f"alias {alias.alias_id} already registered with different content"
             )
         clash = self.store.conn.execute(
             "SELECT alias_id FROM entity_aliases WHERE entity_id=? AND normalized_alias=?",
@@ -280,8 +279,7 @@ class AliasRegistry(object):
         ).fetchone()
         if clash is not None:
             raise DuplicateIdentity(
-                "entity %s already has alias %r (as %s)"
-                % (alias.entity_id, alias.alias, clash["alias_id"])
+                "entity {} already has alias {!r} (as {})".format(alias.entity_id, alias.alias, clash["alias_id"])
             )
         d = alias.to_dict()
         self.store.conn.execute(
@@ -305,7 +303,7 @@ class AliasRegistry(object):
         self.store.conn.commit()
         return alias.alias_id
 
-    def resolve(self, name: str) -> Dict[str, Any]:
+    def resolve(self, name: str) -> dict[str, Any]:
         """Resolve a name to exactly one active entity.
 
         Raises ``UnknownEntity`` if nothing matches and ``AmbiguousAlias`` if more
@@ -313,12 +311,12 @@ class AliasRegistry(object):
         """
         candidates = self.candidates(name)
         if not candidates:
-            raise UnknownEntity("no entity resolves from name %r" % name)
+            raise UnknownEntity(f"no entity resolves from name {name!r}")
         if len(candidates) > 1:
             raise AmbiguousAlias(name, [c["entity_id"] for c in candidates])
         return candidates[0]
 
-    def candidates(self, name: str) -> List[Dict[str, Any]]:
+    def candidates(self, name: str) -> list[dict[str, Any]]:
         """Every ACTIVE entity reachable from ``name`` by alias or canonical name.
 
         A superseded entity resolves through to its surviving target, so an old
@@ -326,7 +324,7 @@ class AliasRegistry(object):
         """
         norm = normalize_name(name)
         conn = self.store.conn
-        ids: List[str] = []
+        ids: list[str] = []
         for row in conn.execute(
             "SELECT entity_id FROM entity_aliases WHERE normalized_alias = ?", (norm,)
         ).fetchall():
@@ -336,7 +334,7 @@ class AliasRegistry(object):
         ).fetchall():
             ids.append(row["entity_id"])
 
-        resolved: Dict[str, Dict[str, Any]] = {}
+        resolved: dict[str, dict[str, Any]] = {}
         for eid in ids:
             ent = self.entities.get(eid)
             seen = set()
@@ -352,7 +350,7 @@ class AliasRegistry(object):
                 resolved[ent["entity_id"]] = ent
         return [resolved[k] for k in sorted(resolved)]
 
-    def aliases_for(self, entity_id: str) -> List[Dict[str, Any]]:
+    def aliases_for(self, entity_id: str) -> list[dict[str, Any]]:
         rows = self.store.conn.execute(
             "SELECT * FROM entity_aliases WHERE entity_id = ? ORDER BY alias_id",
             (entity_id,),

@@ -18,7 +18,7 @@ Hard boundary rules, enforced here and asserted by tests:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from capt_foundry.canonical import FOUNDRY_SCHEMA_VERSION, digest, utc_now
 from capt_foundry.corpus import CorpusRegistry
@@ -43,21 +43,21 @@ FORBIDDEN_KEYS = frozenset(
 )
 
 
-def _scan_forbidden(node: Any, path: str = "$") -> List[str]:
+def _scan_forbidden(node: Any, path: str = "$") -> list[str]:
     """Recursively find SEAL-owned keys. Used by export AND by tests."""
-    found: List[str] = []
+    found: list[str] = []
     if isinstance(node, dict):
         for key, value in node.items():
             if str(key).lower() in FORBIDDEN_KEYS:
-                found.append("%s.%s" % (path, key))
-            found.extend(_scan_forbidden(value, "%s.%s" % (path, key)))
+                found.append(f"{path}.{key}")
+            found.extend(_scan_forbidden(value, f"{path}.{key}"))
     elif isinstance(node, list):
         for i, item in enumerate(node):
-            found.extend(_scan_forbidden(item, "%s[%d]" % (path, i)))
+            found.extend(_scan_forbidden(item, f"{path}[{i}]"))
     return found
 
 
-class SealAssetExporter(object):
+class SealAssetExporter:
     """Produces the SEAL-facing envelope. Read-only."""
 
     def __init__(
@@ -75,10 +75,10 @@ class SealAssetExporter(object):
     def export(
         self,
         *,
-        entity_ids: Optional[List[str]] = None,
-        corpus_ids: Optional[List[str]] = None,
-        exported_at: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        entity_ids: list[str] | None = None,
+        corpus_ids: list[str] | None = None,
+        exported_at: str | None = None,
+    ) -> dict[str, Any]:
         """Build a deterministic, versioned envelope for SEAL.
 
         ``entity_ids``/``corpus_ids`` omitted means "everything registered".
@@ -99,7 +99,7 @@ class SealAssetExporter(object):
             ]
         )
 
-        entity_out: List[Dict[str, Any]] = []
+        entity_out: list[dict[str, Any]] = []
         for row in ents:
             aliases = self.aliases.aliases_for(row["entity_id"])
             entity_out.append(
@@ -131,7 +131,7 @@ class SealAssetExporter(object):
                 }
             )
 
-        corpus_out: List[Dict[str, Any]] = []
+        corpus_out: list[dict[str, Any]] = []
         for row in corps:
             corpus_out.append(
                 {
@@ -186,7 +186,7 @@ class SealAssetExporter(object):
         if leaks:
             raise ValidationError(
                 "seal_export",
-                ["SEAL-owned key emitted by Foundry: %s" % k for k in leaks],
+                [f"SEAL-owned key emitted by Foundry: {k}" for k in leaks],
             )
 
         body["content_digest"] = digest(body)
@@ -194,7 +194,7 @@ class SealAssetExporter(object):
         return body
 
     @staticmethod
-    def verify(envelope: Dict[str, Any]) -> Dict[str, Any]:
+    def verify(envelope: dict[str, Any]) -> dict[str, Any]:
         """Recompute the content digest of an envelope (round-trip integrity)."""
         body = {k: v for k, v in envelope.items() if k not in ("content_digest", "exported_at")}
         recomputed = digest(body)

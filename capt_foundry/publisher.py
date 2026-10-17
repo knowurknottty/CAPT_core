@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from capt_foundry.canonical import digest, is_identifier, utc_now
 from capt_foundry.corpus import CorpusRegistry
@@ -38,13 +38,13 @@ class CuratedAsset:
     asset_id: str
     name: str
     asset_version: str = "1.0.0"
-    entity_ids: List[str] = field(default_factory=list)
-    corpus_ids: List[str] = field(default_factory=list)
-    evidence_ids: List[str] = field(default_factory=list)
+    entity_ids: list[str] = field(default_factory=list)
+    corpus_ids: list[str] = field(default_factory=list)
+    evidence_ids: list[str] = field(default_factory=list)
     summary: str = ""
 
     def __post_init__(self) -> None:
-        problems: List[str] = []
+        problems: list[str] = []
         if not is_identifier(self.asset_id):
             problems.append("asset_id must match Identifier pattern")
         if not self.name.strip():
@@ -57,7 +57,7 @@ class CuratedAsset:
             raise ValidationError("CuratedAsset", problems)
 
 
-class ArtifactPublisher(object):
+class ArtifactPublisher:
     """Turns registry contents into a portable, verifiable asset."""
 
     def __init__(
@@ -76,13 +76,13 @@ class ArtifactPublisher(object):
 
     # -- payload -----------------------------------------------------------
 
-    def build_payload(self, asset: CuratedAsset) -> Dict[str, Any]:
+    def build_payload(self, asset: CuratedAsset) -> dict[str, Any]:
         """Resolve references into a deterministic, provenance-preserving payload."""
-        entity_records: List[Dict[str, Any]] = []
+        entity_records: list[dict[str, Any]] = []
         for eid in sorted(set(asset.entity_ids)):
             row = self.entities.get(eid)
             if row is None:
-                raise DanglingReference("asset cites unregistered entity %s" % eid)
+                raise DanglingReference(f"asset cites unregistered entity {eid}")
             entity_records.append(
                 {
                     "entity_id": row["entity_id"],
@@ -118,11 +118,11 @@ class ArtifactPublisher(object):
                 }
             )
 
-        corpus_records: List[Dict[str, Any]] = []
+        corpus_records: list[dict[str, Any]] = []
         for cid in sorted(set(asset.corpus_ids)):
             row = self.corpora.get(cid)
             if row is None:
-                raise DanglingReference("asset cites unregistered corpus %s" % cid)
+                raise DanglingReference(f"asset cites unregistered corpus {cid}")
             corpus_records.append(
                 {
                     "corpus_id": row["corpus_id"],
@@ -174,8 +174,8 @@ class ArtifactPublisher(object):
         asset: CuratedAsset,
         actor: str,
         *,
-        published_at: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        published_at: str | None = None,
+    ) -> dict[str, Any]:
         """Build the payload, wrap it in a Knowledge Bubble manifest, record it.
 
         Deterministic: identical registry content and identical ``published_at``
@@ -204,8 +204,7 @@ class ArtifactPublisher(object):
                     ).fetchone()["manifest_json"]
                 )
             raise DuplicateIdentity(
-                "asset %s already published with a different manifest hash"
-                % asset.asset_id
+                f"asset {asset.asset_id} already published with a different manifest hash"
             )
 
         conn.execute(
@@ -232,11 +231,11 @@ class ArtifactPublisher(object):
     def _build_manifest(
         self,
         asset: CuratedAsset,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         payload_digest: str,
         actor: str,
         stamp: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Wrap the payload using the canonical Knowledge Bubble builder.
 
         Falls back to a self-describing envelope only if the bubble module is not
@@ -300,7 +299,7 @@ class ArtifactPublisher(object):
 
     # -- retrieval ---------------------------------------------------------
 
-    def get(self, asset_id: str) -> Optional[Dict[str, Any]]:
+    def get(self, asset_id: str) -> dict[str, Any] | None:
         row = self.store.conn.execute(
             "SELECT * FROM assets WHERE asset_id = ?", (asset_id,)
         ).fetchone()
@@ -313,14 +312,14 @@ class ArtifactPublisher(object):
         out["evidence_ids"] = json.loads(out["evidence_ids"])
         return out
 
-    def verify(self, asset_id: str) -> Dict[str, Any]:
+    def verify(self, asset_id: str) -> dict[str, Any]:
         """Recompute the payload digest from the stored manifest.
 
         Integrity check: proves the stored asset has not been altered in place.
         """
         stored = self.get(asset_id)
         if stored is None:
-            raise DanglingReference("asset %s was never published" % asset_id)
+            raise DanglingReference(f"asset {asset_id} was never published")
         manifest = stored["manifest"]
         payload = manifest.get("foundry_payload")
         recomputed = digest(payload) if payload is not None else None

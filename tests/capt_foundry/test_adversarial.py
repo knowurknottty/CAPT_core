@@ -259,7 +259,7 @@ def test_foundry_declares_no_runtime_ownership_concepts():
     for path in (REPO / "capt_foundry").rglob("*.py"):
         text = path.read_text(encoding="utf-8")
         for b in banned_defs:
-            assert b not in text, "%s defines runtime-owned concept %r" % (path.name, b)
+            assert b not in text, f"{path.name} defines runtime-owned concept {b!r}"
 
 
 def test_foundry_has_no_import_time_side_effects():
@@ -273,27 +273,14 @@ def test_foundry_has_no_import_time_side_effects():
         "sqlite3.connect = orig;"
         "print('clean')"
     )
-    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=str(REPO))
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=str(REPO), check=False)
     assert r.returncode == 0, r.stderr
     assert "clean" in r.stdout
 
 
 def test_foundry_writes_no_files_at_import():
-    code = "\n".join(
-        [
-            "import builtins",
-            "real = builtins.open",
-            "def guard(f, mode='r', *a, **k):",
-            "    if any(m in str(mode) for m in 'wax'):",
-            "        raise AssertionError('wrote %s' % (f,))",
-            "    return real(f, mode, *a, **k)",
-            "builtins.open = guard",
-            "import capt_foundry",
-            "builtins.open = real",
-            "print('clean')",
-        ]
-    )
-    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=str(REPO))
+    code = "import builtins\nreal = builtins.open\ndef guard(f, mode='r', *a, **k):\n    if any(m in str(mode) for m in 'wax'):\n        raise AssertionError('wrote %s' % (f,))\n    return real(f, mode, *a, **k)\nbuiltins.open = guard\nimport capt_foundry\nbuiltins.open = real\nprint('clean')"
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=str(REPO), check=False)
     assert r.returncode == 0, r.stderr
     assert "clean" in r.stdout
 
@@ -305,7 +292,7 @@ def test_no_submission_or_prompt_generation_capability():
     for path in (REPO / "capt_foundry").rglob("*.py"):
         text = path.read_text(encoding="utf-8")
         for b in banned:
-            assert b not in text, "%s exposes %r" % (path.name, b)
+            assert b not in text, f"{path.name} exposes {b!r}"
 
 
 # -- attack: non-determinism ------------------------------------------------
@@ -324,14 +311,14 @@ def test_dict_ordering_cannot_change_a_digest(corpora):
 def test_hash_randomization_does_not_affect_digests():
     """PYTHONHASHSEED must not change any digest (subprocess, different seeds)."""
     code = (
-        "import sys; sys.path.insert(0, %r);"
+        f"import sys; sys.path.insert(0, {str(REPO)!r});"
         "from capt_foundry.canonical import digest;"
-        "print(digest({'z':1,'a':[{'m':2,'b':3}],'k':'v'}))" % str(REPO)
+        "print(digest({'z':1,'a':[{'m':2,'b':3}],'k':'v'}))"
     )
     outs = set()
     for seed in ("0", "1", "12345"):
         env = dict(os.environ, PYTHONHASHSEED=seed)
-        r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env)
+        r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, check=False)
         assert r.returncode == 0, r.stderr
         outs.add(r.stdout.strip())
     assert len(outs) == 1

@@ -125,7 +125,7 @@ def test_full_lifecycle(tmp_path, source_dir):
     # 8. REPLAY in a genuinely fresh PROCESS against the same database.
     replay = subprocess.run(
         [sys.executable, str(REPO / "tests" / "capt_foundry" / "_replay_probe.py"), str(db)],
-        capture_output=True, text=True, cwd=str(REPO),
+        capture_output=True, text=True, cwd=str(REPO), check=False,
     )
     assert replay.returncode == 0, replay.stderr
     out = json.loads(replay.stdout)
@@ -144,8 +144,8 @@ def test_lifecycle_is_reproducible_from_scratch(tmp_path, source_dir):
     """Two independent runs over identical inputs produce identical digests."""
     results = []
     for name in ("run_a", "run_b"):
-        db = tmp_path / ("%s.db" % name)
-        store, entities, aliases, corpora, publisher, exporter = _wire(db)
+        db = tmp_path / (f"{name}.db")
+        store, entities, _aliases, corpora, publisher, exporter = _wire(db)
         entities.register(
             Entity(entity_id="e.ada", entity_type="person", canonical_name="Ada Lovelace"), ACTOR
         )
@@ -167,7 +167,7 @@ def test_lifecycle_is_reproducible_from_scratch(tmp_path, source_dir):
 def test_stale_corpus_is_visible_in_export(tmp_path, source_dir):
     """Never silently trust stale material: freshness must reach the consumer."""
     db = tmp_path / "foundry.db"
-    store, entities, aliases, corpora, publisher, exporter = _wire(db)
+    store, _entities, _aliases, corpora, _publisher, exporter = _wire(db)
     corpora.register(
         index_directory("c.notes", "Notes", source_dir,
                         relative_paths=["letter.txt"], root_label="approved_source"),
@@ -181,7 +181,7 @@ def test_stale_corpus_is_visible_in_export(tmp_path, source_dir):
 def test_changed_source_is_detected(tmp_path, source_dir):
     """Never lose a source hash: re-indexing detects a mutated document."""
     db = tmp_path / "foundry.db"
-    store, entities, aliases, corpora, publisher, exporter = _wire(db)
+    store, _entities, _aliases, corpora, _publisher, _exporter = _wire(db)
     corpora.register(
         index_directory("c.notes", "Notes", source_dir,
                         relative_paths=["letter.txt"], root_label="approved_source"),

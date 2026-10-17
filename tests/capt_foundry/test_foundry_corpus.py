@@ -8,7 +8,12 @@ import pytest
 
 from capt_foundry.canonical import digest_bytes
 from capt_foundry.corpus import CorpusManifest, Document, index_directory
-from capt_foundry.errors import DuplicateIdentity, PathEscape, UnknownEntity, ValidationError
+from capt_foundry.errors import (
+    DuplicateIdentity,
+    PathEscape,
+    UnknownEntity,
+    ValidationError,
+)
 
 ACTOR = "human:captain"
 D1 = digest_bytes(b"alpha")
@@ -16,7 +21,7 @@ D2 = digest_bytes(b"beta")
 
 
 def _doc(i, path, dg=D1, size=5):
-    return Document(document_id="c.1.d%d" % i, relative_path=path, content_digest=dg, byte_size=size)
+    return Document(document_id=f"c.1.d{i}", relative_path=path, content_digest=dg, byte_size=size)
 
 
 def _manifest(docs=None):

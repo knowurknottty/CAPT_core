@@ -7,8 +7,6 @@ does not raise ``AuthorityViolation`` because it grants no authority (ADR-0130).
 
 from __future__ import annotations
 
-from typing import List
-
 
 class FoundryError(Exception):
     """Base class for every Foundry failure."""
@@ -17,10 +15,10 @@ class FoundryError(Exception):
 class ValidationError(FoundryError):
     """A record violated its own contract."""
 
-    def __init__(self, subject: str, problems: List[str]) -> None:
+    def __init__(self, subject: str, problems: list[str]) -> None:
         self.subject = subject
         self.problems = list(problems)
-        super().__init__("%s: %s" % (subject, "; ".join(problems)))
+        super().__init__("{}: {}".format(subject, "; ".join(problems)))
 
 
 class DuplicateIdentity(FoundryError):
@@ -38,12 +36,11 @@ class AmbiguousAlias(FoundryError):
     error carrying every candidate, so a human can disambiguate.
     """
 
-    def __init__(self, alias: str, candidates: List[str]) -> None:
+    def __init__(self, alias: str, candidates: list[str]) -> None:
         self.alias = alias
         self.candidates = sorted(candidates)
         super().__init__(
-            "alias %r is ambiguous across entities: %s"
-            % (alias, ", ".join(self.candidates))
+            "alias {!r} is ambiguous across entities: {}".format(alias, ", ".join(self.candidates))
         )
 
 

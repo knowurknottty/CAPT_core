@@ -20,15 +20,15 @@ from __future__ import annotations
 import re
 import unicodedata
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from capt_foundry.errors import PathEscape, ValidationError
 
 _UNSAFE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _RESERVED = {
     "con", "prn", "aux", "nul",
-    *("com%d" % i for i in range(1, 10)),
-    *("lpt%d" % i for i in range(1, 10)),
+    *(f"com{i}" for i in range(1, 10)),
+    *(f"lpt{i}" for i in range(1, 10)),
 }
 _MAX_STEM = 120
 
@@ -56,15 +56,15 @@ def sanitize_filename(name: str) -> str:
 def _safe_target(root: Path, filename: str) -> Path:
     """Resolve ``filename`` directly under ``root``, refusing every escape."""
     if Path(filename).is_absolute() or len(Path(filename).parts) != 1:
-        raise PathEscape("projection filename must be a single segment: %r" % filename)
+        raise PathEscape(f"projection filename must be a single segment: {filename!r}")
     root_resolved = root.resolve()
     target = (root_resolved / filename).resolve()
     try:
         target.relative_to(root_resolved)
     except ValueError:
-        raise PathEscape("%r escapes vault root %s" % (filename, root_resolved))
+        raise PathEscape(f"{filename!r} escapes vault root {root_resolved}")
     if target.is_symlink() or (root_resolved / filename).is_symlink():
-        raise PathEscape("refusing to write through symlink at %s" % target)
+        raise PathEscape(f"refusing to write through symlink at {target}")
     return target
 
 
@@ -86,23 +86,23 @@ def _fm_escape(value: Any) -> str:
         elif ch == "\t":
             out.append("\\t")
         elif ord(ch) < 0x20 or ord(ch) == 0x7F:
-            out.append("\\u%04x" % ord(ch))
+            out.append(f"\\u{ord(ch):04x}")
         else:
             out.append(ch)
     return '"' + "".join(out) + '"'
 
 
-class ObsidianProjection(object):
+class ObsidianProjection:
     """Renders curated assets to a vault directory."""
 
-    def __init__(self, vault_root: Union[str, Path], subdir: str = "CAPT Foundry") -> None:
+    def __init__(self, vault_root: str | Path, subdir: str = "CAPT Foundry") -> None:
         root = Path(vault_root)
         if not root.exists():
-            raise ValidationError("ObsidianProjection", ["vault root does not exist: %s" % root])
+            raise ValidationError("ObsidianProjection", [f"vault root does not exist: {root}"])
         if not root.is_dir():
             raise ValidationError("ObsidianProjection", ["vault root is not a directory"])
         if root.is_symlink():
-            raise PathEscape("vault root is a symlink: %s" % root)
+            raise PathEscape(f"vault root is a symlink: {root}")
         self.vault_root = root.resolve()
         clean = sanitize_filename(subdir)
         self.target_dir = _safe_target(self.vault_root, clean)
@@ -110,23 +110,23 @@ class ObsidianProjection(object):
 
     # -- rendering (pure) --------------------------------------------------
 
-    def render_asset(self, manifest: Dict[str, Any]) -> str:
+    def render_asset(self, manifest: dict[str, Any]) -> str:
         """Deterministic Markdown for one published asset. No I/O."""
         payload = manifest.get("foundry_payload") or {}
-        entities: List[Dict[str, Any]] = payload.get("entities", [])
-        corpora: List[Dict[str, Any]] = payload.get("corpora", [])
+        entities: list[dict[str, Any]] = payload.get("entities", [])
+        corpora: list[dict[str, Any]] = payload.get("corpora", [])
         prov = manifest.get("provenance") or {}
 
-        lines: List[str] = [
+        lines: list[str] = [
             "---",
-            "capt_asset_id: %s" % _fm_escape(payload.get("asset_id", manifest.get("bubble_id"))),
-            "capt_asset_version: %s" % _fm_escape(payload.get("asset_version")),
-            "capt_format: %s" % _fm_escape(payload.get("format")),
-            "capt_format_version: %s" % _fm_escape(payload.get("format_version")),
-            "capt_manifest_hash: %s" % _fm_escape(manifest.get("manifest_hash")),
-            "capt_payload_digest: %s" % _fm_escape(manifest.get("foundry_payload_digest")),
-            "capt_published_by: %s" % _fm_escape(prov.get("published_by")),
-            "capt_published_at: %s" % _fm_escape(prov.get("published_at")),
+            "capt_asset_id: {}".format(_fm_escape(payload.get("asset_id", manifest.get("bubble_id")))),
+            "capt_asset_version: {}".format(_fm_escape(payload.get("asset_version"))),
+            "capt_format: {}".format(_fm_escape(payload.get("format"))),
+            "capt_format_version: {}".format(_fm_escape(payload.get("format_version"))),
+            "capt_manifest_hash: {}".format(_fm_escape(manifest.get("manifest_hash"))),
+            "capt_payload_digest: {}".format(_fm_escape(manifest.get("foundry_payload_digest"))),
+            "capt_published_by: {}".format(_fm_escape(prov.get("published_by"))),
+            "capt_published_at: {}".format(_fm_escape(prov.get("published_at"))),
             "capt_projection: derived-read-only",
             "---",
             "",
@@ -144,54 +144,51 @@ class ObsidianProjection(object):
         if not entities:
             lines += ["_None._", ""]
         for ent in entities:
-            lines.append("### %s" % ent.get("canonical_name", ent.get("entity_id")))
+            lines.append("### {}".format(ent.get("canonical_name", ent.get("entity_id"))))
             lines.append("")
-            lines.append("- **Entity ID:** `%s`" % ent.get("entity_id"))
-            lines.append("- **Type:** %s" % ent.get("entity_type"))
-            lines.append("- **Status:** %s" % ent.get("status"))
+            lines.append("- **Entity ID:** `{}`".format(ent.get("entity_id")))
+            lines.append("- **Type:** {}".format(ent.get("entity_type")))
+            lines.append("- **Status:** {}".format(ent.get("status")))
             if ent.get("superseded_by"):
-                lines.append("- **Superseded by:** `%s`" % ent["superseded_by"])
+                lines.append("- **Superseded by:** `{}`".format(ent["superseded_by"]))
             if ent.get("description"):
-                lines.append("- **Description:** %s" % ent["description"])
-            lines.append("- **Record digest:** `%s`" % ent.get("record_digest"))
+                lines.append("- **Description:** {}".format(ent["description"]))
+            lines.append("- **Record digest:** `{}`".format(ent.get("record_digest")))
             eprov = ent.get("provenance") or {}
             lines.append(
-                "- **Registered:** %s by `%s`"
-                % (eprov.get("registered_at"), eprov.get("registered_by"))
+                "- **Registered:** {} by `{}`".format(eprov.get("registered_at"), eprov.get("registered_by"))
             )
             aliases = ent.get("aliases") or []
             if aliases:
                 lines += ["", "| Alias | Kind | Confidence | Evidence |", "|---|---|---|---|"]
                 for a in aliases:
-                    ev = ", ".join("`%s`" % e for e in (a.get("evidence_ids") or [])) or "—"
+                    ev = ", ".join(f"`{e}`" for e in (a.get("evidence_ids") or [])) or "—"
                     lines.append(
-                        "| %s | %s | %s | %s |"
-                        % (a.get("alias"), a.get("alias_kind"), a.get("confidence"), ev)
+                        "| {} | {} | {} | {} |".format(a.get("alias"), a.get("alias_kind"), a.get("confidence"), ev)
                     )
             ev_ids = ent.get("evidence_ids") or []
             if ev_ids:
-                lines += ["", "**Evidence references:** " + ", ".join("`%s`" % e for e in ev_ids)]
+                lines += ["", "**Evidence references:** " + ", ".join(f"`{e}`" for e in ev_ids)]
             lines.append("")
 
         lines += ["## Corpora", ""]
         if not corpora:
             lines += ["_None._", ""]
         for c in corpora:
-            lines.append("### %s" % c.get("name", c.get("corpus_id")))
+            lines.append("### {}".format(c.get("name", c.get("corpus_id"))))
             lines.append("")
-            lines.append("- **Corpus ID:** `%s`" % c.get("corpus_id"))
-            lines.append("- **Root label:** %s" % c.get("root_label"))
-            lines.append("- **Documents:** %s" % c.get("document_count"))
-            lines.append("- **Manifest digest:** `%s`" % c.get("manifest_digest"))
-            lines.append("- **Freshness:** %s" % c.get("status"))
-            lines.append("- **Last validated:** %s" % c.get("last_validated_at"))
+            lines.append("- **Corpus ID:** `{}`".format(c.get("corpus_id")))
+            lines.append("- **Root label:** {}".format(c.get("root_label")))
+            lines.append("- **Documents:** {}".format(c.get("document_count")))
+            lines.append("- **Manifest digest:** `{}`".format(c.get("manifest_digest")))
+            lines.append("- **Freshness:** {}".format(c.get("status")))
+            lines.append("- **Last validated:** {}".format(c.get("last_validated_at")))
             docs = c.get("documents") or []
             if docs:
                 lines += ["", "| Document | Path | Size | Content digest |", "|---|---|---|---|"]
                 for d in docs:
                     lines.append(
-                        "| `%s` | %s | %s | `%s` |"
-                        % (
+                        "| `{}` | {} | {} | `{}` |".format(
                             d.get("document_id"),
                             d.get("relative_path"),
                             d.get("byte_size"),
@@ -205,7 +202,7 @@ class ObsidianProjection(object):
         lines += (
             ["_None._", ""]
             if not refs
-            else ["- `%s`" % r for r in refs] + [""]
+            else [f"- `{r}`" for r in refs] + [""]
         )
         lines += [
             "---",
@@ -218,7 +215,7 @@ class ObsidianProjection(object):
 
     # -- writing -----------------------------------------------------------
 
-    def project_asset(self, manifest: Dict[str, Any], filename: Optional[str] = None) -> Path:
+    def project_asset(self, manifest: dict[str, Any], filename: str | None = None) -> Path:
         """Write one asset note. Idempotent; never deletes."""
         payload = manifest.get("foundry_payload") or {}
         stem = filename or sanitize_filename(
@@ -233,7 +230,7 @@ class ObsidianProjection(object):
         target.write_text(content, encoding="utf-8")
         return target
 
-    def project_index(self, manifests: List[Dict[str, Any]]) -> Path:
+    def project_index(self, manifests: list[dict[str, Any]]) -> Path:
         """Write a stable index note listing every projected asset."""
         rows = []
         for m in sorted(
@@ -242,8 +239,7 @@ class ObsidianProjection(object):
         ):
             p = m.get("foundry_payload") or {}
             rows.append(
-                "| [[%s]] | `%s` | %s | `%s` |"
-                % (
+                "| [[{}]] | `{}` | {} | `{}` |".format(
                     sanitize_filename(str(p.get("name") or "asset")),
                     p.get("asset_id"),
                     p.get("asset_version"),
@@ -253,7 +249,7 @@ class ObsidianProjection(object):
         lines = [
             "---",
             "capt_projection: derived-read-only",
-            "capt_asset_count: %d" % len(manifests),
+            f"capt_asset_count: {len(manifests)}",
             "---",
             "",
             "# CAPT Foundry — curated assets",
