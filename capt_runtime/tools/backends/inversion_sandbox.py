@@ -711,6 +711,35 @@ class InversionSandboxProcessBackend:
         )
         return record
 
+    def _verify_guardian_source_command(
+        self, config: dict[str, Any], profile: InversionSandboxProfile
+    ) -> str:
+        """Bind an existing Guardian to the actual, current Docker command bytes.
+
+        A freshly recomputed guardianSourceDigest in an effect receipt does not
+        prove what an existing container will run. Verify its Docker Config.Cmd
+        before persistent restart, inspection, or execution. Absent/old evidence
+        is fail-closed: never silently recreate or approve a sandbox.
+        """
+        cmd = config.get("Cmd") if isinstance(config, dict) else None
+        if (
+            not isinstance(cmd, list)
+            or len(cmd) != 3
+            or cmd[0] != profile.guardian_python
+            or cmd[1] != "-c"
+            or not isinstance(cmd[2], str)
+        ):
+            raise AuthorityViolation(
+                "Guardian source unverified in persistent Docker command; recycle required"
+            )
+        actual = hashlib.sha256(cmd[2].encode("utf-8")).hexdigest()
+        current = hashlib.sha256(self._guardian_source().encode("utf-8")).hexdigest()
+        if actual != current:
+            raise AuthorityViolation(
+                "Guardian source stale in persistent Docker command; recycle required"
+            )
+        return actual
+
     def _verify_persistent_guardian(
         self, identity: SandboxRuntimeIdentity, profile: InversionSandboxProfile
     ) -> dict[str, Any] | None:
@@ -760,6 +789,7 @@ class InversionSandboxProcessBackend:
         if not isinstance(labels, dict) or any(labels.get(k) != v for k, v in expected_labels.items()):
             raise AuthorityViolation("InversionSandbox persistent guardian labels drifted")
         config = guardian.get("Config") or {}
+        self._verify_guardian_source_command(config, profile)
         host = guardian.get("HostConfig") or {}
         if config.get("User") != f"{profile.uid}:{profile.gid}":
             raise AuthorityViolation("InversionSandbox persistent guardian user drifted")
