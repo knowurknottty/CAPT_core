@@ -104,6 +104,32 @@ def safe_model_authority_reason(exc: BaseException) -> str:
     return candidate if match else "MODEL_AUTHORITY_FAILURE_DETAILS_REDACTED"
 
 
+
+# Stable CAPT-authored validation outcomes only. Never echo arbitrary ValueError
+# messages: providers, HTTP libraries, prompts and filesystem paths are untrusted.
+_MODEL_VALIDATION_CODES = frozenset({
+    "MODEL_TASK_OBJECTIVE_OR_TARGET_MISSING",
+    "MODEL_VISIBLE_PROMPT_TITLE_TOO_LONG",
+    "PROVIDER_OR_MODEL_UNAVAILABLE",
+    "PROVIDER_CREDENTIAL_UNAVAILABLE",
+    "REASONING_EFFORT_REQUIRES_PROVIDER",
+    "MODEL_EXECUTION_SECONDS_OUT_OF_RANGE",
+    "MODEL_PROMPT_APPROVAL_RECEIPT_REQUIRED",
+})
+
+
+def safe_model_validation_code(exc: BaseException) -> str:
+    """Return one exact, non-secret model validation code or a redacted fallback.
+
+    This is a diagnostic projection only: it never decides authorization,
+    changes approval state, or retries an unknown provider outcome.
+    """
+    if type(exc) is not ValueError:
+        return "MODEL_FAILURE_DETAILS_REDACTED"
+    message = str(exc)
+    return message if message in _MODEL_VALIDATION_CODES else "MODEL_VALUE_ERROR_REDACTED"
+
+
 def safe_cohort_receipt(
     cohort_id: str, item: Dict[str, Any], receipt: Dict[str, Any],
     driver_state: Optional[Dict[str, Any]] = None,

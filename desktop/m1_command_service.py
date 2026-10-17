@@ -25,6 +25,7 @@ from capt_runtime.errors import AuthorityViolation, CaptRuntimeError, Idempotenc
 from capt_runtime.approval_dispatch import register_expected_prompt_digest
 from capt_runtime.diagnostic_receipts import (
     safe_cohort_receipt, council_submission_digest, safe_model_authority_reason,
+    safe_model_validation_code,
 )
 from capt_runtime.prompt_approval import request_model_prompt_approval
 from capt_runtime.cohort_contract import MAX_COHORTS, normalize_cohort_spec
@@ -1234,18 +1235,22 @@ class RuntimeCommandService:
             )
         except Exception as exc:  # noqa: BLE001
             provider_exc = type(exc).__name__ in {"ProviderDriverFailure", "DispatchBoundaryError"}
+            is_model = cmd.get("op") == "run_approved_hermes_inspection"
+            validation_code = safe_model_validation_code(exc) if is_model else None
             return self._receipt(
                 cmd,
                 status="rejected",
                 classification="internal_failure",
                 error=self._error_envelope(
-                    cmd, "internal_failure", type(exc).__name__.upper()
+                    cmd, "internal_failure",
+                    validation_code if is_model and type(exc) is ValueError
+                    else type(exc).__name__.upper()
                 ),
                 detail=(
                     "PROVIDER_FAILURE_DIAGNOSTIC_AVAILABLE_OR_OUTCOME_UNKNOWN"
                     if provider_exc
-                    else "MODEL_FAILURE_DETAILS_REDACTED"
-                    if cmd.get("op") == "run_approved_hermes_inspection"
+                    else validation_code
+                    if is_model
                     else str(exc)[:240]
                 ),
             )
