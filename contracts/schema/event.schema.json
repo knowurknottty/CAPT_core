@@ -32,6 +32,7 @@
         "ClaimGuardDecided",
         "HumanApprovalRequested",
         "HumanApprovalDecided",
+        "HumanApprovalRevoked",
         "HumanApprovalConsumed",
         "HumanApprovalConsumedForCapability",
         "PromptProposalCreated",
@@ -542,6 +543,26 @@
             },
             "decision": {
               "$ref": "common.schema.json#/$defs/HumanApprovalDecision"
+            }
+          }
+        },
+        {
+          "title": "HumanApprovalRevokedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["eventType", "revocation"],
+          "properties": {
+            "eventType": {"type": "string", "const": "HumanApprovalRevoked"},
+            "revocation": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["requestId", "operatorId", "revokedAt", "reason"],
+              "properties": {
+                "requestId": {"$ref": "common.schema.json#/$defs/Identifier"},
+                "operatorId": {"$ref": "common.schema.json#/$defs/Identifier"},
+                "revokedAt": {"type": "string", "minLength": 20, "maxLength": 40},
+                "reason": {"type": "string", "minLength": 1, "maxLength": 1024}
+              }
             }
           }
         },

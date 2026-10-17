@@ -25,14 +25,15 @@ from ..errors import AuthorityViolation, IllegalTransition
 
 KIND = "human_approval"
 
-APPROVAL_TERMINAL: FrozenSet[str] = frozenset({"denied", "expired", "consumed"})
+APPROVAL_TERMINAL: FrozenSet[str] = frozenset({"denied", "expired", "consumed", "revoked"})
 
 APPROVAL_TRANSITIONS: Dict[str, FrozenSet[str]] = {
     "requested": frozenset({"approved", "denied", "expired"}),
-    "approved": frozenset({"consumed", "expired"}),
+    "approved": frozenset({"consumed", "expired", "revoked"}),
     "denied": frozenset(),
     "expired": frozenset(),
     "consumed": frozenset(),
+    "revoked": frozenset(),
 }
 
 
@@ -52,6 +53,7 @@ class HumanApprovalAggregate(object):
             "human_approval.remainingUses",
             "human_approval.consumedAt",
             "human_approval.consumedBy",
+            "human_approval.revocation",
         }
     )
     REFERENCE_FIELDS = frozenset({"requestId", "missionId", "taskId", "externalCommitments"})
@@ -91,6 +93,7 @@ class HumanApprovalAggregate(object):
             "decidedIdempotencyKeys": [],
             "consumedAt": None,
             "consumedBy": None,
+            "revocation": None,
         }
 
     @staticmethod
@@ -141,6 +144,21 @@ class HumanApprovalAggregate(object):
         if idek not in keys:
             keys.append(idek)
         nxt["decidedIdempotencyKeys"] = keys
+        return nxt
+
+    @staticmethod
+    def revoke(state: Dict[str, Any], revocation: Dict[str, Any]) -> Dict[str, Any]:
+        """Revoke unused approved authority while preserving the original decision."""
+        if state.get("state") != "approved":
+            raise IllegalTransition("only approved authority may be revoked",
+                                    str(state.get("state")), "revoked")
+        if revocation.get("requestId") != state.get("requestId") or not revocation.get("operatorId"):
+            raise AuthorityViolation("APPROVAL_REVOCATION_IDENTITY_MISMATCH")
+        if not revocation.get("reason") or not revocation.get("revokedAt"):
+            raise AuthorityViolation("APPROVAL_REVOCATION_EVIDENCE_REQUIRED")
+        nxt = dict(state)
+        nxt["state"] = "revoked"
+        nxt["revocation"] = dict(revocation)
         return nxt
 
     @staticmethod
