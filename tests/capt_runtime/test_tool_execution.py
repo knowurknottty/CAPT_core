@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from copy import deepcopy
+
 import pytest
 
 from capt_runtime import commands
 from capt_runtime.aggregates.tool_execution import ToolExecutionAggregate
 from capt_runtime.contracts import digest
-from capt_runtime.errors import AuthorityViolation, IllegalTransition
+from capt_runtime.errors import AuthorityViolation, IllegalTransition, IntegrityViolation
+from capt_runtime.checkpoint import create_checkpoint
+from capt_runtime.replay import ReplayState, _apply, full_replay, checkpoint_replay, replay_equivalent
 from capt_runtime.services import RuntimeService
 from capt_runtime.store import EventStore
 
@@ -118,6 +122,55 @@ def test_runtime_service_persists_tool_execution_events(tmp_path) -> None:
         assert [event["eventType"] for event in store.read_stream("tool_execution-tool-exec-1")] == [
             "ToolExecutionPrepared", "ToolExecutionAdmitted", "ToolExecutionDispatching",
         ]
+    finally:
+        store.close()
+
+
+def test_tool_execution_full_checkpoint_and_terminal_replay(tmp_path) -> None:
+    store = EventStore(str(tmp_path / "replay.db"))
+    service = RuntimeService(store)
+    stream = "tool_execution-tool-exec-1"
+    try:
+        service.prepare_tool_execution(_execution(), _metadata("replay-prepare"))
+        service.transition_tool_execution("tool-exec-1", "admitted", {}, _metadata("replay-admit"))
+        service.transition_tool_execution("tool-exec-1", "dispatching", {
+            "dispatchBoundary": "started",
+        }, _metadata("replay-dispatch"))
+        checkpoint = create_checkpoint(store, "cp-replay-tool", NOW, digest({"source": "tool-test"}))
+        result = _tool_result()
+        result_digest = digest(result)
+        service.transition_tool_execution("tool-exec-1", "settling", {
+            "result": result, "resultDigest": result_digest,
+            "settlementStatus": "settling", "dispatchBoundary": "response_completed",
+        }, _metadata("replay-settle"))
+        service.transition_tool_execution("tool-exec-1", "completed", {
+            "settlementStatus": "settled",
+        }, _metadata("replay-complete"))
+        full = full_replay(store)
+        tail = checkpoint_replay(store, checkpoint)
+        assert full.aggregates[stream] == store.require_state(stream)
+        assert full.versions[stream] == store.aggregate_version(stream) == 5
+        assert replay_equivalent(full, tail)
+    finally:
+        store.close()
+
+
+def test_tool_execution_replay_rejects_identity_drift_and_event_mismatch(tmp_path) -> None:
+    store = EventStore(str(tmp_path / "adversarial.db"))
+    service = RuntimeService(store)
+    try:
+        service.prepare_tool_execution(_execution(), _metadata("adv-prepare"))
+        service.transition_tool_execution("tool-exec-1", "admitted", {}, _metadata("adv-admit"))
+        events = store.read_stream("tool_execution-tool-exec-1")
+        for mutation in ("toolId", "state"):
+            replay = ReplayState()
+            _apply(replay, events[0])
+            forged = deepcopy(events[1])
+            forged["payload"]["execution"][mutation] = (
+                "forged.tool" if mutation == "toolId" else "dispatching"
+            )
+            with pytest.raises(IntegrityViolation):
+                _apply(replay, forged)
     finally:
         store.close()
 
