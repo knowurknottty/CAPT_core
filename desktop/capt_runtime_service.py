@@ -83,7 +83,7 @@ from capt_runtime.prepared_execution import PreparedApprovedModelExecution, free
 from capt_runtime.prompt_proposals import authoritative_proposal_binding_for_execution
 from capt_runtime.verification_baseline import capture_verification_baseline
 from capt_runtime.authored_skills import (
-    parse_authored_skill_request, prepare_runtime_skill_context, summarize_skill_context,
+    parse_authored_skill_request, prepare_approved_runtime_skill_context, summarize_skill_context,
 )
 from capt_runtime.managed_skills import default_managed_skill_root, verify_managed_skill_pack
 from desktop.prompt_compiler_provider import build_prompt_compiler
@@ -1514,9 +1514,6 @@ def serve(
                     provider = ProviderManager(Path(ledger_path).parent / "ui").get(str(provider_id))
                     if provider is None or not provider_model:
                         raise ValueError("PROVIDER_OR_MODEL_UNAVAILABLE")
-                skill_context, skill_names = prepare_runtime_skill_context(
-                    payload, state_root=Path(ledger_path).parent
-                )
                 requested_context_budget = int(payload.get("requestedContextBudget", 32_000))
                 effective_budget = effective_context_budget(
                     requested_context_budget, provider.context_limit if provider is not None else 0)
@@ -1532,6 +1529,16 @@ def serve(
                 )
                 approval_scope = approval_state.get("scope") or {}
                 approval_binding = approval_scope.get("approvalBinding") or {}
+
+                # Approval-time managed skill selection is authoritative.  A
+                # separate client path may submit autoSelectSkills=False even
+                # when a proposal approval selected managed skills by default.
+                # Rehydrate and re-verify the exact frozen skills; do not weaken
+                # the final prompt-assembly digest admission check.
+                skill_context, skill_names = prepare_approved_runtime_skill_context(
+                    payload, state_root=Path(ledger_path).parent,
+                    approval_binding=approval_binding,
+                )
 
                 # Replay the approval-time continuation snapshot. Sequential
                 # cohorts may complete between approval and execution; selecting

@@ -256,6 +256,9 @@ def test_runtime_auto_selects_managed_skill_and_rejects_post_approval_tamper(tmp
             "targetRoot": str(target),
             "provider": "mtplx-managed",
             "model": "qwen3.8-27b-mtplx",
+            # The Workspace MCP run surface defaults auto-selection off, but
+            # approval already froze this exact managed-skill set.
+            "autoSelectSkills": False,
             "approvalRequestId": planned["requestId"],
             "missionId": planned["missionId"],
             "taskId": planned["taskId"],

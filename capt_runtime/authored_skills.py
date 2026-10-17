@@ -300,6 +300,50 @@ def prepare_runtime_skill_context(
         raise AuthoredSkillRequestViolation("skillLimit must be an integer") from exc
     return prepare_managed_skill_context(root, objective, limit=limit)
 
+
+def prepare_approved_runtime_skill_context(
+    payload: Mapping[str, Any],
+    *,
+    state_root: str | Path,
+    approval_binding: Mapping[str, Any],
+) -> tuple[Dict[str, Any] | None, List[str]]:
+    """Replay an approved skill selection without trusting a new execution-time default.
+
+    Operator proposals can auto-select managed skills when approval is requested,
+    while execution callers may explicitly disable automatic selection.  The
+    immutable HumanApproval binding, not either later default, determines which
+    managed skills were approved.  Every reloaded skill digest must still match
+    the approved provenance exactly.  Missing or changed skill bytes fail closed.
+    """
+    approved = approval_binding.get("authoredSkills")
+    if approved is not None and not isinstance(approved, dict):
+        raise AuthoredSkillRequestViolation("APPROVED_SKILL_CONTEXT_INVALID")
+    replay = dict(payload)
+    explicit = any(key in replay for key in (
+        "skillPackRoot", "skillNames", "managedSkillNames"
+    ))
+    if not explicit and approved is not None and approved.get("trust") == "managed_local":
+        entries = approved.get("skills")
+        if not isinstance(entries, list) or not entries or any(
+            not isinstance(item, dict)
+            or not isinstance(item.get("name"), str)
+            or not item["name"]
+            for item in entries
+        ):
+            raise AuthoredSkillRequestViolation("APPROVED_SKILL_SELECTION_INVALID")
+        # An explicitly approved list overrides only execution-time *auto*
+        # selection; it never widens the exact already-approved context.
+        replay["managedSkillNames"] = [item["name"] for item in entries]
+    elif not explicit and approved is None:
+        # Do not auto-enroll newly installed or re-ranked skills after approval.
+        replay["autoSelectSkills"] = False
+
+    context, names = prepare_runtime_skill_context(replay, state_root=state_root)
+    if summarize_skill_context(context) != approved:
+        raise AuthoredSkillRequestViolation("APPROVED_SKILL_CONTEXT_MISMATCH")
+    return context, names
+
+
 def summarize_skill_context(context: Mapping[str, Any] | None) -> Dict[str, Any] | None:
     """Return provenance-only skill evidence; never echo instruction bodies."""
     if not context:
