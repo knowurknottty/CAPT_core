@@ -30,8 +30,10 @@ from .aggregates import (
     ReplayForkAggregate,
     SkillCandidateAggregate,
     TaskAggregate,
+    ToolExecutionAggregate,
 )
 from .checkpoint import verify_checkpoint
+from .driver_run import DriverRunAggregate as _DispatchBoundaryAggregate
 from .contracts import digest
 from .errors import IntegrityViolation
 from .store import GENESIS_CHAIN, EventStore, chain_next
@@ -104,6 +106,7 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         "CouncilAdmitted",
         "ReplayForkCreated",
         "CloudflareResourceBindingCreated",
+        "ToolExecutionPrepared",
     )
     if event_type not in _CREATION_EVENTS and current is None:
         # A mutation event on a stream with no prior state means the ledger is
@@ -132,6 +135,23 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         nxt = MissionAggregate.transition(existing(), payload["toState"])
     elif event_type == "TaskCreated":
         nxt = TaskAggregate.create(payload["task"])
+    elif event_type == "ToolExecutionPrepared":
+        nxt = ToolExecutionAggregate.create(payload["execution"])
+    elif event_type in (
+        "ToolExecutionAdmitted", "ToolExecutionDispatching",
+        "ToolExecutionEffectObserved", "ToolExecutionSettling", "ToolExecutionTerminated",
+    ):
+        snapshot = payload["execution"]
+        expected_states = {
+            "ToolExecutionAdmitted": {"admitted"},
+            "ToolExecutionDispatching": {"dispatching"},
+            "ToolExecutionEffectObserved": {"effect_observed"},
+            "ToolExecutionSettling": {"settling"},
+            "ToolExecutionTerminated": {"completed", "failed", "cancelled", "indeterminate"},
+        }
+        if snapshot["state"] not in expected_states[event_type]:
+            raise IntegrityViolation("ToolExecution replay event type does not match state")
+        nxt = ToolExecutionAggregate.replay_transition(existing(), snapshot)
     elif event_type == "TaskTransitioned":
         nxt = TaskAggregate.transition(existing(), payload["toState"])
     elif event_type == "TaskResultSubmitted":
@@ -153,6 +173,15 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         nxt = DriverRunAggregate.create(payload["driverRun"])
     elif event_type == "DriverRunStateChanged":
         nxt = DriverRunAggregate.transition(existing(), payload["toState"])
+    elif event_type == "DriverRunDispatchBoundaryRecorded":
+        previous = existing()
+        if payload["driverRunId"] != previous["driverRunId"]:
+            raise IntegrityViolation("DriverRun dispatch event identity mismatch")
+        if payload["previousDispatchBoundary"] != previous.get("dispatchBoundary", "unknown"):
+            raise IntegrityViolation("DriverRun dispatch predecessor mismatch")
+        nxt = _DispatchBoundaryAggregate.record_dispatch_boundary(
+            previous, payload["dispatchBoundary"], payload["recordedAt"]
+        )
     elif event_type == "ClaimCreated":
         nxt = ClaimAggregate.propose(payload["claim"])
     elif event_type == "EvidenceRecorded":

@@ -10,7 +10,7 @@ from copy import deepcopy
 from typing import Any, Dict
 
 from ..contracts import require
-from ..errors import IllegalTransition
+from ..errors import IllegalTransition, IntegrityViolation
 
 TERMINAL_STATES = frozenset({"completed", "failed", "cancelled", "indeterminate"})
 TRANSITIONS = {
@@ -129,3 +129,22 @@ class ToolExecutionAggregate:
                 )
         require("ToolExecution", nxt)
         return nxt
+
+    @staticmethod
+    def replay_transition(state: Dict[str, Any], snapshot: Dict[str, Any]) -> Dict[str, Any]:
+        """Rebuild a historical transition, checking its complete committed snapshot.
+
+        Event payloads are evidence, not authority to overwrite identity fields.
+        Reuse the normal transition kernel and reject any snapshot it cannot derive.
+        """
+        require("ToolExecution", snapshot)
+        patch = {
+            key: snapshot[key] for key in _MUTABLE_FIELDS
+            if key in snapshot and snapshot[key] != state.get(key)
+        }
+        rebuilt = ToolExecutionAggregate.transition(state, snapshot["state"], patch)
+        if rebuilt != snapshot:
+            raise IntegrityViolation(
+                "ToolExecution replay snapshot differs from canonical state transition"
+            )
+        return rebuilt
