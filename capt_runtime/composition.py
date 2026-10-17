@@ -33,6 +33,7 @@ from .tools.adapters import (
     InversionSandboxLifecycleToolAdapter,
     InversionSandboxTerminalToolAdapter,
     SSHTerminalToolAdapter,
+    TerminalInspectToolAdapter,
     TerminalToolAdapter,
 )
 from .tools.backends.cloudflare import (
@@ -74,6 +75,7 @@ from .tools.builtins import (
     SANDBOX_INVERSION_DESCRIPTOR,
     TERMINAL_CLOUDFLARE_DESCRIPTOR,
     TERMINAL_DOCKER_DESCRIPTOR,
+    TERMINAL_INSPECT_DESCRIPTOR,
     TERMINAL_INVERSION_SANDBOX_DESCRIPTOR,
     TERMINAL_LOCAL_DESCRIPTOR,
     TERMINAL_SSH_DESCRIPTOR,
@@ -239,6 +241,7 @@ def create_runtime(
         return checked
 
     terminal = TerminalToolAdapter()
+    inspector = TerminalInspectToolAdapter()
     files = FileToolAdapter()
     code = CodeExecutionAdapter()
     ssh_profile_registry = SSHProfileRegistry(ssh_profiles)
@@ -288,6 +291,7 @@ def create_runtime(
     )
     for descriptor, adapter in (
         (TERMINAL_LOCAL_DESCRIPTOR, terminal),
+        (TERMINAL_INSPECT_DESCRIPTOR, inspector),
         (TERMINAL_SSH_DESCRIPTOR, ssh_terminal),
         (TERMINAL_DOCKER_DESCRIPTOR, docker_terminal),
         (SANDBOX_INVERSION_DESCRIPTOR, inversion_sandbox_lifecycle),
