@@ -14,16 +14,17 @@ from typing import Any, Dict
 
 from . import commands
 from .authored_skills import prepare_runtime_skill_context, summarize_skill_context
+from .cohort_contract import compile_cohort_objective, normalize_cohort_spec
+from .continuation_context import select_continuation_context
 from .contracts import require
 from .errors import AuthorityViolation
-from .model_authority import canonical_execution_target_root, normalize_model_authority
-from .reasoning import ReasoningConfigurationError, normalize_reasoning_effort
 from .model_approval_binding import (
     build_bound_model_operator_approval,
     staging_root_for_ledger,
 )
-from .continuation_context import select_continuation_context
-from .cohort_contract import compile_cohort_objective, normalize_cohort_spec
+from .model_authority import canonical_execution_target_root, normalize_model_authority
+from .operator_provenance import effective_context_budget
+from .reasoning import ReasoningConfigurationError, normalize_reasoning_effort
 
 
 def _expiry_from(issued_at: str) -> str:
@@ -85,7 +86,17 @@ def request_model_prompt_approval(
     bound_objective = compile_cohort_objective(
         objective, provider=provider, model=model, cohort_spec=cohort_spec
     )
-    requested_context_budget = int(intent.get("requestedContextBudget", 32_000))
+    # The execution preflight accepts only the canonical context tiers.
+    # Validate before a HumanApproval is ever persisted: an arbitrary
+    # client-supplied integer would otherwise create an unusable approval.
+    raw_context_budget = intent.get("requestedContextBudget", 32_000)
+    try:
+        if isinstance(raw_context_budget, bool):
+            raise TypeError("REQUESTED_CONTEXT_BUDGET_INVALID")
+        requested_context_budget = int(raw_context_budget)
+        effective_context_budget(requested_context_budget, 0)
+    except (TypeError, ValueError) as exc:
+        raise AuthorityViolation("REQUESTED_CONTEXT_BUDGET_INVALID") from exc
     requested_execution_seconds = int(intent.get("requestedExecutionSeconds", 600))
     if requested_execution_seconds < 60 or requested_execution_seconds > 3600:
         raise AuthorityViolation("MODEL_EXECUTION_SECONDS_OUT_OF_RANGE")
