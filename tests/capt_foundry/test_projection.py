@@ -195,3 +195,39 @@ def test_index_is_idempotent(tmp_path, manifest):
 def test_empty_index_is_valid(tmp_path):
     proj = ObsidianProjection(tmp_path)
     assert "_none_" in proj.project_index([]).read_text(encoding="utf-8")
+
+
+def test_projection_rejects_subdirectory_symlink_swap(tmp_path, manifest):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    projection = ObsidianProjection(vault)
+    # A local attacker replaces the originally validated subdirectory.
+    projection.target_dir.rmdir()
+    try:
+        projection.target_dir.symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unavailable")
+    with pytest.raises(PathEscape):
+        projection.project_asset(manifest)
+    with pytest.raises(PathEscape):
+        projection.project_index([manifest])
+    assert list(outside.iterdir()) == []
+
+
+def test_projection_rejects_root_symlink_swap_after_initialization(tmp_path):
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    projection = ObsidianProjection(vault)
+    moved = tmp_path / "vault-original"
+    vault.rename(moved)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    try:
+        vault.symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unavailable")
+    with pytest.raises(PathEscape):
+        projection.project_index([])
+    assert list(outside.iterdir()) == []

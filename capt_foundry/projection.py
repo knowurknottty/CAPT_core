@@ -17,7 +17,10 @@ database:
 
 from __future__ import annotations
 
+import os
 import re
+import secrets
+import stat
 import unicodedata
 from pathlib import Path
 from typing import Any
@@ -107,6 +110,10 @@ class ObsidianProjection:
         clean = sanitize_filename(subdir)
         self.target_dir = _safe_target(self.vault_root, clean)
         self.target_dir.mkdir(parents=True, exist_ok=True)
+        # Inode binding prevents a post-construction symlink or directory swap
+        # from redirecting later exports to an unrelated location.
+        self._vault_identity = self._directory_identity(self.vault_root)
+        self._target_identity = self._directory_identity(self.target_dir)
 
     # -- rendering (pure) --------------------------------------------------
 
@@ -213,6 +220,90 @@ class ObsidianProjection:
         ]
         return "\n".join(lines)
 
+    # -- guarded output -----------------------------------------------------
+
+    @staticmethod
+    def _directory_identity(path: Path) -> tuple[int, int]:
+        info = path.stat()
+        return (info.st_dev, info.st_ino)
+
+    def _write_note(self, filename: str, content: str) -> Path:
+        """Write atomically, anchored to the original vault and subdirectory.
+
+        A resolved Path followed by write_text has a check/use race. Instead,
+        open each directory without following symlinks, verify its original
+        inode and use directory-relative I/O throughout. This prevents a
+        post-construction symlink swap redirecting the projection outside
+        its declared vault.
+        """
+        segment = Path(filename)
+        if (segment.is_absolute() or len(segment.parts) != 1
+                or filename in (".", "..") or "\\" in filename):
+            raise PathEscape("projection filename must be a single segment")
+        if not hasattr(os, "O_DIRECTORY") or not hasattr(os, "O_NOFOLLOW"):
+            raise PathEscape("secure directory-relative output unsupported")
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        try:
+            vault_fd = os.open(self.vault_root, flags)
+        except OSError as exc:
+            raise PathEscape("vault path replaced or inaccessible") from exc
+        try:
+            vault_stat = os.fstat(vault_fd)
+            if (vault_stat.st_dev, vault_stat.st_ino) != self._vault_identity:
+                raise PathEscape("vault identity changed since initialization")
+            try:
+                directory_fd = os.open(self.target_dir.name, flags, dir_fd=vault_fd)
+            except OSError as exc:
+                raise PathEscape("projection directory replaced or inaccessible") from exc
+            try:
+                directory_stat = os.fstat(directory_fd)
+                if (directory_stat.st_dev, directory_stat.st_ino) != self._target_identity:
+                    raise PathEscape("projection directory identity changed")
+                data = content.encode("utf-8")
+                try:
+                    existing_fd = os.open(filename, os.O_RDONLY | os.O_NOFOLLOW,
+                                          dir_fd=directory_fd)
+                except FileNotFoundError:
+                    pass
+                except OSError as exc:
+                    raise PathEscape("projection target is not a safe regular file") from exc
+                else:
+                    with os.fdopen(existing_fd, "rb") as existing:
+                        if not stat.S_ISREG(os.fstat(existing.fileno()).st_mode):
+                            raise PathEscape("projection target is not a regular file")
+                        if existing.read() == data:
+                            return self.target_dir / filename
+
+                temp_name = ".capt-foundry-" + secrets.token_hex(12) + ".tmp"
+                temp_fd = os.open(temp_name,
+                                  os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                                  0o600, dir_fd=directory_fd)
+                try:
+                    with os.fdopen(temp_fd, "wb") as stream:
+                        stream.write(data)
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                    try:
+                        existing_stat = os.stat(filename, dir_fd=directory_fd,
+                                                follow_symlinks=False)
+                    except FileNotFoundError:
+                        pass
+                    else:
+                        if not stat.S_ISREG(existing_stat.st_mode):
+                            raise PathEscape("refusing to replace a symlink or special file")
+                    os.replace(temp_name, filename, src_dir_fd=directory_fd,
+                               dst_dir_fd=directory_fd)
+                finally:
+                    try:
+                        os.unlink(temp_name, dir_fd=directory_fd)
+                    except FileNotFoundError:
+                        pass
+                return self.target_dir / filename
+            finally:
+                os.close(directory_fd)
+        finally:
+            os.close(vault_fd)
+
     # -- writing -----------------------------------------------------------
 
     def project_asset(self, manifest: dict[str, Any], filename: str | None = None) -> Path:
@@ -223,12 +314,7 @@ class ObsidianProjection:
         )
         if not stem.endswith(".md"):
             stem += ".md"
-        target = _safe_target(self.target_dir, stem)
-        content = self.render_asset(manifest)
-        if target.exists() and target.read_text(encoding="utf-8") == content:
-            return target  # byte-identical: no write, no mtime churn
-        target.write_text(content, encoding="utf-8")
-        return target
+        return self._write_note(stem, self.render_asset(manifest))
 
     def project_index(self, manifests: list[dict[str, Any]]) -> Path:
         """Write a stable index note listing every projected asset."""
@@ -260,8 +346,4 @@ class ObsidianProjection:
         lines += rows if rows else ["| _none_ | | | |"]
         lines.append("")
         content = "\n".join(lines)
-        target = _safe_target(self.target_dir, "CAPT Foundry Index.md")
-        if target.exists() and target.read_text(encoding="utf-8") == content:
-            return target
-        target.write_text(content, encoding="utf-8")
-        return target
+        return self._write_note("CAPT Foundry Index.md", content)
