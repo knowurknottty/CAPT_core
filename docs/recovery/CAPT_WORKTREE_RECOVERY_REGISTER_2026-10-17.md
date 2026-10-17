@@ -63,3 +63,27 @@ Worktree paths, unrelated personal files, credentials and local auth material ar
 ## Exit conditions
 
 Every candidate is annotated as integrated, proven equivalent, superseded, merged, or specifically blocked, with an evidence pointer. The register is not complete until every candidate has such a terminal disposition. The current values are audit-only.
+
+## Verified no-replay dispositions - wave 1
+
+Seven clean donor HEADs were verified against current Core; this is no-op reconciliation, not a merge.
+
+| Donor branch | HEAD | Proof |
+|---|---|---|
+| feat/capt-refresh-v1-20261012 | eff6164356b5 | 9/9 changed files byte-identical in current main; diagnostic/recover and Swift reattachment tests passed |
+| feat/rrds1-review-depth-20261012 | ef189732a6de | 10/10 changed files byte-identical in current main; review gate and diagnostic tests passed |
+| (detached) | ad9521b0fec4 | 16/16 changed files byte-identical in main, combined Refresh + RRDS snapshot |
+| docs/hermes-moa-capt-case-study-20260921 | 80b4628f37f6 | All 146 distinct substantive donor lines appear in current expanded 295-line case study; no re-application |
+| feature/council-demo-wiring | 6d5e8b67e749 | All 165 CLI and 244 runtime distinct substantive donor lines appear in current files; 6/6 Council and restart tests |
+| fix/standard-native-sigpipe-20260924 | c59270840bc7 | Exact SIGPIPE function body and socket call exist in main, test blob identical; 5/5 Swift socket tests |
+| integration/capt-core-63-r1 | a1c0d6d49b8d | Original 310 test lines preserved in current corresponding file; 6/6 Council and restart tests |
+
+### Focused regression witnesses
+
+- Python diagnostic, recovery and review gates: 20 passed.
+- Swift native reattachment: 1 passed.
+- Swift SIGPIPE socket tests: 5 passed.
+- Council and restart Python tests: 6 passed.
+
+After seven evidence-backed no-replay dispositions, **98 of the original 105** candidates remain.
+No donor branch, worktree or uncommitted content was deleted. CAPT-macOS retains independent uncommitted work outside current CAPT Node scope.
