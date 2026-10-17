@@ -76,3 +76,6 @@ desktop/*_stdout.txt
 
 # Local worktrees
 .worktrees/
+
+# upg_queue.py local mutation lock
+docs/upgrade-campaign/*.lock

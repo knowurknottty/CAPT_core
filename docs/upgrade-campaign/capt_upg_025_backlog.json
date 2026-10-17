@@ -1,0 +1,2207 @@
+{
+  "schemaVersion": "capt.upgrade-backlog.v1",
+  "campaign": "CAPT-UPG-025",
+  "title": "Same-UID authority hardening and evolution program + UPG-069..106 cherry-picks (OpenWorker + 19-repo wave)",
+  "baseline": {
+    "repository": "knowurknottty/CAPT_core",
+    "head": "80d3b82ed9841818dbcc60e6098d8ae6de74fbcd",
+    "reviewDate": "2026-10-08",
+    "testBaseline": "2039 passed, 1 failed (host-dependent ssh readiness), 90 skipped, 13 deselected on CPython 3.13.16 / Linux"
+  },
+  "provenanceLegend": {
+    "V": "Verified by reproduction against the baseline HEAD; the reproduction is quoted in evidence.",
+    "V-code": "Verified by deterministic source reading at the baseline HEAD; not executed. Reproduce before fixing.",
+    "R": "Reported lead; plausible from source but depends on an external behaviour not confirmed here.",
+    "P": "Proposal. A design idea, not a defect. Requires an ADR or spike before implementation."
+  },
+  "statusValues": [
+    "open",
+    "claimed",
+    "red",
+    "green",
+    "in_review",
+    "changes_requested",
+    "merged",
+    "blocked",
+    "deferred",
+    "rejected"
+  ],
+  "roles": [
+    "implementer",
+    "adversary",
+    "verifier",
+    "operator"
+  ],
+  "items": [
+    {
+      "id": "CAPT-UPG-025",
+      "title": "Remove shell execution from Skill Foundry ValidationHarness",
+      "tier": "P0",
+      "kind": "hole",
+      "provenance": "V",
+      "summary": "harness.py executes any workflow step beginning with 'echo' via os.system; '&&', ';', '|' and command substitution run arbitrary commands outside ToolBroker. Reachable from model-authored procedures through the Hermes plugin after a count-only verify_procedure promotion.",
+      "evidence": "Procedure step 'echo hello && uname -a | tee <proof>' -> capt_validate_skill -> proof file contained host uname output.",
+      "files": [
+        "capt_solo/foundry/harness.py"
+      ],
+      "creates": [],
+      "depends_on": [],
+      "risk": "low",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "No os.system, subprocess(shell=True) or string-to-shell path remains in capt_solo/foundry.",
+        "The execution stage never runs workflow text. It records the steps as requiring a governed run (or delegates to ToolBroker with typed argv and an approval binding).",
+        "A regression test proves that a step containing '&&', ';', '|', '$(...)' and backticks produces no process and no file effect.",
+        "Existing foundry tests still pass; no test is weakened."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'foundry or harness'",
+        "ruff check --select S605,S602,S604 capt_solo"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-026",
+      "title": "Separation of duties for skill approval and publication",
+      "tier": "P0",
+      "kind": "hole",
+      "provenance": "V",
+      "summary": "capt_publish_skill submits, approves and publishes in one call with a caller-chosen reviewer string (default 'hermes'). The model approves its own skill.",
+      "evidence": "capt_publish_skill(skill_id) returned {'ok': True, 'lifecycle': 'published'} for a model-created skill.",
+      "files": [
+        "capt_solo/plugin/__init__.py",
+        "capt_solo/plugin/plugin.json",
+        "capt_solo/foundry/skill_foundry.py"
+      ],
+      "creates": [],
+      "depends_on": [],
+      "risk": "low",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "capt_publish_skill is removed from the plugin tool surface and plugin.json, or replaced by capt_request_skill_review, which only reaches 'reviewing'.",
+        "SkillFoundry.approve rejects a reviewer equal to the skill author or creating session, and rejects any reviewer not supplied by a human-authenticated path.",
+        "verify_procedure distinguishes self-reported runs from CAPT-observed runs; self-reported runs alone cannot reach 'verified'.",
+        "Tests cover the self-approval refusal and the self-report refusal."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'foundry or plugin or procedure'"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-027",
+      "title": "Single credential-safe HTTP opener; forbid default urlopen",
+      "tier": "P0",
+      "kind": "hole",
+      "provenance": "V",
+      "summary": "provider.py, billing_assurance.py and capt_ui/operator/providers.py use the default urllib opener. On 301/302/303 it re-issues the request as GET and keeps the Authorization header across origins.",
+      "evidence": "Local two-origin fixture: the redirect target received 'Authorization: Bearer sk-SECRET' (CPython 3.13 urllib).",
+      "files": [
+        "capt_runtime/drivers/provider.py",
+        "capt_runtime/billing_assurance.py",
+        "capt_ui/operator/providers.py",
+        "capt_runtime/mcp.py",
+        "desktop/prompt_compiler_provider.py",
+        "capt_ui/operator/adapters.py",
+        "capt_runtime/tools/backends/cloudflare.py"
+      ],
+      "creates": [
+        "capt_runtime/http_client.py"
+      ],
+      "depends_on": [],
+      "risk": "low",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "New module capt_runtime/http_client.py exposes one opener that never follows redirects and bounds response bytes. media_execution.NoRedirectHandler is reused or moved there.",
+        "Every outbound call that carries a credential uses it.",
+        "A CI check fails on any new bare urllib.request.urlopen in shipped packages (ruff S310 without noqa, or a grep gate).",
+        "Test: the redirect fixture yields an error and the second origin observes no request."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'redirect or provider'",
+        "! grep -rn 'urllib.request.urlopen(' capt_runtime capt_ui desktop --include=*.py | grep -v http_client.py"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-028",
+      "title": "Lock discipline for the shared SQLite connection",
+      "tier": "P0",
+      "kind": "hole",
+      "provenance": "V",
+      "summary": "EventStore.read_recent_events reads the shared connection without self._lock and observes another thread's uncommitted transaction (dirty read of later-rolled-back events). It is reachable from desktop IPC threads.",
+      "evidence": "Writer thread inside BEGIN IMMEDIATE inserted ev-phantom; read_recent_events returned ['ev-phantom']; after rollback it returned [].",
+      "files": [
+        "capt_runtime/store.py",
+        "tests/capt_runtime"
+      ],
+      "creates": [],
+      "depends_on": [],
+      "risk": "low",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "read_recent_events holds self._lock.",
+        "A static test parses store.py (ast) and fails if any self._conn access outside __init__/close is not lexically inside 'with self._lock' or 'with self.transaction()'.",
+        "The dirty-read reproduction becomes a regression test."
+      ],
+      "verification": [
+        "python -m pytest -q tests/capt_runtime -k 'store or event'"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-029",
+      "title": "State-key lifecycle that can never orphan a ledger",
+      "tier": "P0",
+      "kind": "hole",
+      "provenance": "V-code",
+      "summary": "_keychain_key regenerates and overwrites (-U) the key on any non-zero find result (locked keychain, interaction not allowed, timeout), not only on item-not-found. Concurrent first runs race. The key is passed on argv (visible in ps).",
+      "files": [
+        "capt_runtime/state_security.py",
+        "capt_runtime/store.py"
+      ],
+      "creates": [],
+      "depends_on": [],
+      "risk": "high",
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "acceptance": [
+        "Generation happens only on the explicit item-not-found result; every other failure raises AtRestProtectionError (fail closed, no new key).",
+        "Creation never uses -U. After an add, the key is re-read and the stored value wins (race-safe).",
+        "Key material is never placed on a process argv (Security.framework via pyobjc or the Swift helper, or stdin if the tool supports it; document the choice in the ADR).",
+        "The ledger stores a key fingerprint (HMAC of a constant under the key) in a new meta table; open() refuses a mismatched key before any write.",
+        "_KEY_CACHE initialisation is guarded by a lock.",
+        "Tests simulate: not-found, locked, timeout, two concurrent creators, wrong key on existing ledger."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'state_security or at_rest or key'"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-030",
+      "title": "Reap the whole process group after every local terminal run",
+      "tier": "P0",
+      "kind": "hole",
+      "provenance": "V",
+      "summary": "LocalProcessBackend kills the process group only on timeout or cancel. Background children survive leader exit, hold the pipes, and the run raises 'output reader did not terminate' while the orphan keeps running ungoverned.",
+      "evidence": "argv sh -c 'sleep 30 & echo started' -> RuntimeError after 1.5s; pgrep showed 'sleep 30' still alive.",
+      "files": [
+        "capt_runtime/tools/backends/local.py"
+      ],
+      "creates": [],
+      "depends_on": [],
+      "risk": "low",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "After leader exit, the backend sends SIGTERM then SIGKILL to the process group before joining the readers.",
+        "The result reports 'orphanedDescendantsTerminated': true/false.",
+        "Regression test: no surviving process from the run's pgid, and the captured stdout includes 'started'."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'local_backend or terminal_local'"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-031",
+      "title": "MCP subprocess environment allowlist and bounded transport",
+      "tier": "P0",
+      "kind": "hole",
+      "provenance": "V-code",
+      "summary": "MCP stdio servers inherit os.environ wholesale, including CAPT_STATE_KEY_B64 and provider keys. The HTTP MCP client reads unbounded bodies. Default config ships an 'another' server at localhost:7070.",
+      "files": [
+        "capt_runtime/mcp.py"
+      ],
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-027"
+      ],
+      "risk": "low",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "Stdio env = SAFE_PARENT_ENV ∪ explicit per-server 'environment'; credential-shaped names are refused unless listed in an explicit 'secretRefs' resolved through capt_ui.operator.secrets.",
+        "HTTP responses are read with a byte ceiling.",
+        "The default config contains only the capt server; existing configs are not rewritten.",
+        "Test asserts CAPT_STATE_KEY_B64 is absent from the child environment."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k mcp"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-032",
+      "title": "Runtime socket server hardening",
+      "tier": "P0",
+      "kind": "weak_spot",
+      "provenance": "V-code",
+      "summary": "Accepted sockets block forever (idle connections pin threads); threads are unbounded; the token file is chmod'ed after creation and written through a path that follows symlinks; the token comparison is not constant-time; handler exceptions are swallowed silently; fixed-work and checkpoint idempotency are in-memory, unlocked and lost on restart.",
+      "files": [
+        "desktop/capt_runtime_service.py"
+      ],
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-028"
+      ],
+      "risk": "medium",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "Auth frame deadline (e.g. 2s) and per-request idle timeout; bounded worker pool with an explicit overload response.",
+        "Token written via os.open(O_CREAT|O_EXCL|O_NOFOLLOW|O_WRONLY, 0o600) to a temp name, then os.replace.",
+        "secrets.compare_digest for the token.",
+        "Handler failures emit one structured, secret-free log line with a correlation id.",
+        "Fixed-work and checkpoint receipts go through EventStore.claim_command/complete_claimed_command.",
+        "Tests: idle client does not block a second client; overload path; token file mode 0600 at every instant."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'runtime_service or ipc or desktop'"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-033",
+      "title": "Outbox dispatch: claims, failure accounting, dead-letter",
+      "tier": "P1",
+      "kind": "weak_spot",
+      "provenance": "V-code",
+      "summary": "A subscriber exception halts dispatch for all later events forever (head-of-line block); attempts only increments on success; concurrent dispatch() calls double-deliver.",
+      "files": [
+        "capt_runtime/store.py"
+      ],
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-028"
+      ],
+      "risk": "medium",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "Schema migration adds status 'dead' (or a dead_letter table) plus last_error_code. The migration is idempotent and covered by MIGRATIONS.md.",
+        "attempts increments on every delivery attempt; after N failures the event is dead-lettered and dispatch continues.",
+        "A single dispatcher lock prevents concurrent delivery of the same row.",
+        "Tests: poison event does not block successors; replay after crash is still at-least-once."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'outbox or dispatch'"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-034",
+      "title": "Fingerprint-checked idempotent replays on every early-return path",
+      "tier": "P1",
+      "kind": "weak_spot",
+      "provenance": "V-code",
+      "summary": "submit_human_approval_decision and admit_approved_model_execution return 'idempotent' for an existing key without comparing operation fingerprints.",
+      "files": [
+        "capt_runtime/services.py"
+      ],
+      "creates": [],
+      "depends_on": [],
+      "risk": "low",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "Both paths raise IdempotencyConflict on fingerprint mismatch.",
+        "A repository-wide test enumerates RuntimeService methods that call find_idempotent and asserts each compares operation_fingerprint."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k idempot"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-035",
+      "title": "Hermes prompt off argv",
+      "tier": "P1",
+      "kind": "weak_spot",
+      "provenance": "V-code",
+      "summary": "The full approved prompt is passed as '-z <prompt>': visible in ps to every local user, and limited by ARG_MAX (about 1 MiB on macOS).",
+      "files": [
+        "capt_runtime/drivers/hermes.py"
+      ],
+      "creates": [],
+      "depends_on": [],
+      "risk": "medium",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "The prompt is delivered via stdin or an inherited 0600 fd/file whose digest is re-verified against the approved dispatch digest immediately before exec.",
+        "If the installed Hermes version cannot read a prompt from stdin/file, the driver refuses prompts above a documented size and records the Hermes version requirement.",
+        "The argvShape provenance field no longer contains prompt material."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k hermes"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-036",
+      "title": "Swift CLI runner: pipe-drain deadlock and timeouts",
+      "tier": "P1",
+      "kind": "hole",
+      "provenance": "V-code",
+      "summary": "CAPTOperatorCLI.run calls waitUntilExit before draining the pipes. Output over the pipe buffer deadlocks, blocking the CAPTBackgroundRuntime actor and every queued call behind it. There is no timeout.",
+      "files": [
+        "capt_ui/surfaces/desktop_swift/Sources/CAPTCoreDesktop/CAPTOperatorCLI.swift",
+        "capt_ui/surfaces/desktop_swift/Sources/CAPTCoreDesktop/CAPTRuntimeBootstrapper.swift"
+      ],
+      "creates": [],
+      "depends_on": [],
+      "risk": "low",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "stdout/stderr are drained concurrently (readabilityHandler or async reads) before or while waiting.",
+        "Per-command timeout terminates the child and surfaces a typed error.",
+        "XCTest: a fake CLI that prints 1 MiB returns; a fake CLI that sleeps past the timeout is terminated."
+      ],
+      "verification": [
+        "swift test --package-path capt_ui/surfaces/desktop_swift"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-037",
+      "title": "Confine plugin export/import paths",
+      "tier": "P1",
+      "kind": "hole",
+      "provenance": "V-code",
+      "summary": "capt_export_project and capt_import_project accept arbitrary model-supplied paths: overwrite any user file, or ingest any JSON file into memory.",
+      "files": [
+        "capt_solo/plugin/__init__.py",
+        "capt_solo/memory/engine.py"
+      ],
+      "creates": [],
+      "depends_on": [],
+      "risk": "low",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "Plugin exports are written only under the CAPT Solo exports directory with a generated name; the plugin path argument is a basename at most.",
+        "Imports from the plugin surface accept only files inside that directory; the operator CLI keeps arbitrary paths.",
+        "Tests cover traversal, absolute path and symlink attempts."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'export or import'"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-038",
+      "title": "Truthful runtime support matrix and host-independent tests",
+      "tier": "P1",
+      "kind": "weak_spot",
+      "provenance": "V",
+      "summary": "pyproject declares requires-python >=3.8, but importing capt_cli on 3.8.20 fails (os.PathLike[str] subscript). CI tests 3.10/3.12 only. test_runtime_composition_owns_slice_a_registry_and_broker depends on an ssh binary on the host. The Hermes operator integration references an unimported Mapping.",
+      "files": [
+        "pyproject.toml",
+        ".github/workflows/m0a-contract-runtime.yml",
+        ".github/workflows/release-security.yml",
+        "tests/capt_runtime/test_runtime_tool_wiring.py",
+        "integrations/hermes/capt-operator/__init__.py"
+      ],
+      "creates": [],
+      "depends_on": [],
+      "risk": "low",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "requires-python reflects the oldest CI-tested version (>=3.10 unless 3.8/3.9 are deliberately restored and added to CI).",
+        "The cryptography marker for python_version < '3.9' is removed or justified.",
+        "CI matrix includes the newest supported CPython (3.13).",
+        "The SSH readiness test accepts either 'no named SSH profiles' or 'missing OpenSSH executable' (or injects which()).",
+        "The Mapping import is added."
+      ],
+      "verification": [
+        "python -m pytest -q tests/capt_runtime/test_runtime_tool_wiring.py",
+        "ruff check --select F821 integrations"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-039",
+      "title": "Supply-chain pinning for CI",
+      "tier": "P2",
+      "kind": "weak_spot",
+      "provenance": "V-code",
+      "summary": "GitHub Actions are pinned by mutable tag (actions/checkout@v4, gitleaks-action@v2). The release key is available to same-repo PR branches.",
+      "files": [
+        ".github/workflows/m0a-contract-runtime.yml",
+        ".github/workflows/release-security.yml",
+        ".github/workflows/upgrade-probes.yml",
+        ".github/workflows/native-macos-swift.yml"
+      ],
+      "creates": [],
+      "depends_on": [],
+      "risk": "low",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "Every 'uses:' is pinned to a full commit SHA with a trailing version comment.",
+        "Dependabot (or Renovate) config updates the pins.",
+        "billing-assurance runs only on push to protected branches or behind an environment with required reviewers."
+      ],
+      "verification": [
+        "! grep -nE 'uses: [^@]+@v[0-9]' .github/workflows/*.yml"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-040",
+      "title": "ADR: same-UID adversary threat model",
+      "tier": "P0",
+      "kind": "hole",
+      "provenance": "V",
+      "summary": "Model-driven processes (Hermes toolsets='terminal', terminal.local) run as the operator, can read ~/.capt/runtime.token, the ledger and the state key, and can therefore submit human approvals and rewrite the chain. The trust-boundary document never models this and still describes a read-only M0 IPC surface.",
+      "evidence": "terminal.local run with cwd scoped to a directory wrote ../outside.txt (exit 0). Token path ~/.capt/runtime.token; token holder becomes 'operator-<user>'.",
+      "files": [
+        "docs/architecture/decisions",
+        "CAPT_DESKTOP_RUNTIME_TRUST_BOUNDARIES.md",
+        "docs/SECURITY.md"
+      ],
+      "creates": [
+        "docs/architecture/decisions/ADR-SAME-UID-THREAT-MODEL.md"
+      ],
+      "depends_on": [],
+      "risk": "low",
+      "needs_adr": true,
+      "owner_role": "operator",
+      "acceptance": [
+        "ADR states the adversary classes (A0 remote, A1 other local user, A2 same-UID model process, A3 root) and which CAPT guarantees hold against each, today and after UPG-041..046.",
+        "The trust-boundary document is updated: current command surface, explicit 'not defended against A2 until …' statements.",
+        "README and FUNCTIONALITY_MATRIX claims about governance are qualified to the adversary class they hold against."
+      ],
+      "verification": [
+        "test -f docs/architecture/decisions/ADR-SAME-UID-THREAT-MODEL.md"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-041",
+      "title": "Human Presence Attestation for approvals",
+      "tier": "P1",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "Approval decisions must carry a signature over the approval-binding digest made by a Secure Enclave P-256 key held by the signed Swift app and gated by LocalAuthentication (Touch ID / password). RuntimeService verifies the signature against a public key pinned at enrollment. A model process holding the socket token can request approvals but cannot decide them.",
+      "files": [
+        "capt_runtime/services.py",
+        "capt_runtime/aggregates/human_approval.py",
+        "desktop/m1_command_service.py",
+        "contracts",
+        "capt_ui/surfaces/desktop_swift/Sources"
+      ],
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-040"
+      ],
+      "risk": "high",
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "acceptance": [
+        "HumanApprovalDecision contract gains signature, keyId and signedDigest; the aggregate refuses unsigned decisions when policy 'approval.presence=required'.",
+        "Enrollment ceremony pins the public key into the ledger as an event; key rotation and revocation are events.",
+        "The signed payload binds requestId, decision, promptAssemblyDigest (or capability scope digest) and expiresAt, so a signature cannot be replayed onto another request.",
+        "Headless/Linux fallback is explicit (policy 'presence=token-only') and labelled as weaker in every projection.",
+        "Adversarial test: token-holding client without a signature cannot move an approval out of 'requested'."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'approval and presence'",
+        "swift test --package-path capt_ui/surfaces/desktop_swift --filter Presence"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-042",
+      "title": "Model-process jail",
+      "tier": "P1",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "Execute Hermes, terminal.local and code.execution under an OS confinement that denies ~/.capt, the keychain and the runtime socket, and restricts writes to the lease scope. macOS: a dedicated low-privilege user via launchd, or sandbox-exec profiles. Linux: Landlock (kernel >= 5.13) or bubblewrap.",
+      "files": [
+        "capt_runtime/tools/backends/local.py",
+        "capt_runtime/drivers/hermes.py",
+        "capt_runtime/tools/backends"
+      ],
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-040",
+        "CAPT-UPG-030"
+      ],
+      "risk": "high",
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "acceptance": [
+        "The ADR chooses the mechanism per OS and records the deprecation status of macOS sandbox-exec (deprecated API, still shipped; do not rely on it as the sole long-term control).",
+        "readiness() reports 'confined' or 'unconfined'; consequential leases require 'confined' unless the operator records an explicit downgrade event.",
+        "Adversarial tests from a confined run: reading ~/.capt/runtime.token fails; writing outside the scope fails; connecting to runtime.sock fails.",
+        "The scoped-escape reproduction from UPG-040 fails closed."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'confine or jail'"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-043",
+      "title": "Split read and authority sockets with peer verification",
+      "tier": "P1",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "Serve read projections on one socket and state-changing commands on a second. Admit authority connections only after getpeereid/LOCAL_PEERPID plus a code-signature check (audit token -> SecCode) matching the CAPT app's designated requirement.",
+      "files": [
+        "desktop/capt_runtime_service.py",
+        "capt_ui/surfaces/desktop_swift/Sources/CAPTCoreDesktop"
+      ],
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-032",
+        "CAPT-UPG-040"
+      ],
+      "risk": "medium",
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "acceptance": [
+        "The CLI and Hermes integrations use the read socket plus explicit request-approval commands only.",
+        "The peer check result is recorded on each authority session as provenance.",
+        "Test: a process with the token but a non-matching peer cannot issue submit_approval_decision."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'socket and peer'"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-044",
+      "title": "Descriptor-relative scoped filesystem operations",
+      "tier": "P1",
+      "kind": "weak_spot",
+      "provenance": "R",
+      "summary": "require_scoped_path validates a path and callers later reuse the string, so a concurrent in-scope symlink swap can redirect writes outside the scope (time-of-check to time-of-use).",
+      "files": [
+        "capt_runtime/tools/scope.py",
+        "capt_runtime/tools/adapters/file.py"
+      ],
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-030"
+      ],
+      "risk": "medium",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "Open the scope root once; walk components with os.open(dir_fd=..., O_NOFOLLOW|O_DIRECTORY); create temp files and rename with dir_fd. Use openat2 RESOLVE_BENEATH on Linux where available; O_NOFOLLOW_ANY on macOS 11+.",
+        "A race test (thread swapping a directory for a symlink in a loop) never produces an out-of-scope write over N iterations."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'scope or file_adapter'"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-045",
+      "title": "Ledger integrity v2: full-envelope chain, external anchors, projection audit",
+      "tier": "P2",
+      "kind": "upgrade",
+      "provenance": "V-code",
+      "summary": "chain_next covers only payloadDigest|eventId. Tail truncation after the last checkpoint is undetectable. verify_chain never checks that the aggregates table equals the replay of events.",
+      "files": [
+        "capt_runtime/store.py",
+        "capt_runtime/replay.py",
+        "capt_runtime/checkpoint.py",
+        "docs/MIGRATIONS.md"
+      ],
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-029",
+        "CAPT-UPG-041"
+      ],
+      "risk": "high",
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "acceptance": [
+        "chain v2 hashes the canonical full envelope (minus self-referential fields). v1 events verify under v1 rules; a chain-version event marks the cutover. No historical rewrite.",
+        "Periodic head anchors are signed with the presence key (UPG-041) and optionally exported to OpenTimestamps.",
+        "'capt verify --deep' rebuilds every aggregate from events and diffs it against stored snapshots.",
+        "Tests: tampering with event metadata, deleting the tail, and editing a snapshot are each detected."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'chain or replay or verify'"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-046",
+      "title": "Purpose-separated keys and per-ledger binding",
+      "tier": "P2",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "One state key seals every table of every ledger. Derive per-purpose subkeys (HKDF-SHA256 with a per-ledger salt stored in meta) so a row cannot be transplanted between ledgers and a diagnostic-key exposure does not open the ledger.",
+      "files": [
+        "capt_runtime/state_security.py",
+        "capt_runtime/store.py"
+      ],
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-029"
+      ],
+      "risk": "high",
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "acceptance": [
+        "Migration re-seals rows under derived keys inside one transaction, with a crash-safe resume marker.",
+        "AAD includes the ledger id.",
+        "Test: a row copied from ledger A into ledger B fails to open."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'at_rest or migration'"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-050",
+      "title": "O(open-work) restart recovery",
+      "tier": "P2",
+      "kind": "weak_spot",
+      "provenance": "V-code",
+      "summary": "_reconcile_stranded_driver_runs includes 'completed' runs and, for each, decrypts every capability aggregate: O(runs × capabilities) at every boot, growing without bound.",
+      "files": [
+        "desktop/capt_runtime_service.py",
+        "capt_runtime/store.py"
+      ],
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-028"
+      ],
+      "risk": "medium",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "A cleartext, non-sensitive index (stream_id, kind, lifecycle_state, task_id) or a dedicated open-work table limits recovery to non-terminal runs and their task's capabilities.",
+        "'completed' runs are reconciled only when their task is still 'running'.",
+        "A benchmark with 10k runs × 10k capabilities completes recovery in < 2s on CI hardware; the number is recorded in the PR.",
+        "Recovery semantics are unchanged (existing crash-seam tests pass)."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'recovery or stranded'"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-051",
+      "title": "Retire one-off migrations and hard-coded defaults from the resident service",
+      "tier": "P3",
+      "kind": "weak_spot",
+      "provenance": "V-code",
+      "summary": "_reconcile_legacy_issue_task_marker hard-codes a single historical task id. The operator control defaults hard-code a specific local model tag. approval_dispatch._EXPECTED grows forever and passes dispatch through when nothing is registered.",
+      "files": [
+        "desktop/capt_runtime_service.py",
+        "capt_runtime/approval_dispatch.py"
+      ],
+      "creates": [],
+      "depends_on": [],
+      "risk": "low",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "Legacy migrations move to a versioned, run-once migration registry recorded as events.",
+        "The default model comes from configuration with an explicit 'unset' state.",
+        "_EXPECTED entries are removed at DriverRun terminal transition; governed drivers fail closed if no expectation is registered (standalone conformance path stays explicit)."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'migration or dispatch_digest'"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-052",
+      "title": "Crash-consistency property harness over the existing fault seams",
+      "tier": "P2",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "_test_fault already marks durable boundaries. Turn them into a stateful property test (Hypothesis RuleBasedStateMachine) that crashes at every seam in random command sequences, restarts, runs recovery, and checks the invariants (no double consumption, no completion without evidence, chain verifies, projections equal replay).",
+      "files": [
+        "tests/capt_runtime",
+        "desktop/capt_runtime_service.py"
+      ],
+      "creates": [
+        "tests/capt_runtime/test_crash_consistency.py"
+      ],
+      "depends_on": [
+        "CAPT-UPG-045",
+        "CAPT-UPG-050"
+      ],
+      "risk": "low",
+      "needs_adr": false,
+      "owner_role": "verifier",
+      "acceptance": [
+        "Test-only dependency hypothesis (6.x, pinned) is added to a test extra.",
+        "At least 200 examples per CI run under a fixed seed, plus a nightly job with a random seed that uploads failing seeds as artifacts.",
+        "Each invariant is written once in contracts/invariants and cited by the test."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k crash_consistency"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-053",
+      "title": "Coverage-guided fuzzing of trust-boundary parsers",
+      "tier": "P2",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "Fuzz ipc_framing.recv_json, inversion_guardian.parse_request_head, contract require(), MediaRouteRegistry parsing and the authored-skill parser.",
+      "files": [
+        "capt_runtime/ipc_framing.py",
+        "capt_runtime/tools/backends/inversion_guardian.py",
+        "capt_runtime/contracts.py"
+      ],
+      "creates": [
+        "fuzz"
+      ],
+      "depends_on": [],
+      "risk": "low",
+      "needs_adr": false,
+      "owner_role": "verifier",
+      "acceptance": [
+        "Atheris harnesses live under fuzz/ with seed corpora. If atheris wheels are unavailable for the CI CPython, hypothesis-based fuzzing is used instead and the gap is noted.",
+        "A short smoke run is part of CI; long runs are nightly.",
+        "Any crash becomes a committed regression input."
+      ],
+      "verification": [
+        "python -m pytest -q fuzz -k smoke"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-054",
+      "title": "Structured, redacted observability spine",
+      "tier": "P2",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "Silent 'except Exception: pass/return' sites (109 blind excepts in shipped code) hide failures. Add one logger with structured fields (commandId, correlationId, phase, code), mandatory scrub(), and optional OpenTelemetry export of command -> commit -> dispatch spans.",
+      "files": [
+        "capt_runtime",
+        "desktop/capt_runtime_service.py",
+        "capt_ui/operator/secrets.py"
+      ],
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-032"
+      ],
+      "risk": "low",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "Every BLE001 site in capt_runtime and desktop either logs a stable code or carries a written justification comment; a ruff BLE001 baseline file prevents new ones.",
+        "scrub() covers AIza…, ghp_…, xox…, AKIA… and JWT shapes, with tests.",
+        "OpenTelemetry is optional (no hard dependency); spans carry no payload content."
+      ],
+      "verification": [
+        "ruff check --select BLE001 capt_runtime desktop"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-055",
+      "title": "Generated state-of-truth surface; contain evidence-document sprawl",
+      "tier": "P3",
+      "kind": "weak_spot",
+      "provenance": "V-code",
+      "summary": "The repository root carries dozens of dated ledger/verification markdown files and docs/ about fifty more; README mixes dated status bulletins with usage. Agents (and readers) cannot cheaply tell current claims from historical evidence, which is exactly the confusion the canonical-state rule in AGENTS.md exists to prevent.",
+      "files": [
+        "README.md",
+        "docs/CURRENT_STATE.md",
+        "docs/FUNCTIONALITY_MATRIX.md",
+        "release_evidence"
+      ],
+      "creates": [
+        "scripts/render_state.py"
+      ],
+      "depends_on": [],
+      "risk": "low",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "Root-level dated ledgers move (git mv, history preserved, content untouched) under docs/evidence/<yyyy-mm-dd>/ with a generated index; no historical text is edited.",
+        "docs/CURRENT_STATE.md is generated from machine-readable sources (this backlog, FUNCTIONALITY_MATRIX data, CI receipts) by scripts/render_state.py, and CI fails if it is stale.",
+        "README keeps usage plus one generated status block; dated bulletins move to CHANGELOG."
+      ],
+      "verification": [
+        "python scripts/render_state.py --check"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-060",
+      "title": "Hostile Vessel: adversarial model regression suite",
+      "tier": "P1",
+      "kind": "novel",
+      "provenance": "P",
+      "summary": "A scripted malicious driver (no LLM) that replays every known escape class against a live composed runtime in CI: token theft and self-approval, scope escape, symlink race, procedure-to-shell injection, self-publication, redirect credential exfiltration, forged claims in driver output, memory poisoning. Each class is a test that must fail closed. The AFP taxonomy names the failure class.",
+      "files": [
+        "capt_runtime/drivers"
+      ],
+      "creates": [
+        "tests/adversarial"
+      ],
+      "depends_on": [
+        "CAPT-UPG-025",
+        "CAPT-UPG-026",
+        "CAPT-UPG-027",
+        "CAPT-UPG-040"
+      ],
+      "risk": "low",
+      "needs_adr": false,
+      "owner_role": "adversary",
+      "acceptance": [
+        "tests/adversarial/test_hostile_vessel.py has one test per escape class, each citing the UPG item that closes it.",
+        "Classes not yet closed are xfail(strict=True) with the blocking UPG id, so closing one forces the marker to be removed.",
+        "The suite runs in release-security CI."
+      ],
+      "verification": [
+        "python -m pytest -q tests/adversarial"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-061",
+      "title": "Model-taint provenance labels",
+      "tier": "P2",
+      "kind": "novel",
+      "provenance": "P",
+      "summary": "Label every persisted string by origin (human, capt, model:<runId>, external:<source>) and propagate the label through memory, procedures, skills and prompt assembly. Authority positions (procedure steps that may execute, approval scopes, tool argv, file targets) refuse model-tainted values unless a human approval binding names that exact value digest. This closes the bug class behind UPG-025/026 rather than the instances.",
+      "files": [
+        "capt_solo/memory/models.py",
+        "capt_solo/lifecycle/procedures.py",
+        "capt_runtime/prompt_compiler",
+        "capt_runtime/tool_broker.py",
+        "contracts"
+      ],
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-040",
+        "CAPT-UPG-025"
+      ],
+      "risk": "medium",
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "acceptance": [
+        "Contract field 'origin' on memory, procedure and skill records; a migration defaults existing rows to 'unknown', which is treated as tainted.",
+        "The ToolBroker admission check rejects tainted argv/paths lacking a value-digest approval.",
+        "Hostile Vessel memory-poisoning and procedure-injection cases pass via taint, not only via UPG-025."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k taint"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-062",
+      "title": "Tripwire canaries on the authority surface",
+      "tier": "P1",
+      "kind": "novel",
+      "provenance": "P",
+      "summary": "Plant decoy credentials (for example ~/.capt/runtime.token.bak and a decoy provider key ref) that are never legitimately used. Any presentation of a decoy token to the socket, or of a decoy key to a provider route, triggers a governed lockdown: revoke all active leases, suspend running DriverRuns, kill confined process groups, and raise a native alert. Cheap detection that works before the jail (UPG-042) ships.",
+      "files": [
+        "desktop/capt_runtime_service.py",
+        "capt_runtime/services.py",
+        "capt_ui/surfaces/desktop_swift/Sources"
+      ],
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-032"
+      ],
+      "risk": "low",
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "acceptance": [
+        "Decoys are rotated per start and recorded (by digest only) in the ledger.",
+        "Lockdown is one idempotent governed command with an evidence record that includes the triggering peer pid when it is available.",
+        "Tests: decoy presentation triggers lockdown; the real token is unaffected; repeated triggers are idempotent.",
+        "Document clearly that this detects, not prevents, and that it is not a hidden trap against forks (compatible with AGENTS.md)."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k canary"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-063",
+      "title": "Global kill switch",
+      "tier": "P1",
+      "kind": "novel",
+      "provenance": "P",
+      "summary": "One operator action (menu bar plus global hotkey in the Swift app, 'capt halt' in the CLI) that atomically revokes every lease, transitions running work to suspended with reason 'operator_halt', and terminates confined process groups. It shares the lockdown command with UPG-062.",
+      "files": [
+        "capt_runtime/services.py",
+        "capt_cli.py",
+        "capt_ui/surfaces/desktop_swift/Sources/CAPTNativeMac"
+      ],
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-062"
+      ],
+      "risk": "low",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "Halt completes in < 1s for 100 active leases in a benchmark.",
+        "Resume requires explicit per-mission continuation; nothing auto-restarts.",
+        "Projection shows the halt with actor, reason and a timestamp from the runtime clock."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k halt"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-064",
+      "title": "Legible approvals: semantic diff and risk tiering",
+      "tier": "P2",
+      "kind": "novel",
+      "provenance": "P",
+      "summary": "Digests are machine-safe but human-opaque, which invites approval fatigue. Render each approval as a semantic diff against the nearest prior approved binding (scope, tools, budget, prompt delta, skill bytes), assign a deterministic risk tier, and let low-risk tiers be batched while high tiers need presence attestation each time.",
+      "files": [
+        "capt_runtime/prompt_approval.py",
+        "capt_runtime/model_approval_binding.py",
+        "capt_ui/surfaces/desktop_swift/Sources/CAPTNativeMac/Views"
+      ],
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-041"
+      ],
+      "risk": "low",
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "acceptance": [
+        "Risk tiering is a pure function with a table of rules under test (no model judgement in the tier).",
+        "The diff is computed by CAPT from authoritative state, never by the model.",
+        "Usability check: the operator can name what changed for 5 sampled approvals without opening raw JSON."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'approval and diff'"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-065",
+      "title": "Staged world effects with preview",
+      "tier": "P2",
+      "kind": "novel",
+      "provenance": "P",
+      "summary": "Generalise the staging-root pattern: file.write/patch from model leases land in an overlay (copy-on-write staging tree); CAPT renders the diff; one approval applies the whole change set atomically with world receipts. This turns 'approve the intent' into 'approve the effect'.",
+      "files": [
+        "capt_runtime/tools/adapters/file.py",
+        "capt_runtime/artifact_workspace.py",
+        "capt_runtime/world_receipt.py"
+      ],
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-044"
+      ],
+      "risk": "medium",
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "acceptance": [
+        "Apply is all-or-nothing, with a reversal handle per file (reuse the existing capt-rollback mechanism).",
+        "Conflicts with external edits made since staging are detected by before-digest and block the apply.",
+        "Tests: partial-apply crash recovery; conflict detection."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'staged or overlay'"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-066",
+      "title": "Ledger-native model regression evals",
+      "tier": "P3",
+      "kind": "novel",
+      "provenance": "P",
+      "summary": "'The model is replaceable' becomes a testable claim: every verified mission exports a replayable eval case (frozen ContextPack, approved prompt digest, verification oracle). 'capt eval --model X' replays the cases in a sandbox and reports a verification pass-rate delta against the incumbent model. This feeds the Council and the provider routing.",
+      "files": [
+        "capt_runtime/replay.py",
+        "capt_runtime/verification.py",
+        "capt_cli.py"
+      ],
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-042",
+        "CAPT-UPG-045"
+      ],
+      "risk": "low",
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "acceptance": [
+        "Eval cases are content-addressed and contain no secrets (scrub plus taint check).",
+        "Replays never touch the live ledger; results are recorded as observations, not completions.",
+        "Report includes confidence intervals (Wilson) on the pass rate."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k eval_replay"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-067",
+      "title": "Council dissent as a verification router",
+      "tier": "P3",
+      "kind": "novel",
+      "provenance": "P",
+      "summary": "Use Model Council dissent (already preserved by the analysis layer) as a deterministic signal: claims whose supporting Vessels disagree above a threshold are routed to mandatory human verification, and unanimous low-risk claims can use automated verification oracles. Disagreement becomes a budgeted attention allocator.",
+      "files": [
+        "capt_runtime/council.py",
+        "capt_runtime/verification.py",
+        "capt_runtime/aggregates/claim_driver.py"
+      ],
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-064"
+      ],
+      "risk": "low",
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "acceptance": [
+        "The routing rule is pure and versioned; the threshold is stored in the policy bundle.",
+        "Unanimity never promotes a claim by itself; it only selects which verifier runs."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'council and route'"
+      ],
+      "status": "open"
+    },
+    {
+      "id": "CAPT-UPG-068",
+      "title": "Signed release provenance",
+      "tier": "P3",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "Attach SLSA build provenance and Sigstore signatures to wheels and the notarised Swift app. 'capt doctor' verifies the installed artefact against its attestation. This aligns with the provenance stance in AGENTS.md and the existing exact-SHA evidence discipline.",
+      "files": [
+        ".github/workflows/release-security.yml",
+        "capt_cli.py",
+        "docs/RELEASE_EVIDENCE.md"
+      ],
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-039"
+      ],
+      "risk": "low",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "The release job emits the provenance attestation (actions/attest-build-provenance, SHA-pinned) and Sigstore bundles.",
+        "capt doctor reports verified/unverified/unknown, never a silent pass."
+      ],
+      "verification": [
+        "capt doctor --json"
+      ],
+      "status": "open"
+    },
+    {
+      "creates": [],
+      "depends_on": [],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "merged",
+      "id": "CAPT-UPG-069",
+      "title": "Guardian: deny IPv4-embedded IPv6 (mapped/NAT64/6to4/Teredo)",
+      "tier": "P0",
+      "kind": "hole",
+      "provenance": "V",
+      "claimedBy": "claude-opus-5.5-review-2026-10-17",
+      "summary": "destination_allowed() compared ::ffff:a.b.c.d answers only against IPv6 rules, so version-mismatched platformDeny CIDRs skipped them. An attacker-controlled AAAA record reached 169.254.169.254 (cloud metadata), loopback and RFC1918 in BOTH allowlist and unrestricted modes. First reported in the 2026-10-09 CAPT-Bot review; absent from UPG-025..068 and still live at Core 6f70886.",
+      "evidence": "At 6f70886: destination_allowed(unrestricted,'evil.example',['::ffff:169.254.169.254']) -> True; same for ::ffff:127.0.0.1, 64:ff9b::a9fe:a9fe, 2002:a9fe:a9fe::1, ::, 198.18.0.1. Patch 07df11a: 22 new tests red on old guardian, 35/35 green after.",
+      "files": [
+        "capt_runtime/tools/backends/inversion_guardian.py",
+        "tests/capt_runtime/test_inversion_sandbox_network.py"
+      ],
+      "acceptance": [
+        "Embedded IPv4 is judged against both an immutable builtin floor and the profile platformDeny.",
+        "The floor is outside the canonical policy: profile and persistent-lease digests are unchanged.",
+        "A profile with platformDeny=() still cannot reach metadata/loopback/RFC1918.",
+        "Operator note: running guardian containers keep the old source until their lease is recycled; reconciliation reports guardianSourceDigest mismatch for pre-fix leases."
+      ],
+      "verification": [
+        "python -m pytest -q tests/capt_runtime/test_inversion_sandbox_network.py"
+      ],
+      "history": [
+        {
+          "at": "2026-10-17T11:28:38Z",
+          "agent": "knowurknot-operator",
+          "from": "in_review",
+          "to": "merged",
+          "note": "Owner-directed merge 2026-10-17; full CI green after one flaky rerun (test_desktop_m0 reconnect digest, unrelated).",
+          "evidence": "PR #201 merged as a1489fa (head aa0fb59)"
+        }
+      ]
+    },
+    {
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-069"
+      ],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-070",
+      "title": "Recycle or flag persistent sandbox leases whose guardian source predates UPG-069",
+      "tier": "P0",
+      "kind": "weak_spot",
+      "provenance": "V-code",
+      "summary": "guardianSourceDigest is recorded per allowlist runtime but never re-verified. Persistent leases created before UPG-069 keep running the vulnerable guardian indefinitely.",
+      "files": [
+        "capt_runtime/tools/backends/inversion_sandbox.py",
+        "capt_runtime/sandbox_reconciliation.py"
+      ],
+      "acceptance": [
+        "Reconciliation compares the live guardian source digest with the current inspect.getsource(inversion_guardian) digest.",
+        "Mismatch -> lease state 'guardian_stale'; consequential exec on that lease is refused until recycle.",
+        "Test: a lease record carrying an old digest is refused for terminal.exec."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'sandbox and reconcil'"
+      ]
+    },
+    {
+      "creates": [
+        "capt_runtime/tools/adapters/inspect.py",
+        "docs/architecture/decisions/ADR-0130-terminal-inspect.md"
+      ],
+      "depends_on": [
+        "CAPT-UPG-030",
+        "CAPT-UPG-069"
+      ],
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "risk": "medium",
+      "status": "open",
+      "id": "CAPT-UPG-071",
+      "title": "terminal.inspect: pure_read_only operation backed by readonly_argv",
+      "tier": "P1",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "Port of OpenWorker's session read-only grant (andrewyng/openworker@e947e44 (MIT), coworker/readonly.py) as a separately declared operation, not a per-call effect-class downgrade, so ToolBroker's static consequential-flag invariant holds. The adapter calls readonly_argv.admit(), scope-checks read targets, runs the git filter-driver probe, and executes the hardened argv with the plan's env. Refusal raises before spawn. Removes approval fatigue for inspection loops (OpenWorker measured ~15 approvals per security-scan run).",
+      "files": [
+        "capt_runtime/tools/readonly_argv.py",
+        "capt_runtime/tools/builtins.py",
+        "capt_runtime/tools/adapters/terminal.py"
+      ],
+      "acceptance": [
+        "Descriptor declares terminal.inspect effectClass pure_read_only; terminal.exec is unchanged.",
+        "readonly_argv refusal -> ToolResult denied with READONLY_REFUSED:<reason>; no process spawned (asserted by backend spy).",
+        "Hostile-repo e2e (fsmonitor, filter.clean, diff.external, textconv, hooksPath) executes nothing.",
+        "Output capped at MAX_CAPTURE_BYTES and bounded per UPG-072 before entering model context.",
+        "ADR records: GIT_NO_LAZY_FETCH requires git >= 2.44 (ignored on older git: partial clones may lazy-fetch); LFS files render as pointers because filter drivers are neutralized."
+      ],
+      "verification": [
+        "python -m pytest -q tests/capt_runtime/test_readonly_argv.py tests -k inspect"
+      ]
+    },
+    {
+      "creates": [
+        "capt_runtime/tool_result_bound.py"
+      ],
+      "depends_on": [],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-072",
+      "title": "Bound tool results before they enter model context (head+tail, content-addressed spill)",
+      "tier": "P1",
+      "kind": "weak_spot",
+      "provenance": "V-code",
+      "summary": "drivers/provider.py appends json.dumps(tool_result) to messages unbounded; one large read taxes every later round and drives early 'context headroom reserve reached' finalization. Port andrewyng/openworker@e947e44 (MIT) coworker/toolresult.py: if the serialized result exceeds max_bytes, bound only the largest string field(s) to head+marker+tail, write the full payload as a content-addressed artifact, and keep the marker timestamp-free so prompt caching is not disturbed.",
+      "files": [
+        "capt_runtime/drivers/provider.py",
+        "capt_runtime/artifact_workspace.py"
+      ],
+      "acceptance": [
+        "Bounded result remains valid JSON; non-string fields untouched.",
+        "Marker names the artifact digest and omitted byte count; byte-identical across rounds.",
+        "Full payload is a ledger-referenced artifact (sha256), never only a temp file.",
+        "Test: 500 KB stdout yields <= max_bytes in the tool message and an artifact with the full bytes."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'tool_result and bound'"
+      ]
+    },
+    {
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-044"
+      ],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "medium",
+      "status": "open",
+      "id": "CAPT-UPG-073",
+      "title": "Deferred-execution path floor (hooks, CI, task runners, git config, CAPT policy)",
+      "tier": "P1",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "From andrewyng/openworker@e947e44 (MIT) permissions._PROTECTED_IN_PROJECT: writes to files that execute on a later innocuous action are a deferred command. CAPT file.write scopes by root only. Extend the list with .git/config (repo-config exec, see UPG-071 evidence), .git/info/attributes, .envrc, Makefile-adjacent hooks are out of scope. Enforce in the file adapter AND as deny rules in the UPG-042 jail profile (OpenWorker's seatbelt profile does not deny these, so its shell can write them).",
+      "files": [
+        "capt_runtime/tools/adapters/file.py",
+        "capt_runtime/tools/scope.py"
+      ],
+      "acceptance": [
+        "file.write/file.patch to .git/hooks/**, .git/config, .git/info/**, .github/workflows/**, .gitlab-ci.yml, .vscode/tasks.json, .envrc, .capt/** require a HumanApproval binding naming that exact path digest; no trust/reviewer path clears it.",
+        "Jail profile (UPG-042) denies file-write* to the same set inside writable roots.",
+        "Test: uniq-style indirect write via terminal.exec to .git/config is denied by the jail, not only by the adapter."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'protected_path or deferred_exec'"
+      ]
+    },
+    {
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-026"
+      ],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-074",
+      "title": "Persistent-authority floor: acts that outlive the session are always human-only",
+      "tier": "P1",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "From andrewyng/openworker@e947e44 (MIT) PERSISTENT_AUTHORITY_TOOLS (OPE-117): save_skill, create/update/delete_scheduled_task are floored because the effect lands after the authorizing conversation ends. CAPT equivalent set: skill promotion, cognitive-candidate promotion, standing grants/trust rules, scheduled missions, Bot manifest revisions. Narrowing is floored with broadening (judging intent is what a floor avoids).",
+      "files": [
+        "capt_runtime/authority.py"
+      ],
+      "acceptance": [
+        "authority.py classifies these acts as human-only; governance_kernel/system/model actors are rejected at the transition boundary.",
+        "Read-only operator modes deny them outright rather than offering an approval card.",
+        "Hostile Vessel (UPG-060) case: model proposes a skill revision that only narrows scope -> still requires human."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'persistent_authority'"
+      ]
+    },
+    {
+      "creates": [
+        "capt_runtime/action_reviewer.py"
+      ],
+      "depends_on": [
+        "CAPT-UPG-064",
+        "CAPT-UPG-041",
+        "CAPT-UPG-073",
+        "CAPT-UPG-074"
+      ],
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "risk": "high",
+      "status": "open",
+      "id": "CAPT-UPG-075",
+      "title": "Friction-only action reviewer with circuit breaker (R5 4.6)",
+      "tier": "P2",
+      "kind": "novel",
+      "provenance": "P",
+      "summary": "Port the design of andrewyng/openworker@e947e44 (MIT) coworker/reviewer.py: a second model judges ONE proposed action against the human's own messages and a frozen known-world snapshot; it may turn 'ask' into 'proceed' only for the low risk tiers UPG-064 marks batchable, never 'denied' into 'proceed', and never touches floors (073/074). Fail-closed parse; one action per request; never shown untrusted content; deny reason to human, terse refusal to agent; N consecutive denies pauses the reviewer with a persisted notice. In CAPT terms the verdict is a recorded friction waiver (approvalOrigin=reviewer, model identity and prompt digest bound), NOT a HumanApproval.",
+      "files": [
+        "capt_runtime/prompt_approval.py",
+        "capt_runtime/model_approval_binding.py"
+      ],
+      "acceptance": [
+        "A reviewer verdict can never satisfy an act that requires HumanApproval; enforced in authority.py, tested.",
+        "Malformed/empty/timeout/provider-error -> 'unsure' with error=true; error-unsures do not count toward any 'reviewer is cautious' metric.",
+        "Reviewer input excludes tool results, file contents, web/mail text (asserted by prompt-assembly test).",
+        "Breaker trips after 3 consecutive denies and requires a human to re-arm.",
+        "Shadow mode first: verdicts recorded but not applied for >= 200 approvals; agreement with human decisions reported before enablement."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'action_reviewer'"
+      ]
+    },
+    {
+      "creates": [],
+      "depends_on": [],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-076",
+      "title": "Attendance modes for Bot runs: attended / parked / auto-decline",
+      "tier": "P2",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "From andrewyng/openworker@e947e44 (MIT) coworker/unattended.py + inbox.py: attendance is orthogonal to autonomy. attended = inline approvals; parked = approval requests become durable first-responder-wins items and the turn suspends (answerable from Swift app, TIA, or a messaging relay); auto = nobody will come: least-destructive fixed answers, human-only asks refused and recorded, never a hang. CAPT already has durable HumanApproval; this adds the attendance projection and the auto rules for scheduled/headless missions.",
+      "files": [
+        "capt_runtime/aggregates/human_approval.py",
+        "capt_runtime/mission_steward.py"
+      ],
+      "acceptance": [
+        "Attendance is a recorded per-mission field; changing it is an operator act.",
+        "In auto, every answer given on the absent human's behalf is an evidence record (answers-on-behalf ledger).",
+        "A parked approval resolves exactly once across surfaces (concurrency test with two resolvers)."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k attendance"
+      ]
+    },
+    {
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-061"
+      ],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-077",
+      "title": "Derived ingestion facts as the taint source (feeds UPG-061)",
+      "tier": "P2",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "OpenWorker plumbs a 'taint' flag through its board store and tools, but no code sets engine.tainted (grep at e947e44: only getattr(..., False) readers) - it is always False. What does work is session_facts: a deterministic record of which tool categories ingested outside content (web, connector, mcp) and a frozen known-world snapshot taken before the agent acts. CAPT should derive taint from ToolBroker evidence (tool effect/ingestion class + source host), never from model self-report, and include local reads of untrusted checkouts (OpenWorker excludes them and documents the poisoned-README gap).",
+      "files": [
+        "capt_runtime/tool_broker.py",
+        "capt_runtime/world_receipt.py"
+      ],
+      "acceptance": [
+        "Each run carries ingestedSources[] computed from executed ToolRequests; the model cannot set it.",
+        "Lab Board/journal events authored after ingestion are stamped tainted=true by the store, not the caller.",
+        "Known-world snapshot (roots, git remotes) is frozen at run start; a later 'git remote add' does not enter it."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'ingestion or taint'"
+      ]
+    },
+    {
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-077"
+      ],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-078",
+      "title": "Lab Board: verification gate, role-scoped targets, @mention wake semantics",
+      "tier": "P2",
+      "kind": "weak_spot",
+      "provenance": "V-code",
+      "summary": "CAPT-Bot LabBoardAggregate allows active->done and ready->done for any non-human actor without passing verifying. OpenWorker's model (andrewyng/openworker@e947e44 (MIT) teams/model.py) makes review->done the only path to done and restricts workers to {in_progress, blocked, review}; done is a lead/user verdict. Its chat store wakes only @mentioned members on agent posts (user posts wake all), keeping chat an exception channel.",
+      "files": [
+        "capt_runtime/aggregates/lab_board.py"
+      ],
+      "acceptance": [
+        "Only verifying->done is legal for non-human actors, and requires >= 1 evidenceRef produced by the verification plane.",
+        "Delegate/worker actors cannot reach done or cancel.",
+        "Agent-authored board comments wake only mentioned bots; human posts wake all."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k lab_board"
+      ]
+    },
+    {
+      "creates": [
+        "capt_runtime/board_tokens.py",
+        "capt_runtime/board_mcp.py"
+      ],
+      "depends_on": [
+        "CAPT-UPG-078",
+        "CAPT-UPG-043"
+      ],
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "risk": "medium",
+      "status": "open",
+      "id": "CAPT-UPG-079",
+      "title": "Board join tokens + board MCP server for external harnesses",
+      "tier": "P2",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "From andrewyng/openworker@e947e44 (MIT) teams/tokens.py + mcp_server.py: a token binds actor+role server-side (hash-only storage, plaintext shown once, per-token revocation); an external agent (VESPER, AXIOM, Hermes) joins the Lab Board via a stdio MCP server whose writes are judged by the store. Directly serves Kanban R2 'durable multi-actor write/claim APIs'.",
+      "files": [
+        "capt_runtime/aggregates/lab_board.py",
+        "capt_runtime/mcp.py"
+      ],
+      "acceptance": [
+        "Client never states its identity; a worker token cannot act as lead (test).",
+        "Token file leak reveals no usable credential (sha256 only).",
+        "Board MCP exposes no capability/approval/execution tools."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'board_token or board_mcp'"
+      ]
+    },
+    {
+      "creates": [
+        "capt_runtime/tools/backends/confine_macos.py",
+        "capt_runtime/tools/backends/confine_linux.py"
+      ],
+      "depends_on": [
+        "CAPT-UPG-040"
+      ],
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "risk": "high",
+      "status": "open",
+      "id": "CAPT-UPG-080",
+      "title": "Seatbelt/Landlock jail renderer (implementation input to UPG-042)",
+      "tier": "P1",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "andrewyng/openworker@e947e44 (MIT) coworker/sandbox/providers/seatbelt_profile.py renders a deny-default SBPL profile: system read, session roots rw, a private tmp, a fixed toolchain list, network only to a localhost allow-list proxy port, secret-named env vars stripped. Port the renderer for macOS (the Swift app's host) and add a Landlock (ABI v4+, kernel >= 6.7 for TCP connect rules) equivalent on Linux. Fix two gaps found in the upstream profile: (1) no deny for deferred-execution paths inside writable roots (UPG-073); (2) file-read-metadata is allowed everywhere, an existence oracle for ~/.ssh, ~/.capt. Superseded as the primary path by CAPT-UPG-085 (MXC); keep only as fallback if MXC cannot be used.",
+      "files": [
+        "capt_runtime/tools/backends/local.py"
+      ],
+      "acceptance": [
+        "sandbox-exec deprecation recorded in the ADR (deprecated since macOS 10.x man page, still shipped; also used by Chromium/Bazel); readiness reports 'confined' only after a live self-test denies a read of ~/.capt.",
+        "Network egress from confined processes only via the guardian (UPG-069) on a loopback port.",
+        "UPG-042 adversarial tests pass on macOS 14+ and Linux 6.7+; older kernels report 'unconfined' and consequential leases refuse."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'confine or jail'"
+      ]
+    },
+    {
+      "creates": [
+        "capt_runtime/net_guard.py"
+      ],
+      "depends_on": [
+        "CAPT-UPG-069"
+      ],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-081",
+      "title": "One SSRF guard for every host-side fetch (media URLs, provider endpoints, guardian)",
+      "tier": "P1",
+      "kind": "weak_spot",
+      "provenance": "V-code",
+      "summary": "Private-range checks exist separately in inversion_guardian, provider_endpoint, media_adapter_contract and ssh backend. Consolidate into one module modelled on andrewyng/openworker@e947e44 (MIT) coworker/web/guard.py: vet every redirect hop, pin the connection to the vetted address (Host/SNI keep the name) to close DNS rebinding, judge embedded IPv4 (UPG-069), refuse any answer set containing a blocked address.",
+      "files": [
+        "capt_runtime/provider_endpoint.py",
+        "capt_runtime/media_adapter_contract.py",
+        "capt_runtime/tools/backends/inversion_guardian.py"
+      ],
+      "acceptance": [
+        "All four call sites import net_guard; a grep test forbids new ipaddress private-range logic elsewhere.",
+        "Redirect-to-loopback and rebinding (TTL 0 flip) tests fail closed.",
+        "guardian keeps a stdlib-only copy generated from net_guard with a digest check (it runs via python3 -c in the image)."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'net_guard or ssrf'"
+      ]
+    },
+    {
+      "creates": [
+        "capt_runtime/atif_export.py"
+      ],
+      "depends_on": [
+        "CAPT-UPG-066"
+      ],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-082",
+      "title": "ATIF trajectory export from the flight recorder",
+      "tier": "P3",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "andrewyng/openworker@e947e44 (MIT) headless/trajectory.py maps runs to ATIF v1.7 (Agent Trajectory Interchange Format) so third-party eval tooling can read them. CAPT's .capt-flight bundle is richer but proprietary; an ATIF view makes CAPT runs consumable by external benchmarks and makes UPG-066 regression evals portable.",
+      "files": [
+        "capt_runtime/flight_recorder.py"
+      ],
+      "acceptance": [
+        "Export validates against ATIF v1.7 rules (sequential steps, observation source_call_id in same step, metrics only on agent steps with llm_call_count>0).",
+        "Export is a read-only projection; it never carries secrets or raw evidence marked sensitive.",
+        "Provenance note: confirm the ATIF spec source and version before implementation (not verified in this review)."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k atif"
+      ]
+    },
+    {
+      "creates": [],
+      "depends_on": [],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-083",
+      "title": "Reasoning effort: nearest-rank mapping with recorded requested/effective",
+      "tier": "P3",
+      "kind": "upgrade",
+      "provenance": "V-code",
+      "summary": "capt_runtime/reasoning.py maps legacy 'max' to 'xhigh' silently and raises for unsupported providers. andrewyng/openworker@e947e44 (MIT) providers/effort.py maps to the nearest accepted level by rank (ties up), records {requested, effective, param, note} on every reply, and falls back once per model per run when an endpoint rejects the parameter. Keep CAPT's fail-closed default; add the recorded mapping so run provenance states the effort actually sent (R5 section 8: provider configuration bound into provenance).",
+      "files": [
+        "capt_runtime/reasoning.py",
+        "capt_runtime/drivers/provider.py"
+      ],
+      "acceptance": [
+        "Every provider call records requested and effective effort in run provenance.",
+        "Lossy mappings (max->xhigh) are recorded, never silent."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k reasoning"
+      ]
+    },
+    {
+      "creates": [],
+      "depends_on": [],
+      "needs_adr": false,
+      "owner_role": "operator",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-084",
+      "title": "Coordinated disclosure to OpenWorker: four read-only/sandbox findings",
+      "tier": "P2",
+      "kind": "novel",
+      "provenance": "V",
+      "summary": "Report to security@openworker.com per their SECURITY.md (in scope: 'bypasses of the human-only floors or approval gates'): (1) readonly.py admits 'uniq IN OUT' (writes OUT; can overwrite in-root .git/config or an existing executable hook) and (2) 'actionlint -shellcheck=PATH' (exec); (3) _GIT_SAFE status/diff/log -p/show/blame/grep execute repo-configured programs; (4) seatbelt profile has no deny for .git/hooks etc. inside writable roots. Credit-bearing public signal for the Fellows/red-team narrative; also validates CAPT's fixes against upstream review.",
+      "files": [
+        "capt_runtime/tools/readonly_argv.py"
+      ],
+      "evidence": "Reproduced 2026-10-17 against e947e44: is_readonly_command() True for 'uniq in.txt out.txt' (targets in-root) and 'actionlint -shellcheck=/tmp/x/evil' (targets []); hostile repo with core.fsmonitor/filter.clean/diff.external/diff.textconv/core.hooksPath executes stubs for all six git verbs (git 2.43.0).",
+      "acceptance": [
+        "Report sent with PoCs and the CAPT hardening as a suggested fix; disclosure window agreed.",
+        "Public write-up only after their fix ships."
+      ],
+      "verification": [
+        "manual: operator confirms acknowledgement email"
+      ]
+    },
+    {
+      "creates": [
+        "capt_runtime/tools/backends/mxc.py",
+        "docs/architecture/decisions/ADR-0131-mxc-confinement.md"
+      ],
+      "depends_on": [
+        "CAPT-UPG-040"
+      ],
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "risk": "high",
+      "status": "open",
+      "id": "CAPT-UPG-085",
+      "title": "Adopt MXC containment-policy 1.0.0 as the jail contract (supersedes hand-rolled renderers)",
+      "tier": "P1",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "microsoft/mxc (MIT) ships a versioned, closed JSON containment policy (filesystem read/rw/denied, directional network with hostLoopback default deny, UI) with Seatbelt (macOS), Bubblewrap/LXC (Linux) and ProcessContainer (Windows) backends, and a standalone executor (`mxc-exec-mac config.json`, `--dry-run`). Its key property: a schema-valid request is REJECTED when the selected backend cannot enforce it, never silently weakened. Use MXC as UPG-042's mechanism instead of maintaining CAPT's own SBPL/Landlock renderers; UPG-080 becomes the fallback path only if MXC is unavailable.",
+      "files": [
+        "capt_runtime/tools/backends/local.py",
+        "capt_runtime/drivers/hermes.py"
+      ],
+      "acceptance": [
+        "CAPT emits MXC request JSON with exact `version: \"1.0.0\"`; an unregistered version fails closed.",
+        "ToolRegistry readiness reports per-property enforcement (fs, egress, ingress, hostLoopback, ui) from a dry-run, not from configuration.",
+        "~/.capt, the runtime socket, ssh-agent/gpg-agent/docker sockets are in deniedPaths: MXC Seatbelt governs AF_UNIX connect() through filesystem write grants, so a broad readwrite root is a control-plane grant.",
+        "Network: egress allowed only to the guardian's loopback port; hostLoopback explicitly configured (MXC documents that `localhost` covers every host-bound address, LAN included).",
+        "Pinned executor binary by sha256; mxc release version recorded in run provenance.",
+        "Adversarial tests from UPG-042 pass through the MXC path on macOS 14+ and Linux."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'mxc or confine or jail'"
+      ]
+    },
+    {
+      "creates": [
+        "capt_runtime/confinement_learning.py"
+      ],
+      "depends_on": [
+        "CAPT-UPG-085"
+      ],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "medium",
+      "status": "open",
+      "id": "CAPT-UPG-086",
+      "title": "Confinement learning mode: deny-and-record to a policy proposal",
+      "tier": "P2",
+      "kind": "novel",
+      "provenance": "P",
+      "summary": "MXC separates `learningModeLogging` (accesses stay denied, each denial recorded) from `permissiveLearningMode` (allow-all audit, returned as a security warning to the caller, never printed into the embedding terminal). For CAPT: a dev-only deny-and-record run produces a least-privilege policy PROPOSAL that becomes a HumanApproval binding; permissive mode is never available to model-originated runs.",
+      "files": [
+        "capt_runtime/prompt_proposals.py"
+      ],
+      "acceptance": [
+        "Learning runs keep enforcement; the output is a diff against the current policy, rendered for approval (UPG-064).",
+        "Permissive audit can only be started by a human actor and is recorded as a security warning event."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'learning_mode'"
+      ]
+    },
+    {
+      "creates": [
+        "capt_runtime/verification_panel.py"
+      ],
+      "depends_on": [
+        "CAPT-UPG-067"
+      ],
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "risk": "medium",
+      "status": "open",
+      "id": "CAPT-UPG-087",
+      "title": "Refutation-lens verification panel with code-computed tally",
+      "tier": "P1",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "claude-security verifies every candidate finding with exactly three independent voters, one refutation lens each; the 2-of-3 arithmetic runs outside every model; the panel may LOWER severity, never raise it; a vote whose reasoning does not cite file:line is untrusted; the report's verification status is stamped by a renderer from the vote record, and a hand-assembled report 'claims a verification that never ran'. Adopt as the default shape of CAPT's verification plane for model-produced claims (Council outputs, Bot claims, security findings).",
+      "files": [
+        "capt_runtime/verification.py",
+        "capt_runtime/council.py"
+      ],
+      "acceptance": [
+        "Panel size, lenses and threshold are versioned policy; the tally is a pure function over recorded votes.",
+        "Severity monotonicity: panel output severity <= claimed severity (property test).",
+        "A claim's verification status can only be written by the tally function (authority rule test).",
+        "Voters run with read-only capability and different model families where available."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'verification_panel'"
+      ]
+    },
+    {
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-087"
+      ],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-088",
+      "title": "Coverage ledger for negative claims ('clean' requires completeness=checked)",
+      "tier": "P1",
+      "kind": "weak_spot",
+      "provenance": "V-code",
+      "summary": "claude-security distinguishes 'covered and clean' from 'not examined': completenessCheckOutcome is checked|partial|not-checkable, every unaccounted top-level directory and every worker that did not return is named with its recorded reason. CAPT claims such as 'no secrets', 'tests pass', 'no regression' currently carry no coverage object. This is the structural fix for the recurring 'verification outpaces mechanism' pattern (test runners that skip files, suites that test the wrong tree).",
+      "files": [
+        "capt_runtime/verification.py"
+      ],
+      "acceptance": [
+        "Any negative claim (absence of X) must carry a coverage object; without it the claim is stored as 'not-examined', never 'verified'.",
+        "Lost workers/drivers are enumerated with reasons in the receipt.",
+        "Regression test: a verification run over a partially read tree cannot produce a verified-clean claim."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'coverage_ledger or negative_claim'"
+      ]
+    },
+    {
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-072"
+      ],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-089",
+      "title": "Verbatim residue for any bounded or compacted context",
+      "tier": "P1",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "ai-memory (#1215, benchmarked 2026-10-15) appends a bounded zero-LLM block of literal tokens mined by regex from exactly the text a projection dropped: error lines, paths, URLs, error codes, HTTP statuses, versions. Head+tail bounding (UPG-072) loses the middle; residue keeps its load-bearing literals. Byte-identical prompt when off.",
+      "files": [
+        "capt_runtime/drivers/provider.py"
+      ],
+      "acceptance": [
+        "Residue is computed only from omitted bytes, de-duplicated, capped, and deterministic (cache-stable).",
+        "Fixture: a 500 KB log whose only failing assertion sits in the middle still surfaces that assertion line to the model."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'residue'"
+      ]
+    },
+    {
+      "creates": [
+        "capt_runtime/sanitized.py"
+      ],
+      "depends_on": [
+        "CAPT-UPG-054"
+      ],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-090",
+      "title": "Typed Sanitized boundary for everything persisted from tools and models",
+      "tier": "P1",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "ai-memory invariant #6: `Sanitized<NewObservation>` has no constructor other than `sanitize()`, and the server re-scrubs what the client already scrubbed. Python equivalent: a frozen `Sanitized` wrapper produced only by scrub(), and EventStore payload fields typed to accept only it for tool output, model text and driver observations. Converts UPG-054's 'mandatory scrub()' from convention into a type error.",
+      "files": [
+        "capt_runtime/store.py",
+        "capt_runtime/ingestion.py"
+      ],
+      "acceptance": [
+        "mypy --strict fails if an unsanitized str reaches the persisted-observation API.",
+        "Runtime check rejects plain str at the store boundary (defense against untyped callers).",
+        "Scrub patterns versioned; the version is recorded with each sanitized payload."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k sanitized",
+        "mypy --strict capt_runtime/sanitized.py"
+      ]
+    },
+    {
+      "creates": [],
+      "depends_on": [],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-091",
+      "title": "Cross-agent handoff: offered, never auto-claimed; claimed exactly once",
+      "tier": "P2",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "ai-memory's handoff contract: a typed baton claimed exactly once by two independent state='open' guards; after production incidents (an unrelated session silently consumed a handoff) they moved to OFFER mode at session start. For CAPT: VESPER/AXIOM/Hermes continuation is offered with the continuation-context pack; claiming is an explicit act bound to the Dispatch that accepts it.",
+      "files": [
+        "capt_runtime/continuation_context.py",
+        "capt_runtime/mission_steward.py"
+      ],
+      "acceptance": [
+        "Concurrency test: two claimants, exactly one wins, loser gets a typed 'already claimed by <dispatch>' result.",
+        "Non-interactive or unrelated sessions never claim implicitly."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k handoff"
+      ]
+    },
+    {
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-026"
+      ],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-092",
+      "title": "Executable eval gate before any learned artifact is promoted",
+      "tier": "P2",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "ai-memory's auto-improve eval gate: an operator-configured scorer (argv, no shell) receives {before_body, after_body, expected_base_body_sha256, kind, confidence} on stdin and must clear min_delta before staging. Its rules-promotion design adds a budget: promoted always-loaded rules compete for ~100 usable instruction lines, so each must pass 'would removing this cause a mistake?'. Apply to CAPT Skill Workshop and cognitive-candidate promotion.",
+      "files": [
+        "capt_runtime/aggregates/skill_candidate.py",
+        "capt_runtime/aggregates/cognitive_candidate.py"
+      ],
+      "acceptance": [
+        "Promotion requires a recorded scorer result bound to the before/after digests; base drift refuses.",
+        "Always-loaded rule count has a configured ceiling; exceeding it requires demoting another rule."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'promotion and eval'"
+      ]
+    },
+    {
+      "creates": [],
+      "depends_on": [],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-093",
+      "title": "Access-weighted memory aging and LLM-free tier-down",
+      "tier": "P3",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "ai-memory decay: retention = salience*exp(-lambda*age) + sigma*ln(1+access)*exp(-mu*since_access)*breadth (defaults lambda=0.02 ~35-day half-life, sigma=0.6, mu=0.04, cold 0.20); cold episodic notes are compacted to durable facts (paths, error codes, decisions) by a regex miner, not dropped. Every ranking-affecting change is gated on a recall eval before default-on.",
+      "files": [
+        "capt_runtime/memory/governor.py",
+        "capt_runtime/memory/policy.py"
+      ],
+      "acceptance": [
+        "Retention is a pure function with property tests (monotone in age, non-decreasing in access).",
+        "Tier-down preserves every literal token class from UPG-089's miner.",
+        "Default stays off until a recall eval on CAPT's own memory shows no regression."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'memory and decay'"
+      ]
+    },
+    {
+      "creates": [
+        "capt_runtime/context_folds.py"
+      ],
+      "depends_on": [
+        "CAPT-UPG-072",
+        "CAPT-UPG-089"
+      ],
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "risk": "medium",
+      "status": "open",
+      "id": "CAPT-UPG-094",
+      "title": "Model-driven reversible compression with ledger-backed decompress",
+      "tier": "P2",
+      "kind": "novel",
+      "provenance": "P",
+      "summary": "billion-context injects compress/decompress/search_context/status tools so the model folds consumed message ranges into summaries itself, incrementally and prefix-cache-friendly; its paper reports 4.5 months, 174,327 calls, zero window violations on 204,800-token models (self-reported, tagged [V] in their claims register). In CAPT, reversibility is free: the ledger holds the original, so decompress is a governed re-selection, and summaries are labeled unverified model output that can never become claim evidence.",
+      "files": [
+        "capt_runtime/continuation_context.py",
+        "capt_runtime/drivers/provider.py"
+      ],
+      "acceptance": [
+        "A fold records (range digest, summary digest, model id); decompress restores byte-identical originals from the ledger.",
+        "Folded summaries are excluded from ClaimGuard evidence selection (test).",
+        "Prefix-cache hit rate is measured per run, not assumed."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'context_fold'"
+      ]
+    },
+    {
+      "creates": [],
+      "depends_on": [],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-095",
+      "title": "Coverage-conditioned savings and benefit accounting",
+      "tier": "P3",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "billion-context found its savings counter reported 355M tokens saved while the substrate it credited had been destroyed by a host (#2193); the fix scales accrual by measured coverage (1 / f / 0) at the claim site. Any CAPT metric that claims a benefit (resource_governor savings, cache economics, 'tokens saved' in receipts) should accrue only while evidence of the benefit exists.",
+      "files": [
+        "capt_runtime/resource_governor.py"
+      ],
+      "acceptance": [
+        "Every benefit counter names its evidence predicate; when the predicate is false, accrual is frozen and the receipt says so."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'resource_governor'"
+      ]
+    },
+    {
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-090"
+      ],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-096",
+      "title": "Definition-owned audit/privacy policy on every tool descriptor",
+      "tier": "P1",
+      "kind": "weak_spot",
+      "provenance": "V-code",
+      "summary": "WebCodex makes ToolDefinition the only place audit/privacy policy is declared: unknown tools or projections fail closed to an EMPTY audit object (raw arguments are never the fallback), the registry rejects a definition without a policy at construction, and audit output never feeds authorization. CAPT's ToolRegistry descriptors carry operationEffects but no evidence/audit projection policy.",
+      "files": [
+        "capt_runtime/tools/registry.py",
+        "capt_runtime/tools/builtins.py"
+      ],
+      "acceptance": [
+        "Descriptor schema gains a required auditPolicy; registration without it raises.",
+        "Evidence persistence uses the declared projection; unknown -> empty, logged with a stable code.",
+        "Grep test: no authority path imports the audit projector."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'audit_policy'"
+      ]
+    },
+    {
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-072"
+      ],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-097",
+      "title": "Model-facing tool result projection: decision-complete, internals off the model surface",
+      "tier": "P2",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "WebCodex rule: strict where meaning, authority, identity, retry safety, privacy or effect truth changes; tolerant where a parameter only shapes presentation. Failures are structured and decision-complete with one parser-ready next {tool, arguments} when provable; lifecycle bookkeeping, cursors and forensic fields stay inside the runtime. This is R5 4.10 (answer vs receipt) applied to the model. XERJ's measurement adds why: token cost = envelope + answer + materialized intermediate data, and the last term dominates.",
+      "files": [
+        "capt_runtime/model_tool_bridge.py"
+      ],
+      "acceptance": [
+        "ToolResult has a model projection distinct from the receipt; a size test caps envelope overhead.",
+        "Every failure projection names the decisive reason and, where safe, the next valid call."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'model_projection'"
+      ]
+    },
+    {
+      "creates": [
+        "capt_boundaries.toml",
+        "tests/test_import_boundaries.py"
+      ],
+      "depends_on": [],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-098",
+      "title": "Enforced ownership layers: Bot may import only declared Core seams",
+      "tier": "P1",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "WebCodex's workspace-boundaries.toml declares layers (leaf..entrypoint) and forbidden dependencies per package, enforced by test. CAPT-Bot R5 requires Bot code to reach Core only through the minimal extension seam and never create a second RuntimeService/EventStore/ToolBroker; today that is prose. Encode it.",
+      "files": [
+        "tests"
+      ],
+      "acceptance": [
+        "AST-based test fails if capt_bot imports a Core module outside the seam allowlist.",
+        "Test fails if any module outside Core constructs RuntimeService, EventStore or ToolBroker."
+      ],
+      "verification": [
+        "python -m pytest -q tests/test_import_boundaries.py"
+      ]
+    },
+    {
+      "creates": [
+        "capt_runtime/worktree_snapshot.py"
+      ],
+      "depends_on": [
+        "CAPT-UPG-065",
+        "CAPT-UPG-071"
+      ],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "medium",
+      "status": "open",
+      "id": "CAPT-UPG-099",
+      "title": "Shadow-git content-addressed snapshots around every file effect",
+      "tier": "P1",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "opencode's Snapshot service captures the worktree as a content-addressed git tree in a SEPARATE git directory under its data dir (seeded from the project), then lists changed paths, diffs and restores individual files between captures without touching the user's repository. For CAPT: before/after tree ids in every file-effect world receipt give exact reversal handles and drift detection for UPG-065. Must run git with readonly_argv's hardening (the shadow repo has its own config, but the worktree's .gitattributes still names filter drivers).",
+      "files": [
+        "capt_runtime/world_receipt.py",
+        "capt_runtime/tools/adapters/file.py"
+      ],
+      "acceptance": [
+        "Each consequential file effect records beforeTree/afterTree ids; restore of one path is byte-exact.",
+        "The shadow repo never writes into the project's .git; hostile-repo test executes nothing."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'worktree_snapshot'"
+      ]
+    },
+    {
+      "creates": [
+        "capt_runtime/code_mode.py"
+      ],
+      "depends_on": [
+        "CAPT-UPG-097"
+      ],
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "risk": "medium",
+      "status": "open",
+      "id": "CAPT-UPG-100",
+      "title": "Governed code mode: one model program, every call a ToolRequest",
+      "tier": "P2",
+      "kind": "novel",
+      "provenance": "P",
+      "summary": "opencode's @opencode/codemode is a pure interpreter for a JS-like language with no ambient authority: no network, fs, processes, timers or imports; programs reach the world only through host tools, under limits (MAX_STRING_LENGTH 2^24, MAX_ARRAY_LENGTH 1e7, MAX_PENDING_PROMISES 1e4, MAX_VALUE_DEPTH 32) and unfinished work is interrupted at program end. In CAPT each host tool call becomes a ToolBroker request, so a model can batch many governed reads in one turn without any new authority path.",
+      "files": [
+        "capt_runtime/model_tool_bridge.py"
+      ],
+      "acceptance": [
+        "Interpreter has no capability beyond the tool table (escape tests: import, eval, constructor chains).",
+        "Each tool call inside a program yields its own ToolRequest, receipt and budget debit.",
+        "Consequential calls inside a program still require their own approval bindings."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k code_mode"
+      ]
+    },
+    {
+      "creates": [
+        "capt_runtime/cloud_lease.py"
+      ],
+      "depends_on": [
+        "CAPT-UPG-028"
+      ],
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "risk": "high",
+      "status": "open",
+      "id": "CAPT-UPG-101",
+      "title": "Object-store writer lease + epoch fence for CAPT on Cloud Run",
+      "tier": "P1",
+      "kind": "weak_spot",
+      "provenance": "V-code",
+      "summary": "CAPT's single-writer guarantee is a local flock on runtime.lock (desktop/capt_runtime_service.py), which means nothing across Cloud Run instances. HydraDB's design (ideas only; AGPL code is not to be copied): a durable lease object acquired and renewed by conditional update (GCS ifGenerationMatch), expiry judged by the object store's clock rather than a fresh local TTL, and a writer epoch checked at commit so a stale writer cannot append. Also adopt its rule that an exceeded result/work budget fails explicitly instead of returning unmarked partial data.",
+      "files": [
+        "capt_runtime/store.py",
+        "desktop/capt_runtime_service.py"
+      ],
+      "acceptance": [
+        "Two instances racing: exactly one holds the lease; the other refuses mutations with a typed NotWriter.",
+        "Paused-writer test: a writer whose lease expired during a pause cannot commit after resuming (epoch fence).",
+        "Cloud Run service configured max-instances=1 until this lands; the ADR records that as the interim control."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'cloud_lease or epoch_fence'"
+      ]
+    },
+    {
+      "creates": [
+        "capt_runtime/remote_commands.py"
+      ],
+      "depends_on": [
+        "CAPT-UPG-043"
+      ],
+      "needs_adr": true,
+      "owner_role": "implementer",
+      "risk": "medium",
+      "status": "open",
+      "id": "CAPT-UPG-102",
+      "title": "Durable remote command plane (steer/interrupt from phone or second device)",
+      "tier": "P2",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "zeron: send/steer/interrupt are durable command entries appended per device and executed only by the chat's host engine, marked processed BEFORE execute (at-most-once), queued while offline, relayed through Cloudflare Durable Objects; AuthState (live) is separate from WorkspaceScope (immutable at engine start). It also states plainly that hiding files in a UI is not a security control. Fits CAPT-Bot's existing Cloudflare R3/R4 work: the DO is a relay, the local EventStore stays the authority.",
+      "files": [
+        "capt_runtime/aggregates/human_approval.py"
+      ],
+      "acceptance": [
+        "Remote commands are proposals until the owning runtime records them; the relay holds no authority.",
+        "Replay of a delivered command is a no-op (idempotency by command id).",
+        "Approvals from a remote device still require UPG-041 presence attestation."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k remote_command"
+      ]
+    },
+    {
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-087"
+      ],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-103",
+      "title": "Dispatch = the one authoritative attempt; best-of-N worktrees judged by the verification plane",
+      "tier": "P2",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "Orca orchestration: a Run is a namespace, a Task is work, a Dispatch is ONE authoritative attempt; lifecycle authority comes from the active Dispatch, never a terminal title or copied id; 'only positive proof of exit authorizes stop, abandon, or retry', every other observation including absence is a checkpoint; every settled worker gets a next owner or cleanup decision. Its headline feature fans one prompt across N agents in N worktrees to compare and merge the winner. CAPT: model the DelegateAssignment attempt the same way and let UPG-087's panel, not a model, pick the winner.",
+      "files": [
+        "capt_runtime/aggregates/delegate_assignment.py",
+        "capt_runtime/vessel_dispatcher.py"
+      ],
+      "acceptance": [
+        "Retry of an attempt requires a recorded terminal state; 'unknown' blocks retry (R5 4.7).",
+        "Best-of-N selection is recorded with panel votes; losers are released with a cleanup event."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'dispatch_attempt or best_of_n'"
+      ]
+    },
+    {
+      "creates": [
+        "capt_runtime/active_effects.py"
+      ],
+      "depends_on": [
+        "CAPT-UPG-063",
+        "CAPT-UPG-030"
+      ],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-104",
+      "title": "Kill switch complete by construction: ActiveEffects registry with drop guards",
+      "tier": "P1",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "quiche's task-killswitch crate registers every spawned task so one call aborts all of them, with a drop guard that deregisters panicked tasks. UPG-063's global kill switch is only as good as its coverage: register every live effect (process group, sandbox lease, provider stream, MCP subprocess) at spawn so the switch cannot miss one, and make the registry the thing UPG-062 tripwires trigger.",
+      "files": [
+        "capt_runtime/tools/backends/local.py",
+        "capt_runtime/mcp.py"
+      ],
+      "acceptance": [
+        "Every effect spawn path registers before start (AST test over spawn sites).",
+        "Kill switch test: after trigger, no process in any registered pgid survives and no provider stream continues."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'kill_switch or active_effects'"
+      ]
+    },
+    {
+      "creates": [
+        "capt_runtime/tools/adapters/browser.py"
+      ],
+      "depends_on": [
+        "CAPT-UPG-085",
+        "CAPT-UPG-081"
+      ],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "medium",
+      "status": "open",
+      "id": "CAPT-UPG-105",
+      "title": "Structure-first browser tool in the sandbox; Web Bot Auth signing for Bot egress",
+      "tier": "P3",
+      "kind": "upgrade",
+      "provenance": "P",
+      "summary": "moli is a single-binary headless browser (CDP, WebDriver Classic/BiDi) that serves DOM/markdown extraction without layout or paint unless a request needs geometry or pixels, so it fits inside InversionSandbox behind the guardian. It also implements Web Bot Auth (RFC 9421 HTTP message signatures), which would let a CAPT Bot sign its outbound requests with its own key so operators (and Cloudflare, which verifies Web Bot Auth) can tell which Bot acted.",
+      "files": [
+        "capt_runtime/tools/backends/inversion_sandbox.py"
+      ],
+      "acceptance": [
+        "Browser runs only in a sandbox lease with allowlist egress; page content returns as untrusted ingestion (UPG-077).",
+        "Bot signing keys are per-Bot, held outside the sandbox, rotated, and named in receipts."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'browser_tool'"
+      ]
+    },
+    {
+      "creates": [
+        "capt_runtime/reference_intake.py"
+      ],
+      "depends_on": [
+        "CAPT-UPG-077"
+      ],
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "risk": "low",
+      "status": "open",
+      "id": "CAPT-UPG-106",
+      "title": "Reference-coding intake: quarantined, indexed OSS references with counted savings",
+      "tier": "P3",
+      "kind": "novel",
+      "provenance": "P",
+      "summary": "XERJ's main use case is 'reference coding': clone the open-source repos closest to the task, index them, and let the agent query passages instead of reading whole files; its controlled study reports 2.7x fewer output tokens at the same 16/16 solve rate (their measurement). `xerj gain` reports savings counted, not estimated. CAPT already has a secure-intake quarantine plan; this makes cherry-pick reviews like this one a governed workflow: references are read-only, provenance-pinned (repo, commit, license), and their text is untrusted ingestion. XERJ's security doc also records a lesson worth keeping: authority carried in task-local context is lost across spawned tasks, so 'absent guard means allow' must be audited at every spawn site.",
+      "files": [
+        "capt_runtime/discovery/scanner.py"
+      ],
+      "acceptance": [
+        "Each reference records repo, commit, license; GPL/AGPL/proprietary references are flagged ideas-only for code reuse.",
+        "Reference text never enters authority positions (UPG-061)."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k reference_intake"
+      ]
+    }
+  ]
+}
