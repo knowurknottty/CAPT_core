@@ -199,7 +199,12 @@ def test_runtime_registers_docker_but_default_readiness_is_truthfully_unavailabl
         assert descriptor["supportsCancellation"] is False
         readiness = runtime.tool_registry.readiness("terminal.docker")
         assert readiness["status"] == "unavailable"
-        assert "no named Docker profiles" in readiness["reason"]
+        # Environment-dependent preflight: either missing CLI or missing
+        # profiles is a truthful default-unavailable state.
+        assert readiness["reason"] in {
+            "Docker CLI unavailable",
+            "no named Docker profiles configured",
+        }
     finally:
         runtime.close()
 
