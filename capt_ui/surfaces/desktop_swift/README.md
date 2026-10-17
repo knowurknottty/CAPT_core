@@ -80,7 +80,7 @@ Implemented and exercised on macOS:
 - live RuntimeService capability inventory for queries, commands, components, and lifecycle operations;
 - bounded 4 MiB framed Unix-socket transport;
 - `script/install_local_runtime.sh` builds/installs the exact local CAPT wheel into a private venv;
-- `script/build_and_run.sh --verify` installs or refreshes that runtime when it is missing or stale relative to the current source HEAD, then stages, signs, verifies, and launches `dist/CAPT.app`.
+- `script/build_and_run.sh --verify` installs or refreshes the private runtime when missing or stale, then builds and signs **one** verified native bundle with a `CAPTSourceCommit` marker. It transactionally publishes identical signed copies to `dist/CAPT.app` and `~/Applications/CAPT.app`, and launches **only the installed** `~/Applications` copy used by TIA. Existing bundles are archived before replacement; failure restores both copies. A stable Apple Development signing identity is required by default (development-only ad-hoc signing must be explicitly opted in).
 
 The meaningful current RuntimeService operator surface is represented. Low-level
 `create_mission` and fixed OpenHarness commands remain visible in the live
@@ -108,3 +108,13 @@ Use the current Tk client (`capt_ui/surfaces/desktop/surface.py`) and
   ledger, evidence, verification, memory, context budget, driver, latency
 - Bottom status (always visible): Runtime / Connected / Healthy / Checkpoint /
   Context / Provider / Model / Memory / EventStore
+
+## Native app packaging and drift prevention
+
+From the Swift package folder, invoke `./script/build_and_run.sh --verify` for a verified install. This is not merely a `dist/` build: it publishes the exact same signed executable and source-commit marker to both `dist/CAPT.app` and `~/Applications/CAPT.app`. Only `~/Applications/CAPT.app` is launched, matching TIA's fixed signed-process identity.
+
+The installer stages and verifies the complete bundle **before** closing any running CAPT app, requests normal app quit without force killing the process, and snapshots both previous bundles under `~/.capt/app-release-backups/`. Swaps occur at their respective destination filesystem paths; on any replacement, signing, or launch failure, both old bundles are restored. RuntimeService and its ledger are not restarted by the bundle publisher. Native package source changes during the build fail closed to avoid a false `CAPTSourceCommit` claim.
+
+The existing runtime installer preflight remains in `build_and_run.sh`; it can update the private Python runtime when source HEAD differs. Do not confuse that runtime-package update with a RuntimeService restart. For a strictly UI-only build without modifying the private runtime, use the separate `swift build --product CAPTNativeMac` path, which builds an executable but **does not publish** either app.
+
+Configuration: `CAPT_CODESIGN_IDENTITY` selects an exact signing identity; absent an identity, publication stops rather than silently replacing the TIA-targeted signed app with an ad-hoc signature. Set `CAPT_ALLOW_ADHOC_SIGNING=1` explicitly only in isolated development environments, not the production TIA identity. `CAPT_APP_BACKUP_DIR` overrides the archive location. The packaging helper is `script/install_signed_bundle.py`; its tests are `tests/capt_runtime/test_native_app_packaging.py`.
