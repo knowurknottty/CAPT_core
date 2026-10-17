@@ -95,3 +95,20 @@ def test_git_inspection_uses_hardened_probe(tmp_path):
     )
     assert output["status"] == "succeeded", output
     assert output["sideEffectIdentity"] is None
+
+
+@pytest.mark.parametrize("argv", [
+    ["ls", "-LR", "."],
+    ["ls", "--dereference", "--recursive", "."],
+    ["find", "-L", ".", "-type", "f"],
+    ["grep", "-R", "secret", "."],
+    ["rg", "--follow", "secret", "."],
+    ["du", "-L", "."],
+])
+def test_recursive_symlink_follow_flags_refuse(tmp_path, argv):
+    outside = tmp_path.parent / "out-of-scope-directory"
+    outside.mkdir(exist_ok=True)
+    (outside / "secret.txt").write_text("secret")
+    (tmp_path / "link-outside").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(ReadOnlyRefused):
+        TerminalInspectToolAdapter().execute(_request(tmp_path, argv))

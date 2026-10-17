@@ -57,7 +57,7 @@ class ReadOnlyPlan:
 # verb -> denied flags. A token matches the flag exactly, as `--long=value`, or
 # (short flags) attached or inside a cluster.
 _SIMPLE: dict = {
-    "ls": (), "cat": (), "head": (), "wc": (), "nl": (), "cut": (),
+    "ls": ("-L", "-R", "--dereference", "--recursive", "--dereference-command-line", "--dereference-command-line-symlink-to-dir"), "cat": (), "head": (), "wc": (), "nl": (), "cut": (),
     "stat": (), "df": (), "pwd": (), "whoami": (), "id": (), "uname": (),
     "basename": (), "dirname": (), "realpath": (), "readlink": (),
     "which": (), "cmp": (), "comm": (), "strings": (), "od": (), "hexdump": (),
@@ -69,8 +69,8 @@ _SIMPLE: dict = {
     "xxd": ("-r",),  # operand count policed below
     "date": ("-s", "--set"),
     "file": ("-C", "--compile"),
-    "du": ("--files0-from",),
-    "grep": (), "egrep": (), "fgrep": (),
+    "du": ("--files0-from", "-L", "-H", "-D", "--dereference", "--dereference-args"),
+    "grep": ("-R", "--dereference-recursive"), "egrep": ("-R", "--dereference-recursive"), "fgrep": ("-R", "--dereference-recursive"),
     "rg": ("--pre", "--pre-glob", "-z", "--search-zip", "--hostname-bin"),
     "jq": (),
     "find": (),  # policed below
@@ -90,7 +90,7 @@ _PATH_VALUE_FLAGS = {
 _PATTERN_FIRST = {"grep", "egrep", "fgrep", "rg", "jq"}
 _NO_PATH_OPERANDS = {"pwd", "whoami", "id", "uname", "basename", "dirname", "date", "which", "df"}
 _FIND_DENY = (
-    "-exec", "-execdir", "-ok", "-okdir", "-delete",
+    "-exec", "-execdir", "-ok", "-okdir", "-delete", "-L", "-H",
     "-fprint", "-fprint0", "-fprintf", "-fls",
 )
 _FIND_GLOBAL = {"-H", "-L", "-P", "-O0", "-O1", "-O2", "-O3"}

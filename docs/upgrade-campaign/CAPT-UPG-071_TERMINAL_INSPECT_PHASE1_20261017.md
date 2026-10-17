@@ -23,10 +23,10 @@ authority boundary; rejected commands fail before process dispatch.
   terminal.exec and cannot satisfy HumanApproval.
 
 ## Evidence
-- Ten new adapter tests including real /bin/cat, real Git status and
-  refusals for shells, write-argv and outside-scope files.
+- Sixteen new adapter tests including real /bin/cat, real Git status and
+  refusals for shells, writes, symlink-following recursive options and outside-scope files.
 - Full selected readonly-argv, authenticated RuntimeCommandService
-  tool-wiring and adapter suite: 84 passed.
+  tool-wiring and adapter suite: 90 passed.
 - Focused Ruff correctness/import lint: passed.
 
 ## Remaining release prerequisites
@@ -36,3 +36,12 @@ binaries, TOCTOU symlink swaps, distributed filesystem providers and
 process-level side effects require independent threat review and tests.
 No broad unattended use or automatic approval for production until
 those gates and full GitHub security/contract suites are green.
+
+## Post-review symlink traversal hardening
+Six negative-first tests verified that ls -LR, find -L, grep -R and du -L
+could follow symlinks into outside directories despite initial operand scope
+checks. Those flags now refuse in the canonical readonly_argv admission
+policy. Ordinary grep -r remains accepted because it does not follow
+symlinks encountered while recursively traversing directories. The
+expanded tests are 90/90 green; this remains a defence in depth and
+not a kernel-enforced filesystem jail.
