@@ -530,7 +530,7 @@ class RuntimeService(object):
 
     def mission_disposition_preview(self, mission_id: str, target: str) -> Dict[str, Any]:
         """Read-only review bound to the exact states that would be mutated."""
-        if target not in ("authorize", "cancel", "complete", "reconcile_complete"):
+        if target not in ("authorize", "cancel", "cancel_revoke", "complete", "reconcile_complete"):
             raise AuthorityViolation("MISSION_DISPOSITION_INVALID")
         mission_stream = MissionAggregate.stream_id(mission_id)
         mission = self.store.require_state(mission_stream)
@@ -560,7 +560,7 @@ class RuntimeService(object):
             blockers.append("MISSION_ALREADY_TERMINAL")
         if target == "authorize" and mission["state"] != "draft":
             blockers.append("MISSION_NOT_DRAFT")
-        if target == "cancel" and mission["state"] not in (
+        if target in ("cancel", "cancel_revoke") and mission["state"] not in (
             "draft", "authorized", "executing", "suspended"
         ):
             blockers.append("MISSION_CANCEL_STATE_INVALID")
@@ -578,15 +578,22 @@ class RuntimeService(object):
                 blockers.append("CLAIMGUARD_ACCEPTED_SUCCESSOR_REQUIRED")
             if any(state in ("requested", "approved") for _, state, _ in approvals):
                 blockers.append("UNSETTLED_APPROVALS")
-        if target in ("cancel", "complete", "reconcile_complete"):
+        if target in ("cancel", "cancel_revoke", "complete", "reconcile_complete"):
             if any(state in ("created", "submitted", "running") for _, state, _, _ in runs):
                 blockers.append("ACTIVE_DRIVER_RUN")
-            if target == "cancel" and any(
+            if target in ("cancel", "cancel_revoke") and any(
                 status == "reconciliation_required" for _, _, _, status in runs
             ):
                 blockers.append("INDETERMINATE_RUN_RECONCILIATION_REQUIRED")
             if target == "cancel" and any(state == "approved" for _, state, _ in approvals):
                 blockers.append("APPROVED_AUTHORITY_REQUIRES_REVOCATION")
+        if target == "cancel_revoke":
+            for request_id, state, _ in approvals:
+                if state != "approved":
+                    continue
+                approval = self.store.require_state(HumanApprovalAggregate.stream_id(request_id))
+                if approval.get("externalCommitments"):
+                    blockers.append("EXTERNAL_COMMITMENTS_RECONCILIATION_REQUIRED")
         subject = {
             "missionId": mission_id, "version": version,
             "state": mission["state"], "target": target,
@@ -602,6 +609,8 @@ class RuntimeService(object):
             "driverRuns": [{"driverRunId": rid, "state": state, "version": v,
                             "reconciliationStatus": rs} for rid, state, v, rs in runs],
             "acceptedClaimCount": len(accepted),
+            "approvedRevocationCount": sum(state == "approved" for _, state, _ in approvals)
+                if target == "cancel_revoke" else 0,
             "historyPolicy": "append_only",
         }
 
@@ -628,7 +637,7 @@ class RuntimeService(object):
         prior_state = self.store.require_state(stream)
         target_state = {
             "authorize": "authorized", "cancel": "cancelled",
-            "complete": "completed", "reconcile_complete": "completed",
+            "cancel_revoke": "cancelled", "complete": "completed", "reconcile_complete": "completed",
         }[target]
         if target == "reconcile_complete":
             # Historical, verified provider results may be terminal while the
@@ -652,7 +661,7 @@ class RuntimeService(object):
                 mission_id=mission_id, task_id=task_id,
             )
             appends.append(AppendRequest(stream_id, kind, prior_version, event, state))
-        if target == "cancel":
+        if target in ("cancel", "cancel_revoke"):
             for task in preview["tasks"]:
                 if task["state"] in ("succeeded", "failed", "cancelled"):
                     continue
@@ -665,6 +674,23 @@ class RuntimeService(object):
                            "fromState": task["state"], "toState": "cancelled", "reason": reason},
                           task_id=task_id)
             for approval in preview["approvals"]:
+                if approval["state"] == "approved" and target == "cancel_revoke":
+                    request_id = approval["requestId"]
+                    approval_stream = HumanApprovalAggregate.stream_id(request_id)
+                    current = self.store.require_state(approval_stream)
+                    revocation = {
+                        "requestId": request_id,
+                        "operatorId": metadata["actor"]["actorId"],
+                        "revokedAt": metadata["issuedAt"],
+                        "reason": reason,
+                    }
+                    state = HumanApprovalAggregate.revoke(current, revocation)
+                    add_event(approval_stream, HumanApprovalAggregate.KIND,
+                              self.store.aggregate_version(approval_stream), state,
+                              "HumanApprovalRevoked",
+                              {"eventType": "HumanApprovalRevoked", "revocation": revocation},
+                              current["taskId"])
+                    continue
                 if approval["state"] != "requested":
                     continue
                 request_id = approval["requestId"]

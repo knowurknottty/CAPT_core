@@ -75,6 +75,56 @@ def _ip_values(values: list[str] | tuple[str, ...]) -> tuple[ipaddress._BaseAddr
     return tuple(out)
 
 
+# Immutable deny floor, applied in every mode IN ADDITION to the profile's
+# platformDeny. It is not part of the canonical policy (so profile/lease digests
+# are unchanged) and a profile cannot narrow it. These ranges are reachable only
+# because of the guardian's network position (host loopback, cloud metadata,
+# the operator's LAN, carrier NAT, fake-IP DNS resolvers).
+_BUILTIN_DENY = tuple(
+    ipaddress.ip_network(value)
+    for value in (
+        "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8",
+        "169.254.0.0/16", "172.16.0.0/12", "192.0.0.0/24", "192.168.0.0/16",
+        "198.18.0.0/15", "224.0.0.0/4", "240.0.0.0/4",
+        "::/96",  # unspecified, loopback and deprecated IPv4-compatible ::a.b.c.d
+        "fc00::/7", "fe80::/10", "fec0::/10", "ff00::/8",
+        "64:ff9b:1::/48",  # RFC 8215 local-use NAT64: embedding is site-defined
+    )
+)
+_NAT64_WELL_KNOWN = ipaddress.ip_network("64:ff9b::/96")  # RFC 6052
+
+
+def _effective_addresses(
+    ip: ipaddress._BaseAddress,
+) -> tuple[ipaddress._BaseAddress, ...]:
+    """The address plus every IPv4 address it can deliver traffic to.
+
+    An AAAA answer of ``::ffff:169.254.169.254`` is connected over IPv4 by a
+    dual-stack socket, so it must be judged as 169.254.169.254. Same for NAT64
+    (RFC 6052 well-known prefix), 6to4 (2002::/16) and Teredo (2001::/32).
+    Version-mismatched CIDR rules otherwise skip these silently.
+    """
+    out: list[ipaddress._BaseAddress] = [ip]
+    if isinstance(ip, ipaddress.IPv6Address):
+        if ip.ipv4_mapped is not None:
+            out.append(ip.ipv4_mapped)
+        if ip.sixtofour is not None:
+            out.append(ip.sixtofour)
+        if ip.teredo is not None:
+            out.extend(ip.teredo)
+        if ip in _NAT64_WELL_KNOWN:
+            out.append(ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF))
+    return tuple(out)
+
+
+def _builtin_denied(ips: tuple[ipaddress._BaseAddress, ...]) -> bool:
+    for ip in ips:
+        for address in _effective_addresses(ip):
+            if any(address.version == net.version and address in net for net in _BUILTIN_DENY):
+                return True
+    return False
+
+
 def _rule_matches_host_or_ips(
     rule: str, host: str, ips: tuple[ipaddress._BaseAddress, ...]
 ) -> bool:
@@ -104,7 +154,12 @@ def destination_allowed(
         return False
     if mode not in {"none", "allowlist", "unrestricted"}:
         return False
-    if any(_rule_matches_host_or_ips(rule, normalized_host, ips) for rule in deny):
+    if _builtin_denied(ips):
+        return False
+    # Profile deny rules are judged against embedded IPv4 too (::ffff:10.0.0.5
+    # must hit a 10.0.0.0/8 rule).
+    expanded = tuple(address for ip in ips for address in _effective_addresses(ip))
+    if any(_rule_matches_host_or_ips(rule, normalized_host, expanded) for rule in deny):
         return False
     if mode == "none":
         return False

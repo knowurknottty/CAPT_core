@@ -199,6 +199,8 @@ def _apply(state: ReplayState, envelope: Dict[str, Any]) -> None:
         nxt = HumanApprovalAggregate.decide(
             existing(), decision, decision.get("decidedAt") or envelope.get("occurredAt", "")
         )
+    elif event_type == "HumanApprovalRevoked":
+        nxt = HumanApprovalAggregate.revoke(existing(), payload["revocation"])
     elif event_type == "HumanApprovalConsumed":
         consumption = payload["consumption"]
         nxt = HumanApprovalAggregate.consume(

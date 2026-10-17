@@ -15,6 +15,7 @@ from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Set, Union
 
 from .contracts import canonical_json
 from .errors import IntegrityViolation
+from .secret_patterns import redact_credential_shapes
 from .store import EventStore
 
 FLIGHT_SCHEMA_VERSION = "1.0.0"
@@ -82,7 +83,7 @@ def redact(
             for secret in sorted(values, key=len, reverse=True):
                 if secret and secret in replaced:
                     replaced = replaced.replace(secret, _REDACTED)
-            return replaced
+            return redact_credential_shapes(replaced, marker=_REDACTED)
         return node
 
     return walk(value)
