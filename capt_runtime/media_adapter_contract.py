@@ -7,10 +7,12 @@ before any upload, polling, or download occurs.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 import ipaddress
 import re
+from dataclasses import dataclass
 from urllib.parse import urlsplit
+
+from capt_runtime.tools.backends.inversion_guardian import _effective_addresses
 
 _ALLOWED_OPERATIONS = frozenset({
     "image_input", "audio_input", "video_input", "file_input", "document_input",
@@ -49,7 +51,10 @@ def _trusted_origin(url: str, *, allow_loopback: bool = False) -> str:
             if not allow_loopback:
                 raise ValueError("MEDIA_ENDPOINT_LOCALHOST_NOT_ALLOWED")
     else:
-        if not ip.is_global and not (allow_loopback and ip.is_loopback):
+        if not all(
+            candidate.is_global or (allow_loopback and candidate.is_loopback)
+            for candidate in _effective_addresses(ip)
+        ):
             raise ValueError("MEDIA_ENDPOINT_PRIVATE_IP_FORBIDDEN")
     return parsed.netloc.lower()
 
