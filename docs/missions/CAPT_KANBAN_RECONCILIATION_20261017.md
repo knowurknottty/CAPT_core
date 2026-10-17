@@ -44,3 +44,21 @@ Two new tasks were awaiting verification without accepted claims at the UI revie
 - Successful installed production build under exclusive runtime lock and CAPT stop/start, with pre-release database backups.
 
 The original backlog is cleared. The live Kanban may refill when independent workers create new missions; those new missions require their own evidence and review.
+
+## Final closure addendum — 2026-10-17 11:31 UTC
+
+The three newer model missions subsequently acquired accepted ClaimGuard results and were each completed through an individually reviewed TIA/CAPT-Bot disposition. The final live Missions / Goals display showed zero open missions, zero verification backlog, zero suspended missions and zero active DriverRuns.
+
+Final authoritative audit at EventStore global sequence 26593:
+- 411 missions total: 386 cancelled, 25 completed, zero open.
+- 407/407 original cleanup-manifest missions terminal.
+- 18 prior approvals explicitly revoked with their original approved decisions preserved.
+- Global replay applied all 26,593 events without failure.
+- 411 mission receipts reconciled against authoritative terminal states, zero audit discrepancies.
+- Fifteen legacy approval streams had only documented missing optional defaults; no conflicting stored values.
+
+Complete evidence record, with event IDs and ledger sequence numbers for all 411 missions:
+
+CAPT_core/.capt-evidence/kanban-cleanup-20261017/CAPT_KANBAN_ALL_MISSIONS_TERMINAL_20261017.json
+
+This is an observed point-in-time closure. If workers create new missions later, CAPT can display new open cards again.
