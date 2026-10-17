@@ -12,7 +12,8 @@ from .contracts import digest
 
 RESPONSE_MODES = ("MAX", "SPOCK", "CAVE CAPT", "MIN")
 ENHANCEMENT_ENGINES = ("OFF", "AUTO", "OMNI", "META", "FORGE", "SIGMA")
-CONTEXT_BUDGETS = tuple(range(32_000, 256_001, 32_000))
+# A small one-shot smoke tier plus the existing production context selectors.
+CONTEXT_BUDGETS = (4_096,) + tuple(range(32_000, 256_001, 32_000))
 # A refused/absent context reference must NOT be rendered as a digest. Hashing a
 # sentinel string yields a value indistinguishable from a real governed-pack
 # digest, so provenance reads as authoritative while addressing nothing. Absence

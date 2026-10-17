@@ -16,6 +16,7 @@ from capt_runtime.diagnostic_receipts import safe_model_validation_code
         "REASONING_EFFORT_REQUIRES_PROVIDER",
         "MODEL_EXECUTION_SECONDS_OUT_OF_RANGE",
         "MODEL_PROMPT_APPROVAL_RECEIPT_REQUIRED",
+        "REQUESTED_CONTEXT_BUDGET_INVALID",
     ],
 )
 def test_internal_preflight_code_is_preserved(reason):

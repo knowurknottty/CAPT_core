@@ -137,6 +137,58 @@ def test_runtime_planner_builds_prompt_approval_receipt_for_exact_model_assembly
 
 
 
+
+def test_4096_token_smoke_budget_is_approvable_and_pinned(tmp_path):
+    store = EventStore(str(tmp_path / "smoke.db"))
+    try:
+        target = tmp_path / "project"
+        target.mkdir()
+        receipt = request_model_prompt_approval(
+            RuntimeService(store),
+            {
+                "requestId": "approval-smoke",
+                "missionId": "m-smoke",
+                "taskId": "t-smoke",
+                "driverRunId": "dr-smoke",
+                "objective": "Return CAPT_SMOKE_OK.",
+                "targetRoot": str(target),
+                "provider": "openrouter",
+                "model": "xiaomi/mimo-v2.6-flash",
+                "requestedContextBudget": 4_096,
+            },
+            meta("smoke", "human", "smoke"),
+        )
+        approved = store.require_state("human_approval-approval-smoke")
+        assert approved["state"] == "requested"
+        assert approved["scope"]["approvalBinding"]["requestedContextBudget"] == 4_096
+        assert approved["promptAssemblyDigest"] == receipt["promptAssemblyDigest"]
+    finally:
+        store.close()
+
+
+@pytest.mark.parametrize("bad_budget", (1, 8_192, 12_000, 262_144, True, "4096"))
+def test_invalid_context_selector_fails_before_creating_approval(tmp_path, bad_budget):
+    store = EventStore(str(tmp_path / "invalid.db"))
+    try:
+        target = tmp_path / "project"
+        target.mkdir()
+        with pytest.raises(AuthorityViolation, match="REQUESTED_CONTEXT_BUDGET_INVALID"):
+            request_model_prompt_approval(
+                RuntimeService(store),
+                {
+                    "requestId": "approval-invalid",
+                    "objective": "Return CAPT_SMOKE_OK.",
+                    "targetRoot": str(target),
+                    "provider": "openrouter",
+                    "model": "deepseek/deepseek-v4.1-flash",
+                    "requestedContextBudget": bad_budget,
+                },
+                meta("invalid-budget", "human", "invalid-budget"),
+            )
+        assert store.load_state("human_approval-approval-invalid") is None
+    finally:
+        store.close()
+
 def test_cohort_vessel_count_is_bound_into_exact_prompt_approval(tmp_path):
     target = tmp_path / "project"
     target.mkdir()

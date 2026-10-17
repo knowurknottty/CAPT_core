@@ -17,6 +17,7 @@ from .authored_skills import prepare_runtime_skill_context, summarize_skill_cont
 from .contracts import require
 from .errors import AuthorityViolation
 from .model_authority import canonical_execution_target_root, normalize_model_authority
+from .operator_provenance import CONTEXT_BUDGETS
 from .reasoning import ReasoningConfigurationError, normalize_reasoning_effort
 from .model_approval_binding import (
     build_bound_model_operator_approval,
@@ -85,7 +86,13 @@ def request_model_prompt_approval(
     bound_objective = compile_cohort_objective(
         objective, provider=provider, model=model, cohort_spec=cohort_spec
     )
-    requested_context_budget = int(intent.get("requestedContextBudget", 32_000))
+    # Admission and execution must recognize the same context selectors.
+    # Otherwise we can ask for HumanApproval on a run that will always fail
+    # pre-dispatch, even when all model/provider authority checks succeed.
+    raw_context_budget = intent.get("requestedContextBudget", 32_000)
+    if type(raw_context_budget) is not int or raw_context_budget not in CONTEXT_BUDGETS:
+        raise AuthorityViolation("REQUESTED_CONTEXT_BUDGET_INVALID")
+    requested_context_budget = raw_context_budget
     requested_execution_seconds = int(intent.get("requestedExecutionSeconds", 600))
     if requested_execution_seconds < 60 or requested_execution_seconds > 3600:
         raise AuthorityViolation("MODEL_EXECUTION_SECONDS_OUT_OF_RANGE")
