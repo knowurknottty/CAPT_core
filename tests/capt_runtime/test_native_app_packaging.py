@@ -147,3 +147,22 @@ def test_refuses_symlinked_installed_path(tmp_path):
         )
     assert installed.is_symlink()
     assert pkg.binary_digest(dist) != pkg.binary_digest(signed)
+
+
+def test_native_release_script_publishes_only_canonical_signed_bundle():
+    """Guard against duplicated shell fragments and launching dist/CAPT.app."""
+    script = (
+        Path(__file__).resolve().parents[2]
+        / "capt_ui/surfaces/desktop_swift/script/build_and_run.sh"
+    ).read_text()
+    assert script.count("swift build --product") == 1
+    assert script.count("script/install_signed_bundle.py") == 1
+    assert script.count('CAPT_PACKAGE_VERSION="$(') == 1
+    assert script.count('INSTALLED_HEAD=""') == 1
+    assert '<key>CAPTSourceCommit</key>' in script
+    assert '--installed "$INSTALLED_BUNDLE"' in script
+    assert '--dist "$DIST_BUNDLE"' in script
+    assert '--source-commit "$SOURCE_HEAD"' in script
+    assert '/usr/bin/open -n "$BUNDLE"' not in script
+    assert 'rm -rf "$BUNDLE"' not in script
+    assert "kill \"$pid\"" not in script
