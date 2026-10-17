@@ -1,4 +1,3 @@
-#!/usr/bin/env python3.12
 """Unit + integration tests for the CAPT Desktop Runtime M0 vertical slice.
 
 These tests drive a REAL local CAPT runtime service (not a mock). They assert:
@@ -48,7 +47,7 @@ def _wait_sock(sock: Path, timeout: float = 15.0) -> None:
             except OSError:
                 pass
         time.sleep(0.2)
-    raise TimeoutError("runtime socket did not appear: %s" % sock)
+    raise TimeoutError(f"runtime socket did not appear: {sock}")
 
 
 @pytest.fixture()
@@ -104,23 +103,65 @@ def test_projection_contains_all_m0_panels(runtime):
     client.disconnect()
 
 
+
+def _stable_reconnect_projection(view):
+    """Compare authoritative state while preserving truthful advisory read times.
+
+    Each verification query recomputes an explicitly advisory result.
+    Its verifiedAt is the time of that observation, not stored event state.
+    Every other field and all committed timestamps remain in the digest.
+    """
+    stable = json.loads(json.dumps(view, sort_keys=True, default=str))
+    verification = stable.get("verification")
+    if (isinstance(verification, dict)
+            and verification.get("advisory") is True
+            and verification.get("committed") is False):
+        observed_at = verification.pop("verifiedAt")
+        assert isinstance(observed_at, str) and observed_at.endswith("Z")
+    return stable
+
+
+def test_stable_reconnect_comparison_excludes_only_advisory_observation_time():
+    view = {
+        "missionSpec": {"state": "completed", "version": 3},
+        "verification": {"advisory": True, "committed": False,
+                         "status": {"kind": "verified"},
+                         "verifiedAt": "2026-08-03T00:05:00Z"},
+    }
+    next_view = json.loads(json.dumps(view))
+    next_view["verification"]["verifiedAt"] = "2026-08-03T00:05:01Z"
+    assert _stable_reconnect_projection(view) == _stable_reconnect_projection(next_view)
+
+    next_view["missionSpec"]["version"] = 4
+    assert _stable_reconnect_projection(view) != _stable_reconnect_projection(next_view)
+    next_view["missionSpec"]["version"] = 3
+    next_view["verification"]["status"]["kind"] = "failed"
+    assert _stable_reconnect_projection(view) != _stable_reconnect_projection(next_view)
+
+    next_view["verification"] = {"advisory": False, "committed": True,
+                                 "status": {"kind": "verified"},
+                                 "verifiedAt": "2026-08-03T00:05:01Z"}
+    committed_before = json.loads(json.dumps(next_view))
+    committed_before["verification"]["verifiedAt"] = "2026-08-03T00:05:00Z"
+    assert _stable_reconnect_projection(committed_before) != _stable_reconnect_projection(next_view)
+
 def test_disconnect_reconnect_no_duplicate_execution(runtime):
     client = RuntimeClient(str(runtime["sock"]), str(runtime["token"]))
     client.connect()
     view1 = project_mission_view(client)
     head1 = client.identity()["headSequence"]
-    d1 = hashlib.sha256(json.dumps(view1, sort_keys=True, default=str).encode()).hexdigest()
+    d1 = hashlib.sha256(json.dumps(_stable_reconnect_projection(view1), sort_keys=True).encode()).hexdigest()
     client.disconnect()
 
     client2 = RuntimeClient(str(runtime["sock"]), str(runtime["token"]))
     client2.connect()
     view2 = project_mission_view(client2)
     head2 = client2.identity()["headSequence"]
-    d2 = hashlib.sha256(json.dumps(view2, sort_keys=True, default=str).encode()).hexdigest()
+    d2 = hashlib.sha256(json.dumps(_stable_reconnect_projection(view2), sort_keys=True).encode()).hexdigest()
     client2.disconnect()
 
     assert head1 == head2, "head advanced across read-only reconnect"
-    assert d1 == d2, "view digest changed across reconnect (duplicate execution?)"
+    assert d1 == d2, "stable view changed across reconnect (duplicate execution?)"
 
 
 def test_unauthenticated_ipc_rejected(runtime):
@@ -197,7 +238,7 @@ def test_second_service_refuses_live_socket_without_disrupting_first(runtime):
         [sys.executable, str(REPO / "desktop" / "capt_runtime_service.py"),
          "--ledger", str(runtime["ledger"]), "--sock", str(runtime["sock"]),
          "--token-file", str(runtime["token"])],
-        cwd=str(REPO), env=env, capture_output=True, text=True, timeout=10,
+        cwd=str(REPO), env=env, capture_output=True, text=True, timeout=10, check=False,
     )
     assert second.returncode != 0
     assert "already active" in second.stderr
