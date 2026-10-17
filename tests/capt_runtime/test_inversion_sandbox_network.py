@@ -365,3 +365,51 @@ def _created_record(profile, image_id: str, container_id: str) -> dict:
         "Mounts": [],
         "NetworkSettings": {"Networks": {}},
     }
+
+
+# --- IPv4-embedded IPv6 deny bypass (guardian floor) -------------------------
+# A dual-stack socket connects ::ffff:a.b.c.d over IPv4, so an attacker AAAA
+# record must be judged as the IPv4 address it delivers to.
+
+_EMBEDDED_PRIVATE = (
+    "::ffff:169.254.169.254",  # IPv4-mapped -> cloud metadata
+    "::ffff:127.0.0.1",        # IPv4-mapped -> loopback
+    "::ffff:10.0.0.5",         # IPv4-mapped -> RFC1918
+    "64:ff9b::a9fe:a9fe",      # RFC 6052 NAT64 -> 169.254.169.254
+    "2002:a9fe:a9fe::1",       # 6to4 -> 169.254.169.254
+    "::",                      # unspecified
+    "::7f00:1",                # deprecated IPv4-compatible 127.0.0.1
+    "64:ff9b:1::a9fe:a9fe",    # RFC 8215 local-use NAT64
+    "198.18.0.1",              # benchmarking / fake-IP DNS
+    "192.0.0.170",             # NAT64 discovery
+)
+
+
+@pytest.mark.parametrize("address", _EMBEDDED_PRIVATE)
+@pytest.mark.parametrize("mode", ["allowlist", "unrestricted"])
+def test_embedded_ipv4_cannot_bypass_platform_deny(address: str, mode: str) -> None:
+    if mode == "allowlist":
+        policy = _policy("evil.example")
+    else:
+        policy = InversionSandboxNetworkPolicy(mode="unrestricted").canonical()
+    assert not destination_allowed(policy, "evil.example", [address])
+    # Mixed answers: one bad record poisons the whole resolution.
+    assert not destination_allowed(policy, "evil.example", ["93.184.216.34", address])
+
+
+def test_builtin_floor_survives_an_empty_profile_deny_list() -> None:
+    policy = _policy("evil.example", deny=())
+    assert not destination_allowed(policy, "evil.example", ["169.254.169.254"])
+    assert not destination_allowed(policy, "evil.example", ["::ffff:127.0.0.1"])
+    assert destination_allowed(policy, "evil.example", ["93.184.216.34"])
+
+
+def test_profile_deny_rules_match_embedded_ipv4() -> None:
+    policy = _policy("example.com", deny=DEFAULT_PLATFORM_DENY + ("93.184.216.0/24",))
+    assert not destination_allowed(policy, "example.com", ["::ffff:93.184.216.34"])
+
+
+def test_public_ipv6_and_public_mapped_still_admitted() -> None:
+    policy = _policy("example.com")
+    assert destination_allowed(policy, "example.com", ["2606:2800:220:1:248:1893:25c8:1946"])
+    assert destination_allowed(policy, "example.com", ["::ffff:93.184.216.34"])
