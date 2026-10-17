@@ -9,6 +9,7 @@ RuntimeService and its ledger are never touched here.
 from __future__ import annotations
 
 import argparse
+import fcntl
 from datetime import datetime, timezone
 import hashlib
 import os
@@ -147,6 +148,7 @@ def install_signed_bundle(
     originals: list[tuple[Path, Path | None]] = []
     published: list[Path] = []
     started = False
+    launch_attempted = False
     try:
         for target, label in ((dist, "dist"), (installed, "installed")):
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -182,13 +184,22 @@ def install_signed_bundle(
         if binary_digest(dist) != binary_digest(installed):
             raise PackagingError("CAPT_CANONICAL_COPY_DRIFT")
         # Always launch only the canonical installed app, never dist/CAPT.app.
+        launch_attempted = True
         launch(installed)
         started = True
+        # Cleanup failure must not roll back a healthy, launched app.
         for _, previous in originals:
             if previous:
-                shutil.rmtree(previous)
+                try:
+                    shutil.rmtree(previous)
+                except OSError:
+                    print("CAPT_OLD_HOLD_CLEANUP_PENDING=" + str(previous), file=sys.stderr)
         return backups
     except Exception:
+        if launch_attempted:
+            # A launch can fail verification after opening the new process.
+            # Stop it through the same graceful CAPT-only path before restoring.
+            stop(targets)
         for target, previous in reversed(originals):
             if target in published and target.exists():
                 shutil.rmtree(target)
@@ -218,10 +229,18 @@ def main() -> int:
     parser.add_argument("--backup-root", type=Path, required=True)
     parser.add_argument("--source-commit", required=True)
     args = parser.parse_args()
-    saved = install_signed_bundle(
-        args.signed, args.dist, args.installed,
-        args.backup_root, args.source_commit,
-    )
+    args.backup_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    lock_path = args.backup_root / ".native-install.lock"
+    with lock_path.open("a+") as lock:
+        os.chmod(lock_path, 0o600)
+        try:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise PackagingError("CAPT_NATIVE_INSTALL_ALREADY_RUNNING") from exc
+        saved = install_signed_bundle(
+            args.signed, args.dist, args.installed,
+            args.backup_root, args.source_commit,
+        )
     print("CAPT_APP_PUBLISHED_COMMIT=" + args.source_commit)
     print("CAPT_APP_INSTALLED=" + str(args.installed))
     print("CAPT_APP_BACKUP=" + str(saved))
