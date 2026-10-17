@@ -530,7 +530,7 @@ class RuntimeService(object):
 
     def mission_disposition_preview(self, mission_id: str, target: str) -> Dict[str, Any]:
         """Read-only review bound to the exact states that would be mutated."""
-        if target not in ("authorize", "cancel", "complete"):
+        if target not in ("authorize", "cancel", "complete", "reconcile_complete"):
             raise AuthorityViolation("MISSION_DISPOSITION_INVALID")
         mission_stream = MissionAggregate.stream_id(mission_id)
         mission = self.store.require_state(mission_stream)
@@ -564,9 +564,11 @@ class RuntimeService(object):
             "draft", "authorized", "executing", "suspended"
         ):
             blockers.append("MISSION_CANCEL_STATE_INVALID")
-        if target == "complete":
-            if mission["state"] != "executing":
+        if target in ("complete", "reconcile_complete"):
+            if target == "complete" and mission["state"] != "executing":
                 blockers.append("MISSION_NOT_EXECUTING")
+            if target == "reconcile_complete" and mission["state"] != "authorized":
+                blockers.append("MISSION_NOT_AUTHORIZED_FOR_RECONCILIATION")
             if not tasks or any(t[1] not in ("succeeded", "failed", "cancelled") for t in tasks):
                 blockers.append("MISSION_TASKS_NOT_ALL_TERMINAL")
             if not any(
@@ -576,7 +578,7 @@ class RuntimeService(object):
                 blockers.append("CLAIMGUARD_ACCEPTED_SUCCESSOR_REQUIRED")
             if any(state in ("requested", "approved") for _, state, _ in approvals):
                 blockers.append("UNSETTLED_APPROVALS")
-        if target in ("cancel", "complete"):
+        if target in ("cancel", "complete", "reconcile_complete"):
             if any(state in ("created", "submitted", "running") for _, state, _, _ in runs):
                 blockers.append("ACTIVE_DRIVER_RUN")
             if target == "cancel" and any(
@@ -624,8 +626,19 @@ class RuntimeService(object):
             raise AuthorityViolation("MISSION_DISPOSITION_BLOCKED:" + ",".join(preview["blocked"]))
         stream = MissionAggregate.stream_id(mission_id)
         prior_state = self.store.require_state(stream)
-        target_state = {"authorize": "authorized", "cancel": "cancelled", "complete": "completed"}[target]
-        nxt = MissionAggregate.transition(prior_state, target_state)
+        target_state = {
+            "authorize": "authorized", "cancel": "cancelled",
+            "complete": "completed", "reconcile_complete": "completed",
+        }[target]
+        if target == "reconcile_complete":
+            # Historical, verified provider results may be terminal while the
+            # original Mission aggregate is still authorized. Never imply a
+            # new provider run: append explicit administrative lifecycle
+            # transitions in the same atomic command, with evidence gates.
+            intervening = MissionAggregate.transition(prior_state, "executing")
+            nxt = MissionAggregate.transition(intervening, "completed")
+        else:
+            nxt = MissionAggregate.transition(prior_state, target_state)
         appends: List[AppendRequest] = []
         ordinal = 0
         def add_event(stream_id: str, kind: str, prior_version: int, state: Dict[str, Any],
@@ -670,9 +683,21 @@ class RuntimeService(object):
                           self.store.aggregate_version(approval_stream), state,
                           "HumanApprovalDecided", {"eventType": "HumanApprovalDecided",
                                                    "decision": decision}, current["taskId"])
-        add_event(stream, MissionAggregate.KIND, expected_version, nxt,
+        mission_event_version = expected_version
+        previous_state = prior_state["state"]
+        if target == "reconcile_complete":
+            add_event(
+                stream, MissionAggregate.KIND, expected_version, intervening,
+                "MissionStateChanged",
+                {"eventType": "MissionStateChanged", "fromState": "authorized",
+                 "toState": "executing",
+                 "reason": "Historical administrative reconciliation of previously verified task/ClaimGuard receipts; no new model execution. " + reason},
+            )
+            mission_event_version += 1
+            previous_state = "executing"
+        add_event(stream, MissionAggregate.KIND, mission_event_version, nxt,
                   "MissionStateChanged",
-                  {"eventType": "MissionStateChanged", "fromState": prior_state["state"],
+                  {"eventType": "MissionStateChanged", "fromState": previous_state,
                    "toState": target_state, "reason": reason})
         committed = self._commit(appends, metadata)
         return {**committed, "missionId": mission_id,

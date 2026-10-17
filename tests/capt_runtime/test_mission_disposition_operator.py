@@ -144,3 +144,40 @@ def test_operator_command_requires_typed_confirmation():
         assert ok["status"]=="accepted",ok
         assert store.require_state("mission-"+mid)["state"]=="authorized"
     finally:store.close()
+
+def test_verified_historical_closure_is_atomic_and_replayable(tmp_path):
+    """Reconcile a real ClaimGuard-accepted provider result without a new run."""
+    from capt_runtime.composition import create_runtime
+    from tests.capt_runtime.test_model_operator import (
+        _seed_provider_result_awaiting_review, _envelope,
+    )
+    runtime = create_runtime(str(tmp_path / "verified-reconcile.db"))
+    svc = runtime.service
+    mid = "m-provider-reconcile"
+    try:
+        svc.create_mission(mission_spec(mid), meta("reconcile-mission"))
+        apply(svc, mid, "authorize", "reconcile-authorize")
+        ids = _seed_provider_result_awaiting_review(runtime, "reconcile")
+        relay = RuntimeCommandService(runtime.store, "operator-x", "sess-1", runtime_service=svc)
+        receipt = relay.execute(_envelope(
+            "submit_provider_result_review",
+            {"driverRunId": ids["driverRunId"], "disposition": "accept",
+             "note": "Result meets criteria."}, key="reconcile-result-review",
+        ))
+        assert receipt["status"] == "accepted", receipt
+        assert runtime.store.require_state("task-"+ids["taskId"])["state"] == "succeeded"
+        preview = svc.mission_disposition_preview(mid, "reconcile_complete")
+        assert preview["blocked"] == [], preview
+        before_head=runtime.store.head_sequence()
+        committed=svc.dispose_mission(mid, "reconcile_complete",
+                                       preview["expectedVersion"], preview["previewDigest"],
+                                       "Accept earlier verified completion", meta("reconcile-complete"))
+        assert committed["missionState"] == "completed"
+        assert committed["settledEvents"] == 2
+        assert runtime.store.head_sequence() == before_head + 2
+        events=runtime.store.read_stream("mission-"+mid)
+        assert [(e["payload"]["fromState"],e["payload"]["toState"]) for e in events[-2:]] == [
+            ("authorized","executing"),("executing","completed")]
+        assert full_replay(runtime.store).aggregates["mission-"+mid] == runtime.store.require_state("mission-"+mid)
+    finally:
+        runtime.close()
