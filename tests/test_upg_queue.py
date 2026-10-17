@@ -153,4 +153,11 @@ def test_shipped_backlog_untouched_by_tests() -> None:
     snapshot = copy.deepcopy(data)
     uq.ready(data)
     assert data == snapshot
-    assert all(i["status"] == "open" for i in data["items"])
+    # The campaign is allowed to progress, but only through the queue's guarded
+    # transitions: any item that has left "open" must carry the history entry
+    # that `upg_queue.py set/claim` appends, ending in its current status.
+    for item in data["items"]:
+        if item["status"] != "open":
+            history = item.get("history") or []
+            assert history, f"{item['id']} changed status without a recorded transition"
+            assert history[-1]["to"] == item["status"], item["id"]
