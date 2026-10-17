@@ -254,6 +254,8 @@ def test_invalid_context_preparation_does_not_consume_approval(tmp_path: Path) -
         svc.approved_hermes_runner = _PreparedRunner(svc, prepare_error=ValueError("MODEL_TASK_OBJECTIVE_OR_TARGET_MISSING"))
         receipt = svc.execute(_envelope("run_approved_hermes_inspection", payload, key="invalid-context-run"))
         assert receipt["status"] == "rejected"
+        assert receipt["error"]["code"] == "MODEL_TASK_OBJECTIVE_OR_TARGET_MISSING"
+        assert receipt["detail"] == "MODEL_TASK_OBJECTIVE_OR_TARGET_MISSING"
         assert svc.store.require_state("human_approval-" + payload["approvalRequestId"])["state"] == "approved"
     finally:
         runtime.close()
@@ -267,6 +269,27 @@ def test_title_preparation_failure_does_not_consume_approval(tmp_path: Path) -> 
         svc.approved_hermes_runner = _PreparedRunner(svc, prepare_error=ValueError("MODEL_VISIBLE_PROMPT_TITLE_TOO_LONG"))
         receipt = svc.execute(_envelope("run_approved_hermes_inspection", payload, key="title-run"))
         assert receipt["status"] == "rejected"
+        assert receipt["error"]["code"] == "MODEL_VISIBLE_PROMPT_TITLE_TOO_LONG"
+        assert receipt["detail"] == "MODEL_VISIBLE_PROMPT_TITLE_TOO_LONG"
+        assert svc.store.require_state("human_approval-" + payload["approvalRequestId"])["state"] == "approved"
+    finally:
+        runtime.close()
+
+
+def test_unexpected_value_error_keeps_exception_content_private(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "ledger.db"))
+    try:
+        svc = RuntimeCommandService(runtime.store, "operator-x", "sess-1", runtime_service=runtime.service)
+        payload = _approved_run_payload(svc, {"objective": "x", "targetRoot": "/tmp"}, "redact")
+        private_error = "Bearer injected-secret-key /private/secret-path"
+        svc.approved_hermes_runner = _PreparedRunner(
+            svc, prepare_error=ValueError(private_error)
+        )
+        receipt = svc.execute(_envelope("run_approved_hermes_inspection", payload, key="redact-run"))
+        assert receipt["status"] == "rejected"
+        assert receipt["error"]["code"] == "MODEL_VALUE_ERROR_REDACTED"
+        assert receipt["detail"] == "MODEL_VALUE_ERROR_REDACTED"
+        assert private_error not in str(receipt)
         assert svc.store.require_state("human_approval-" + payload["approvalRequestId"])["state"] == "approved"
     finally:
         runtime.close()
