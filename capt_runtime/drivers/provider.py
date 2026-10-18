@@ -425,6 +425,16 @@ class ProviderDriver:
             ) from exc
 
     @staticmethod
+    def _safe_finish_reason(value: Any) -> str:
+        # Provider text is untrusted. Only stable enumerated finish categories
+        # may be stored in durable artifact headers and diagnostics.
+        if isinstance(value, str) and value in {
+            "stop", "length", "tool_calls", "content_filter", "function_call"
+        }:
+            return value
+        return "unknown"
+
+    @staticmethod
     def _usage_from(data: dict[str, Any]) -> tuple[int | None, int | None, float]:
         usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
         prompt_tokens = usage.get("prompt_tokens")
@@ -479,6 +489,14 @@ class ProviderDriver:
                 text = self._final_facing_text(message)
                 if not text:
                     raise ProviderDriverFailure("provider returned no content")
+                # A one-round final reply still travels through the tool-
+                # capable handler when read-only file operations are approved.
+                # Preserve its finish reason even when zero tools were called.
+                finish_reason = self._safe_finish_reason(
+                    choices[0].get("finish_reason") if choices and isinstance(choices[0], dict) else None
+                )
+                with self._lock:
+                    self.runs[rid]["providerFinishReason"] = finish_reason
                 return (
                     text,
                     prompt_tokens_total,
@@ -634,15 +652,14 @@ class ProviderDriver:
         if not isinstance(message, dict):
             raise ProviderDriverFailure("provider returned malformed final assistant message")
         text = self._final_facing_text(message)
-        finish_reason = choice.get("finish_reason")
-        if not isinstance(finish_reason, str) or not finish_reason:
-            finish_reason = None
+        finish_reason = self._safe_finish_reason(choice.get("finish_reason"))
         with self._lock:
             run = self.runs.setdefault(rid, {})
             run.setdefault("toolClosureReason", reason)
             run["finalizationReasoningMode"] = "answer_only"
             run["finalizationTextSource"] = "closure_response" if text else "none"
             run["finalizationFinishReason"] = finish_reason
+            run["providerFinishReason"] = finish_reason
         if not text:
             raise ProviderDriverFailure(
                 "provider returned no final-facing content after tool budget closure"
@@ -917,14 +934,7 @@ class ProviderDriver:
             # answer truncation after successful HTTP 200 and artifact staging.
             choice = ((data.get("choices") or [{}])[0] if self.provider_id != "ollama" else {})
             choice = choice if isinstance(choice, dict) else {}
-            raw_finish = choice.get("finish_reason")
-            finish_reason = (
-                raw_finish
-                if isinstance(raw_finish, str) and raw_finish in {
-                    "stop", "length", "tool_calls", "content_filter", "function_call"
-                }
-                else "unknown"
-            )
+            finish_reason = self._safe_finish_reason(choice.get("finish_reason"))
             with self._lock:
                 self.runs[rid]["providerFinishReason"] = finish_reason
             text = (

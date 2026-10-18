@@ -134,6 +134,49 @@ def test_prompt_only_provider_records_truncation_finish_reason_without_losing_ar
     ).read_text()
 
 
+def test_tool_capable_immediate_final_captures_length_limited_response(
+    monkeypatch, tmp_path: Path
+):
+    """MiMo-shaped one-HTTP-answer case with an enabled read-only bridge."""
+    import capt_runtime.drivers.provider as provider_module
+
+    class ToolBridge:
+        max_calls = 1
+
+        def openai_tools(self):
+            return []
+
+    class Response:
+        def read(self):
+            return json.dumps({
+                "choices": [{
+                    "message": {"content": "CAPT_CANDIDATE C0076 | AXIS=partial | MEC"},
+                    "finish_reason": "length",
+                }],
+                "usage": {"prompt_tokens": 100, "completion_tokens": 120},
+            }).encode()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(provider_module.urllib.request, "urlopen", lambda *_a, **_kw: Response())
+    driver = ProviderDriver(
+        str(tmp_path), provider_id="openrouter", model="fixture",
+        base_url="http://127.0.0.1:1/v1", task_resolver=_resolver(),
+        tool_bridge=ToolBridge(),
+    )
+    out = asyncio.run(driver.submit({
+        "driverRunId": "dr-toolbridge-final", "missionId": "m-toolbridge-final",
+        "taskId": "t-toolbridge-final", "contextSlice": {},
+        "submittedAt": "2026-10-18T00:00:00Z",
+    }))
+    assert out["state"] == "completed"
+    assert out["diagnostics"]["toolCallCount"] == 0
+    assert out["diagnostics"]["providerFinishReason"] == "length"
+    assert out["diagnostics"]["providerOutputLengthLimited"] is True
+    assert "ProviderFinishReason: length" in Path(out["artifactCandidate"]["artifactPath"]).read_text()
+
+
 def test_provider_driver_http_timeout_uses_governed_work_order_budget(monkeypatch, tmp_path: Path):
     import capt_runtime.drivers.provider as provider_module
 
