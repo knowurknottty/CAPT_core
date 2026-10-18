@@ -217,6 +217,25 @@ def compile_cohort_objective(
     first = f"{cohort_id}-v0001"
     last = f"{cohort_id}-v{count:04d}"
     modality = str(spec.get("outputModality") or "text")
+    policy = spec.get("vesselCharterPolicy")
+    if modality == "text" and isinstance(policy, dict) and policy.get("strictLedger"):
+        candidate_count = count * int(policy["candidateMultiplier"])
+        # Strict cohorts must preserve the mandatory audit evidence even if a
+        # lengthy user objective consumes the model's finite output window.
+        # This changes only FUTURE prompt bindings; never revise a frozen
+        # approval or previously submitted provider request.
+        base = (
+            "CAPT STRICT OUTPUT ORDER (MANDATORY; BEFORE ANY REPORT PROSE):\n"
+            f"1. Emit at least {candidate_count} unique, complete CAPT_CANDIDATE rows.\n"
+            "2. Emit the single CAPT_CHARTER_AUDIT row for the physical candidates.\n"
+            f"3. Emit exactly {count} complete CAPT_VESSEL rows with unique SOURCE ids.\n"
+            "4. ONLY THEN write the requested review, findings, dispositions and "
+            "synthesis. These do not replace the mandatory ledger.\n"
+            "If output or context limits prevent completing the physical ledger, "
+            "write CAPT_COHORT_INCOMPLETE and disclose the missing rows instead "
+            "of claiming completion. No partial report is certified.\n\n"
+            + base
+        )
     common = (
         base
         + "\n\nCAPT native cohort execution contract:\n"

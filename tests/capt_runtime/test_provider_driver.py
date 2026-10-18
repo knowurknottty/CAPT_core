@@ -79,6 +79,8 @@ def test_openrouter_driver_provenance_and_secret_not_persisted(tmp_path: Path):
         assert out["diagnostics"]["reasoningEffortRequested"] == "xhigh"
         assert out["diagnostics"]["promptDigest"].startswith("sha256:")
         assert out["diagnostics"]["responseDigest"].startswith("sha256:")
+        assert out["diagnostics"]["providerFinishReason"] == "unknown"
+        assert out["diagnostics"]["providerOutputLengthLimited"] is False
         assert secret not in str(out)
         assert secret not in Path(out["artifactCandidate"]["artifactPath"]).read_text()
         inspected = asyncio.run(driver.inspect("dr-1"))
@@ -90,6 +92,89 @@ def test_openrouter_driver_provenance_and_secret_not_persisted(tmp_path: Path):
         server.shutdown()
         server.server_close()
 
+
+
+def test_prompt_only_provider_records_truncation_finish_reason_without_losing_artifact(
+    monkeypatch, tmp_path: Path
+):
+    """HTTP 200 + a partial answer is not proof of semantic completion."""
+    import capt_runtime.drivers.provider as provider_module
+
+    class Response:
+        def read(self):
+            return json.dumps({
+                "choices": [{
+                    "message": {"content": "CAPT_CANDIDATE C0076 | AXIS=partial | MEC"},
+                    "finish_reason": "length",
+                }],
+                "usage": {"prompt_tokens": 120, "completion_tokens": 192},
+            }).encode()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(provider_module.urllib.request, "urlopen", lambda *_a, **_kw: Response())
+    driver = ProviderDriver(
+        str(tmp_path), provider_id="openrouter", model="fixture",
+        base_url="http://127.0.0.1:1/v1", task_resolver=_resolver(),
+    )
+    out = asyncio.run(driver.submit({
+        "driverRunId": "dr-limited", "missionId": "m-limited",
+        "taskId": "t-limited", "contextSlice": {},
+        "submittedAt": "2026-10-18T00:00:00Z",
+    }))
+    assert out["state"] == "completed"  # Transport completed, NOT a verified task.
+    assert out["diagnostics"]["providerFinishReason"] == "length"
+    assert out["diagnostics"]["providerOutputLengthLimited"] is True
+    assert "CAPT_CANDIDATE C0076" in Path(
+        out["artifactCandidate"]["artifactPath"]
+    ).read_text()
+    assert "ProviderFinishReason: length" in Path(
+        out["artifactCandidate"]["artifactPath"]
+    ).read_text()
+
+
+def test_tool_capable_immediate_final_captures_length_limited_response(
+    monkeypatch, tmp_path: Path
+):
+    """MiMo-shaped one-HTTP-answer case with an enabled read-only bridge."""
+    import capt_runtime.drivers.provider as provider_module
+
+    class ToolBridge:
+        max_calls = 1
+
+        def openai_tools(self):
+            return []
+
+    class Response:
+        def read(self):
+            return json.dumps({
+                "choices": [{
+                    "message": {"content": "CAPT_CANDIDATE C0076 | AXIS=partial | MEC"},
+                    "finish_reason": "length",
+                }],
+                "usage": {"prompt_tokens": 100, "completion_tokens": 120},
+            }).encode()
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(provider_module.urllib.request, "urlopen", lambda *_a, **_kw: Response())
+    driver = ProviderDriver(
+        str(tmp_path), provider_id="openrouter", model="fixture",
+        base_url="http://127.0.0.1:1/v1", task_resolver=_resolver(),
+        tool_bridge=ToolBridge(),
+    )
+    out = asyncio.run(driver.submit({
+        "driverRunId": "dr-toolbridge-final", "missionId": "m-toolbridge-final",
+        "taskId": "t-toolbridge-final", "contextSlice": {},
+        "submittedAt": "2026-10-18T00:00:00Z",
+    }))
+    assert out["state"] == "completed"
+    assert out["diagnostics"]["toolCallCount"] == 0
+    assert out["diagnostics"]["providerFinishReason"] == "length"
+    assert out["diagnostics"]["providerOutputLengthLimited"] is True
+    assert "ProviderFinishReason: length" in Path(out["artifactCandidate"]["artifactPath"]).read_text()
 
 
 def test_provider_driver_http_timeout_uses_governed_work_order_budget(monkeypatch, tmp_path: Path):
