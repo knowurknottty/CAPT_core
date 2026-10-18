@@ -2329,7 +2329,11 @@ class RuntimeService(object):
         # must NEVER authorize another HTTP effect without another durable slot.
         # Historical replay continues to accept old same-boundary events.
         if dispatch_boundary == "request_started" and current.get("dispatchBoundary") == "request_started":
-            raise AuthorityViolation("PROVIDER_REQUEST_BOUNDARY_ALREADY_STARTED")
+            # The identical recorded command is replay-safe and must return its
+            # original receipt. A fresh idempotency key cannot reauthorize I/O.
+            # _commit checks the stored fingerprint and refuses conflicting keys.
+            if self.store.find_idempotent(metadata["idempotencyKey"]) is None:
+                raise AuthorityViolation("PROVIDER_REQUEST_BOUNDARY_ALREADY_STARTED")
         recorded_at = _now_rfc3339()
         # Boundary vocabulary/monotonicity is owned by the boundary-capable
         # aggregate (capt_runtime.driver_run); the service aggregate
