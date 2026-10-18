@@ -166,7 +166,7 @@ def test_4096_token_smoke_budget_is_approvable_and_pinned(tmp_path):
         store.close()
 
 
-@pytest.mark.parametrize("bad_budget", (1, 8_192, 12_000, 262_144, True, "4096"))
+@pytest.mark.parametrize("bad_budget", (0, -1, False, True, 4096.0, "4096", None))
 def test_invalid_context_selector_fails_before_creating_approval(tmp_path, bad_budget):
     store = EventStore(str(tmp_path / "invalid.db"))
     try:
@@ -228,3 +228,28 @@ def test_cohort_vessel_count_is_bound_into_exact_prompt_approval(tmp_path):
     assert binding_111["cohortSpec"]["vesselsPerCohort"] == 111
     assert twenty_two["cohortSpec"]["vesselsPerCohort"] == 22
     assert one_eleven["cohortSpec"]["vesselsPerCohort"] == 111
+
+@pytest.mark.parametrize("allowed_budget", (1, 8_192, 48_000, 262_144, 1_048_576))
+def test_nonpreset_context_capacity_binds_without_forcing_large_memory_pack(tmp_path, allowed_budget):
+    store = EventStore(str(tmp_path / ("context-%d.db" % allowed_budget)))
+    try:
+        target = tmp_path / "project"
+        target.mkdir(exist_ok=True)
+        receipt = request_model_prompt_approval(
+            RuntimeService(store),
+            {
+                "requestId": "approval-context-" + str(allowed_budget),
+                "objective": "Inspect a small subset of evidence.",
+                "targetRoot": str(target),
+                "provider": "openrouter",
+                "model": "deepseek/deepseek-v4.1-flash-1017",
+                "requestedContextBudget": allowed_budget,
+            },
+            meta("nonpreset-%d" % allowed_budget, "human", "context"),
+        )
+        state = store.require_state("human_approval-approval-context-" + str(allowed_budget))
+        assert state["scope"]["approvalBinding"]["requestedContextBudget"] == allowed_budget
+        assert state["state"] == "requested"
+        assert receipt["promptAssemblyDigest"]
+    finally:
+        store.close()
