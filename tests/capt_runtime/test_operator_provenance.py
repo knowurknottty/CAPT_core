@@ -74,11 +74,16 @@ def test_unknown_provider_capacity_remains_unknown():
     assert env["effectiveContextBudgetStatus"] == "unknown"
 
 
-def test_effective_context_budget_rejects_unsupported_selector_value():
+def test_context_budget_accepts_arbitrary_positive_model_capacity_without_memory_inflation():
     assert effective_context_budget(4_096, 128_000) == 4_096
     assert effective_context_budget(32_000, 8_192) == 8_192
-    with pytest.raises(ValueError, match="REQUESTED_CONTEXT_BUDGET_INVALID"):
-        effective_context_budget(1, 8_192)
+    assert effective_context_budget(48_000, 1_048_576) == 48_000
+    assert effective_context_budget(1_048_576, 1_048_576) == 1_048_576
+    assert effective_context_budget(2_000_000, 1_048_576) == 1_048_576
+    assert effective_context_budget(1_048_576, 0) is None
+    for invalid in (0, -1, True, False, "48000", 48_000.0, None):
+        with pytest.raises(ValueError, match="REQUESTED_CONTEXT_BUDGET_INVALID"):
+            effective_context_budget(invalid, 1_048_576)
 
 
 def test_prompt_assembly_rejects_noncanonical_engine():

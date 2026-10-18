@@ -80,7 +80,7 @@ class PromptPreferences:
     def _validate(self) -> None:
         if self._data.get("responseMode") not in RESPONSE_MODES:
             self._data["responseMode"] = "SPOCK"
-        if self._data.get("contextBudget") not in CONTEXT_BUDGETS:
+        if type(self._data.get("contextBudget")) is not int or self._data["contextBudget"] <= 0:
             self._data["contextBudget"] = 32_000
         self._data["humanVerificationRequired"] = bool(self._data.get("humanVerificationRequired", True))
 
