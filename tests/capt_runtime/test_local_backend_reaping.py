@@ -18,12 +18,24 @@ pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX process groups
 
 
 def _group_alive(pgid: int) -> bool:
+    """Live (non-zombie) members of the group; zombies cannot run."""
+    proc = Path("/proc")
+    if (proc / "self" / "stat").exists():
+        for entry in proc.iterdir():
+            if not entry.name.isdigit():
+                continue
+            try:
+                raw = (entry / "stat").read_text(encoding="ascii", errors="replace")
+            except OSError:
+                continue
+            tail = raw[raw.rfind(")") + 2:].split()
+            if len(tail) >= 3 and tail[2] == str(pgid) and tail[0] != "Z":
+                return True
+        return False
     try:
         os.killpg(pgid, 0)
     except ProcessLookupError:
         return False
-    except PermissionError:
-        return True
     return True
 
 

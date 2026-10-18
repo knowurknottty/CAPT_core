@@ -61,6 +61,10 @@ class LocalProcessResult:
     process_group_id: int
     timed_out: bool
     cancelled: bool
+    # True when processes of the run's group outlived the leader and CAPT
+    # terminated them (CAPT-UPG-030). A descendant that called setsid() left
+    # the group and is outside this guarantee (see CAPT-UPG-042).
+    descendants_terminated: bool = False
 
 
 class _BoundedCollector:
@@ -159,6 +163,77 @@ def _terminate_process_group(proc: subprocess.Popen[bytes], grace_seconds: float
         raise RuntimeError(f"process group {proc.pid} did not terminate after SIGKILL")
 
 
+_PROC = Path("/proc")
+
+
+def _live_group_members(pgid: int) -> Optional[int]:
+    """Count non-zombie members of ``pgid`` via /proc; None when /proc is absent."""
+    if not (_PROC / "self" / "stat").exists():
+        return None
+    live = 0
+    for entry in _PROC.iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            raw = (entry / "stat").read_text(encoding="ascii", errors="replace")
+        except OSError:
+            continue  # exited between listing and reading
+        # Fields after the parenthesised comm: state ppid pgrp ...
+        tail = raw[raw.rfind(")") + 2:].split()
+        if len(tail) >= 3 and tail[2] == str(pgid) and tail[0] != "Z":
+            live += 1
+    return live
+
+
+def _process_group_alive(pgid: int) -> bool:
+    """True while any member of ``pgid`` can still run (zombies excluded)."""
+    members = _live_group_members(pgid)
+    if members is not None:
+        return members > 0
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    # Without /proc a zombie still answers signal 0; callers treat SIGKILL
+    # delivery as final rather than waiting for the group to vanish.
+    return True
+
+
+def _reap_process_group(pgid: int, grace_seconds: float) -> bool:
+    """Terminate every process left in ``pgid`` after its leader exited.
+
+    The leader was created with ``start_new_session=True`` so ``pgid`` is the
+    run's own group. POSIX does not reuse a PID as a new process ID while a
+    process group with that ID still has members, so signalling a non-empty
+    group cannot hit an unrelated process. Returns True when live survivors
+    existed. SIGKILL cannot be caught or ignored; once it is delivered the
+    survivors are dead even if they linger as zombies awaiting a reaper.
+    """
+    if not _process_group_alive(pgid):
+        return False
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except ProcessLookupError:
+        return True
+    deadline = time.monotonic() + grace_seconds
+    while time.monotonic() < deadline:
+        if not _process_group_alive(pgid):
+            return True
+        time.sleep(0.01)
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except ProcessLookupError:
+        return True
+    deadline = time.monotonic() + max(grace_seconds, 0.5)
+    while time.monotonic() < deadline and _process_group_alive(pgid):
+        if _live_group_members(pgid) is None:
+            break  # no /proc: cannot distinguish zombies; SIGKILL is final
+        time.sleep(0.01)
+    return True
+
+
 class LocalProcessBackend:
     backend_id = "local"
     adapter_id = "backend-local-process"
@@ -231,6 +306,11 @@ class LocalProcessBackend:
 
         if proc.poll() is None:
             proc.wait()
+        # Leader exit does not end the run: background children inherit the
+        # group and the output pipes. Reap them before collecting output.
+        descendants_terminated = _reap_process_group(
+            proc.pid, request.terminate_grace_seconds
+        )
         for thread in threads:
             thread.join(timeout=max(request.terminate_grace_seconds, 0.5) + 1.0)
             if thread.is_alive():
@@ -254,4 +334,5 @@ class LocalProcessBackend:
             process_group_id=proc.pid,
             timed_out=timed_out,
             cancelled=cancelled,
+            descendants_terminated=descendants_terminated,
         )
