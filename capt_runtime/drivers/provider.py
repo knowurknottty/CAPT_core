@@ -912,10 +912,25 @@ class ProviderDriver:
                     **self._reasoning_fields,
                 }
             data = self._post_json(rid, url, body, headers)
+            # Capture only a fixed known finish classification. The no-tool
+            # path historically discarded finish_reason, hiding provider-side
+            # answer truncation after successful HTTP 200 and artifact staging.
+            choice = ((data.get("choices") or [{}])[0] if self.provider_id != "ollama" else {})
+            choice = choice if isinstance(choice, dict) else {}
+            raw_finish = choice.get("finish_reason")
+            finish_reason = (
+                raw_finish
+                if isinstance(raw_finish, str) and raw_finish in {
+                    "stop", "length", "tool_calls", "content_filter", "function_call"
+                }
+                else "unknown"
+            )
+            with self._lock:
+                self.runs[rid]["providerFinishReason"] = finish_reason
             text = (
                 data.get("response")
                 if self.provider_id == "ollama"
-                else ((data.get("choices") or [{}])[0].get("message", {}).get("content"))
+                else (choice.get("message") or {}).get("content")
             ) or ""
             if not text:
                 with self._lock:
@@ -942,13 +957,14 @@ class ProviderDriver:
         artifact = (
             "# CAPT Provider Observation\n\n"
             "Provider: %s\nModel: %s\nEndpointClass: %s\nReasoningEffort: %s\nPromptDigest: %s\n"
-            "ResponseDigest: %s\n\n%s\n"
+            "ProviderFinishReason: %s\nResponseDigest: %s\n\n%s\n"
             % (
                 self.provider_id,
                 self.model,
                 ep_class,
                 self.reasoning_effort or "provider-default",
                 prompt_digest,
+                self.runs[rid].get("providerFinishReason") or "unknown",
                 response_digest,
                 text,
             )
@@ -1006,6 +1022,8 @@ class ProviderDriver:
                 "finalizationReasoningMode": self.runs[rid].get("finalizationReasoningMode"),
                 "finalizationTextSource": self.runs[rid].get("finalizationTextSource"),
                 "finalizationFinishReason": self.runs[rid].get("finalizationFinishReason"),
+                "providerFinishReason": self.runs[rid].get("providerFinishReason"),
+                "providerOutputLengthLimited": self.runs[rid].get("providerFinishReason") == "length",
                 "resourceUsage": resource_receipt,
             },
         }
