@@ -42,7 +42,7 @@
     "capt_get_restart_context",
     "capt_generate_skill",
     "capt_validate_skill",
-    "capt_publish_skill",
+    "capt_request_skill_review",
     "capt_query_capability",
     "capt_verify_claim",
     "capt_build_bubble",

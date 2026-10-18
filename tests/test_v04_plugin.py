@@ -39,14 +39,14 @@ def _seed_procedure(home):
 
 def test_plugin_tool_count():
     names = tool_names()
-    for t in ["capt_generate_skill", "capt_validate_skill", "capt_publish_skill",
+    for t in ["capt_generate_skill", "capt_validate_skill", "capt_request_skill_review",
               "capt_query_capability", "capt_verify_claim", "capt_build_bubble",
               "capt_validate_bubble", "capt_install_bubble", "capt_export_bubble",
               "capt_inspect_proof"]:
         assert t in names
 
 
-def test_generate_and_publish_skill(plugin, tmp_path, monkeypatch):
+def test_generate_skill_then_request_review_only(plugin, tmp_path, monkeypatch):
     monkeypatch.setenv("CAPT_SOLO_HOME", str(tmp_path))
     pid = _seed_procedure(str(tmp_path))
     r = plugin.capt_generate_skill(pid, name="op-skill",
@@ -56,8 +56,10 @@ def test_generate_and_publish_skill(plugin, tmp_path, monkeypatch):
     sid = r["skill_id"]
     v = plugin.capt_validate_skill(sid)
     assert v["ok"] is True and v["passed"] is True
-    p = plugin.capt_publish_skill(sid, reviewer="hermes")
-    assert p["ok"] is True and p["lifecycle"] == "published"
+    # CAPT-UPG-026: the model surface can request review but never approve or publish.
+    assert not hasattr(plugin, "capt_publish_skill")
+    p = plugin.capt_request_skill_review(sid)
+    assert p["ok"] is True and p["lifecycle"] == "reviewing"
 
 
 def test_query_capability(plugin, tmp_path, monkeypatch):
