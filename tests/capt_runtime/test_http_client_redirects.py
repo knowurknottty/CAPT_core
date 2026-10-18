@@ -57,7 +57,10 @@ def redirect_pair() -> Iterator[tuple[str, _Recorder]]:
         def log_message(self, *_args: object) -> None:
             pass
 
-    target = _serve(Target, "127.0.0.2")
+    # An independent ephemeral port is a distinct HTTP origin without
+    # relying on 127.0.0.2 being configured as a loopback alias (it is not
+    # guaranteed on macOS). The security test still checks zero forwarding.
+    target = _serve(Target, "127.0.0.1")
 
     class Origin(BaseHTTPRequestHandler):
         def _redirect(self) -> None:
@@ -65,7 +68,7 @@ def redirect_pair() -> Iterator[tuple[str, _Recorder]]:
             if length:
                 self.rfile.read(length)
             self.send_response(302)
-            self.send_header("Location", f"http://127.0.0.2:{target.server_port}/steal")
+            self.send_header("Location", f"http://127.0.0.1:{target.server_port}/steal")
             self.send_header("Content-Length", "0")
             self.end_headers()
 
