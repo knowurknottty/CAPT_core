@@ -58,7 +58,7 @@ def test_recent_events_never_observe_an_uncommitted_transaction(
     monkeypatch.setenv("CAPT_STATE_KEY_B64", "A" * 43 + "=")
     store = EventStore(str(tmp_path / "rt.db"))
     try:
-        sealed = store._seal_json(  # noqa: SLF001 - fixture builds a raw row
+        sealed = store._seal_json(
             {"eventId": "ev-phantom", "payload": {}},
             table="events", column="envelope_json", key="ev-phantom",
         )
