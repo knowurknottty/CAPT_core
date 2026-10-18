@@ -18,6 +18,7 @@ from capt_runtime.provider_endpoint import endpoint_class
 from capt_runtime.reasoning import openai_reasoning_fields
 from capt_runtime.resource_governor import TokenCostGovernor
 from capt_ui.operator.secrets import resolve as resolve_secret
+from capt_runtime import http_client
 
 _MAX_RESPONSE_BYTES = 262_144
 _DEFAULT_COMPILER_MAX_OUTPUT_TOKENS = 32_768
@@ -249,7 +250,7 @@ class OpenAICompatiblePromptCompilerTransport:
             method="GET",
         )
         try:
-            with urllib.request.urlopen(request, timeout=min(self.timeout_seconds, 5)) as response:
+            with http_client.open_url(request, timeout=min(self.timeout_seconds, 5)) as response:
                 raw = response.read(_MAX_RESPONSE_BYTES + 1)
         except urllib.error.HTTPError:
             # Endpoint is reachable but may not implement model discovery.
@@ -323,7 +324,7 @@ class OpenAICompatiblePromptCompilerTransport:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
+            with http_client.open_url(request, timeout=self.timeout_seconds) as response:
                 raw = response.read(_MAX_RESPONSE_BYTES + 1)
         except http.client.IncompleteRead as exc:
             raise OSError("prompt compiler response stream interrupted") from exc

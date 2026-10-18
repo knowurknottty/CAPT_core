@@ -21,6 +21,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlsplit
 
+from capt_runtime import http_client
+
 from .contract import ProviderHealth, ProviderKind
 from .secrets import is_reference
 
@@ -297,6 +299,7 @@ class ProviderManager:
 
         import time
         import urllib.request
+
         from .adapters import resolve_secret
 
         body = json.dumps({
@@ -315,8 +318,8 @@ class ProviderManager:
             data=body, headers=headers, method="POST",
         )
         started = time.monotonic()
-        with urllib.request.urlopen(req, timeout=120) as response:
-            response.read()
+        with http_client.open_url(req, timeout=120) as response:
+            http_client.read_bounded(response)
         return {
             "status": "warm",
             "provider": p.id,

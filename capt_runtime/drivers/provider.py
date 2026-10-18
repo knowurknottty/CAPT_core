@@ -16,6 +16,7 @@ from ..approval_dispatch import require_expected_prompt_digest
 from ..provider_endpoint import endpoint_class
 from ..resource_governor import BudgetCeilingExceeded, TokenCostGovernor
 from ..reasoning import normalize_reasoning_effort, openai_reasoning_fields
+from .. import http_client
 
 DRIVER_ID = "provider"
 DESCRIPTOR = {
@@ -386,7 +387,7 @@ class ProviderDriver:
             req = urllib.request.Request(
                 url, data=json.dumps(outbound).encode(), headers=headers, method="POST"
             )
-            response = urllib.request.urlopen(
+            response = http_client.open_url(
                 req, timeout=self._remaining_request_timeout(rid)
             )
             self._note_dispatch_boundary(rid, "response_started")

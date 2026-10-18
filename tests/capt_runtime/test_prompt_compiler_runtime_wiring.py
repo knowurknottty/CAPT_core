@@ -65,7 +65,7 @@ def test_transport_uses_strict_schema_and_capability_guard(monkeypatch):
         return _Response(json.dumps(payload).encode("utf-8"))
 
     monkeypatch.setattr(
-        "desktop.prompt_compiler_provider.urllib.request.urlopen", fake_urlopen
+        "capt_runtime.http_client.open_url", fake_urlopen
     )
     selection = LocalPromptCompilerSelection(
         "mtplx", "qwen3.8-27b-mtplx", "http://127.0.0.1:18085/v1"
@@ -142,7 +142,7 @@ def test_transport_rejects_non_object_model_content(monkeypatch):
         return _Response(json.dumps(payload).encode("utf-8"))
 
     monkeypatch.setattr(
-        "desktop.prompt_compiler_provider.urllib.request.urlopen", fake_urlopen
+        "capt_runtime.http_client.open_url", fake_urlopen
     )
     transport = OpenAICompatiblePromptCompilerTransport(
         LocalPromptCompilerSelection(
@@ -221,7 +221,7 @@ def test_transport_resolves_unambiguous_local_model_alias(monkeypatch):
         return _Response(json.dumps(payload).encode("utf-8"))
 
     monkeypatch.setattr(
-        "desktop.prompt_compiler_provider.urllib.request.urlopen", fake_urlopen
+        "capt_runtime.http_client.open_url", fake_urlopen
     )
     transport = OpenAICompatiblePromptCompilerTransport(
         LocalPromptCompilerSelection(
@@ -267,7 +267,7 @@ def test_remote_prompt_compiler_reasoning_effort_is_selected_and_transmitted(tmp
         content = json.dumps(_stage("OMNI"))
         return _Response(json.dumps({"choices": [{"message": {"content": content}}]}).encode("utf-8"))
 
-    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("capt_runtime.http_client.open_url", fake_urlopen)
     transport = OpenAICompatiblePromptCompilerTransport(selections[0], api_key="synthetic-test-key")
     transport({
         "stage": "OMNI", "allowedCapabilities": [],
@@ -283,7 +283,7 @@ def test_prompt_compiler_explicit_output_token_limit_is_transmitted(monkeypatch)
         seen["body"] = json.loads(request.data.decode("utf-8"))
         content = json.dumps(_stage("OMNI"))
         return _Response(json.dumps({"choices": [{"finish_reason": "stop", "message": {"content": content}}]}).encode("utf-8"))
-    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("capt_runtime.http_client.open_url", fake_urlopen)
     selection = PromptCompilerSelection(
         "openrouter", "deepseek/deepseek-v4.1-flash",
         "https://openrouter.ai/api/v1", "remote", "keychain:test", True, "max"
@@ -310,7 +310,7 @@ def test_prompt_compiler_truncation_is_typed(monkeypatch):
         }
         return _Response(json.dumps(payload).encode("utf-8"))
 
-    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("capt_runtime.http_client.open_url", fake_urlopen)
     selection = PromptCompilerSelection(
         "openrouter", "deepseek/deepseek-v4.1-flash",
         "https://openrouter.ai/api/v1", "remote", "keychain:test", True, "max"
@@ -337,7 +337,7 @@ def test_prompt_compiler_incomplete_http_body_is_typed(monkeypatch):
         def read(self, _limit=-1):
             raise http.client.IncompleteRead(b"partial", 100)
 
-    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen", lambda request, timeout: InterruptedResponse())
+    monkeypatch.setattr("capt_runtime.http_client.open_url", lambda request, timeout: InterruptedResponse())
     selection = PromptCompilerSelection(
         "openrouter", "deepseek/deepseek-v4.1-flash",
         "https://openrouter.ai/api/v1", "remote", "keychain:test", True, "max"
@@ -363,7 +363,7 @@ def test_remote_prompt_compiler_malformed_envelope_is_typed_transport_failure(mo
             return b'{"choices":[{"message":{"content":"partial"}}]\n'
 
     monkeypatch.setattr(
-        "desktop.prompt_compiler_provider.urllib.request.urlopen",
+        "capt_runtime.http_client.open_url",
         lambda request, timeout: MalformedResponse(),
     )
     selection = PromptCompilerSelection(

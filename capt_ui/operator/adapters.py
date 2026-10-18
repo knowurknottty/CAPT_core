@@ -27,6 +27,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Protocol
 
+from capt_runtime import http_client
+
 from .contract import ProviderHealth
 
 
@@ -91,8 +93,8 @@ class OpenAICompatibleAdapter:
             headers["Authorization"] = "Bearer " + key
         url = provider.base_url.rstrip("/") + "/models"
         req = urllib.request.Request(url, headers=headers, method="GET")
-        with urllib.request.urlopen(req, timeout=4) as resp:  # noqa: S310
-            data = json.loads(resp.read().decode())
+        with http_client.open_url(req, timeout=4) as resp:
+            data = json.loads(http_client.read_bounded(resp).decode())
         return [m.get("id", "") for m in data.get("data", []) if m.get("id")]
 
     def capabilities(self) -> List[str]:
@@ -151,8 +153,8 @@ class OllamaAdapter:
         base = provider.base_url.replace("/v1", "").rstrip("/")
         url = base + "/api/tags"
         req = urllib.request.Request(url, headers={"Accept": "application/json"})
-        with urllib.request.urlopen(req, timeout=4) as resp:  # noqa: S310
-            data = json.loads(resp.read().decode())
+        with http_client.open_url(req, timeout=4) as resp:
+            data = json.loads(http_client.read_bounded(resp).decode())
         return [m.get("name", "") for m in data.get("models", []) if m.get("name")]
 
     def capabilities(self) -> List[str]:

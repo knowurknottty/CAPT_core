@@ -68,6 +68,8 @@ class MCPServerRegistry:
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 
+from capt_runtime import http_client
+
 MCP_PROTOCOL_VERSION = "2025-06-18"
 
 
@@ -122,7 +124,7 @@ class MCPHTTPClient:
             method="POST",
         )
         try:
-            with urllib_request.urlopen(req, timeout=self.timeout) as response:
+            with http_client.open_url(req, timeout=self.timeout) as response:
                 session_id = response.headers.get("Mcp-Session-Id")
                 if session_id:
                     self.session_id = session_id
