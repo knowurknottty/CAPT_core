@@ -274,6 +274,21 @@ class ProviderDriver:
             return None
         return value
 
+    def _physical_request_limit(self) -> int | None:
+        spec = self.cohort_spec
+        if not isinstance(spec, dict):
+            return None
+        configured = spec.get("maxPhysicalProviderRequests")
+        if configured is None:
+            return 1 if self._strict_charter_policy() is not None else None
+        if isinstance(configured, bool) or not isinstance(configured, int) or not 1 <= configured <= 24:
+            raise ProviderDriverFailure(
+                "invalid approval-bound provider request ceiling",
+                diagnostic_code="PROVIDER_BUDGET_EXCEEDED",
+                diagnostic_phase="pre_dispatch",
+            )
+        return configured
+
     def _strict_charter_policy(self) -> dict[str, Any] | None:
         spec = self.cohort_spec
         if not isinstance(spec, dict):
@@ -335,13 +350,25 @@ class ProviderDriver:
         # Physical request slots are reserved BEFORE each provider HTTP call,
         # including subsequent tool rounds (not merely DriverRun admission).
         estimate = max(1, len(json.dumps(body)) // 4)
-        try:
-            self.governor.reserve_provider_request(estimate)
-        except BudgetCeilingExceeded as exc:
-            raise ProviderDriverFailure(
-                "physical provider request budget exceeded",
-                diagnostic_code="PROVIDER_BUDGET_EXCEEDED", diagnostic_phase="pre_dispatch",
-            ) from exc
+        with self._lock:
+            run = self.runs[rid]
+            limit = self._physical_request_limit()
+            attempts = int(run.get("physicalRequestSlotsConsumed", 0))
+            if limit is not None and attempts >= limit:
+                raise ProviderDriverFailure(
+                    "approval-bound physical provider request ceiling exhausted",
+                    diagnostic_code="PROVIDER_BUDGET_EXCEEDED",
+                    diagnostic_phase="pre_dispatch",
+                )
+            try:
+                self.governor.reserve_provider_request(estimate)
+            except BudgetCeilingExceeded as exc:
+                raise ProviderDriverFailure(
+                    "physical provider request budget exceeded",
+                    diagnostic_code="PROVIDER_BUDGET_EXCEEDED",
+                    diagnostic_phase="pre_dispatch",
+                ) from exc
+            run["physicalRequestSlotsConsumed"] = attempts + 1
         # The authoritative EventStore boundary is written before external I/O
         # and enforces the per-DriverRun attempt ceiling.
         self._note_dispatch_boundary(rid, "request_started")
@@ -547,11 +574,21 @@ class ProviderDriver:
                     raise ProviderDriverFailure("provider tool call missing id")
                 if not isinstance(name, str) or not name:
                     raise ProviderDriverFailure("provider tool call missing function name")
-                tool_result = self.tool_bridge.execute_call(
-                    name,
-                    function.get("arguments", "{}"),
-                    call_id=call_id,
-                )
+                try:
+                    tool_result = self.tool_bridge.execute_call(
+                        name,
+                        function.get("arguments", "{}"),
+                        call_id=call_id,
+                    )
+                except Exception as exc:
+                    # Do not collapse a ToolBroker/authority failure into an
+                    # unclassified provider error. Never include exception text,
+                    # tool arguments or tool response in durable diagnostics.
+                    raise ProviderDriverFailure(
+                        "governed model tool execution failed",
+                        diagnostic_code="PROVIDER_TOOL_FAILURE",
+                        diagnostic_phase="tool_execution",
+                    ) from exc
                 tool_call_count += 1
                 messages.append({
                     "role": "tool",
@@ -881,6 +918,18 @@ class ProviderDriver:
             else "Provide a bounded evidence-backed observation."
         )
         estimated_prompt_tokens = max(1, len(prompt) // 4)
+        # Do not spend a provider call on a charter whose conservative physical
+        # row budget already exceeds the configured output ceiling.
+        minimum = self._charter_minimum_output_tokens()
+        if minimum > int(self.governor.max_output_tokens_per_request):
+            with self._lock:
+                self.runs[rid]["state"] = "failed"
+            self._note_dispatch_boundary(rid, "budget_rejected")
+            raise ProviderDriverFailure(
+                "strict charter cannot fit the configured output-token ceiling",
+                diagnostic_code="PROVIDER_BUDGET_EXCEEDED",
+                diagnostic_phase="pre_dispatch",
+            )
         try:
             self.governor.check_pre_dispatch(
                 estimated_prompt_tokens=estimated_prompt_tokens
@@ -904,11 +953,18 @@ class ProviderDriver:
 
         tool_call_count = 0
         context_budget_tokens = self._work_order_context_budget_tokens(wo)
-        if self.provider_id == "ollama" and self.tool_bridge is not None:
+        # Tool-capable completion requires a second physical provider request
+        # after tool output. For a one-request-approved council, send only the
+        # already-bound prompt and never advertise a tool path that cannot
+        # complete within the operator's explicit physical request ceiling.
+        tool_bridge_enabled = (
+            self.tool_bridge is not None and self._physical_request_limit() != 1
+        )
+        if self.provider_id == "ollama" and tool_bridge_enabled:
             text, prompt_tokens, completion_tokens, cost_usd, tool_call_count = self._ollama_with_tools(
                 rid, prompt, headers
             )
-        elif self.tool_bridge is not None:
+        elif tool_bridge_enabled:
             text, prompt_tokens, completion_tokens, cost_usd, tool_call_count = self._openai_with_tools(
                 rid, prompt, headers, context_budget_tokens
             )
