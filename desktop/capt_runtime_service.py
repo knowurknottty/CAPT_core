@@ -190,9 +190,19 @@ def _reconcile_stranded_driver_runs(runtime: RuntimeComposition, now: str) -> No
                 correlation_id="corr-recovery-" + run_id, actor_id="exec-recovery",
                 actor_kind="execution_plane", issued_at=now, replay_policy="never",
             )
-        # A created run has not reached submission. Every later non-terminal
-        # state is ambiguous: consume any open reservation and forbid replay.
+        # A "created" DriverRun can already have an irreversible HTTP
+        # request_started boundary: the provider dispatcher persists that
+        # boundary before it updates run state. Never claim such a run failed
+        # on restart, since its external outcome is indeterminate. Preserve
+        # its recorded boundary and require manual reconciliation; never
+        # redispatch or synthesize a completion/failure receipt.
+        # Only definitely pre-dispatch boundaries permit an automatic
+        # created -> failed recovery.
         if run["state"] == "created":
+            if run.get("dispatchBoundary", "unknown") not in (
+                "not_dispatched", "prepared", "budget_rejected"
+            ):
+                continue
             svc.transition_driver_run(run_id, "failed", recovery_meta("created-failed"))
             task = store.load_state("task-" + task_id)
             if task and task.get("state") in ("assigned", "running"):
