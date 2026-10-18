@@ -65,7 +65,7 @@ def test_harness_starts_no_process_for_any_workflow_step(
         eng.close()
 
     assert launched == []
-    execution = next(s for s in report.to_dict()["stages"] if s["name"] == "execution")
+    execution = next(s for s in report.to_dict()["stages"] if s["stage"] == "execution")
     assert execution["status"] != "fail"
     assert any("not executed" in w for w in execution["warnings"])
 

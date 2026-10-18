@@ -181,29 +181,20 @@ class ValidationHarness:
         return s
 
     def _execution(self, skill, tr) -> StageResult:
+        """Inventory workflow steps; never execute them (CAPT-UPG-025).
+
+        Workflow text is model-authorable data. Running it here would be
+        process execution outside ToolBroker, capability leases and approval
+        binding. Execution of a skill's steps belongs to a governed run; this
+        stage only records what such a run would have to perform. The evidence
+        id is the digest of the inspected workflow content, not an execution
+        receipt.
+        """
         s = self._stage("execution", tr)
-        # isolated execution: run workflow steps that are safe (no network/
-        # destructive). We execute only steps prefixed with 'echo' or marked
-        # safe, in an isolated temp dir. This is real execution, not a mock.
-        safe = True
-        try:
-            workdir = tempfile.mkdtemp(prefix="skill-exec-")
-            for step in skill.workflow:
-                st = step.strip()
-                if not st:
-                    continue
-                # only allow echo-style safe steps in the harness sandbox
-                if st.lower().startswith("echo") or st.lower().startswith("#"):
-                    os.system(f"cd {workdir} && {st} >/dev/null 2>&1")
-                else:
-                    # non-trivial step: record as requiring manual review
-                    s.warnings.append(f"step not auto-executed in sandbox: {st[:60]}")
-            os.rmdir(workdir)
-        except Exception as e:
-            safe = False
-            s.status = "fail"
-            s.failure_reasons.append(f"execution error: {e}")
-        if safe and not s.failure_reasons:
+        steps = [step.strip() for step in skill.workflow if step.strip()]
+        for st in steps:
+            s.warnings.append(f"step not executed by validation; requires a governed run: {st[:60]}")
+        if not s.failure_reasons:
             s.evidence_ids.append(sha256_of("\n".join(skill.workflow)))
         return s
 
