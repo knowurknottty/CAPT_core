@@ -64,7 +64,7 @@ class DriverRunAggregate:
 
     @staticmethod
     def create(run: Dict[str, Any]) -> Dict[str, Any]:
-        return {
+        result = {
             "driverRunId": run["driverRunId"],
             "driverId": run["driverId"],
             "missionId": run["missionId"],
@@ -84,6 +84,10 @@ class DriverRunAggregate:
             "dispatchBoundary": "not_dispatched",
             "providerHttpRequestAttempts": 0,
         }
+        for field in ("approvalRequestId", "maxPhysicalProviderRequests"):
+            if field in run:
+                result[field] = run[field]
+        return result
 
     @staticmethod
     def transition(
@@ -169,7 +173,10 @@ class DriverRunAggregate:
             # Each new physical HTTP attempt is recorded BEFORE external I/O.
             # Repeat of the current boundary is idempotent (handled above).
             used = int(state.get("providerHttpRequestAttempts", 0))
-            if used >= DriverRunAggregate.MAX_PROVIDER_HTTP_REQUESTS_PER_RUN:
+            bound = state.get("maxPhysicalProviderRequests", DriverRunAggregate.MAX_PROVIDER_HTTP_REQUESTS_PER_RUN)
+            if type(bound) is not int or not 1 <= bound <= DriverRunAggregate.MAX_PROVIDER_HTTP_REQUESTS_PER_RUN:
+                raise IllegalTransition("INVALID_APPROVAL_BOUND_PROVIDER_REQUEST_CEILING", str(bound), str(used + 1))
+            if used >= bound:
                 raise IllegalTransition(
                     "PROVIDER_HTTP_REQUEST_ATTEMPT_CAP_EXCEEDED",
                     str(used), str(used + 1),

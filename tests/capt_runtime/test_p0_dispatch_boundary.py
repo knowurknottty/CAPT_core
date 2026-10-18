@@ -199,3 +199,63 @@ def test_repeated_boundary_records_are_distinct_durable_events(tmp_path: Path):
         ]
     finally:
         runtime.close()
+
+
+def test_approved_physical_ceiling_survives_restart_and_refuses_new_http_round(tmp_path: Path):
+    """A new driver/runtime cannot reset the authoritative request count."""
+    ledger = str(tmp_path / "bounded.db")
+    run_id = "dr-approved-single"
+    run = {
+        "schemaVersion": "1.0.0", "driverRunId": run_id,
+        "driverId": "provider", "missionId": "m-bound", "taskId": "t-bound",
+        "workOrderVersion": 1, "externalRunId": None, "state": "created",
+        "reconciliationStatus": "not_required", "createdAt": T,
+        "approvalRequestId": "approval-bound-single",
+        "maxPhysicalProviderRequests": 1,
+    }
+    runtime = create_runtime(ledger)
+    try:
+        runtime.service.create_driver_run(run, _boundary_metadata("create-bound"))
+        for n, boundary in enumerate(("prepared", "request_started", "response_started", "response_completed")):
+            runtime.service.record_driver_dispatch_boundary(
+                run_id, boundary, _boundary_metadata(f"bound-{n}"))
+        assert runtime.store.require_state("driverrun-" + run_id)["providerHttpRequestAttempts"] == 1
+    finally:
+        runtime.close()
+
+    recovered = create_runtime(ledger)
+    try:
+        previous = recovered.store.require_state("driverrun-" + run_id)
+        assert previous["approvalRequestId"] == run["approvalRequestId"]
+        assert previous["maxPhysicalProviderRequests"] == 1
+        assert previous["providerHttpRequestAttempts"] == 1
+        events_before = len(recovered.store.read_stream("driverrun-" + run_id))
+        with pytest.raises(Exception, match="PROVIDER_HTTP_REQUEST_ATTEMPT_CAP_EXCEEDED"):
+            recovered.service.record_driver_dispatch_boundary(
+                run_id, "request_started", _boundary_metadata("recovery-extra"))
+        after = recovered.store.require_state("driverrun-" + run_id)
+        assert after["providerHttpRequestAttempts"] == 1
+        assert len(recovered.store.read_stream("driverrun-" + run_id)) == events_before
+    finally:
+        recovered.close()
+
+
+def test_fresh_duplicate_request_started_cannot_reuse_same_durable_slot(tmp_path: Path):
+    runtime = create_runtime(str(tmp_path / "duplicate.db"))
+    run_id = "dr-duplicate-bound"
+    try:
+        runtime.service.create_driver_run({
+            "schemaVersion": "1.0.0", "driverRunId": run_id,
+            "driverId": "provider", "missionId": "m-dupe", "taskId": "t-dupe",
+            "workOrderVersion": 1, "state": "created",
+            "reconciliationStatus": "not_required", "createdAt": T,
+            "maxPhysicalProviderRequests": 1,
+        }, _boundary_metadata("create-dupe"))
+        runtime.service.record_driver_dispatch_boundary(
+            run_id, "request_started", _boundary_metadata("start-dupe"))
+        with pytest.raises(Exception, match="PROVIDER_REQUEST_BOUNDARY_ALREADY_STARTED"):
+            runtime.service.record_driver_dispatch_boundary(
+                run_id, "request_started", _boundary_metadata("start-dupe-again"))
+        assert runtime.store.require_state("driverrun-" + run_id)["providerHttpRequestAttempts"] == 1
+    finally:
+        runtime.close()

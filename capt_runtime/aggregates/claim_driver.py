@@ -213,7 +213,7 @@ class DriverRunAggregate(object):
 
     @staticmethod
     def create(run: Dict[str, Any]) -> Dict[str, Any]:
-        return {
+        result = {
             "driverRunId": run["driverRunId"],
             "driverId": run["driverId"],
             "missionId": run["missionId"],
@@ -224,6 +224,10 @@ class DriverRunAggregate(object):
             "reconciliationStatus": "not_required",
             "dispatchBoundary": "not_dispatched",
         }
+        for field in ("approvalRequestId", "maxPhysicalProviderRequests"):
+            if field in run:
+                result[field] = run[field]
+        return result
 
     @staticmethod
     def transition(

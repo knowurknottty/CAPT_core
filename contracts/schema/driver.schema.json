@@ -374,6 +374,8 @@
         "state": { "$ref": "driver.schema.json#/$defs/DriverRunState" },
         "reconciliationStatus": { "$ref": "driver.schema.json#/$defs/DriverReconciliationStatus" },
         "createdAt": { "$ref": "common.schema.json#/$defs/Timestamp" },
+        "approvalRequestId": { "$ref": "common.schema.json#/$defs/Identifier" },
+        "maxPhysicalProviderRequests": { "type": "integer", "minimum": 1, "maximum": 24 },
         "dispatchBoundary": { "$ref": "driver.schema.json#/$defs/DispatchBoundary" },
         "dispatchBoundaryUpdatedAt": { "$ref": "common.schema.json#/$defs/Timestamp" }
       }

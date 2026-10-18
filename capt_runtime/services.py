@@ -2262,13 +2262,27 @@ class RuntimeService(object):
                 mission_id=mission_id,
                 task_id=task_id,
             )
+            # Derive the physical ceiling exclusively from the immutable, verified
+            # HumanApproval binding. Never accept a fresh driver/process estimate.
+            approved_cohort = binding.get("cohortSpec")
+            approved_max = None
+            if approved_cohort is not None:
+                if not isinstance(approved_cohort, dict):
+                    raise AuthorityViolation("APPROVED_COHORT_SPEC_INVALID")
+                if "maxPhysicalProviderRequests" in approved_cohort:
+                    approved_max = approved_cohort["maxPhysicalProviderRequests"]
+                    if type(approved_max) is not int or not 1 <= approved_max <= 24:
+                        raise AuthorityViolation("APPROVED_PHYSICAL_PROVIDER_REQUEST_LIMIT_INVALID")
             run = {
                 "schemaVersion": "1.0.0", "driverRunId": driver_run_id,
                 "driverId": driver_id, "missionId": mission_id, "taskId": task_id,
                 "workOrderVersion": 1, "externalRunId": None, "state": "created",
                 "reconciliationStatus": "not_required", "createdAt": consumed_at,
                 "dispatchBoundary": "not_dispatched",
+                "approvalRequestId": request_id,
             }
+            if approved_max is not None:
+                run["maxPhysicalProviderRequests"] = approved_max
             require("DriverRun", run)
             run_stream = DriverRunAggregate.stream_id(driver_run_id)
             if self.store.aggregate_version(run_stream) != 0:
@@ -2311,6 +2325,11 @@ class RuntimeService(object):
         stream = DriverRunAggregate.stream_id(driver_run_id)
         expected = self.store.aggregate_version(stream)
         current = self.store.require_state(stream)
+        # Repeating request_started with a fresh operation identity after a crash
+        # must NEVER authorize another HTTP effect without another durable slot.
+        # Historical replay continues to accept old same-boundary events.
+        if dispatch_boundary == "request_started" and current.get("dispatchBoundary") == "request_started":
+            raise AuthorityViolation("PROVIDER_REQUEST_BOUNDARY_ALREADY_STARTED")
         recorded_at = _now_rfc3339()
         # Boundary vocabulary/monotonicity is owned by the boundary-capable
         # aggregate (capt_runtime.driver_run); the service aggregate
