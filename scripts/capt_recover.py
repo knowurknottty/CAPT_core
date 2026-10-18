@@ -79,7 +79,9 @@ def local_runtime(state):
             token=os.read(fd,4096).decode().strip()
         finally:
             os.close(fd)
-        if not token or not is_live(str(sock_file)):
+        if not token:
+            # The authenticated exchange below is the health check.
+            # A bare socket probe creates an unauthenticated audit rejection.
             return {"profile":state.name,"state":"unreachable_or_empty_token"}
         with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as s:
             s.settimeout(3)

@@ -998,15 +998,23 @@ class ProviderDriver:
             finish_reason = self._safe_finish_reason(choice.get("finish_reason"))
             with self._lock:
                 self.runs[rid]["providerFinishReason"] = finish_reason
-            text = (
-                data.get("response")
-                if self.provider_id == "ollama"
-                else (choice.get("message") or {}).get("content")
-            ) or ""
+            # OpenAI-compatible providers can return visible content as a
+            # string or a list of text parts. Never mistake a reasoning-only
+            # completion for final-facing content, and never call .encode()
+            # on a raw list after the HTTP response has completed.
+            if self.provider_id == "ollama":
+                text = data.get("response")
+                text = text if isinstance(text, str) else ""
+            else:
+                text = self._final_facing_text(choice.get("message") or {})
             if not text:
                 with self._lock:
                     self.runs[rid]["state"] = "failed"
-                raise ProviderDriverFailure("provider returned no content")
+                raise ProviderDriverFailure(
+                    "provider returned no final-facing content",
+                    diagnostic_code="PROVIDER_NO_CONTENT",
+                    diagnostic_phase="response_body",
+                )
             usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
             prompt_tokens = usage.get("prompt_tokens")
             completion_tokens = usage.get("completion_tokens")
