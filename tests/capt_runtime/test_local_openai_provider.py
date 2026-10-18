@@ -567,7 +567,10 @@ def test_runtime_write_authority_off_rejects_model_write_before_mutation(tmp_pat
     )
     try:
         assert run["status"] == "rejected", run
-        assert "MODEL_TOOL_NOT_AUTHORIZED:file.write" in (run.get("detail") or "")
+        # A denied tool is still refused, but raw authority exception strings
+        # must not be exposed by the external model-response error channel.
+        assert run.get("detail") == "PROVIDER_FAILURE_DIAGNOSTIC_AVAILABLE_OR_OUTCOME_UNKNOWN"
+        assert "MODEL_TOOL_NOT_AUTHORIZED" not in str(run)
         assert not (target / target_path).exists()
         assert len(_AuthorityMatrixHandler.calls) == 1
     finally:
@@ -613,7 +616,8 @@ def test_runtime_shell_authority_off_rejects_model_shell(tmp_path: Path, monkeyp
     )
     try:
         assert run["status"] == "rejected", run
-        assert "MODEL_TOOL_NOT_AUTHORIZED:terminal.exec" in (run.get("detail") or "")
+        assert run.get("detail") == "PROVIDER_FAILURE_DIAGNOSTIC_AVAILABLE_OR_OUTCOME_UNKNOWN"
+        assert "MODEL_TOOL_NOT_AUTHORIZED" not in str(run)
         assert len(_AuthorityMatrixHandler.calls) == 1
     finally:
         try: client.command("shutdown", {}, "shell-off-shutdown")

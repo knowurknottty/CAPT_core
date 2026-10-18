@@ -39,7 +39,7 @@ Incident assessed via authenticated CAPT RuntimeService IPC projections, CAPT No
 ## VERIFY and remaining gates
 
 - Focused cohort/provider/physical-budget suite: **61 passed** on the isolated Mac worktree, without provider network dispatch; changes passed focused Ruff and schema-generated drift checks before the typed diagnostic addition, to be re-run for the final SHA.
-- Run broader Python regression and GitHub CI before merging.
+- Run broader Python regression and GitHub CI before merging. Initial M0-A CI exposed legacy tests expecting unsafe raw exception details in failed tool calls, and two direct _post_json test entry points without prepopulated process-local run state. Corrected the transient state initializer and updated the tests to assert sanitized failure receipts instead of promoting internal authority details across the response boundary. Confirm the new CI run and independently verify successful request-boundary evidence.
 - Demonstrate prompt-assembly/approval parity including the new maxPhysicalProviderRequests bound under RuntimeService.
 - Separately implement semantic exact-source/ID verification (issue #187); do not claim it is addressed by physical budget enforcement.
 - Implement safe provider-effect reconciliation for lost runs and verify authenticated provider billing (issues #185/#210). Do not auto-replay lost GLM.

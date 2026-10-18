@@ -351,7 +351,11 @@ class ProviderDriver:
         # including subsequent tool rounds (not merely DriverRun admission).
         estimate = max(1, len(json.dumps(body)) // 4)
         with self._lock:
-            run = self.runs[rid]
+            # Some recovery/chain-integrity callers enter _post_json using a
+            # durable DriverRun that has not been materialized in this driver's
+            # process-local cache. Initialize only transient bookkeeping; the
+            # EventStore recorder remains the authoritative request witness.
+            run = self.runs.setdefault(rid, {"state": "running"})
             limit = self._physical_request_limit()
             attempts = int(run.get("physicalRequestSlotsConsumed", 0))
             if limit is not None and attempts >= limit:
