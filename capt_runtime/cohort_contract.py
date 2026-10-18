@@ -131,6 +131,18 @@ def normalize_cohort_spec(value: Any) -> Optional[Dict[str, Any]]:
         normalized["vesselCharterPolicy"] = normalize_charter_policy(
             value.get("vesselCharterPolicy"), vessels
         )
+    # One approved cohort is not permission for unlimited provider round-trips.
+    # Strict charter councils default to ONE physical inference even if a
+    # read-only ToolBridge is otherwise authorized. Explicit higher limits must
+    # participate in the immutable HumanApproval cohort binding.
+    if "maxPhysicalProviderRequests" in value or (
+        isinstance(normalized.get("vesselCharterPolicy"), dict)
+        and normalized["vesselCharterPolicy"].get("strictLedger")
+    ):
+        limit = value.get("maxPhysicalProviderRequests", 1)
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 24:
+            raise ValueError("COHORT_PHYSICAL_PROVIDER_REQUEST_LIMIT_INVALID")
+        normalized["maxPhysicalProviderRequests"] = limit
     return normalized
 
 
@@ -246,6 +258,10 @@ def compile_cohort_objective(
         + f"- output_modality: {modality}\n"
         + f"- logical_vessels: {count}\n"
         + f"- vessel_namespace: {first}..{last}\n"
+        + (
+            f"- approved_max_physical_provider_requests: {spec['maxPhysicalProviderRequests']}\n"
+            if "maxPhysicalProviderRequests" in spec else ""
+        )
         + "- this is ONE provider inference for the whole cohort; never fan "
           "logical vessels out into separate provider calls;\n"
     )
