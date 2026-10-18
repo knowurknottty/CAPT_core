@@ -37,3 +37,11 @@ New tests cover list-form text output, rejection of reasoning-only content, and 
 **Observed tests:** 35/35 provider-driver + recovery tests, plus 18/18 physical accounting and local OpenAI-provider tests passed. Local pytest basetemp must be short on macOS to avoid AF_UNIX's 104-byte pathname limit. A failing test caused by the default long pytest temp path is not a production provider failure.
 
 **Remaining gates:** full suite and GitHub CI; catalog/credit preflight; causal attribution of 17,974 IPC probe events to scheduled invoker; account/provider transaction reconciliation for lost runs; exact post-restart release verification. No automatic model inference was issued by this audit. No lost runs replayed.
+
+## Follow-up: identified scheduled source of unauthenticated IPC probes
+
+The agent's `~/Library/LaunchAgents/online.inversionlabs.capt-goal-watchdog.plist` schedules a 60-second `capt-goal-watchdog.py` process. Its `runtime_ok()` calls `capt status --state-dir ~/.capt`. CAPT CLI's `capt_runtime/cli_ramp.py::is_running()` previously opened a **bare unauthenticated socket and then closed it**, before `capt_cli.py` constructed `RuntimeClient` and authenticated separately. The ledger shows one rejection every ~62 seconds (e.g., 23:21:10, 23:22:12, 23:23:14 UTC), consistent with the periodic status check and its execution overhead.
+
+**Actual root-level fix in this PR:** replace `cli_ramp.is_running()` with bounded authenticated token-handshake health probing. It refuses missing or insecure token files, never emits credentials to logs, enforces response length limits and checks both `ok` and `authenticated`. `scripts/capt_recover.py` also drops its duplicate bare probe before doing the already-existing authenticated exchange. The normal RuntimeService IPC security check is unchanged.
+
+**Validation:** `tests/test_v06_cli_onramp.py` now explicitly asserts a `capt status` call does not increase `unauthenticated_ipc_attempt` count in an isolated real RuntimeService ledger. Alongside `tests/test_capt_recover.py`, 7 tests PASS. This establishes a concrete source/fix, though other independent unauthenticated clients cannot be ruled out from old rows lacking peer PID.
