@@ -9,7 +9,6 @@ import pytest
 from capt_runtime.cohort_contract import normalize_cohort_spec, compile_cohort_objective
 from capt_runtime.drivers.provider import ProviderDriver, ProviderDriverFailure
 from capt_runtime.resource_governor import TokenCostGovernor
-import capt_runtime.drivers.provider as provider_module
 
 
 def spec(*, requests=None, vessels=22):
@@ -71,7 +70,7 @@ def test_strict_one_call_does_not_advertise_a_tool_loop(monkeypatch,tmp_path):
     def fake_urlopen(request,**kwargs):
         seen.append(json.loads(request.data))
         return FakeResponse()
-    monkeypatch.setattr(provider_module.urllib.request,"urlopen",fake_urlopen)
+    monkeypatch.setattr("capt_runtime.http_client.open_url", fake_urlopen)
 
     class ReadOnlyToolBridge:
         def openai_tools(self):
@@ -95,7 +94,7 @@ def test_bound_physical_request_cap_blocks_third_network_attempt(monkeypatch,tmp
     def fake_urlopen(request,**kwargs):
         sent.append(json.loads(request.data))
         return FakeResponse()
-    monkeypatch.setattr(provider_module.urllib.request,"urlopen",fake_urlopen)
+    monkeypatch.setattr("capt_runtime.http_client.open_url", fake_urlopen)
     driver=ProviderDriver(
         str(tmp_path), provider_id="openrouter", model="test/model",
         base_url="https://example.invalid/v1", cohort_spec=spec(requests=2),
@@ -115,7 +114,7 @@ def test_bound_physical_request_cap_blocks_third_network_attempt(monkeypatch,tmp
 def test_impossible_charter_output_budget_fails_before_network(monkeypatch,tmp_path):
     def forbidden(*args,**kwargs):
         raise AssertionError("no network request should be dispatched")
-    monkeypatch.setattr(provider_module.urllib.request,"urlopen",forbidden)
+    monkeypatch.setattr("capt_runtime.http_client.open_url", forbidden)
     driver=ProviderDriver(
         str(tmp_path), provider_id="openrouter", model="test/model",
         base_url="https://example.invalid/v1", cohort_spec=spec(vessels=22),
@@ -148,7 +147,7 @@ def test_tool_execution_failure_is_typed_and_never_leaks_exception(monkeypatch,t
             }).encode()
         def close(self):
             pass
-    monkeypatch.setattr(provider_module.urllib.request,"urlopen",lambda *_a,**_kw:ToolResponse())
+    monkeypatch.setattr("capt_runtime.http_client.open_url", lambda *_a,**_kw:ToolResponse())
     driver=ProviderDriver(
         str(tmp_path),provider_id="openrouter",model="fixture",
         base_url="https://example.invalid/v1",cohort_spec=spec(requests=2),

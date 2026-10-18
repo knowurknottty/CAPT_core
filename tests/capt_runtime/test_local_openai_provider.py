@@ -719,8 +719,6 @@ def test_runtime_local_only_blocks_remote_provider_before_credential_resolution(
 
 
 def test_runtime_remote_allowed_dispatches_cloud_provider_after_approval(tmp_path: Path, monkeypatch) -> None:
-    import io
-    import capt_runtime.drivers.provider as provider_driver_module
 
     provider_id = "remote-allowed"
     secret = "remote-test-secret-12345"
@@ -760,7 +758,7 @@ def test_runtime_remote_allowed_dispatches_cloud_provider_after_approval(tmp_pat
             "usage": {"prompt_tokens": 11, "completion_tokens": 5},
         })
 
-    monkeypatch.setattr(provider_driver_module.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr("capt_runtime.http_client.open_url", fake_urlopen)
     tag = hashlib.sha256(str(tmp_path).encode()).hexdigest()[:12]
     sock = Path("/tmp") / ("capt-net-on-" + tag + ".sock")
     token = state / "runtime.token"

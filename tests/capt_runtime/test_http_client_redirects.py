@@ -16,7 +16,10 @@ from pathlib import Path
 import pytest
 
 from capt_runtime import http_client
-from capt_runtime.billing_assurance import BillingAssuranceError, verify_openrouter_key_limit
+from capt_runtime.billing_assurance import (
+    BillingAssuranceError,
+    verify_openrouter_key_limit,
+)
 
 REPO = Path(__file__).resolve().parents[2]
 SHIPPED = ("capt_runtime", "capt_ui", "capt_solo", "desktop")
@@ -49,7 +52,7 @@ def redirect_pair() -> Iterator[tuple[str, _Recorder]]:
             self.end_headers()
             self.wfile.write(b'{"data": {}}')
 
-        do_GET = do_POST = _record  # noqa: N815
+        do_GET = do_POST = _record
 
         def log_message(self, *_args: object) -> None:
             pass
@@ -66,7 +69,7 @@ def redirect_pair() -> Iterator[tuple[str, _Recorder]]:
             self.send_header("Content-Length", "0")
             self.end_headers()
 
-        do_GET = do_POST = _redirect  # noqa: N815
+        do_GET = do_POST = _redirect
 
         def log_message(self, *_args: object) -> None:
             pass

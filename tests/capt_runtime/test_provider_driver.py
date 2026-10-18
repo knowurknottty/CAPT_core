@@ -98,7 +98,6 @@ def test_prompt_only_provider_records_truncation_finish_reason_without_losing_ar
     monkeypatch, tmp_path: Path
 ):
     """HTTP 200 + a partial answer is not proof of semantic completion."""
-    import capt_runtime.drivers.provider as provider_module
 
     class Response:
         def read(self):
@@ -113,7 +112,7 @@ def test_prompt_only_provider_records_truncation_finish_reason_without_losing_ar
         def close(self):
             pass
 
-    monkeypatch.setattr(provider_module.urllib.request, "urlopen", lambda *_a, **_kw: Response())
+    monkeypatch.setattr("capt_runtime.http_client.open_url", lambda *_a, **_kw: Response())
     driver = ProviderDriver(
         str(tmp_path), provider_id="openrouter", model="fixture",
         base_url="http://127.0.0.1:1/v1", task_resolver=_resolver(),
@@ -138,7 +137,6 @@ def test_tool_capable_immediate_final_captures_length_limited_response(
     monkeypatch, tmp_path: Path
 ):
     """MiMo-shaped one-HTTP-answer case with an enabled read-only bridge."""
-    import capt_runtime.drivers.provider as provider_module
 
     class ToolBridge:
         max_calls = 1
@@ -159,7 +157,7 @@ def test_tool_capable_immediate_final_captures_length_limited_response(
         def close(self):
             pass
 
-    monkeypatch.setattr(provider_module.urllib.request, "urlopen", lambda *_a, **_kw: Response())
+    monkeypatch.setattr("capt_runtime.http_client.open_url", lambda *_a, **_kw: Response())
     driver = ProviderDriver(
         str(tmp_path), provider_id="openrouter", model="fixture",
         base_url="http://127.0.0.1:1/v1", task_resolver=_resolver(),
@@ -178,7 +176,6 @@ def test_tool_capable_immediate_final_captures_length_limited_response(
 
 
 def test_provider_driver_http_timeout_uses_governed_work_order_budget(monkeypatch, tmp_path: Path):
-    import capt_runtime.drivers.provider as provider_module
 
     seen = {}
 
@@ -199,7 +196,7 @@ def test_provider_driver_http_timeout_uses_governed_work_order_budget(monkeypatc
         seen["timeout"] = timeout
         return Response()
 
-    monkeypatch.setattr(provider_module.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr("capt_runtime.http_client.open_url", fake_urlopen)
     driver = ProviderDriver(
         str(tmp_path), provider_id="mtplx", model="local-model",
         base_url="http://127.0.0.1:18085/v1", task_resolver=_resolver(),
@@ -1125,7 +1122,7 @@ def test_provider_response_read_enforces_absolute_wall_clock_deadline(tmp_path: 
                 raise OSError("response closed")
             return b'{"choices":[{"message":{"content":"late"}}]}'
 
-    monkeypatch.setattr("urllib.request.urlopen", lambda *_args, **_kwargs: SlowResponse())
+    monkeypatch.setattr("capt_runtime.http_client.open_url", lambda *_args, **_kwargs: SlowResponse())
     driver = ProviderDriver(
         str(tmp_path / "staging-hard-deadline"),
         provider_id="openrouter",
