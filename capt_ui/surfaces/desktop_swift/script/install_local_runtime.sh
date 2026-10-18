@@ -5,12 +5,12 @@ umask 077
 # Build and validate versioned runtime before any activation.
 # Never replace an existing live runtime from this staging command.
 unset PYTHONPATH PYTHONHOME
-SCRIPT_DIR="\${0:A:h}"
-REPO_ROOT="\${SCRIPT_DIR:h:h:h:h}"
-STATE_DIR="\${CAPT_STATE_DIR:-$HOME/.capt}"
+SCRIPT_DIR="${0:A:h}"
+REPO_ROOT="${SCRIPT_DIR:h:h:h:h}"
+STATE_DIR="${CAPT_STATE_DIR:-$HOME/.capt}"
 ACTIVE="$STATE_DIR/runtime-venv"
 RELEASES="$STATE_DIR/runtime-releases"
-MODE="\${1:-}"
+MODE="${1:-}"
 [[ -z "$MODE" || "$MODE" == "--stage-only" ]] || { echo "usage: $0 [--stage-only]" >&2; exit 2; }
 [[ -z "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no)" ]] || {
  echo "CAPT_RELEASE_SOURCE_DIRTY" >&2; exit 3
@@ -18,7 +18,7 @@ MODE="\${1:-}"
 SOURCE_HEAD="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 print -r -- "$SOURCE_HEAD" | grep -Eq '^[0-9a-f]{40}$' || { echo "CAPT_RELEASE_INVALID_SOURCE_HEAD" >&2; exit 3; }
 mkdir -p "$RELEASES"
-BUILD_DIR="$(/usr/bin/mktemp -d "\${TMPDIR:-/tmp}/capt-runtime-wheel.XXXXXXXX")"
+BUILD_DIR="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/capt-runtime-wheel.XXXXXXXX")"
 STAGED=""
 COMPLETE=0
 cleanup() {
