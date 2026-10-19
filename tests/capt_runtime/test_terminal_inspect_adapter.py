@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -83,18 +82,17 @@ def test_outside_scope_refused_before_dispatch(tmp_path):
         TerminalInspectToolAdapter().execute(_request(tmp_path, ["cat", str(outside)]))
 
 
-def test_git_inspection_uses_hardened_probe(tmp_path):
-    if not Path("/usr/bin/git").is_file():
-        pytest.skip("system git unavailable")
-    init = subprocess.run(["/usr/bin/git", "init", str(tmp_path)],
-                          capture_output=True, text=True, check=False, timeout=10)
-    if init.returncode:
-        pytest.skip("system Git initialization unavailable")
-    output = TerminalInspectToolAdapter().execute(
-        _request(tmp_path, ["git", "status", "--short"])
-    )
-    assert output["status"] == "succeeded", output
-    assert output["sideEffectIdentity"] is None
+@pytest.mark.parametrize("argv", [
+    ["git", "config", "--get", "--file=/tmp/outside.ini", "private.canary"],
+    ["git", "config", "--get", "--file", "/tmp/outside.ini", "private.canary"],
+    ["git", "config", "--global", "--list"],
+    ["git", "config", "--system", "--list"],
+    ["git", "status", "--short"],
+    ["git", "log", "--oneline", "-1"],
+])
+def test_git_inspection_does_not_cross_unenforced_git_config_scope(tmp_path, argv):
+    with pytest.raises(ReadOnlyRefused, match="git-requires-governed-exec"):
+        TerminalInspectToolAdapter().execute(_request(tmp_path, argv))
 
 
 @pytest.mark.parametrize("argv", [

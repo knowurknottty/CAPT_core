@@ -45,3 +45,13 @@ policy. Ordinary grep -r remains accepted because it does not follow
 symlinks encountered while recursively traversing directories. The
 expanded tests are 90/90 green; this remains a defence in depth and
 not a kernel-enforced filesystem jail.
+
+
+## Independent Git configuration escape remediation (2026-10-19)
+Git config --get --file=/outside bypassed operand-scoped reads.
+Git can also read out-of-scope includes and worktree Git directories.
+The terminal.inspect adapter now denies ALL Git invocations, including
+Git status/log, until OS-enforced filesystem isolation is available.
+Six refusal fixtures cover explicit and ambient Git config access. Git
+remains accessible only via the separately governed terminal.exec path.
+This is a deliberate reduction of claimed read-only coverage.

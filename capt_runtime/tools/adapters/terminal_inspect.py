@@ -96,6 +96,10 @@ class TerminalInspectToolAdapter:
         scope = Path(scope_value).resolve(strict=True)
         args = _arguments(request)
         argv = _parse_argv(args["argv"])
+        # Git transitively reads config/includes and Git directories outside
+        # the allowed root. Until OS-isolated Git exists, fail closed.
+        if argv[0] == "git":
+            raise ReadOnlyRefused("READONLY_REFUSED:git-requires-governed-exec")
         cwd = require_scoped_path(scope, args["cwd"])
         if not cwd.is_dir():
             raise AuthorityViolation("terminal.inspect cwd must exist")
