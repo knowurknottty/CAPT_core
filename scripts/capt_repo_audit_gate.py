@@ -105,6 +105,15 @@ def verify(c: dict, inspection: dict, minimum: float = 0.70) -> dict:
     expected = {x["path"]: x for x in c["files"]}
     current = census(root)
     actual = {x["path"]: x for x in current["files"]}
+    if len(expected) != len(c["files"]):
+        problems.append("duplicate census path")
+    if set(c.get("source_directories") or ()) != set(current["source_directories"]):
+        problems.append("frozen source-directory declaration mismatch")
+    for path in sorted(set(expected) & set(actual)):
+        if expected[path].get("source") != actual[path]["source"]:
+            problems.append(f"frozen source classification mismatch: {path}")
+        if expected[path].get("risk") != actual[path]["risk"]:
+            problems.append(f"frozen risk classification mismatch: {path}")
     if not c.get("head") or c["head"] != current["head"]:
         problems.append("unpinned or changed Git HEAD")
     if set(expected) != set(actual):
@@ -139,13 +148,33 @@ def verify(c: dict, inspection: dict, minimum: float = 0.70) -> dict:
             problems.append(f"line evidence absent: {path}")
         elif not row.get("node_evidence_ref"):
             problems.append(f"journaled read receipt absent: {path}")
-    source = {x["path"] for x in c["files"] if x["source"]}
+        elif not isinstance(row.get("line_sha256"), str):
+            problems.append(f"source-line checksum absent: {path}")
+        else:
+            # Validate the referenced source line bytes, not merely an
+            # L-number in a model-generated description. This cannot prove
+            # comprehension or authenticate the external Node journal.
+            match = RECEIPT_LINE.search(str(row["line_evidence"]))
+            if match is not None:
+                bounds = match.group().replace("L", "").split("-", 1)
+                start, end = int(bounds[0]), int(bounds[-1])
+                lines = (root / path).read_bytes().splitlines(keepends=True)
+                if not (1 <= start <= end <= len(lines)) and not (
+                    start == end == 0 and not lines
+                ):
+                    problems.append(f"source-line span outside file: {path}")
+                else:
+                    excerpt = b"".join(lines[start - 1:end])
+                    if hashlib.sha256(excerpt).hexdigest() != row["line_sha256"]:
+                        problems.append(f"source-line checksum mismatch: {path}")
+    # Derive mandatory coverage from the fresh tree, never from claimant flags.
+    source = {x["path"] for x in current["files"] if x["source"]}
     reviewed = observed & source
     present_dirs = {str(Path(path).parent) for path in reviewed}
-    absent_dirs = sorted(set(c["source_directories"]) - present_dirs)
+    absent_dirs = sorted(set(current["source_directories"]) - present_dirs)
     if absent_dirs:
         problems.append(f"{len(absent_dirs)} uninspected source directories")
-    risk = {x["path"] for x in c["files"] if x["risk"]}
+    risk = {x["path"] for x in current["files"] if x["risk"]}
     undeclared = sorted(risk - set(critical))
     missing_critical = sorted(set(critical) - observed)
     if undeclared:
@@ -161,8 +190,8 @@ def verify(c: dict, inspection: dict, minimum: float = 0.70) -> dict:
         problems.append("incomplete first-party source-file receipts; deep review requires 100%")
     return dict(status="DEEP_COVERAGE_GATE_PASS" if not problems else "PARTIAL_OR_UNVERIFIED",
                 git_head=c.get("head"), source_files=len(source),
-                inspected_source_files=len(reviewed), source_directories=len(c["source_directories"]),
-                inspected_source_directories=len(present_dirs & set(c["source_directories"])),
+                inspected_source_files=len(reviewed), source_directories=len(current["source_directories"]),
+                inspected_source_directories=len(present_dirs & set(current["source_directories"])),
                 uninspected_directories=absent_dirs, uninspected_critical=missing_critical,
                 undeclared_risk=undeclared, problems=problems,
                 caveat="Hash/path coverage and Node references do not establish comprehension or valid conclusions.")

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import hashlib
 import importlib.util
 import json
 import subprocess
@@ -30,7 +31,11 @@ def repo(tmp_path):
 
 def receipt(c,path):
     entry=next(x for x in c["files"] if x["path"]==path)
-    return dict(path=path,sha256=entry["sha256"],line_evidence="L1: examined",
+    file_lines=(Path(c["root"])/path).read_bytes().splitlines(keepends=True)
+    first=file_lines[0] if file_lines else b""
+    evidence="L1: examined" if file_lines else "L0: empty source file"
+    return dict(path=path,sha256=entry["sha256"],line_evidence=evidence,
+                line_sha256=hashlib.sha256(first).hexdigest(),
                 node_evidence_ref="node-evidence://test-fixture-not-real")
 
 def inspection(c, paths):
@@ -137,3 +142,67 @@ def test_git_metadata_exclusion_does_not_hide_other_symlinks(repo, tmp_path):
     result = m.census(repo)
     assert "src/deep/linked-dir" in result["symlinks"]
     assert m.verify(result, complete(result))["status"] == "PARTIAL_OR_UNVERIFIED"
+
+
+def test_fabricated_line_checksum_does_not_pass(repo):
+    c=m.census(repo)
+    i=complete(c)
+    i["inspected"][0]["line_sha256"]="0"*64
+    verdict=m.verify(c,i)
+    assert verdict["status"]=="PARTIAL_OR_UNVERIFIED"
+    assert any("source-line checksum mismatch" in p for p in verdict["problems"])
+
+
+def test_out_of_range_line_receipt_does_not_pass(repo):
+    c=m.census(repo)
+    i=complete(c)
+    i["inspected"][0]["line_evidence"]="L9999: fabricated"
+    verdict=m.verify(c,i)
+    assert verdict["status"]=="PARTIAL_OR_UNVERIFIED"
+    assert any("source-line span outside" in p for p in verdict["problems"])
+
+
+def test_missing_line_checksum_does_not_pass(repo):
+    c=m.census(repo)
+    i=complete(c)
+    del i["inspected"][0]["line_sha256"]
+    verdict=m.verify(c,i)
+    assert verdict["status"]=="PARTIAL_OR_UNVERIFIED"
+    assert any("source-line checksum absent" in p for p in verdict["problems"])
+
+
+def test_forged_census_cannot_hide_source_or_risk(repo):
+    c=m.census(repo)
+    forged=json.loads(json.dumps(c))
+    for row in forged["files"]:
+        row["source"]=False
+        row["risk"]=False
+    forged["source_directories"]=[]
+    fake=dict(schema="capt.rrds.inspection.v1",critical_paths=[],inspected=[])
+    result=m.verify(forged,fake)
+    assert result["status"]=="PARTIAL_OR_UNVERIFIED"
+    assert result["source_files"]==3
+    assert result["undeclared_risk"]
+    assert any("classification mismatch" in issue for issue in result["problems"])
+
+
+def test_duplicate_census_paths_rejected(repo):
+    c=m.census(repo)
+    forged=json.loads(json.dumps(c))
+    forged["files"].append(forged["files"][0].copy())
+    outcome=m.verify(forged,complete(c))
+    assert outcome["status"]=="PARTIAL_OR_UNVERIFIED"
+    assert "duplicate census path" in outcome["problems"]
+
+
+def test_empty_source_has_explicit_zero_line_span(repo):
+    path=repo/"src/deep/empty.py"
+    path.write_bytes(b"")
+    subprocess.run(["git","-C",str(repo),"add","."],check=True)
+    subprocess.run(["git","-C",str(repo),"-c","user.name=Fixture","-c",
+                    "user.email=fixture@example.invalid","commit","-qm","empty file"],check=True)
+    c=m.census(repo)
+    i=complete(c)
+    r=next(x for x in i["inspected"] if x["path"]=="src/deep/empty.py")
+    assert r["line_evidence"].startswith("L0:")
+    assert m.verify(c,i)["status"]=="DEEP_COVERAGE_GATE_PASS"
