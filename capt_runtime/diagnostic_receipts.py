@@ -13,12 +13,13 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from .errors import IdempotencyConflict, IntegrityViolation
+from .provider_error_types import safe_openrouter_error_type
 
 _SAFE_FAILURES = frozenset({
     "PROVIDER_HTTP_ERROR", "PROVIDER_NETWORK_ERROR", "PROVIDER_TIMEOUT",
     "PROVIDER_RESPONSE_INVALID", "PROVIDER_BUDGET_EXCEEDED",
     "PROVIDER_BOUNDARY_RECORDING_FAILURE", "PROVIDER_TOOL_FAILURE",
-    "PROVIDER_NO_CONTENT", "PROVIDER_UNCLASSIFIED_FAILURE",
+    "PROVIDER_NO_CONTENT", "PROVIDER_UPSTREAM_ERROR", "PROVIDER_UNCLASSIFIED_FAILURE",
     "INTERNAL_DRIVER_ERROR",
     "PROVIDER_MODEL_ID_INVALID", "PROVIDER_MODEL_UNAVAILABLE",
     "PROVIDER_ENDPOINT_UNAVAILABLE",
@@ -70,6 +71,9 @@ def safe_provider_failure(
         "failureCode": code,
         "phase": phase,
         "httpStatus": status,
+        "providerErrorType": safe_openrouter_error_type(
+            getattr(exc, "provider_error_type", None)
+        ) if provider == "openrouter" else None,
         "exceptionClass": (
             type(exc).__name__
             if type(exc).__name__ in {"ProviderDriverFailure", "DispatchBoundaryError", "BudgetCeilingExceeded"}
@@ -167,6 +171,7 @@ def safe_cohort_receipt(
         ),
         "reconciliationStatus": _text(observed.get("reconciliationStatus"), 64),
         "sanitizedProviderFailureCode": _text(diagnostic.get("failureCode"), 64),
+        "sanitizedProviderErrorType": _text(diagnostic.get("providerErrorType"), 64),
         "classification": _text(receipt.get("classification"), 60),
         "errorCategory": _text(error.get("category"), 60),
         "errorCode": _text(error.get("code"), 60),

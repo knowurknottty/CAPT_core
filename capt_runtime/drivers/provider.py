@@ -18,6 +18,7 @@ from ..provider_model_preflight import ProviderModelPreflightError, verify_openr
 from ..resource_governor import BudgetCeilingExceeded, TokenCostGovernor
 from ..reasoning import normalize_reasoning_effort, openai_reasoning_fields
 from .. import http_client
+from ..provider_error_types import openrouter_embedded_error, openrouter_error_type
 
 DRIVER_ID = "provider"
 DESCRIPTOR = {
@@ -33,11 +34,15 @@ class ProviderDriverFailure(RuntimeError):
     """Typed, sanitized diagnostic provenance kept separately from raw errors."""
 
     def __init__(self, message: str, *, diagnostic_code: str = "PROVIDER_UNCLASSIFIED_FAILURE",
-                 diagnostic_phase: str = "unknown", http_status: int | None = None) -> None:
+                 diagnostic_phase: str = "unknown", http_status: int | None = None,
+                 provider_error_type: str | None = None) -> None:
         super().__init__(message)
         self.diagnostic_code = diagnostic_code
         self.diagnostic_phase = diagnostic_phase
         self.http_status = http_status
+        # The durable projector independently revalidates this against a
+        # fixed vocabulary. Neither error.message nor metadata is persisted.
+        self.provider_error_type = provider_error_type
 
 
 class DispatchBoundaryError(ProviderDriverFailure):
@@ -421,15 +426,35 @@ class ProviderDriver:
                         close_response()
             if not isinstance(data, dict):
                 raise ProviderDriverFailure("provider returned non-object JSON")
+            if self.provider_id == "openrouter" and self.base_url == "https://openrouter.ai/api/v1":
+                is_error, error_type = openrouter_embedded_error(data)
+                if is_error:
+                    raise ProviderDriverFailure(
+                        "provider returned embedded failure after HTTP 200",
+                        diagnostic_code="PROVIDER_UPSTREAM_ERROR",
+                        diagnostic_phase="response_body",
+                        provider_error_type=error_type,
+                    )
             return data
         except urllib.error.HTTPError as exc:
             with self._lock:
                 self.runs[rid]["state"] = "failed"
             message = "provider HTTP %s" % exc.code
-            # Never propagate upstream response bodies into receipts/logs.
+            error_type = None
+            if self.provider_id == "openrouter" and self.base_url == "https://openrouter.ai/api/v1":
+                try:
+                    # Read a bounded diagnostic only; never log or retain the
+                    # message, provider_code, raw output or other metadata.
+                    raw = exc.read(8193)
+                    if len(raw) <= 8192:
+                        parsed = json.loads(raw.decode("utf-8"))
+                        error_type = openrouter_error_type(parsed)
+                except (OSError, TimeoutError, ValueError, UnicodeError, TypeError):
+                    pass
             raise ProviderDriverFailure(
                 message, diagnostic_code="PROVIDER_HTTP_ERROR",
                 diagnostic_phase="response_headers", http_status=int(exc.code),
+                provider_error_type=error_type,
             ) from exc
         except TimeoutError as exc:
             with self._lock:
