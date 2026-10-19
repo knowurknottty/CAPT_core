@@ -134,6 +134,7 @@ def verify(c: dict, inspection: dict, minimum: float = 0.70) -> dict:
     if not isinstance(inspections, list) or not isinstance(critical, list):
         raise ValueError("inspected and critical_paths must be arrays")
     observed = set()
+    structurally_verified = set()
     for row in inspections:
         if not isinstance(row, dict) or not isinstance(row.get("path"), str):
             problems.append("invalid file receipt")
@@ -173,17 +174,19 @@ def verify(c: dict, inspection: dict, minimum: float = 0.70) -> dict:
             excerpt = b"" if first == 0 else b"".join(lines[first - 1:last])
             if hashlib.sha256(excerpt).hexdigest() != checksum:
                 problems.append(f"source-line checksum mismatch: {path}")
+            else:
+                structurally_verified.add(path)
     # Coverage must be computed from a freshly generated local census,
     # not from the adversarial/submitted source/risk classification.
     source = {x["path"] for x in current["files"] if x["source"]}
-    reviewed = observed & source
+    reviewed = structurally_verified & source
     present_dirs = {str(Path(path).parent) for path in reviewed}
     absent_dirs = sorted(set(current["source_directories"]) - present_dirs)
     if absent_dirs:
         problems.append(f"{len(absent_dirs)} uninspected source directories")
     risk = {x["path"] for x in current["files"] if x["risk"]}
     undeclared = sorted(risk - set(critical))
-    missing_critical = sorted(set(critical) - observed)
+    missing_critical = sorted(set(critical) - structurally_verified)
     if undeclared:
         problems.append(f"{len(undeclared)} undeclared risk candidates")
     if missing_critical:
@@ -197,13 +200,19 @@ def verify(c: dict, inspection: dict, minimum: float = 0.70) -> dict:
         problems.append(f"source-file breadth {fraction:.1%} < diagnostic floor {minimum:.1%}")
     if fraction < 1.0:
         problems.append("incomplete first-party source-file receipts; deep review requires 100%")
-    return dict(status="DEEP_COVERAGE_GATE_PASS" if not problems else "PARTIAL_OR_UNVERIFIED",
+    structural_status = "PASS" if not problems else "FAIL"
+    # The inspection document is claimant-controlled. A nonempty Node reference
+    # does not establish that CAPT Node returned the claimed file bytes.
+    # Fail closed until a trusted live Node journal/evidence verifier is integrated.
+    if structural_status == "PASS":
+        problems.append("authenticated CAPT Node read verification unavailable; claimant-supplied node_evidence_ref is not proof")
+    return dict(status="PARTIAL_OR_UNVERIFIED", structural_status=structural_status,
                 git_head=c.get("head"), source_files=len(source),
                 inspected_source_files=len(reviewed), source_directories=len(current["source_directories"]),
                 inspected_source_directories=len(present_dirs & set(current["source_directories"])),
                 uninspected_directories=absent_dirs, uninspected_critical=missing_critical,
                 undeclared_risk=undeclared, problems=problems,
-                caveat="Hash/path coverage and Node references do not establish comprehension or valid conclusions.")
+                caveat="Structural source-byte coverage is not authenticated CAPT Node provenance or semantic review.")
 
 
 def main() -> int:
