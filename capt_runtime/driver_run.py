@@ -83,6 +83,7 @@ class DriverRunAggregate:
             "terminalDisposition": None,
             "dispatchBoundary": "not_dispatched",
             "providerHttpRequestAttempts": 0,
+            **{key: run[key] for key in ("providerHttpRequestLimit", "providerRequestApprovalId") if key in run},
         }
 
     @staticmethod
@@ -139,6 +140,8 @@ class DriverRunAggregate:
         """
         current = state.get("dispatchBoundary", "unknown")
         if boundary == current:
+            if boundary == "request_started" and state.get("providerRequestApprovalId"):
+                raise IllegalTransition("PROVIDER_REQUEST_ALREADY_STARTED", str(current), str(boundary))
             nxt = dict(state)
             nxt["dispatchBoundaryUpdatedAt"] = recorded_at
             return nxt
@@ -169,7 +172,10 @@ class DriverRunAggregate:
             # Each new physical HTTP attempt is recorded BEFORE external I/O.
             # Repeat of the current boundary is idempotent (handled above).
             used = int(state.get("providerHttpRequestAttempts", 0))
-            if used >= DriverRunAggregate.MAX_PROVIDER_HTTP_REQUESTS_PER_RUN:
+            ceiling = state.get("providerHttpRequestLimit", DriverRunAggregate.MAX_PROVIDER_HTTP_REQUESTS_PER_RUN)
+            if type(ceiling) is not int or not 1 <= ceiling <= 24:
+                raise IllegalTransition("INVALID_PROVIDER_REQUEST_CEILING", str(ceiling), str(used))
+            if used >= ceiling:
                 raise IllegalTransition(
                     "PROVIDER_HTTP_REQUEST_ATTEMPT_CAP_EXCEEDED",
                     str(used), str(used + 1),

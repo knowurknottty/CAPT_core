@@ -223,6 +223,7 @@ class DriverRunAggregate(object):
             "state": "created",
             "reconciliationStatus": "not_required",
             "dispatchBoundary": "not_dispatched",
+            **{key: run[key] for key in ("providerHttpRequestLimit", "providerRequestApprovalId") if key in run},
         }
 
     @staticmethod
