@@ -76,7 +76,11 @@ class ToolBroker:
         registry: ToolRegistry,
         *,
         now: Callable[[], str],
+        governed_offerings_enabled: bool = False,
     ) -> None:
+        if type(governed_offerings_enabled) is not bool:
+            raise TypeError("governed_offerings_enabled must be a bool")
+        self._governed_offerings_enabled = governed_offerings_enabled
         self.runtime = runtime
         self.store = runtime.store
         self.registry = registry

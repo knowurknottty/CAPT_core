@@ -67,6 +67,8 @@ class GovernedDecisionOfferingService:
 
     def issue(self, request: dict, metadata: dict, *, ttl_seconds: int = 60) -> dict:
         """Create a governed *proposal* receipt, never a capability grant."""
+        if not self.broker._governed_offerings_enabled:
+            raise AuthorityViolation("DECISION_OFFERINGS_DISABLED_UNTIL_GATED")
         require("CommandMetadata", metadata)
         require_authority("issue_decision_offering", metadata["actor"]["kind"])
         if type(ttl_seconds) is not int or not 1 <= ttl_seconds <= _MAX_TTL_SECONDS:
@@ -129,11 +131,14 @@ class GovernedDecisionOfferingService:
             metadata=metadata,occurred_at=issued_at
         )
         result = self.runtime._commit(
-            [AppendRequest(stream,"decision_offering",0,envelope,state)],metadata
+            [AppendRequest(stream,"decision_offering",0,envelope,state)], metadata,
+            expected_chain_digest=material["ledgerBasisDigest"],
         )
         return {"receipt":receipt,"command":result,"dispatchAllowed":False}
 
     def revoke(self, offering_id: str, metadata:dict) -> dict:
+        if not self.broker._governed_offerings_enabled:
+            raise AuthorityViolation("DECISION_OFFERINGS_DISABLED_UNTIL_GATED")
         require("CommandMetadata",metadata)
         require_authority("revoke_decision_offering", metadata["actor"]["kind"])
         if metadata["operationFingerprint"]!=self.revoke_fingerprint(offering_id):
@@ -169,6 +174,8 @@ class GovernedDecisionOfferingService:
                 "externalWorldVerified":False,"humanPresenceVerified":False,
                 "dispatchAllowed":False,"completionVerified":False,
             }
+        if not self.broker._governed_offerings_enabled:
+            return outcome("DECISION_OFFERINGS_DISABLED")
         try:
             require("DecisionOfferingReceipt",receipt)
             require("ToolRequest",request)

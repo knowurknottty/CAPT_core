@@ -61,7 +61,7 @@ def sample(tmp_path):
     store=EventStore(str(tmp_path/"governed.db"))
     runtime=RuntimeService(store)
     registry=registry_for(clock)
-    broker=ToolBroker(runtime,registry,now=clock)
+    broker=ToolBroker(runtime,registry,now=clock,governed_offerings_enabled=True)
     svc=GovernedDecisionOfferingService(broker)
     request={
         "schemaVersion":"1.0.0","toolRequestId":"ql-file-read-request",
@@ -214,7 +214,7 @@ def test_registry_descriptor_change_invalidates(tmp_path):
     store,clock,svc,request=sample(tmp_path)
     try:
         r=svc.issue(request,issue_meta(svc,request))["receipt"]
-        newer=ToolBroker(RuntimeService(store),registry_for(clock,"Altered descriptor"),now=clock)
+        newer=ToolBroker(RuntimeService(store),registry_for(clock,"Altered descriptor"),now=clock,governed_offerings_enabled=True)
         assessment=GovernedDecisionOfferingService(newer).inspect(r,request)
         assert assessment["reason"]=="DESCRIPTOR_VERSION_CHANGED"
     finally:store.close()
@@ -227,7 +227,7 @@ def test_durable_receipt_survives_runtime_restart(tmp_path):
         store.close()
     another=EventStore(str(tmp_path/"governed.db"))
     try:
-        broker=ToolBroker(RuntimeService(another),registry_for(clock),now=clock)
+        broker=ToolBroker(RuntimeService(another),registry_for(clock),now=clock,governed_offerings_enabled=True)
         value=GovernedDecisionOfferingService(broker).inspect(receipt,request)
         assert value["identityCurrent"]
         assert not value["dispatchAllowed"]
@@ -313,3 +313,61 @@ def test_broker_owned_api_issues_inspects_and_revokes_in_authoritative_store(tmp
         assert revoked["status"]=="applied"
         assert broker.inspect_decision_offering(receipt,request)["reason"]=="RECEIPT_REVOKED"
     finally:store.close()
+
+
+def test_production_default_disables_offering_issuance_and_replay(tmp_path):
+    store,clock,svc,request=sample(tmp_path)
+    try:
+        default_broker=ToolBroker(RuntimeService(store),registry_for(clock),now=clock)
+        default_service=GovernedDecisionOfferingService(default_broker)
+        with pytest.raises(AuthorityViolation,match="DECISION_OFFERINGS_DISABLED"):
+            default_broker.issue_decision_offering(request,issue_meta(svc,request))
+        with pytest.raises(AuthorityViolation,match="DECISION_OFFERINGS_DISABLED"):
+            default_service.issue(request,issue_meta(svc,request))
+        assert store.head_sequence()==0
+    finally:store.close()
+
+
+def test_cross_connection_atomic_chain_basis_rejects_intervening_issue(tmp_path):
+    """Two real SQLite EventStore connections: a read-before-write cannot win."""
+    store,clock,svc,request=sample(tmp_path)
+    second=EventStore(str(tmp_path/"governed.db"))
+    try:
+        before=store.head_chain()
+        second_broker=ToolBroker(
+            RuntimeService(second),registry_for(clock),now=clock,
+            governed_offerings_enabled=True,
+        )
+        second_service=GovernedDecisionOfferingService(second_broker)
+        another=second_service.issue(
+            request,issue_meta(second_service,request,key="other-receipt-claim")
+        )
+        assert another["command"]["status"]=="applied"
+        assert store.head_chain()!=before
+        with pytest.raises(IntegrityViolation,match="LEDGER_BASIS_STALE_AT_COMMIT"):
+            store.commit_command(
+                [],"stale-commit-command",
+                "sha256:"+"a"*64,"stale-commit-command",
+                expected_chain_digest=before,
+            )
+        assert store.find_idempotent("stale-commit-command") is None
+        assert store.verify_chain()
+    finally:
+        second.close()
+        store.close()
+
+
+def test_exact_predecessor_digest_is_committed_and_replay_does_not_write(tmp_path):
+    store,clock,svc,request=sample(tmp_path)
+    try:
+        chain_before=store.head_chain()
+        metadata=issue_meta(svc,request)
+        first=svc.issue(request,metadata)
+        assert first["receipt"]["ledgerBasisDigest"]==chain_before
+        chain_after=store.head_chain()
+        assert chain_after!=chain_before
+        assert svc.issue(request,metadata)["command"]["status"]=="idempotent"
+        assert store.head_chain()==chain_after
+        assert store.verify_chain()
+    finally:
+        store.close()

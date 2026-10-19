@@ -118,3 +118,7 @@ suite, active desktop app, production runtime or provider integration passed.
 
 **Operational boundary:** No running CAPT service, deployed runtime, provider,
 human approval, CCF+ promotion, or release gate was modified by this work.
+
+## R2 evidence update (2026-10-19)
+
+Follow-up: [R2 issuance hardening and compatibility gates](QUANTUM_LEAP_GOVERNED_OFFERING_R2_GATES.md). The R2 experiment binds the issuance ledger predecessor inside the SQLite commit transaction and disables the new interface by default. Mixed-version readers still reject the new event format; this remains a draft, not production enablement.

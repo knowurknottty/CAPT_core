@@ -553,6 +553,7 @@ class EventStore(object):
         idempotency_key: str,
         operation_fingerprint: str,
         command_id: str,
+        expected_chain_digest: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Steps 1-6 of the transaction rule, atomically.
 
@@ -607,6 +608,11 @@ class EventStore(object):
                     return replayed
 
                 chain = self.head_chain()
+                # The expected predecessor must be compared AFTER BEGIN IMMEDIATE
+                # has acquired the SQLite writer lock. This works across
+                # independent connections and processes, not only this RLock.
+                if expected_chain_digest is not None and chain != expected_chain_digest:
+                    raise IntegrityViolation("LEDGER_BASIS_STALE_AT_COMMIT")
                 written: List[Dict[str, Any]] = []
 
                 for append in appends:
