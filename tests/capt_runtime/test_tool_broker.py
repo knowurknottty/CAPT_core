@@ -331,3 +331,51 @@ def test_missing_tool_during_recovery_does_not_block_other_stranded_executions(t
         assert adapter.calls == 0
     finally:
         store.close()
+
+
+def test_f2_recovered_indeterminate_result_uses_same_id_as_in_process_failure(tmp_path) -> None:
+    """The same idempotent operation must have stable result identity across crash paths."""
+    live_dir = tmp_path / "live"
+    crash_dir = tmp_path / "crash"
+    live_dir.mkdir()
+    crash_dir.mkdir()
+    request = _request(operation="test.write", idem="f2-identity-bound-operation")
+
+    live_store, _runtime, _reg, live_adapter, live_broker = _broker(live_dir)
+    try:
+        def explode(_request):
+            live_adapter.calls += 1
+            raise RuntimeError("synthetic post-dispatch transport failure")
+        live_adapter.execute = explode
+        live = live_broker.execute(request, operator_id="op", session_id="s")
+        assert live["status"] == "indeterminate"
+        assert live_adapter.calls == 1
+        live_result_id = live["result"]["toolResultId"]
+    finally:
+        live_store.close()
+
+    crash_store, crash_runtime, _crash_registry, crash_adapter, crash_broker = _broker(crash_dir)
+    try:
+        execution = crash_broker.build_execution(request, operator_id="op", session_id="s")
+        runid = execution["toolExecutionId"]
+        crash_runtime.prepare_tool_execution(
+            execution, crash_broker.metadata(runid, "prepared")
+        )
+        crash_runtime.transition_tool_execution(
+            runid, "admitted", {}, crash_broker.metadata(runid, "admitted")
+        )
+        crash_runtime.transition_tool_execution(
+            runid, "dispatching", {"dispatchBoundary": "started"},
+            crash_broker.metadata(runid, "dispatching"),
+        )
+        recovered = crash_broker.reconcile_stranded()
+        assert len(recovered) == 1
+        assert recovered[0]["state"] == "indeterminate"
+        assert crash_adapter.calls == 0  # reconciliation MUST NOT redispatch
+        assert recovered[0]["result"]["toolResultId"] == live_result_id
+        replay = crash_broker.execute(request, operator_id="op", session_id="s")
+        assert replay["replayed"] is True
+        assert replay["result"]["toolResultId"] == live_result_id
+        assert crash_adapter.calls == 0
+    finally:
+        crash_store.close()

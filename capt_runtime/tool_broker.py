@@ -680,7 +680,7 @@ class ToolBroker:
             reason = f"{type(exc).__name__}: {exc}"
             if request["consequential"]:
                 result = self._indeterminate_result(
-                    request["toolRequestId"], request["idempotencyKey"],
+                    request["toolRequestId"], execution_id,
                     "adapter failed after dispatch boundary: " + reason,
                     side_effect_identity=observed_identity,
                 )
@@ -744,7 +744,7 @@ class ToolBroker:
                     )
                 except Exception as exc:
                     result = self._indeterminate_result(
-                        request["toolRequestId"], request["idempotencyKey"],
+                        request["toolRequestId"], execution_id,
                         "capability settlement failed after tool dispatch: "
                         f"{type(exc).__name__}: {exc}",
                         side_effect_identity=result.get("sideEffectIdentity"),
