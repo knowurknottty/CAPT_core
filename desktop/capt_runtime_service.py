@@ -2011,7 +2011,11 @@ def serve(
                         issued_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                         replay_policy="never",
                     )
-                    svc.record_driver_dispatch_boundary(driver_run_id, boundary, boundary_meta)
+                    # Return the EventStore receipt to the driver: an idempotent
+                    # replay must never be treated as a fresh HTTP permit.
+                    return svc.record_driver_dispatch_boundary(
+                        driver_run_id, boundary, boundary_meta
+                    )
 
                 if provider is not None:
                     host = runtime.provider_host(

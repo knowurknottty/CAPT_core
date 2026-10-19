@@ -1,47 +1,75 @@
 #!/bin/zsh
 set -euo pipefail
+umask 077
 
-# Never let caller Python import overrides shadow the freshly built CAPT runtime.
+# Build and validate versioned runtime before any activation.
+# Never replace an existing live runtime from this staging command.
 unset PYTHONPATH PYTHONHOME
-
 SCRIPT_DIR="${0:A:h}"
 REPO_ROOT="${SCRIPT_DIR:h:h:h:h}"
 STATE_DIR="${CAPT_STATE_DIR:-$HOME/.capt}"
-STAGING_ROOT="$STATE_DIR/runtime-release-candidates"
-mkdir -p "$STAGING_ROOT"
-RELEASE_DIR="$(mktemp -d "$STAGING_ROOT/runtime.XXXXXXXX")"
-VENV="$RELEASE_DIR/venv"
-READY=0
-BUILD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/capt-native-runtime.XXXXXX")"
-cleanup_stage() {
-  rm -rf -- "$BUILD_DIR"
-  if [[ "$READY" != "1" ]]; then rm -rf -- "$RELEASE_DIR"; fi
+ACTIVE="$STATE_DIR/runtime-venv"
+RELEASES="$STATE_DIR/runtime-releases"
+MODE="${1:-}"
+[[ -z "$MODE" || "$MODE" == "--stage-only" ]] || { echo "usage: $0 [--stage-only]" >&2; exit 2; }
+[[ -z "$(git -C "$REPO_ROOT" status --porcelain --untracked-files=no)" ]] || {
+ echo "CAPT_RELEASE_SOURCE_DIRTY" >&2; exit 3
 }
-trap cleanup_stage EXIT
+SOURCE_HEAD="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+print -r -- "$SOURCE_HEAD" | grep -Eq '^[0-9a-f]{40}$' || { echo "CAPT_RELEASE_INVALID_SOURCE_HEAD" >&2; exit 3; }
+mkdir -p "$RELEASES"
+BUILD_DIR="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/capt-runtime-wheel.XXXXXXXX")"
+STAGED=""
+COMPLETE=0
+cleanup() {
+ /bin/rm -rf -- "$BUILD_DIR"
+ if [[ "$COMPLETE" != 1 && -n "$STAGED" && -d "$STAGED" ]]; then
+   /bin/rm -rf -- "$STAGED"
+ fi
+}
+trap cleanup EXIT
 
-mkdir -p "$STATE_DIR"
 cd "$REPO_ROOT"
-SOURCE_HEAD="$(git rev-parse HEAD)"
-if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
-  echo "Refusing to mark uncommitted runtime source with a committed SHA" >&2
-  exit 3
-fi
 python3 -m build --wheel --outdir "$BUILD_DIR"
 WHEEL="$(find "$BUILD_DIR" -maxdepth 1 -name 'capt_solo-*.whl' -print -quit)"
-[[ -n "$WHEEL" ]] || { echo "CAPT wheel build failed" >&2; exit 1; }
-
-python3 -m venv "$VENV"
-"$VENV/bin/python" -m pip install --quiet --upgrade pip
-"$VENV/bin/python" -m pip install --quiet "$WHEEL"
+[[ -n "$WHEEL" ]] || { echo "CAPT_RELEASE_WHEEL_MISSING" >&2; exit 4; }
 WHEEL_SHA="$(shasum -a 256 "$WHEEL" | awk '{print $1}')"
-printf '%s\n' "$SOURCE_HEAD" > "$VENV/CAPT_SOURCE_HEAD"
-printf '%s\n' "$WHEEL_SHA" > "$VENV/CAPT_WHEEL_SHA256"
+STAGED="$RELEASES/$SOURCE_HEAD-$WHEEL_SHA"
+[[ ! -e "$STAGED" && ! -L "$STAGED" ]] || { echo "CAPT_RELEASE_CANDIDATE_EXISTS=$STAGED" >&2; exit 5; }
+python3 -m venv "$STAGED"
+"$STAGED/bin/python" -m pip install --quiet "$WHEEL"
+printf '%s\n' "$SOURCE_HEAD" > "$STAGED/CAPT_SOURCE_HEAD"
+printf '%s\n' "$WHEEL_SHA" > "$STAGED/CAPT_WHEEL_SHA256"
+"$STAGED/bin/capt" --help >/dev/null
 
-"$VENV/bin/capt" --help >/dev/null
-READY=1
-printf 'CAPT candidate runtime STAGED (not active)\n'
-printf '  source: %s\n' "$SOURCE_HEAD"
-printf '  wheel:  %s\n' "$WHEEL_SHA"
-printf '  cli:    %s\n' "$VENV/bin/capt"
-
-printf '  candidate: %s\n' "$RELEASE_DIR"
+# Isolated imports must resolve to the wheel, never the mutable repository.
+(cd "$STATE_DIR" && "$STAGED/bin/python" -I -c '
+import hashlib,pathlib,sys
+repo=pathlib.Path(sys.argv[1]); installed=pathlib.Path(sys.argv[2])
+for rel in ("capt_runtime/cohort_contract.py","capt_runtime/driver_run.py",
+            "capt_runtime/services.py","capt_runtime/drivers/provider.py",
+            "desktop/capt_runtime_service.py"):
+ source=repo/rel
+ sites=list((installed/"lib").glob("python*/site-packages"))
+ if len(sites)!=1 or not (sites[0]/rel).is_file():
+  raise SystemExit("CAPT_RELEASE_INSTALLED_MODULE_MISSING:"+rel)
+ digest=lambda p:hashlib.sha256(p.read_bytes()).hexdigest()
+ if digest(source)!=digest(sites[0]/rel):
+  raise SystemExit("CAPT_RELEASE_SOURCE_INSTALLED_MISMATCH:"+rel)
+' "$REPO_ROOT" "$STAGED")
+[[ "$(git -C "$REPO_ROOT" rev-parse HEAD)" == "$SOURCE_HEAD" ]] || {
+ echo "CAPT_RELEASE_SOURCE_MOVED_DURING_BUILD" >&2; exit 6
+}
+COMPLETE=1
+print -r -- "CAPT_RELEASE_STAGED=$STAGED"
+print -r -- "CAPT_RELEASE_SOURCE_HEAD=$SOURCE_HEAD"
+print -r -- "CAPT_RELEASE_WHEEL_SHA256=$WHEEL_SHA"
+if [[ "$MODE" == "--stage-only" ]]; then exit 0; fi
+# Only first-time provisioning can publish here. Quiescent upgrades require
+# a separate authenticated transaction with a durable rollback receipt.
+if [[ -e "$ACTIVE" || -L "$ACTIVE" ]]; then
+ echo "CAPT_RELEASE_QUIESCENCE_REQUIRED: active runtime preserved" >&2; exit 7
+fi
+/bin/ln -s "$STAGED" "$ACTIVE"
+[[ -x "$ACTIVE/bin/capt" ]] || { echo "CAPT_RELEASE_FIRST_INSTALL_VERIFICATION_FAILED" >&2; exit 8; }
+print -r -- "CAPT_RELEASE_FIRST_INSTALL=$ACTIVE"

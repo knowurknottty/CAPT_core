@@ -68,3 +68,31 @@ def test_pending_request_recovery_is_not_an_extra_slot(tmp_path):
         assert b.store.require_state("driverrun-"+rid)["providerHttpRequestAttempts"] == 1
     finally:
         b.close()
+
+
+@pytest.mark.parametrize("receipt", [
+    {"status": "idempotent"}, {"status": "duplicate"}, {}, "unexpected",
+])
+def test_replayed_request_boundary_never_opens_http(tmp_path, monkeypatch, receipt):
+    """Even a command-idempotent EventStore replay is not a second HTTP permit."""
+    import urllib.request
+    from capt_runtime.drivers.provider import ProviderDriver, DispatchBoundaryError
+
+    http_calls = []
+    def never_send(*args, **kwargs):
+        http_calls.append((args, kwargs))
+        raise AssertionError("provider HTTP was dispatched after boundary replay")
+
+    monkeypatch.setattr(urllib.request, "urlopen", never_send)
+    driver = ProviderDriver(
+        staging_root=str(tmp_path), provider_id="openrouter", model="offline-fixture",
+        base_url="https://fixture.invalid", api_key="fixture",
+        boundary_recorder=lambda _rid, _boundary: receipt,
+    )
+    with pytest.raises(DispatchBoundaryError, match="PROVIDER_REQUEST_BOUNDARY_REPLAY_FORBIDDEN"):
+        driver._post_json(
+            "dr-recovered", "https://fixture.invalid/chat/completions",
+            {"model": "offline-fixture", "messages": [{"role": "user", "content": "fixture"}]},
+            {"Authorization": "Bearer fixture"},
+        )
+    assert http_calls == []
