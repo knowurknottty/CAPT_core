@@ -7,10 +7,12 @@ before any upload, polling, or download occurs.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
 import ipaddress
 import re
+from dataclasses import dataclass
 from urllib.parse import urlsplit
+
+from capt_runtime.tools.backends.inversion_guardian import _effective_addresses
 
 _ALLOWED_OPERATIONS = frozenset({
     "image_input", "audio_input", "video_input", "file_input", "document_input",
@@ -27,13 +29,25 @@ _TEMPLATE_NAMES = frozenset({"job_id", "file_id", "generation_id"})
 
 
 def _trusted_origin(url: str, *, allow_loopback: bool = False) -> str:
+    if not isinstance(url, str) or any(c in url for c in ("\\", "\r", "\n", "\t")):
+        raise ValueError("MEDIA_ENDPOINT_AMBIGUOUS_AUTHORITY")
     parsed = urlsplit(url)
+    # Other URL clients can decode an authority differently (percent escapes,
+    # empty userinfo or backslashes). Refuse rather than trusting urlsplit alone.
+    if any(ch in parsed.netloc for ch in ("%", "@")):
+        raise ValueError("MEDIA_ENDPOINT_AMBIGUOUS_AUTHORITY")
     if parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise ValueError("MEDIA_ENDPOINT_ORIGIN_CREDENTIALS_OR_QUERY_FORBIDDEN")
     if parsed.path not in ("", "/"):
         raise ValueError("MEDIA_ENDPOINT_ORIGIN_MUST_NOT_CONTAIN_PATH")
     if not parsed.hostname:
         raise ValueError("MEDIA_ENDPOINT_HOST_MISSING")
+    # IDNA/UTS46 clients may convert Unicode numeric lookalikes into
+    # private/loopback IP literals after this parser has admitted them.
+    # Providers using internationalized domains must supply the stable
+    # ASCII punycode hostname instead.
+    if not parsed.hostname.isascii():
+        raise ValueError("MEDIA_ENDPOINT_AMBIGUOUS_UNICODE_HOST")
     try:
         _ = parsed.port
     except ValueError as exc:
@@ -45,11 +59,23 @@ def _trusted_origin(url: str, *, allow_loopback: bool = False) -> str:
     try:
         ip = ipaddress.ip_address(parsed.hostname)
     except ValueError:
-        if parsed.hostname.lower() in ("localhost",):
-            if not allow_loopback:
-                raise ValueError("MEDIA_ENDPOINT_LOCALHOST_NOT_ALLOWED")
+        host = parsed.hostname.lower()
+        # macOS/Linux resolvers can interpret decimal, octal, hex and
+        # abbreviated IPv4 spellings (127.1, 2130706433, 0x7f000001) as
+        # loopback even though ipaddress rejects them as malformed literals.
+        # Keep ordinary hostname labels such as 123.example.com valid.
+        legacy_component = r"(?:0x[0-9a-f]+|[0-9]+)"
+        if re.fullmatch(legacy_component + r"(?:\." + legacy_component + r")*", host.rstrip(".")):
+            raise ValueError("MEDIA_ENDPOINT_AMBIGUOUS_NUMERIC_HOST")
+        if host.endswith(".localhost"):
+            raise ValueError("MEDIA_ENDPOINT_LOCALHOST_NOT_ALLOWED")
+        if host.rstrip(".") == "localhost" and not allow_loopback:
+            raise ValueError("MEDIA_ENDPOINT_LOCALHOST_NOT_ALLOWED")
     else:
-        if not ip.is_global and not (allow_loopback and ip.is_loopback):
+        if not all(
+            candidate.is_global or (allow_loopback and candidate.is_loopback)
+            for candidate in _effective_addresses(ip)
+        ):
             raise ValueError("MEDIA_ENDPOINT_PRIVATE_IP_FORBIDDEN")
     return parsed.netloc.lower()
 
