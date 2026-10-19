@@ -137,3 +137,45 @@ def test_git_metadata_exclusion_does_not_hide_other_symlinks(repo, tmp_path):
     result = m.census(repo)
     assert "src/deep/linked-dir" in result["symlinks"]
     assert m.verify(result, complete(result))["status"] == "PARTIAL_OR_UNVERIFIED"
+
+
+def test_zero_source_falsification_cannot_certify_deep_review(repo):
+    c=m.census(repo)
+    i=complete(c)
+    forged=json.loads(json.dumps(c))
+    for row in forged["files"]:
+        row["source"]=False
+        row["risk"]=False
+    forged["source_directories"]=[]
+    v=m.verify(forged,{"schema":"capt.rrds.inspection.v1","critical_paths":[],"inspected":[]})
+    assert v["status"]=="PARTIAL_OR_UNVERIFIED"
+    assert v["source_files"]==3
+    assert v["inspected_source_files"]==0
+    assert any("classification drift" in msg for msg in v["problems"])
+
+
+def test_risk_classification_cannot_be_suppressed(repo):
+    c=m.census(repo)
+    forged=json.loads(json.dumps(c))
+    for row in forged["files"]:
+        row["risk"]=False
+    v=m.verify(forged,complete(forged))
+    assert v["status"]=="PARTIAL_OR_UNVERIFIED"
+    assert any("census risk classification" in msg for msg in v["problems"])
+
+
+def test_census_duplicate_paths_cannot_hide_missing_files(repo):
+    c=m.census(repo)
+    forged=json.loads(json.dumps(c))
+    forged["files"].append(forged["files"][0].copy())
+    v=m.verify(forged,complete(forged))
+    assert any("duplicate census paths" in msg for msg in v["problems"])
+
+
+def test_census_metadata_drift_without_byte_drift_is_rejected(repo):
+    c=m.census(repo)
+    forged=json.loads(json.dumps(c))
+    forged["files"][0]["bytes"]+=1
+    v=m.verify(forged,complete(forged))
+    assert v["status"]=="PARTIAL_OR_UNVERIFIED"
+    assert any("census bytes classification drift" in msg for msg in v["problems"])

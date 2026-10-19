@@ -107,11 +107,22 @@ def verify(c: dict, inspection: dict, minimum: float = 0.70) -> dict:
     actual = {x["path"]: x for x in current["files"]}
     if not c.get("head") or c["head"] != current["head"]:
         problems.append("unpinned or changed Git HEAD")
+    if len(expected) != len(c["files"]):
+        problems.append("duplicate census paths")
     if set(expected) != set(actual):
         problems.append("tree membership drift")
+    if c.get("root") != current["root"]:
+        problems.append("census root drift")
+    if sorted(c.get("source_directories", [])) != current["source_directories"]:
+        problems.append("source directory classification drift")
+    if c.get("directories") != current["directories"]:
+        problems.append("directory census drift")
     for path in sorted(set(expected) & set(actual)):
-        if expected[path]["sha256"] != actual[path]["sha256"]:
+        if expected[path].get("sha256") != actual[path]["sha256"]:
             problems.append(f"changed bytes: {path}")
+        for field in ("bytes", "source", "risk"):
+            if expected[path].get(field) != actual[path][field]:
+                problems.append(f"census {field} classification drift: {path}")
     if current["errors"] or c.get("errors"):
         problems.append("inaccessible or unreadable files")
     if current["symlinks"] != c.get("symlinks") or current["symlinks"]:
@@ -139,13 +150,15 @@ def verify(c: dict, inspection: dict, minimum: float = 0.70) -> dict:
             problems.append(f"line evidence absent: {path}")
         elif not row.get("node_evidence_ref"):
             problems.append(f"journaled read receipt absent: {path}")
-    source = {x["path"] for x in c["files"] if x["source"]}
+    # Coverage must be computed from a freshly generated local census,
+    # not from the adversarial/submitted source/risk classification.
+    source = {x["path"] for x in current["files"] if x["source"]}
     reviewed = observed & source
     present_dirs = {str(Path(path).parent) for path in reviewed}
-    absent_dirs = sorted(set(c["source_directories"]) - present_dirs)
+    absent_dirs = sorted(set(current["source_directories"]) - present_dirs)
     if absent_dirs:
         problems.append(f"{len(absent_dirs)} uninspected source directories")
-    risk = {x["path"] for x in c["files"] if x["risk"]}
+    risk = {x["path"] for x in current["files"] if x["risk"]}
     undeclared = sorted(risk - set(critical))
     missing_critical = sorted(set(critical) - observed)
     if undeclared:
@@ -154,15 +167,17 @@ def verify(c: dict, inspection: dict, minimum: float = 0.70) -> dict:
         problems.append(f"{len(missing_critical)} uninspected critical paths")
     if not critical and source:
         problems.append("critical path declaration missing")
-    fraction = len(reviewed) / len(source) if source else 1.0
+    if not source:
+        problems.append("no source files found; cannot certify deep review")
+    fraction = len(reviewed) / len(source) if source else 0.0
     if fraction < minimum:
         problems.append(f"source-file breadth {fraction:.1%} < diagnostic floor {minimum:.1%}")
     if fraction < 1.0:
         problems.append("incomplete first-party source-file receipts; deep review requires 100%")
     return dict(status="DEEP_COVERAGE_GATE_PASS" if not problems else "PARTIAL_OR_UNVERIFIED",
                 git_head=c.get("head"), source_files=len(source),
-                inspected_source_files=len(reviewed), source_directories=len(c["source_directories"]),
-                inspected_source_directories=len(present_dirs & set(c["source_directories"])),
+                inspected_source_files=len(reviewed), source_directories=len(current["source_directories"]),
+                inspected_source_directories=len(present_dirs & set(current["source_directories"])),
                 uninspected_directories=absent_dirs, uninspected_critical=missing_critical,
                 undeclared_risk=undeclared, problems=problems,
                 caveat="Hash/path coverage and Node references do not establish comprehension or valid conclusions.")
