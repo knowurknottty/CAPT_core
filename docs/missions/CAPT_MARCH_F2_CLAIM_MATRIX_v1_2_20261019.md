@@ -1,8 +1,8 @@
 # CAPT Core F2 — Claim Matrix v1.2 (ISOLATED BRANCH CANDIDATE; NOT MERGED)
 
-- Repair branch source pin: 5cbe0ffed3d5070da51de40acbd61feb6dd41611, on fix/black-swan-f2-verifier-reconciliation-20261019.
-- Base origin/main before repairs: 2ce53288f565cd387a1d7629b41690f9872b2a4b.
-- Most recently observed remote HEAD: 7e1182154a4086b74529b970d04bef3ece4f4442. This matrix is therefore NOT the main branch's current production certification.
+- Rebased repair code commit: dd832e30; further documentation commits may follow, on fix/black-swan-f2-verifier-reconciliation-20261019.
+- Rebased current upstream main: 3ff7caee5fc89f33d90b3754d6dc518d4e914559.
+- Most recently fetched remote HEAD: 3ff7caee5fc89f33d90b3754d6dc518d4e914559. This matrix is therefore NOT the main branch's current production certification.
 - Older MiMo and DeepSeek read-only model review pin: 444d85862325db9c23dd435bc96098d703f95281.
 - v1.1 matrix historical source pin: e28b66504c422946a66409d0de12e71f1646aae6.
 - RuntimeService last review reconciliation snapshot: ledger integrity ok, head 28252. Executable-to-ledger build identity is NOT established.
@@ -11,7 +11,7 @@
 
 ## Evidence-qualified claims — conservative carry-forward
 
-Old matrix status labels are historical unless independently revalidated on this branch. CM02 and CM05 are specifically re-tested in the new patch. The broad suite is NOT fully green (one Docker-environment mismatch).
+Old matrix status labels are historical unless independently revalidated on this branch. CM02 and CM05 are specifically re-tested in the new patch. Rebased targeted runtime tests are green; Docker/image-dependent skips are not passes.
 
 | ID | Claim | Source | Test or observation | Status | Scope limitation |
 |---|---|---|---|---|---|
@@ -36,37 +36,68 @@ Old matrix status labels are historical unless independently revalidated on this
 | CM19 | Runtime build identity | live executable not attested against repair SHA | attestation pending | UNKNOWN | executable-to-ledger binding unverified |
 | CM20 | Same UID hostile-model boundary | capt_runtime/authority.py | selected authority tests | UNRESOLVED | do not claim security vs same UID |
 
-## Tracked change-impact inventory d250cb3..repair SHA
+## Tracked change-impact inventory since d250cb3 through rebased candidate
 
-Source: git diff --name-status d250cb36abb34e78326537d5e540429ac906aeae 5cbe0ffed3d5070da51de40acbd61feb6dd41611. An inventory is not equivalent to comprehensive behavioral verification.
+Computed against candidate commit 3d72657f9a0f1f466eb8c2ff9bc4b992a7656627. Inventory is not a comprehensive verification.
 
 - M  LICENSE
 - M  README.md
+- M  capt_runtime/aggregates/claim_driver.py
+- M  capt_runtime/cohort_contract.py
 - M  capt_runtime/diagnostic_receipts.py
+- M  capt_runtime/driver_run.py
 - M  capt_runtime/drivers/provider.py
+- M  capt_runtime/media_adapter_contract.py
 - M  capt_runtime/memory/policy.py
 - M  capt_runtime/prepared_execution.py
 - A  capt_runtime/provider_error_types.py
 - M  capt_runtime/provider_model_preflight.py
+- M  capt_runtime/services.py
+- A  capt_runtime/source_fidelity.py
 - M  capt_runtime/state_security.py
 - M  capt_runtime/tool_broker.py
+- M  capt_runtime/tools/backends/ssh.py
 - M  capt_runtime/verification.py
 - M  capt_ui/surfaces/desktop_swift/Sources/CAPTCoreDesktop/CAPTRuntimeClient.swift
 - M  capt_ui/surfaces/desktop_swift/Tests/CAPTCoreDesktopTests/CAPTRuntimeClientTests.swift
+- M  capt_ui/surfaces/desktop_swift/script/build_and_run.sh
+- M  capt_ui/surfaces/desktop_swift/script/install_local_runtime.sh
+- A  capt_ui/surfaces/desktop_swift/script/reversible_runtime_switch.py
+- M  contracts/generated/python/capt_contracts/__init__.py
+- M  contracts/generated/python/capt_contracts/spec.py
+- M  contracts/generated/python/capt_contracts/types.py
+- M  contracts/generated/python/capt_contracts/validate.py
+- M  contracts/generated/typescript/src/index.ts
+- M  contracts/generated/typescript/src/spec.ts
+- M  contracts/generated/typescript/src/types.ts
+- M  contracts/generated/typescript/src/validate.ts
+- M  contracts/generated/typescript/src/version.ts
+- M  contracts/schema/driver.schema.json
+- M  desktop/capt_runtime_service.py
 - M  docs/TROUBLESHOOTING.md
+- A  docs/missions/CAPT_F2_ADVERSARIAL_REPAIR_RECEIPT_20261019.md
+- A  docs/missions/CAPT_MARCH_F2_CLAIM_MATRIX_v1_2_20261019.md
 - A  docs/missions/CAPT_OPENROUTER_ENDPOINT_READINESS_R2_20261019.md
+- A  docs/missions/CAPT_REVIEW_REMEDIATION_20261019.md
+- A  docs/upgrade-campaign/CAPT-UPG-081_EFFECTIVE_ADDRESS_UNIFICATION_20261017.md
 - M  docs/workflows/CAPT_REVIEWER_VERIFIER_CONTRACT.md
 - M  pyproject.toml
 - M  scripts/capt_repo_audit_gate.py
+- A  tests/capt_runtime/test_durable_provider_ceiling.py
 - A  tests/capt_runtime/test_f2_failclosed_digest.py
 - A  tests/capt_runtime/test_memory_policy_authority_lineage.py
 - A  tests/capt_runtime/test_openrouter_typed_errors.py
+- M  tests/capt_runtime/test_p0_dispatch_chain.py
 - A  tests/capt_runtime/test_prepared_frozen_mapping.py
 - M  tests/capt_runtime/test_provider_model_preflight.py
 - M  tests/capt_runtime/test_release_security_assurance.py
+- A  tests/capt_runtime/test_reversible_runtime_switch.py
+- A  tests/capt_runtime/test_source_fidelity.py
+- A  tests/capt_runtime/test_ssrf_effective_ipv4_policy.py
 - A  tests/capt_runtime/test_state_keychain_initialization.py
 - M  tests/capt_runtime/test_tool_broker.py
 - M  tests/test_capt_repo_audit_gate.py
+- M  tests/test_native_runtime_installer.py
 
 ## Adversarial tests and verification scope
 
@@ -76,7 +107,7 @@ Source: git diff --name-status d250cb36abb34e78326537d5e540429ac906aeae 5cbe0ffe
 - Current main source baseline 2ce53288: 114 selected tests passed pre-fix.
 - Preregistered RED: 2 failed and 1 passed; failures reproduced VER-1 and TB-1.
 - Post-fix GREEN: 117 selected tests passed; a separate final run after lint cleanup also passed 117.
-- Broader tests with RLIMIT_NOFILE=4096: 1,734 passed, 1 failed, 14 skipped and 13 deselected. Failure was a Docker profile diagnostic expectation when Docker CLI was unavailable. TypeScript cross-language contract test was deliberately deselected after missing build dependencies; do not claim full suite PASS.
+- Historical broad run before rebase: 1,734 passed and one Docker environment test failed. After rebasing onto 3ff7caee, the full selected runtime, audit and six-primitive run recorded 1,823 passed, zero failed, 14 Docker/image skips, and 12 outside-selection deselections (CAPT journal operation black-swan-f2-3ff-final-combined-regressions-20261019-85, recovered exit 0). Contract and tool-wiring tests passed 62/62, generated bindings drift passed (11 files) using an offline cached compiler located outside the generated source.
 - Historical 218 pass and Swift 8 pass were measured at prior pins. Neither constitutes new integrated source coverage.
 - Six primitives remain UNIT_TESTED_ONLY and not validated as wired live.
 
@@ -84,9 +115,9 @@ Source: git diff --name-status d250cb36abb34e78326537d5e540429ac906aeae 5cbe0ffe
 
 1. Independently review this repair SHA; the models reviewed earlier source.
 2. Full authoritative EventStore ledger replay and live executable-to-ledger SHA attestation.
-3. Correct environment-aware Docker diagnostic test and install/verify local TypeScript build deps if appropriate, then run integrated CI.
-4. Review the concurrent upstream changes 2ce53288..7e118215 and re-pin before any merge.
+3. Require green PR CI after integration; run 14 Docker/image-dependent tests in a configured environment.
+4. Re-confirm remote HEAD has not advanced beyond 3ff7caee before merge and obey branch protection.
 5. Prove six-primitive runtime integration; retain same-UID threat-model caveat.
-6. No automatic human verification acceptance, push, merge, deployment, or provider retry.
+6. User authorizes commit, push and merge only after passing checks; no automatic HumanApproval promotion, runtime deployment or provider replay.
 
 **Disposition:** TEST-PROVEN ISOLATED FIX; F2 gate remains open.

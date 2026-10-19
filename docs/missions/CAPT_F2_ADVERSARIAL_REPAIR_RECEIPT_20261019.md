@@ -1,9 +1,9 @@
 # CAPT F2 — Reproducible Adversarial Repair Receipt
 
-- Repair commit: 5cbe0ffed3d5070da51de40acbd61feb6dd41611
+- Repair origin commit 5cbe0ffe; rebased code commit dd832e30
 - Branch: fix/black-swan-f2-verifier-reconciliation-20261019
 - Baseline: 2ce53288f565cd387a1d7629b41690f9872b2a4b
-- Remote main when written: 7e1182154a4086b74529b970d04bef3ece4f4442
+- Rebased against fetched remote main 3ff7caee
 - Matrix candidate: CAPT_MARCH_F2_CLAIM_MATRIX_v1_2_20261019.md
 - Preregister SHA256: d296a85777805de6eb539f004bdf874963c8eebfab9f8c30d8fc9baa00035b4e
 
@@ -16,6 +16,13 @@
 - /Users/knowurknot/CAPT_core/.capt-evidence/marching-orders-20261019/F2-runtime-wide-firstfailure-short.log: SHA256 4e2c7d572d91be2ef4fc90943ee5ebae90f60e9872b07a6f87f7b8b0b0f6d7e3
 
 ## Evidence classification
-- CONFIRMED: 2 intentional RED regressions and GREEN after patch; 117 selected passing; 1,734 broad passing with environmental Docker failure.
+- CONFIRMED: two RED regressions reproduced and green after patch; post-rebase broad runtime/audit/primitives 1,823 passing, 14 environment skips and 12 outside-selection deselections; contract and Docker wiring 62 passing.
 - UNVERIFIED: full-suite PASS, live runtime integration, live full replay, same-UID adversary, Swift installed-client behavior, independent verification acceptance.
-- No external provider call, state-changing integration, runtime restart, deployment, branch push or merge was authorized by this receipt.
+- This receipt does not grant authority; separate user directive approves commit/push/merge/pull conditionally on green checks, but not runtime deployment or claim promotion.
+
+## Post-rebase evidence
+
+- Operation black-swan-f2-3ff-final-combined-regressions-20261019-85: closed, exit 0, 1823 passed, 14 skipped, 12 deselected.
+- Operation black-swan-f2-contract-and-docker-verification-20261019-84: closed, exit 0, 62 passed.
+- Operation black-swan-f2-check-drift-isolated-20261019-83: closed, exit 0, 11 generated files match source.
+- TypeScript v5.9.3 was obtained from preexisting local npm cache and relocated outside generated source files.
