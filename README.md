@@ -8,6 +8,21 @@ CAPT moves responsibilities that should not live inside a transient model sessio
 
 The model is an inference component. Tools are effect adapters. **RuntimeService + EventStore + governance are the authority plane around them.**
 
+## Choose your starting point
+
+| Goal | Best entry point |
+|---|---|
+| Understand the problem CAPT solves | [CAPT explained simply](docs/EXPLAINED_SIMPLY.md) |
+| Install, try local commands, and learn what they prove | [Start Here](START_HERE.md) |
+| Follow a role-specific path | [Onboarding](docs/ONBOARDING.md) |
+| Use CAPT day to day | [User guide](docs/USER_GUIDE.md) and [existing cheatsheets](docs/CHEATSHEETS/README.md) |
+| Understand components and authority boundaries | [Technical manual](docs/TECHNICAL_MANUAL.md) and [architecture](docs/ARCHITECTURE.md) |
+| Explore CLI/API contracts | [CLI](docs/CLI.md) and [generated API](docs/API.md) |
+| Audit maturity and evidence | [October 8 state snapshot](docs/CURRENT_STATE.md), [September 15 capability matrix](docs/CAPABILITY_MATRIX.md), [selected current-HEAD delta](docs/CURRENT_HEAD_DELTA.md), and [release evidence](docs/RELEASE_EVIDENCE.md) |
+| Find everything, including a glossary | [Documentation index](docs/README.md) |
+
+**Maturity boundary (source baseline checked 2026-10-18):** this documentation audit pinned `main` at [`c956c45e`](https://github.com/knowurknottty/CAPT_core/tree/c956c45e33119cd31ce7e61c55334e803f20bf3f), while package metadata still declares `capt-solo 0.5.0`. There are **134 commits since the October 8 snapshot**. The [current-HEAD delta](docs/CURRENT_HEAD_DELTA.md) covers selected newer behavior, and the [RRDS-1 review ledger](docs/missions/OMEGA_RRDS_C956C45E_PARTIAL.md) documents explicit incomplete source coverage. Source, focused tests, installed/live integrations and release-certified artifacts remain different evidence states; later sections preserve dated historical milestone reports.
+
 ---
 
 ## Governed large-file media R2C — 2026-10-08

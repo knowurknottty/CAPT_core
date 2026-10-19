@@ -1,5 +1,7 @@
 # CAPT Functionality Matrix
 
+> **Historical engineering snapshot.** The test totals and feature claims below describe the October 8, 2026 revision/receipt, **not** current HEAD (`c956c45e`). There are 134 additional commits. A handful of later subsystems have separately scoped [source/test receipts](CURRENT_HEAD_DELTA.md), but no full current-HEAD Python/Swift/live-provider release verification is established here.
+
 Source snapshot: `80d3b82` (docs refreshed 2026-10-08; `capt_cli` fix + this refresh merged via PR #170 at `1e5244f`). Package remains `capt-solo 0.5.0`.
 
 This matrix describes **merged Core `main` as of 2026-10-08**. Governed exact-head evidence: `tests/capt_runtime` 1435 passed / 13 skipped / 12 deselected; Swift package 165 tests / 9 skipped / 0 failures with `CAPTNativeMac` building clean. Implementation presence, exact-head engineering verification, installed-runtime proof, and public-release authorization are distinct states.

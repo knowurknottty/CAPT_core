@@ -1,5 +1,7 @@
 # CAPT Capability Matrix
 
+> **Historical capability snapshot, not current-HEAD certification.** The source baseline below is dated September 15, 2026. The latest October 18 main (`c956c45e`) contains later work that has not undergone complete RRDS-1 source and release verification. See [selected current-HEAD delta notes](CURRENT_HEAD_DELTA.md); do not infer that this table exhaustively describes newer capabilities.
+
 Source snapshot: `1e85bac5d17cde342a1ae55e6ee3da5fa681ff61`. Package remains `capt-solo 0.5.0`.
 
 This matrix describes **merged `main` as of 2026-09-15** and keeps implementation, engineering proof, and release proof separate.
