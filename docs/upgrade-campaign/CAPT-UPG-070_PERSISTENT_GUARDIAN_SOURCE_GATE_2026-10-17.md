@@ -61,3 +61,24 @@ exec and normal inspection continue to reject stale Guardians. Cleanup
 still verifies container and network absence; no automatic retry, recycle,
 or lease recreation is added. Real Docker and exact-approval tests remain
 release prerequisites.
+
+
+## 2026-10-19 Docker Entrypoint verification
+Docker combines image Config.Entrypoint with Config.Cmd. A Cmd digest
+alone is not proof of the executed interpreter when an image-defined
+Entrypoint can override the command. Persistent Guardian source
+attestation now also requires an absent or empty Config.Entrypoint.
+Synthetic tests explicitly reject shell and interpreter entrypoints.
+This is still not a real daemon/immutable-image execution receipt.
+
+
+## 2026-10-19 creation-time attestation completeness
+The image may specify Config.Entrypoint independently of Config.Cmd.
+The Guardian creation attestation now checks the exact source-bearing
+Config.Cmd and requires Config.Entrypoint to be absent/empty before any
+new Guardian may start. Existing persistent reuse applies the same check.
+Two original synthetic Guardian inspect fixtures needed their missing
+Docker Cmd/Entrypoint fields added; the workload fixture was unchanged.
+Tests explicitly exercise malicious creation-time entrypoints. The
+focused persistent/guardian/lease/network suite passed 76 tests.
+Release still requires actual engine proof and per-lease authority.

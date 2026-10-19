@@ -722,6 +722,12 @@ class InversionSandboxProcessBackend:
         is fail-closed: never silently recreate or approve a sandbox.
         """
         cmd = config.get("Cmd") if isinstance(config, dict) else None
+        # Docker executes Config.Entrypoint before Config.Cmd; validating
+        # Cmd alone is insufficient if the image carries an entrypoint.
+        if not isinstance(config, dict) or config.get("Entrypoint") not in (None, []):
+            raise AuthorityViolation(
+                "Guardian source unverified: unexpected Docker Entrypoint"
+            )
         if (
             not isinstance(cmd, list)
             or len(cmd) != 3
@@ -1219,6 +1225,9 @@ class InversionSandboxProcessBackend:
         config = record.get("Config") or {}
         if record.get("Id") != guardian_id or record.get("Image") != image_id or (record.get("State") or {}).get("Status") != "created":
             raise AuthorityViolation("InversionSandbox guardian identity/state drifted")
+        # Initial creation must prove the same baked source and lack of
+        # arbitrary image Entrypoint as all future persistent reuse.
+        self._verify_guardian_source_command(config, profile)
         if config.get("User") != f"{profile.uid}:{profile.gid}":
             raise AuthorityViolation("InversionSandbox guardian user drifted")
         if host.get("ReadonlyRootfs") is not True or host.get("Privileged") is not False:

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -145,3 +147,54 @@ def test_close_path_requires_exact_lease_identity_before_stale_cleanup(monkeypat
     with pytest.raises(AuthorityViolation, match="workload identity mismatch"):
         backend.close_persistent(identity)
     assert not seen  # no container cleanup after an identity failure
+
+@pytest.mark.parametrize("entrypoint", [
+    ["/bin/sh", "-c", "echo fake"],
+    ["/usr/local/bin/python3"],
+    "/bin/sh",
+])
+def test_guardian_source_refuses_untrusted_image_entrypoints(entrypoint):
+    profile, backend = _case()
+    good = [profile.guardian_python, "-c", backend._guardian_source()]
+    with pytest.raises(AuthorityViolation, match="Entrypoint"):
+        backend._verify_guardian_source_command(
+            {"Cmd": good, "Entrypoint": entrypoint}, profile
+        )
+
+
+def test_guardian_source_accepts_explicit_empty_entrypoint():
+    profile, backend = _case()
+    good = [profile.guardian_python, "-c", backend._guardian_source()]
+    assert backend._verify_guardian_source_command(
+        {"Cmd": good, "Entrypoint": []}, profile
+    ) == hashlib.sha256(good[-1].encode()).hexdigest()
+
+@pytest.mark.parametrize("entrypoint", [
+    ["/bin/sh", "-c", "echo fake-ready"],
+    ["/usr/local/bin/python3"],
+])
+def test_new_guardian_attestation_rejects_entrypoint_before_start(monkeypatch, entrypoint):
+    profile, backend = _case()
+    guardian_id = "b" * 64
+    image_id = "sha256:" + "a" * 64
+    record = {
+        "Id": guardian_id, "Image": image_id, "State": {"Status": "created"},
+        "Config": {
+            "User": f"{profile.uid}:{profile.gid}",
+            "Cmd": [profile.guardian_python, "-c", backend._guardian_source()],
+            "Entrypoint": entrypoint,
+        },
+        "HostConfig": {
+            "ReadonlyRootfs": True, "Privileged": False, "CapDrop": ["ALL"],
+            "SecurityOpt": ["no-new-privileges:true"], "Devices": [],
+        },
+    }
+    monkeypatch.setattr(
+        backend.docker_backend, "_run_endpoint",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            exit_code=0, timed_out=False, stdout=json.dumps([record]),
+            stderr="",
+        ),
+    )
+    with pytest.raises(AuthorityViolation, match="Entrypoint"):
+        backend._attest_guardian(profile, "unix:///tmp/docker.sock", guardian_id, image_id)
