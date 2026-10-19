@@ -89,6 +89,8 @@ _PERMITTED: Dict[str, FrozenSet[str]] = {
     "assign_delegate": frozenset({COGNITION, HUMAN, SYSTEM}),
     "transition_delegate_assignment": frozenset({COGNITION, HUMAN, GOVERNANCE, SYSTEM}),
     "bind_cloudflare_resource_adoption": frozenset({EXECUTION, SYSTEM}),
+    "issue_decision_offering": frozenset({GOVERNANCE}),
+    "revoke_decision_offering": frozenset({GOVERNANCE, HUMAN}),
 }
 
 

@@ -8,8 +8,10 @@ reconciliation. Adapters never receive authority merely by being registered.
 from __future__ import annotations
 
 import hashlib
+import os
 from copy import deepcopy
-from typing import Any, Callable, Dict, Iterable
+from pathlib import Path
+from typing import Any, Callable, Dict, Iterable, Optional
 
 from . import commands
 from .aggregates.capability import CapabilityAggregate
@@ -22,6 +24,7 @@ from .errors import (
     IntegrityViolation,
 )
 from .services import RuntimeService
+from .store import EventStore
 from .tools.registry import ToolRegistry
 from .tools.sandbox_broker_hooks import (
     CapabilityLeaseBoundary,
@@ -76,11 +79,53 @@ class ToolBroker:
         registry: ToolRegistry,
         *,
         now: Callable[[], str],
+        governed_offerings_enabled: bool = False,
+        decision_offering_store: Optional[EventStore] = None,
     ) -> None:
+        if type(governed_offerings_enabled) is not bool:
+            raise TypeError("governed_offerings_enabled must be a bool")
+        if governed_offerings_enabled:
+            if decision_offering_store is None:
+                raise ValueError("DECISION_OFFERING_SEPARATE_LEDGER_REQUIRED")
+            if decision_offering_store is runtime.store:
+                raise ValueError("DECISION_OFFERING_MAIN_LEDGER_FORBIDDEN")
+            if decision_offering_store.path != ":memory:" and runtime.store.path != ":memory:":
+                sidecar_path = Path(decision_offering_store.path).resolve()
+                main_path = Path(runtime.store.path).resolve()
+                if sidecar_path == main_path or (
+                    sidecar_path.exists() and main_path.exists()
+                    and os.path.samefile(sidecar_path, main_path)
+                ):
+                    raise ValueError("DECISION_OFFERING_MAIN_LEDGER_FORBIDDEN")
+        self._governed_offerings_enabled = governed_offerings_enabled
+        self.decision_offering_store = decision_offering_store
         self.runtime = runtime
         self.store = runtime.store
         self.registry = registry
         self._now = now
+
+    def issue_decision_offering(
+        self, request: Dict[str, Any], metadata: Dict[str, Any], *, ttl_seconds: int = 60
+    ) -> Dict[str, Any]:
+        """Persist a governance-issued *proposal* receipt; does not dispatch."""
+        from .governed_decision_offering import GovernedDecisionOfferingService
+        return GovernedDecisionOfferingService(self).issue(
+            request, metadata, ttl_seconds=ttl_seconds
+        )
+
+    def revoke_decision_offering(
+        self, offering_id: str, metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Persist governance/human revocation; never grants authority."""
+        from .governed_decision_offering import GovernedDecisionOfferingService
+        return GovernedDecisionOfferingService(self).revoke(offering_id, metadata)
+
+    def inspect_decision_offering(
+        self, receipt: Dict[str, Any], request: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Read only: cannot admit, execute, or verify task completion."""
+        from .governed_decision_offering import GovernedDecisionOfferingService
+        return GovernedDecisionOfferingService(self).inspect(receipt, request)
 
     @staticmethod
     def execution_id(idempotency_key: str) -> str:

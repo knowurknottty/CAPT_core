@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:adee66a628bf008dbf98b4a4d6485306520eb8f0f4b4fbe654844e1070199da7
+# source digest:  sha256:e8c3067c76460f1e26a529b482d1678d9c3ba31cd7805e41f4f34f45a80b84e3
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -1936,6 +1936,23 @@ class CouncilAnalysisRecordedPayload(object):
 
 
 @dataclass(frozen=True)
+class DecisionOfferingIssuedPayload(object):
+    """DecisionOfferingIssuedPayload"""
+
+    eventType: Literal["DecisionOfferingIssued"]
+    receipt: DecisionOfferingReceipt
+
+
+@dataclass(frozen=True)
+class DecisionOfferingRevokedPayload(object):
+    """DecisionOfferingRevokedPayload"""
+
+    eventType: Literal["DecisionOfferingRevoked"]
+    offeringId: Identifier
+    revokedAt: Timestamp
+
+
+@dataclass(frozen=True)
 class DelegateAssignedPayload(object):
     """DelegateAssignedPayload"""
 
@@ -2259,7 +2276,7 @@ class ToolExecutionTerminatedPayload(object):
 
 
 # discriminated on 'eventType'
-EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, DriverRunDispatchBoundaryRecordedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalRevokedPayload, HumanApprovalConsumedPayload, HumanApprovalConsumedForCapabilityPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, CouncilAdmittedPayload, CouncilAnalysisRecordedPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload, PromptProposalCreatedPayload, PromptProposalRevisedPayload, PromptProposalCancelledPayload, BotRegisteredPayload, CognitiveCandidateProposedPayload, CognitiveCandidateDecidedPayload, SkillCandidateCreatedPayload, SkillCandidateTransitionedPayload, LabBoardItemCreatedPayload, LabBoardItemTransitionedPayload, DelegateAssignedPayload, DelegateAssignmentTransitionedPayload, CloudflareResourceAdoptionApprovalConsumedPayload, CloudflareResourceBindingCreatedPayload, SandboxLeaseReservedPayload, SandboxLeaseTransitionedPayload]
+EventPayload = Union[MissionCreatedPayload, PolicyEvaluatedPayload, MissionStateChangedPayload, CheckpointCreatedPayload, MissionResumedPayload, TaskCreatedPayload, TaskTransitionedPayload, TaskResultSubmittedPayload, CapabilityGrantedPayload, CapabilityLeaseActivatedPayload, CapabilityUseReservedPayload, CapabilityUseFinalizedPayload, CapabilityGrantRevokedPayload, CapabilityLeaseRevokedPayload, DriverRunCreatedPayload, DriverRunStateChangedPayload, DriverRunDispatchBoundaryRecordedPayload, ClaimCreatedPayload, EvidenceRecordedPayload, ClaimVerifiedPayload, ClaimGuardDecidedPayload, HumanApprovalRequestedPayload, HumanApprovalDecidedPayload, HumanApprovalRevokedPayload, HumanApprovalConsumedPayload, HumanApprovalConsumedForCapabilityPayload, ArtifactPromotionPreparedPayload, ArtifactPromotionAuthorizedPayload, ArtifactPromotionAdoptedPayload, ArtifactPromotionDiscardedPayload, CohortCreatedPayload, CohortSnapshotPersistedPayload, CohortSteeredPayload, CouncilAdmittedPayload, CouncilAnalysisRecordedPayload, ReplayForkCreatedPayload, ToolExecutionPreparedPayload, ToolExecutionAdmittedPayload, ToolExecutionDispatchingPayload, ToolExecutionEffectObservedPayload, ToolExecutionSettlingPayload, ToolExecutionTerminatedPayload, PromptProposalCreatedPayload, PromptProposalRevisedPayload, PromptProposalCancelledPayload, BotRegisteredPayload, CognitiveCandidateProposedPayload, CognitiveCandidateDecidedPayload, SkillCandidateCreatedPayload, SkillCandidateTransitionedPayload, LabBoardItemCreatedPayload, LabBoardItemTransitionedPayload, DelegateAssignedPayload, DelegateAssignmentTransitionedPayload, CloudflareResourceAdoptionApprovalConsumedPayload, CloudflareResourceBindingCreatedPayload, SandboxLeaseReservedPayload, SandboxLeaseTransitionedPayload, DecisionOfferingIssuedPayload, DecisionOfferingRevokedPayload]
 
 
 class EventType(str, Enum):
@@ -2323,6 +2340,8 @@ class EventType(str, Enum):
     CLOUDFLARERESOURCEBINDINGCREATED = "CloudflareResourceBindingCreated"
     SANDBOXLEASERESERVED = "SandboxLeaseReserved"
     SANDBOXLEASETRANSITIONED = "SandboxLeaseTransitioned"
+    DECISIONOFFERINGISSUED = "DecisionOfferingIssued"
+    DECISIONOFFERINGREVOKED = "DecisionOfferingRevoked"
 
 
 @dataclass(frozen=True)
@@ -2837,6 +2856,36 @@ class BooleanArgument(object):
     kind: Literal["boolean"]
     name: str
     value: bool
+
+
+@dataclass(frozen=True)
+class DecisionOfferingReceipt(object):
+    """Runtime-governance-issued, durable bounded *proposal* receipt. Not a capability or permission to dispatch."""
+
+    descriptorDigest: Digest
+    expiresAt: Timestamp
+    grantId: Optional[str]
+    issuedAt: Timestamp
+    issuedBy: Identifier
+    leaseId: Optional[str]
+    ledgerBasisDigest: Digest
+    nonce: str
+    offeringId: Identifier
+    offeringLedgerBasisDigest: Digest
+    operation: str
+    operationFingerprint: Digest
+    receiptDigest: Digest
+    schemaVersion: SchemaVersion
+    toolId: Identifier
+    toolRequestDigest: Digest
+
+
+@dataclass(frozen=True)
+class DecisionOfferingState(object):
+    receipt: DecisionOfferingReceipt
+    revokedAt: Optional[Timestamp]
+    revokedBy: Optional[Identifier]
+    status: str
 
 
 @dataclass(frozen=True)

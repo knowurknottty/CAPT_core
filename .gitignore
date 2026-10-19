@@ -69,6 +69,7 @@ Package.resolved
 
 # Generated TypeScript build output (bindings SOURCE is committed, dist is not)
 contracts/generated/typescript/dist/
+contracts/generated/typescript/node_modules/
 
 # Generated desktop verification artifacts (reproducible; not source)
 desktop/*_evidence.json
