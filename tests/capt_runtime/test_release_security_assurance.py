@@ -490,5 +490,8 @@ def test_memory_query_returns_decrypted_content_after_at_rest_sealing(tmp_path, 
 
 def test_python38_crypto_dependency_is_bounded_to_last_supported_major():
     text = Path("pyproject.toml").read_text()
-    assert "cryptography>=47.0.0,<48.0.0; python_version < '3.9'" in text
-    assert "cryptography>=47.0.0; python_version >= '3.9'" in text
+    # Python 3.8/3.9 cannot satisfy our production file receipt path
+    # (str.removeprefix) and are not in the tested CI support matrix.
+    assert 'requires-python = ">=3.10"' in text
+    assert '"cryptography>=47.0.0"' in text
+    assert "python_version < '3.9'" not in text

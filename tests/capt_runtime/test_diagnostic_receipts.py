@@ -190,7 +190,7 @@ def test_http_failure_exposes_status_not_upstream_body(tmp_path, monkeypatch):
         "provider rejected: " + secret, {"x-hidden-token": secret},
         io.BytesIO(secret.encode()),
     )
-    monkeypatch.setattr("urllib.request.urlopen", lambda *args, **kwargs: (_ for _ in ()).throw(response))
+    monkeypatch.setattr("capt_runtime.http_client.open_url", lambda *args, **kwargs: (_ for _ in ()).throw(response))
     governor = TokenCostGovernor(max_requests_per_session=2)
     driver = ProviderDriver(
         str(tmp_path), provider_id="openrouter", model="test/model",
@@ -229,7 +229,7 @@ def test_two_turn_failure_no_automatic_retry_and_explained_phase(tmp_path, monke
             raise urllib.error.URLError("secret DNS value")
         return Response()
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("capt_runtime.http_client.open_url", fake_urlopen)
     governor = TokenCostGovernor(max_requests_per_session=2)
     driver = ProviderDriver(
         str(tmp_path), provider_id="openrouter", model="test/model",

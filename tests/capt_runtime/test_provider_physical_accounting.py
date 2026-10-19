@@ -36,7 +36,7 @@ def test_three_physical_http_turns_respect_two_request_cap(tmp_path, monkeypatch
         got.append(1)
         return _Response({"choices": [{"message": {"content": "ok"}}],
                           "usage": {"prompt_tokens": 4, "completion_tokens": 2, "cost": 0.02}})
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("capt_runtime.http_client.open_url", fake_urlopen)
     governor = TokenCostGovernor(max_requests_per_session=2)
     driver = _driver(tmp_path, governor)
     for _ in range(2):
@@ -57,7 +57,7 @@ def test_incomplete_request_reserves_slot_without_invented_cost(tmp_path, monkey
     def no_response(*args, **kwargs):
         got.append(1)
         raise TimeoutError("remote timed out")
-    monkeypatch.setattr("urllib.request.urlopen", no_response)
+    monkeypatch.setattr("capt_runtime.http_client.open_url", no_response)
     governor = TokenCostGovernor(max_requests_per_session=1)
     driver = _driver(tmp_path, governor)
     with pytest.raises(Exception):
@@ -71,7 +71,7 @@ def test_incomplete_request_reserves_slot_without_invented_cost(tmp_path, monkey
 
 
 def test_response_missing_cost_is_flagged_unknown(tmp_path, monkeypatch):
-    monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k:
+    monkeypatch.setattr("capt_runtime.http_client.open_url", lambda *a, **k:
                          _Response({"choices":[{"message":{"content":"ok"}}],
                                     "usage":{"prompt_tokens":4,"completion_tokens":2}}))
     governor = TokenCostGovernor()

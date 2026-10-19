@@ -26,6 +26,7 @@ public enum CAPTRuntimeClientError: Error, LocalizedError {
 
 public final class CAPTRuntimeClient: CAPTRuntimeCommanding {
     public static let maximumFrameBytes = 4 * 1024 * 1024
+    public static let socketIODeadlineSeconds: TimeInterval = 8
 
     public let socketPath: String
     public let tokenPath: String
@@ -34,6 +35,9 @@ public final class CAPTRuntimeClient: CAPTRuntimeCommanding {
 
     private var socketFD: Int32 = -1
     private let lock = NSLock()
+    // Independent from the transaction lock: shutdown can interrupt a
+    // blocked recv without waiting for that same transaction to finish.
+    private let descriptorLock = NSLock()
 
     public init(socketPath: String, tokenPath: String) {
         self.socketPath = socketPath
@@ -64,7 +68,10 @@ public final class CAPTRuntimeClient: CAPTRuntimeCommanding {
             throw CAPTRuntimeClientError.tokenMissing(tokenPath)
         }
         disconnect()
-        socketFD = try Self.openUnixSocket(path: socketPath)
+        let opened = try Self.openUnixSocket(path: socketPath)
+        descriptorLock.lock()
+        socketFD = opened
+        descriptorLock.unlock()
         try send(payload: ["token": token])
         let auth = try receive()
         guard auth["ok"] as? Bool == true else {
@@ -87,11 +94,23 @@ public final class CAPTRuntimeClient: CAPTRuntimeCommanding {
         disconnectUnlocked()
     }
 
+    /// Interrupts a blocked transaction without replaying its command.
+    /// The caller must reconcile the original command ID before a fresh effect.
+    public func interruptPendingTransaction() {
+        descriptorLock.lock()
+        defer { descriptorLock.unlock() }
+        if socketFD >= 0 {
+            _ = Darwin.shutdown(socketFD, SHUT_RDWR)
+        }
+    }
+
     private func disconnectUnlocked() {
+        descriptorLock.lock()
         if socketFD >= 0 {
             Darwin.close(socketFD)
             socketFD = -1
         }
+        descriptorLock.unlock()
         operatorID = nil
         sessionID = nil
     }
@@ -215,19 +234,22 @@ public final class CAPTRuntimeClient: CAPTRuntimeCommanding {
 
     private func sendUnlocked(payload: [String: Any]) throws {
         let frame = try Self.makeFrame(payload)
+        let deadline = ProcessInfo.processInfo.systemUptime + Self.socketIODeadlineSeconds
         var offset = 0
         try frame.withUnsafeBytes { rawBuffer in
             guard let baseAddress = rawBuffer.baseAddress else { return }
             while offset < frame.count {
+                try Self.waitForSocket(fd: socketFD, events: Int16(POLLOUT), deadline: deadline)
                 let sent = Darwin.send(
                     socketFD,
                     baseAddress.advanced(by: offset),
                     frame.count - offset,
                     0
                 )
+                if sent < 0 && errno == EINTR { continue }
                 if sent <= 0 {
                     throw CAPTRuntimeClientError.socketFailure(
-                        "CAPT socket send failed: \(String(cString: strerror(errno)))"
+                        "CAPT socket send failed (possible indeterminate command): \(String(cString: strerror(errno)))"
                     )
                 }
                 offset += sent
@@ -236,12 +258,13 @@ public final class CAPTRuntimeClient: CAPTRuntimeCommanding {
     }
 
     private func receiveUnlocked() throws -> [String: Any] {
-        let header = try readExact(4)
+        let deadline = ProcessInfo.processInfo.systemUptime + Self.socketIODeadlineSeconds
+        let header = try Self.readExactFromSocket(fd: socketFD, count: 4, deadline: deadline)
         let length = header.withUnsafeBytes { raw -> UInt32 in
             raw.load(as: UInt32.self).bigEndian
         }
         try Self.validateFrameLength(Int(length))
-        let body = try readExact(Int(length))
+        let body = try Self.readExactFromSocket(fd: socketFD, count: Int(length), deadline: deadline)
         let object = try JSONSerialization.jsonObject(with: body)
         guard let dictionary = object as? [String: Any] else {
             throw CAPTRuntimeClientError.malformedResponse("top-level JSON is not an object")
@@ -249,27 +272,64 @@ public final class CAPTRuntimeClient: CAPTRuntimeCommanding {
         return dictionary
     }
 
-    private func readExact(_ count: Int) throws -> Data {
+    static func waitForSocket(fd: Int32, events: Int16, deadline: TimeInterval) throws {
+        while true {
+            let remaining = deadline - ProcessInfo.processInfo.systemUptime
+            if remaining <= 0 {
+                throw CAPTRuntimeClientError.socketFailure(
+                    "CAPT socket I/O deadline expired; response outcome indeterminate"
+                )
+            }
+            var entry = pollfd(fd: fd, events: events, revents: 0)
+            let milliseconds = Int32(min(1000, max(1, Int(remaining * 1000))))
+            let rc = Darwin.poll(&entry, 1, milliseconds)
+            if rc > 0 { return }
+            if rc < 0 && errno == EINTR { continue }
+            if rc < 0 {
+                throw CAPTRuntimeClientError.socketFailure(
+                    "CAPT socket poll failed: \(String(cString: strerror(errno)))"
+                )
+            }
+        }
+    }
+
+    static func readExactFromSocket(fd: Int32, count: Int, deadline: TimeInterval) throws -> Data {
         var data = Data(count: count)
         var receivedTotal = 0
         try data.withUnsafeMutableBytes { rawBuffer in
             guard let baseAddress = rawBuffer.baseAddress else { return }
             while receivedTotal < count {
+                try waitForSocket(fd: fd, events: Int16(POLLIN), deadline: deadline)
                 let received = Darwin.recv(
-                    socketFD,
-                    baseAddress.advanced(by: receivedTotal),
-                    count - receivedTotal,
-                    0
+                    fd, baseAddress.advanced(by: receivedTotal),
+                    count - receivedTotal, 0
                 )
+                if received < 0 && errno == EINTR { continue }
+                if received < 0 && (errno == EWOULDBLOCK || errno == EAGAIN) {
+                    continue // poll again, but never extend the absolute deadline
+                }
                 if received <= 0 {
                     throw CAPTRuntimeClientError.socketFailure(
-                        "CAPT socket closed mid-frame"
+                        "CAPT socket closed mid-frame; response outcome indeterminate"
                     )
                 }
                 receivedTotal += received
             }
         }
         return data
+    }
+
+    static func configureIOTimeout(fd: Int32) throws {
+        var timeout = timeval(tv_sec: 1, tv_usec: 0)
+        for option in [SO_RCVTIMEO, SO_SNDTIMEO] {
+            let rc = Darwin.setsockopt(
+                fd, SOL_SOCKET, option, &timeout,
+                socklen_t(MemoryLayout<timeval>.size)
+            )
+            guard rc == 0 else {
+                throw CAPTRuntimeClientError.socketFailure("Unable to set CAPT socket I/O timeout")
+            }
+        }
     }
 
     static func configureNoSigPipe(fd: Int32) throws {
@@ -312,22 +372,48 @@ public final class CAPTRuntimeClient: CAPTRuntimeCommanding {
         }
         do {
             try configureNoSigPipe(fd: fd)
+            try configureIOTimeout(fd: fd)
         } catch {
             Darwin.close(fd)
             throw error
         }
-        let result = withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
-                Darwin.connect(fd, socketAddress, socklen_t(MemoryLayout<sockaddr_un>.size))
-            }
-        }
-        guard result == 0 else {
-            let message = String(cString: strerror(errno))
+        let originalFlags = Darwin.fcntl(fd, F_GETFL)
+        guard originalFlags >= 0 && Darwin.fcntl(fd, F_SETFL, originalFlags | O_NONBLOCK) == 0 else {
             Darwin.close(fd)
-            throw CAPTRuntimeClientError.socketFailure(
-                "Unable to connect to CAPT runtime at \(path): \(message)"
-            )
+            throw CAPTRuntimeClientError.socketFailure("Unable to bound CAPT socket connection time")
         }
-        return fd
+        do {
+            let result = withUnsafePointer(to: &address) { pointer in
+                pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
+                    Darwin.connect(fd, socketAddress, socklen_t(MemoryLayout<sockaddr_un>.size))
+                }
+            }
+            if result < 0 {
+                guard errno == EINPROGRESS || errno == EWOULDBLOCK else {
+                    throw CAPTRuntimeClientError.socketFailure(
+                        "Unable to connect to CAPT runtime at \(path): \(String(cString: strerror(errno)))"
+                    )
+                }
+                try waitForSocket(
+                    fd: fd, events: Int16(POLLOUT),
+                    deadline: ProcessInfo.processInfo.systemUptime + socketIODeadlineSeconds
+                )
+                var socketError: Int32 = 0
+                var socketErrorLength = socklen_t(MemoryLayout<Int32>.size)
+                guard Darwin.getsockopt(fd, SOL_SOCKET, SO_ERROR, &socketError, &socketErrorLength) == 0,
+                      socketError == 0 else {
+                    throw CAPTRuntimeClientError.socketFailure(
+                        "CAPT socket connect failed after readiness check"
+                    )
+                }
+            }
+            guard Darwin.fcntl(fd, F_SETFL, originalFlags) == 0 else {
+                throw CAPTRuntimeClientError.socketFailure("Unable to restore CAPT socket mode")
+            }
+            return fd
+        } catch {
+            Darwin.close(fd)
+            throw error
+        }
     }
 }

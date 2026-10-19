@@ -567,7 +567,10 @@ def test_runtime_write_authority_off_rejects_model_write_before_mutation(tmp_pat
     )
     try:
         assert run["status"] == "rejected", run
-        assert "MODEL_TOOL_NOT_AUTHORIZED:file.write" in (run.get("detail") or "")
+        # A denied tool is still refused, but raw authority exception strings
+        # must not be exposed by the external model-response error channel.
+        assert run.get("detail") == "PROVIDER_FAILURE_DIAGNOSTIC_AVAILABLE_OR_OUTCOME_UNKNOWN"
+        assert "MODEL_TOOL_NOT_AUTHORIZED" not in str(run)
         assert not (target / target_path).exists()
         assert len(_AuthorityMatrixHandler.calls) == 1
     finally:
@@ -613,7 +616,8 @@ def test_runtime_shell_authority_off_rejects_model_shell(tmp_path: Path, monkeyp
     )
     try:
         assert run["status"] == "rejected", run
-        assert "MODEL_TOOL_NOT_AUTHORIZED:terminal.exec" in (run.get("detail") or "")
+        assert run.get("detail") == "PROVIDER_FAILURE_DIAGNOSTIC_AVAILABLE_OR_OUTCOME_UNKNOWN"
+        assert "MODEL_TOOL_NOT_AUTHORIZED" not in str(run)
         assert len(_AuthorityMatrixHandler.calls) == 1
     finally:
         try: client.command("shutdown", {}, "shell-off-shutdown")
@@ -715,8 +719,6 @@ def test_runtime_local_only_blocks_remote_provider_before_credential_resolution(
 
 
 def test_runtime_remote_allowed_dispatches_cloud_provider_after_approval(tmp_path: Path, monkeypatch) -> None:
-    import io
-    import capt_runtime.drivers.provider as provider_driver_module
 
     provider_id = "remote-allowed"
     secret = "remote-test-secret-12345"
@@ -756,7 +758,7 @@ def test_runtime_remote_allowed_dispatches_cloud_provider_after_approval(tmp_pat
             "usage": {"prompt_tokens": 11, "completion_tokens": 5},
         })
 
-    monkeypatch.setattr(provider_driver_module.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr("capt_runtime.http_client.open_url", fake_urlopen)
     tag = hashlib.sha256(str(tmp_path).encode()).hexdigest()[:12]
     sock = Path("/tmp") / ("capt-net-on-" + tag + ".sock")
     token = state / "runtime.token"

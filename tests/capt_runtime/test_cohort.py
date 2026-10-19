@@ -174,6 +174,12 @@ def test_text_cohort_preserves_and_compiles_strict_v2_charter_policy():
         model="deepseek/deepseek-v4-flash-0731",
         cohort_spec=raw,
     )
+    assert text.startswith(
+        "CAPT STRICT OUTPUT ORDER (MANDATORY; BEFORE ANY REPORT PROSE):\n"
+        "1. Emit at least 132 unique, complete CAPT_CANDIDATE rows."
+    )
+    assert text.index("CAPT_CHARTER_AUDIT") < text.index("CAPT_VESSEL deepseek0731-vNNNN")
+    assert text.index("Review the target deeply.") > text.index("CAPT STRICT OUTPUT ORDER")
     assert "CAPT deep Vessel Charter contract v2:" in text
     assert "at least 132 surviving candidate charters" in text
     assert "CAPT_CANDIDATE C0001" in text

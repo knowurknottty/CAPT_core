@@ -17,7 +17,7 @@ from .authored_skills import prepare_runtime_skill_context, summarize_skill_cont
 from .contracts import require
 from .errors import AuthorityViolation
 from .model_authority import canonical_execution_target_root, normalize_model_authority
-from .operator_provenance import CONTEXT_BUDGETS
+from .operator_provenance import valid_requested_context_budget
 from .reasoning import ReasoningConfigurationError, normalize_reasoning_effort
 from .model_approval_binding import (
     build_bound_model_operator_approval,
@@ -90,7 +90,7 @@ def request_model_prompt_approval(
     # Otherwise we can ask for HumanApproval on a run that will always fail
     # pre-dispatch, even when all model/provider authority checks succeed.
     raw_context_budget = intent.get("requestedContextBudget", 32_000)
-    if type(raw_context_budget) is not int or raw_context_budget not in CONTEXT_BUDGETS:
+    if not valid_requested_context_budget(raw_context_budget):
         raise AuthorityViolation("REQUESTED_CONTEXT_BUDGET_INVALID")
     requested_context_budget = raw_context_budget
     requested_execution_seconds = int(intent.get("requestedExecutionSeconds", 600))

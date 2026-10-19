@@ -22,8 +22,16 @@ def test_explicit_off_preserves_prompt():
 
 
 def test_preferences_reject_invalid_persisted_values(tmp_path):
-    (tmp_path / "prompt-preferences.json").write_text('{"responseMode":"NO","contextBudget":1,"humanVerificationRequired":false}')
+    (tmp_path / "prompt-preferences.json").write_text('{"responseMode":"NO","contextBudget":0,"humanVerificationRequired":false}')
     prefs = PromptPreferences(tmp_path)
     assert prefs.response_mode == "SPOCK"
     assert prefs.context_budget == CONTEXT_BUDGETS[0]
     assert prefs.human_verification_required is False
+
+def test_prompt_preferences_preserve_model_context_capacity_above_presets(tmp_path):
+    from capt_ui.operator.prompt_intelligence import PromptPreferences
+    prefs = PromptPreferences(tmp_path)
+    prefs.set(response_mode="SPOCK", context_budget=1_048_576, human_verification_required=True)
+    assert PromptPreferences(tmp_path).context_budget == 1_048_576
+    prefs.set(response_mode="SPOCK", context_budget=48_000, human_verification_required=True)
+    assert PromptPreferences(tmp_path).context_budget == 48_000

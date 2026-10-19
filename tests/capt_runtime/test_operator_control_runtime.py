@@ -135,3 +135,72 @@ def test_stale_control_revision_rejects_prompt_before_proposal_creation(tmp_path
     assert rejected["error"]["code"] == "E_OPERATOR_CONTROL_STALE"
     assert after == before
     store.close()
+
+
+def _proposal_with_durable_task(tmp_path):
+    root, store, control_store, relay, query = _harness(tmp_path)
+    chat = relay.execute(_cmd("operator_chat_new", {"expectedRevision": 0}, "bind-chat"))["result"]
+    cfg = relay.execute(_cmd("operator_execution_config_set", {
+        "expectedRevision": chat["revision"], "promptIntelligence": "OFF",
+    }, "bind-config"))["result"]
+    submitted = relay.execute(_cmd("operator_prompt_submit", {
+        "text": "Assess and resolve CAPT_core issues with independent evidence.",
+        "controlRevision": cfg["revision"],
+        "configurationDigest": cfg["configurationDigest"],
+    }, "bind-submit"))["result"]
+    proposal = submitted["proposal"]
+    mid = "goal-capt-issues-binding-fixture"
+    created = relay.execute(_cmd("create_mission", {
+        "schemaVersion": "1.0.0",
+        "missionId": mid,
+        "objective": "Review CAPT_core issues",
+        "rawRequest": proposal["originalPrompt"],
+        "normalizedRequest": proposal["proposedPrompt"],
+        "constraints": [],
+        "successCriteria": [{"criterionId": "sc-1", "statement": "Evidence checked", "requiresVerification": True}],
+        "terminationCriteria": [{"criterionId": "tc-1", "statement": "Safe stop", "terminalState": "failed"}],
+        "unresolvedAmbiguities": [],
+        "requiresApproval": False,
+        "requestedCapability": "cap.fs.read",
+        "operation": "ModelOperatorInspection",
+        "scope": {"kind": "filesystem", "rootPath": str(root), "recursive": True},
+        "resource": str(root),
+        "riskClassification": "low",
+        "policyReason": "Fixture read-only mission",
+    }, "bind-create"))
+    assert created["status"] == "accepted", created
+    return root, store, relay, submitted["control"], proposal, mid, created["result"]["taskId"]
+
+
+def test_proposal_select_binds_existing_durable_mission_task(tmp_path):
+    _root, store, relay, control, proposal, mid, tid = _proposal_with_durable_task(tmp_path)
+    selected = relay.execute(_cmd("operator_proposal_select", {
+        "proposalId": proposal["proposalId"], "basis": "proposed",
+        "controlRevision": control["revision"],
+        "configurationDigest": control["configurationDigest"],
+        "missionId": mid, "taskId": tid,
+    }, "bind-select"))
+    assert selected["status"] == "accepted", selected
+    approval = selected["result"]["approval"]
+    assert approval["missionId"] == mid
+    assert approval["taskId"] == tid
+    assert store.require_state("task-" + tid)["missionId"] == mid
+    recorded = store.require_state("human_approval-" + approval["requestId"])
+    assert recorded["scope"]["approvalBinding"]["taskId"] == tid
+    assert selected["result"]["control"]["taskId"] == tid
+    store.close()
+
+
+def test_proposal_select_rejects_nonexistent_task_before_approval(tmp_path):
+    _root, store, relay, control, proposal, mid, tid = _proposal_with_durable_task(tmp_path)
+    selected = relay.execute(_cmd("operator_proposal_select", {
+        "proposalId": proposal["proposalId"], "basis": "proposed",
+        "controlRevision": control["revision"],
+        "configurationDigest": control["configurationDigest"],
+        "missionId": mid, "taskId": mid + "-task-imaginary",
+    }, "bind-refuse"))
+    assert selected["status"] == "rejected", selected
+    assert "AUTHORITYVIOLATION" in str(selected.get("error", {}).get("code", ""))
+    assert relay._control().snapshot()["approvalRequestId"] is None
+    assert store.require_state("task-" + tid)["state"] == "pending"
+    store.close()
