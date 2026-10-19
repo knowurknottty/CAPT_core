@@ -98,8 +98,10 @@ class TerminalInspectToolAdapter:
         argv = _parse_argv(args["argv"])
         # Git transitively reads config/includes and Git directories outside
         # the allowed root. Until OS-isolated Git exists, fail closed.
-        if argv[0] == "git":
-            raise ReadOnlyRefused("READONLY_REFUSED:git-requires-governed-exec")
+        if argv[0] in {"git", "jq"}:
+            # jq can import arbitrary external files through filter syntax;
+            # bounding only named argv operands is not sufficient.
+            raise ReadOnlyRefused("READONLY_REFUSED:unbounded-ambient-file-read")
         cwd = require_scoped_path(scope, args["cwd"])
         if not cwd.is_dir():
             raise AuthorityViolation("terminal.inspect cwd must exist")

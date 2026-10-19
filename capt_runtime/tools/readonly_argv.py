@@ -64,14 +64,14 @@ _SIMPLE: dict = {
     "md5sum": (), "sha1sum": (), "sha256sum": (), "sha512sum": (), "shasum": (),
     "diff": ("--no-index",),
     "tail": ("-f", "-F", "--follow", "--retry"),  # follow never terminates
-    "sort": ("-o", "--output", "--compress-program", "--files0-from"),
+    "sort": ("-o", "--output", "--compress-program", "--files0-from", "--random-source", "-T", "--temporary-directory"),
     "uniq": (),  # operand count policed below
     "xxd": ("-r",),  # operand count policed below
     "date": ("-s", "--set"),
     "file": ("-C", "--compile"),
-    "du": ("--files0-from", "-L", "-H", "-D", "--dereference", "--dereference-args"),
+    "du": ("--files0-from", "-L", "-H", "-D", "--dereference", "--dereference-args", "-X", "--exclude-from"),
     "grep": ("-R", "--dereference-recursive"), "egrep": ("-R", "--dereference-recursive"), "fgrep": ("-R", "--dereference-recursive"),
-    "rg": ("--pre", "--pre-glob", "-z", "--search-zip", "--hostname-bin"),
+    "rg": ("--pre", "--pre-glob", "-z", "--search-zip", "--hostname-bin", "-L", "--follow"),
     "jq": (),
     "find": (),  # policed below
 }

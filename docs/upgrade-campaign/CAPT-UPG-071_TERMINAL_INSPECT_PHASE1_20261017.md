@@ -55,3 +55,24 @@ Git status/log, until OS-enforced filesystem isolation is available.
 Six refusal fixtures cover explicit and ambient Git config access. Git
 remains accessible only via the separately governed terminal.exec path.
 This is a deliberate reduction of claimed read-only coverage.
+
+
+## 2026-10-19 indirect-file admission hardening
+An adversarial inspection of the local adapter demonstrated that an original
+negative rg --follow test passed only because ripgrep was absent from the
+hard-coded trusted OS executable directories on that machine. The classifier
+now explicitly refuses rg --follow and rg -L, and dedicated classifier-level
+tests prove rejection without relying on executable availability. Additional
+subprocess options that can read/write outside declared arguments are denied:
+sort --random-source, sort --temporary-directory, sort -T, and
+du --exclude-from / du -X.
+
+The jq filter language supports includes/imports outside explicit file
+operands, so terminal.inspect also refuses all jq argv and routes them to
+separately authorized terminal.exec. This joins the existing all-Git
+refusal. The revised selected suite passed 105 tests and Ruff critical lint.
+
+This improves static grammar safety, not complete filesystem isolation:
+remaining allowed host executables can be subject to symlink TOCTOU, implicit
+system config reads, platform-specific flags and indirect file access. No
+unattended production enablement or no-prompt filesystem authority is claimed.

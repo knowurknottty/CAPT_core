@@ -194,3 +194,25 @@ def test_hardened_plans_execute_nothing(hostile_repo, argv):
     result = _run(final, repo, run_env)
     assert result.returncode == 0, result.stderr.decode()
     assert not sentinel.exists(), sentinel.read_text()
+
+@pytest.mark.parametrize("argv", [
+    ["rg", "--follow", "canary", "."],
+    ["rg", "-L", "canary", "."],
+    ["rg", "--follow=true", "canary", "."],
+])
+def test_rg_follow_refuses_at_classifier_before_executable_resolution(argv):
+    # This must reject even if /usr/bin/rg exists. Adapter-only refusal
+    # can otherwise be a false positive from missing OS system executable.
+    with pytest.raises(ReadOnlyRefused):
+        admit(argv)
+
+@pytest.mark.parametrize("argv", [
+    ["sort", "--random-source=/tmp/outside", "data"],
+    ["sort", "--temporary-directory=/tmp/outside", "data"],
+    ["sort", "-T", "/tmp/outside", "data"],
+    ["du", "--exclude-from=/tmp/outside", "."],
+    ["du", "-X", "/tmp/outside", "."],
+])
+def test_indirect_file_inputs_and_temp_writes_are_not_readonly(argv):
+    with pytest.raises(ReadOnlyRefused):
+        admit(argv)

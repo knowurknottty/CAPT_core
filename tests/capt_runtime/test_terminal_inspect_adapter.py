@@ -91,7 +91,7 @@ def test_outside_scope_refused_before_dispatch(tmp_path):
     ["git", "log", "--oneline", "-1"],
 ])
 def test_git_inspection_does_not_cross_unenforced_git_config_scope(tmp_path, argv):
-    with pytest.raises(ReadOnlyRefused, match="git-requires-governed-exec"):
+    with pytest.raises(ReadOnlyRefused, match="unbounded-ambient-file-read"):
         TerminalInspectToolAdapter().execute(_request(tmp_path, argv))
 
 
@@ -109,4 +109,12 @@ def test_recursive_symlink_follow_flags_refuse(tmp_path, argv):
     (outside / "secret.txt").write_text("secret")
     (tmp_path / "link-outside").symlink_to(outside, target_is_directory=True)
     with pytest.raises(ReadOnlyRefused):
+        TerminalInspectToolAdapter().execute(_request(tmp_path, argv))
+
+@pytest.mark.parametrize("argv", [
+    ["jq", "include \"private\"; .", "data.json"],
+    ["jq", "-L", "/tmp/outside", ".", "data.json"],
+])
+def test_jq_import_or_library_paths_require_separate_exec_authority(tmp_path, argv):
+    with pytest.raises(ReadOnlyRefused, match="unbounded-ambient-file-read"):
         TerminalInspectToolAdapter().execute(_request(tmp_path, argv))
