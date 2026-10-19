@@ -19,7 +19,9 @@ class ReleaseBlocked(RuntimeError):
     pass
 
 def _durable_json(path: Path, value: dict[str, Any]) -> None:
-    tmp = path.with_name(path.name + ".tmp")
+    # A process may die while writing the temp file. Unique names keep that
+    # abandoned file from permanently blocking the next governed recovery.
+    tmp = path.with_name(path.name + "." + uuid4().hex + ".tmp")
     with tmp.open("x", encoding="utf-8") as stream:
         json.dump(value, stream, sort_keys=True)
         stream.flush()
@@ -90,7 +92,13 @@ def switch_runtime(
         journal_dir = backup_root / release_id
         journal_dir.mkdir(mode=0o700)
         retained = journal_dir / "runtime-venv-before"
-        record = {"sourceSha": expected_source_sha, "stateRoot": str(active.parent),
+        previous_marker = active / "CAPT_SOURCE_HEAD"
+        if previous_marker.is_symlink() or not previous_marker.is_file():
+            raise ReleaseBlocked("ACTIVE_SOURCE_MARKER_MISSING")
+        previous_source = previous_marker.read_text().strip()
+        if not re.fullmatch(r"[0-9a-f]{40}", previous_source):
+            raise ReleaseBlocked("ACTIVE_SOURCE_MARKER_INVALID")
+        record = {"previousSourceSha": previous_source, "sourceSha": expected_source_sha, "stateRoot": str(active.parent),
                   "checkpointHeadSequence": gate["checkpointHeadSequence"],
                   "checkpointChainDigest": gate["checkpointChainDigest"], "phase":"prepared"}
         journal = journal_dir / "release.json"
@@ -131,3 +139,103 @@ def switch_runtime(
             except Exception as restore_exc:
                 raise ReleaseBlocked("ROLLBACK_INCOMPLETE_MANUAL_RECONCILIATION_REQUIRED") from restore_exc
             raise
+
+def recover_interrupted_switch(
+    active: Path,
+    candidate: Path,
+    backup_root: Path,
+    governed_preflight: Callable[[], dict[str, Any]],
+    authenticated_restoration_check: Callable[[], dict[str, Any]],
+) -> dict[str, Any]:
+    """Recover an interrupted, unverified switch without resurrecting execution.
+
+    Operator-invoked only. The preflight must independently authenticate a
+    stopped/quiescent RuntimeService and match the checkpoint pinned by the
+    switch's journal. Recovery restores bytes; only a separate authenticated
+    postcheck can establish process and EventStore continuity.
+    """
+    if not callable(governed_preflight) or not callable(authenticated_restoration_check):
+        raise ReleaseBlocked("AUTHENTICATED_RECOVERY_CALLBACKS_REQUIRED")
+    active, candidate, backup_root = map(Path, (active, candidate, backup_root))
+    if any(p.is_symlink() for p in (active, candidate, backup_root)):
+        raise ReleaseBlocked("RECOVERY_SYMLINK_FORBIDDEN")
+    if not backup_root.is_dir() or not active.parent.is_dir():
+        raise ReleaseBlocked("RECOVERY_PATH_MISSING")
+    lock_path = active.parent / ".capt-runtime-release.lock"
+    with lock_path.open("a+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        pending = []
+        for journal in sorted(backup_root.glob("*/release.json")):
+            if journal.is_symlink() or journal.parent.is_symlink():
+                raise ReleaseBlocked("RECOVERY_JOURNAL_SYMLINK")
+            record = json.loads(journal.read_text())
+            if record.get("phase") not in ("verified", "rolled_back"):
+                pending.append((journal, record))
+        if not pending:
+            return {"status": "nothing_pending"}
+        if len(pending) != 1:
+            raise ReleaseBlocked("MULTIPLE_PENDING_RELEASES")
+        journal, record = pending[0]
+        expected_new = record.get("sourceSha", "")
+        expected_old = record.get("previousSourceSha", "")
+        if any(not isinstance(v, str) or not re.fullmatch(r"[0-9a-f]{40}", v)
+               for v in (expected_new, expected_old)):
+            raise ReleaseBlocked("RECOVERY_SOURCE_IDENTITIES_MISSING")
+        if record.get("stateRoot") != str(active.parent):
+            raise ReleaseBlocked("RECOVERY_STATE_ROOT_MISMATCH")
+        gate = governed_preflight()
+        if not isinstance(gate, dict) or any(
+            gate.get(k) is not True for k in (
+                "authenticatedRuntimeService", "quiescent", "checkpointVerified", "runtimeStopped"
+            )
+        ):
+            raise ReleaseBlocked("RECOVERY_GOVERNED_PREFLIGHT_REQUIRED")
+        if (gate.get("stateRoot") != str(active.parent)
+                or gate.get("checkpointHeadSequence") != record.get("checkpointHeadSequence")
+                or gate.get("checkpointChainDigest") != record.get("checkpointChainDigest")):
+            raise ReleaseBlocked("RECOVERY_PINNED_CHECKPOINT_MISMATCH")
+        retained = journal.parent / "runtime-venv-before"
+        for p in (active, candidate, retained):
+            if p.is_symlink():
+                raise ReleaseBlocked("RECOVERY_SYMLINK_FORBIDDEN")
+        def marker(p: Path) -> str | None:
+            if not p.is_dir():
+                return None
+            m = p / "CAPT_SOURCE_HEAD"
+            if not m.is_file() or m.is_symlink():
+                raise ReleaseBlocked("RECOVERY_SOURCE_MARKER_INVALID")
+            return m.read_text().strip()
+        a, n, old = marker(active), marker(candidate), marker(retained)
+        if old is not None and old != expected_old:
+            raise ReleaseBlocked("RECOVERY_BACKUP_IDENTITY_MISMATCH")
+        # The candidate may be on its original path or may have been moved to
+        # active. Any third identity is an unexpected concurrent mutation.
+        if a not in (None, expected_old, expected_new):
+            raise ReleaseBlocked("RECOVERY_ACTIVE_IDENTITY_MISMATCH")
+        if n not in (None, expected_new):
+            raise ReleaseBlocked("RECOVERY_CANDIDATE_IDENTITY_MISMATCH")
+        if old is not None:
+            if a == expected_new and n is None:
+                os.replace(active, candidate)
+            elif a is not None:
+                raise ReleaseBlocked("RECOVERY_AMBIGUOUS_ACTIVE_AND_BACKUP")
+            os.replace(retained, active)
+        elif a != expected_old or n != expected_new:
+            raise ReleaseBlocked("RECOVERY_PREVIOUS_RUNTIME_UNAVAILABLE")
+        # A process crash during the postcheck must remain recoverable.
+        record["phase"] = "restored_pending_authentication"
+        _durable_json(journal, record)
+        proof = authenticated_restoration_check()
+        if not isinstance(proof, dict) or any(
+            proof.get(k) is not True for k in (
+                "authenticatedRuntimeService", "sourceDigestsVerified",
+                "eventStoreContinuityVerified", "processHealthy"
+            )
+        ):
+            raise ReleaseBlocked("RECOVERY_AUTHENTICATED_POSTCHECK_REQUIRED")
+        if proof.get("sourceSha") != expected_old or proof.get("stateRoot") != str(active.parent):
+            raise ReleaseBlocked("RECOVERY_PREVIOUS_SOURCE_IDENTITY_MISMATCH")
+        record["phase"] = "rolled_back"
+        record["recoveryAuthenticated"] = True
+        _durable_json(journal, record)
+        return {"status": "rolled_back", "sourceSha": expected_old, "journal": str(journal)}
