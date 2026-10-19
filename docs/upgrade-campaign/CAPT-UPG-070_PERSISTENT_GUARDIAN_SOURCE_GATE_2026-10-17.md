@@ -82,3 +82,29 @@ Docker Cmd/Entrypoint fields added; the workload fixture was unchanged.
 Tests explicitly exercise malicious creation-time entrypoints. The
 focused persistent/guardian/lease/network suite passed 76 tests.
 Release still requires actual engine proof and per-lease authority.
+
+
+## 2026-10-19 live Docker Desktop lifecycle evidence
+
+Verified against actual Docker Engine 29.8.0 on desktop-linux, ARM64.
+The locally available pinned python:3.13-slim image
+(sha256:9d2e5553305c7c7b0097999bb17187c69b921ccd6bc9d40e4bb5ebe652c00285)
+has no image Entrypoint. CAPT Node needed explicit PATH including
+/usr/local/bin, where Docker CLI is installed; the daemon was already up.
+
+The new test_real_guardian_source_drift_blocks_reuse_but_allows_exact_lease_cleanup
+creates a uniquely labeled temporary persistent sandbox and allowlist Guardian,
+checks created-state attestation, starts the Guardian and workload, simulates
+source drift via test-only in-memory override, verifies normal inspection
+rejects stale source, then exercises close-only exact identity cleanup.
+Workload and Guardian IDs are proven absent and lease labels empty. No
+external HTTP requests; test includes its own owned-resource cleanup in finally.
+
+Real integration suite: 8 passed, 1 deselected in 15.27 seconds,
+across both real Docker modules. The deselected test reaches external
+example.com and is not necessary to prove container lifecycle cleanup.
+
+Read-only Docker inventory had zero containers labeled capt.sandboxLeaseId.
+Older unrelated SN118, Onyx and N8N Docker containers were not modified.
+This is local Docker Desktop evidence, not Cloud Run/gVisor equivalence,
+proof of global lease absence or model-operation authorization.

@@ -4,7 +4,9 @@ import json
 import os
 import shutil
 import subprocess
+from dataclasses import replace
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
@@ -22,6 +24,7 @@ from capt_runtime.tools.adapters.inversion_sandbox_terminal import (
 )
 from capt_runtime.tools.backends.docker import DockerMount, DockerProcessRequest
 from capt_runtime.tools.backends.inversion_sandbox import (
+    InversionSandboxNetworkPolicy,
     InversionSandboxProcessBackend,
     InversionSandboxProfile,
     InversionSandboxProfileRegistry,
@@ -299,3 +302,56 @@ def test_real_reserved_create_crash_is_rediscovered_by_known_lease_label(tmp_pat
         if identity is not None:
             _cleanup(identity.workload_container_id)
         store.close()
+
+def test_real_guardian_source_drift_blocks_reuse_but_allows_exact_lease_cleanup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Real Docker lifecycle; synthetic local source drift, zero external requests."""
+    image = _image()
+    profile = replace(
+        _profile(tmp_path),
+        network_policy=InversionSandboxNetworkPolicy(
+            mode="allowlist", allow=("example.com",),
+        ),
+        guardian_image_ref=image,
+    )
+    backend = InversionSandboxProcessBackend(InversionSandboxProfileRegistry((profile,)))
+    request = DockerProcessRequest(
+        profile_id=profile.profile_id,
+        argv=profile.persistent_entrypoint_argv,
+        cwd="/workspace",
+        filesystem_root="/workspace",
+        timeout_seconds=10.0,
+        stdout_limit_bytes=65536,
+        stderr_limit_bytes=65536,
+    )
+    lease = "sandbox-guardian-live-" + uuid4().hex[:12]
+    identity = None
+    try:
+        identity = backend.create_persistent_stopped(
+            lease, request, prepared=backend.preflight(request),
+        )
+        assert identity.guardian_container_id
+        assert identity.internal_network_id
+        assert backend.inspect_persistent(identity)["workloadState"] == "created"
+        assert backend.start_persistent(identity)["workloadRunning"] is True
+        with monkeypatch.context() as m:
+            m.setattr(backend, "_guardian_source", lambda: "print('obsolete guardian')")
+            with pytest.raises(AuthorityViolation, match="Guardian source stale"):
+                backend.inspect_persistent(identity)
+            closed = backend.close_persistent(identity)
+        assert closed.cleanup_succeeded, closed.cleanup_error
+        assert not _exists(identity.workload_container_id)
+        assert not _exists(identity.guardian_container_id)
+        assert _lease_container_ids(lease) == []
+    finally:
+        # Test-created IDs only, never ambient or unrelated Docker resources.
+        if identity is not None:
+            _cleanup(identity.workload_container_id)
+            _cleanup(identity.guardian_container_id)
+            if identity.internal_network_id:
+                subprocess.run(
+                    [_docker(), "--context", CONTEXT, "network", "rm",
+                     identity.internal_network_id],
+                    capture_output=True, timeout=10, check=False,
+                )
