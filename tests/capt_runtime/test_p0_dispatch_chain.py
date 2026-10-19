@@ -69,9 +69,9 @@ def _make_run(svc, run_id: str) -> None:
 
 
 def _recorder(svc, run_id: str, seq_box: dict):
-    def record(rid: str, boundary: str) -> None:
+    def record(rid: str, boundary: str) -> dict:
         seq_box["n"] += 1
-        svc.record_driver_dispatch_boundary(
+        return svc.record_driver_dispatch_boundary(
             rid, boundary, _meta(run_id, boundary, seq_box["n"]))
     return record
 

@@ -231,6 +231,8 @@ def compile_cohort_objective(
     modality = str(spec.get("outputModality") or "text")
     policy = spec.get("vesselCharterPolicy")
     if modality == "text" and isinstance(policy, dict) and policy.get("strictLedger"):
+        from .source_fidelity import source_coverage_contract
+        source_contract = source_coverage_contract(base)
         candidate_count = count * int(policy["candidateMultiplier"])
         # Strict cohorts must preserve the mandatory audit evidence even if a
         # lengthy user objective consumes the model's finite output window.
@@ -246,7 +248,7 @@ def compile_cohort_objective(
             "If output or context limits prevent completing the physical ledger, "
             "write CAPT_COHORT_INCOMPLETE and disclose the missing rows instead "
             "of claiming completion. No partial report is certified.\n\n"
-            + base
+            + base + source_contract
         )
     common = (
         base

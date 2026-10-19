@@ -126,7 +126,12 @@ class ProviderDriver:
         recorder = self._boundary_recorder
         if recorder is not None:
             try:
-                recorder(rid, boundary)
+                receipt = recorder(rid, boundary)
+                # A replayed idempotency receipt is NOT a fresh permit to
+                # cross the provider HTTP boundary after driver recovery.
+                if boundary == "request_started":
+                    if not isinstance(receipt, dict) or receipt.get("status") != "applied":
+                        raise DispatchBoundaryError("PROVIDER_REQUEST_BOUNDARY_REPLAY_FORBIDDEN")
             except DispatchBoundaryError:
                 raise
             except Exception as exc:

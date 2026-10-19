@@ -57,6 +57,7 @@ from capt_runtime.resource_governor import TokenCostGovernor
 from capt_runtime.reasoning import ReasoningConfigurationError, normalize_reasoning_effort, legacy_cohort_configuration_reasoning_effort
 from capt_runtime.cohort_contract import compile_cohort_objective, normalize_cohort_spec
 from capt_runtime.vessel_charter import validate_vessel_artifact
+from capt_runtime.source_fidelity import validate_source_coverage
 from capt_runtime.replay import replay_to_sequence
 from capt_runtime.verification import (
     build_artifact_hash_evidence,
@@ -2011,7 +2012,11 @@ def serve(
                         issued_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                         replay_policy="never",
                     )
-                    svc.record_driver_dispatch_boundary(driver_run_id, boundary, boundary_meta)
+                    # Return the EventStore receipt to the driver: an idempotent
+                    # replay must never be treated as a fresh HTTP permit.
+                    return svc.record_driver_dispatch_boundary(
+                        driver_run_id, boundary, boundary_meta
+                    )
 
                 if provider is not None:
                     host = runtime.provider_host(
@@ -2149,6 +2154,18 @@ def serve(
                 charter_failed = bool(
                     cohort_validation.get("required") and not cohort_validation.get("valid")
                 )
+                source_validation = {"required": False, "valid": True, "status": "not_required"}
+                if cohort_spec and output_modality == "text":
+                    try:
+                        source_validation = validate_source_coverage(
+                            objective, Path(artifact_path).read_text(errors="replace")
+                        )
+                    except OSError:
+                        source_validation = {"required": True, "valid": False, "status": "artifact_missing"}
+                source_failed = bool(
+                    source_validation.get("required") and not source_validation.get("valid")
+                )
+                output_gate_failed = charter_failed or source_failed
                 baseline_ev_id = "ev-" + commands.fingerprint(
                     "artifact_hash", {"artifact": baseline["artifactDigest"], "role": "verification_baseline"}
                 )
@@ -2180,7 +2197,7 @@ def serve(
                 claim_record = {
                     "schemaVersion": "1.0.0", "claimId": claim_id, "missionId": mission_id,
                     "taskId": task_id,
-                    "kind": "observation" if charter_failed else "completion",
+                    "kind": "observation" if output_gate_failed else "completion",
                     "statement": accepted,
                     "evidenceIds": [baseline_ev_id, result_ev_id], "promotionState": "proposed",
                     "proposedBy": {"actorId": "cog-1", "kind": "cognitive_plane"},
@@ -2206,10 +2223,11 @@ def serve(
                 # verification.  Keep the claim proposed and the task in the
                 # aggregate's existing awaiting_verification state; a later
                 # verification/ClaimGuard authority must perform any promotion.
-                if charter_failed:
+                if output_gate_failed:
                     svc.transition_task(
                         task_id, "failed",
-                        "approval-bound Vessel Charter ledger incomplete",
+                        ("frozen source coverage incomplete" if source_failed
+                         else "approval-bound Vessel Charter ledger incomplete"),
                         exec_meta("taskcohortinvalid"),
                     )
                 else:
@@ -2235,6 +2253,7 @@ def serve(
                     "cognitiveProvenance": cognitive_provenance,
                     "authoredSkills": summarize_skill_context(ctx.get("skillContext")),
                     "cohortValidation": cohort_validation,
+                    "sourceFidelityValidation": source_validation,
                 }
                 store.complete_claimed_command(key, command_fingerprint, receipt)
                 return receipt
