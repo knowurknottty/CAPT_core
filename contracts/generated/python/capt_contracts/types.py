@@ -4,7 +4,7 @@
 # regenerate:     python3 contracts/tools/generate.py
 # drift check:    python3 contracts/tools/check_drift.py
 # schema version: 1.0.0
-# source digest:  sha256:fd0d108e26a1e8d79952c8714ccc938c060b21e608249607307fee109f165f93
+# source digest:  sha256:39721de22a6935a7f1033d5c9ba96a82a1a04b7c25df7b52e3f0ae94b9d01dfb
 #
 # The JSON Schema source is normative (ADR-0101). Edits made here are
 # erased on the next generation and will fail the CI drift check.
@@ -1606,9 +1606,11 @@ class DriverRun(object):
     state: DriverRunState
     taskId: Identifier
     workOrderVersion: int
+    approvalRequestId: Optional[Identifier] = None
     dispatchBoundary: Optional[DispatchBoundary] = None
     dispatchBoundaryUpdatedAt: Optional[Timestamp] = None
     externalRunId: Optional[str] = None
+    maxPhysicalProviderRequests: Optional[int] = None
 
 
 @dataclass(frozen=True)
