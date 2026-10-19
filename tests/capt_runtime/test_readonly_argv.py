@@ -23,7 +23,6 @@ from capt_runtime.tools.readonly_argv import (
     ["cat", "README.md"],
     ["grep", "-rn", "TODO", "src"],
     ["rg", "-n", "retry", "capt_runtime"],
-    ["sort", "-u", "a.txt"],
     ["uniq", "-c", "a.txt"],
     ["find", ".", "-name", "*.py", "-newer", "x"],
     ["git", "status"],
@@ -223,5 +222,15 @@ def test_indirect_file_inputs_and_temp_writes_are_not_readonly(argv):
 def test_jq_unbounded_imports_are_not_readonly_argv(argv):
     # Don't advertise a safe admission through the reusable classifier
     # while the only current adapter rejects jq for implicit file imports.
+    with pytest.raises(ReadOnlyRefused):
+        admit(argv)
+
+@pytest.mark.parametrize("argv", [
+    ["sort", "big.csv"],
+    ["sort", "-u", "big.csv"],
+    ["sort", "--random-source=/tmp/outside", "big.csv"],
+])
+def test_sort_scratch_files_cannot_be_classified_as_pure_read(argv):
+    # GNU/BSD sort can spill to TMPDIR regardless of explicit --output.
     with pytest.raises(ReadOnlyRefused):
         admit(argv)

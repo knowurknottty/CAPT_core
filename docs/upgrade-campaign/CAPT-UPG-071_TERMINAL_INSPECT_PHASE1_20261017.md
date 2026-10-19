@@ -86,3 +86,11 @@ unknown unbounded-read command; tests no longer claim its import grammar
 can be secured only by positional file checks. New admission tests and
 the adapter/runtime suites passed 107/107. No filesystem isolation claim
 is made.
+
+
+## 2026-10-19 implicit sort scratch-write boundary
+Even without output flags, sort can spill merge/sort scratch files into the
+inherited TMPDIR, which is typically outside the declared filesystem root.
+The reusable read-only classifier now refuses every sort command rather
+than assuming this is a pure read. Normal sort execution remains available
+through separate governed terminal.exec grants, not terminal.inspect.
