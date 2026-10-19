@@ -150,6 +150,29 @@ def verify(c: dict, inspection: dict, minimum: float = 0.70) -> dict:
             problems.append(f"line evidence absent: {path}")
         elif not row.get("node_evidence_ref"):
             problems.append(f"journaled read receipt absent: {path}")
+        else:
+            line_ref = str(row.get("line_evidence", ""))
+            references = RECEIPT_LINE.findall(line_ref)
+            if len(references) != 1:
+                problems.append(f"ambiguous source-line span: {path}")
+                continue
+            checksum = row.get("line_sha256")
+            if not isinstance(checksum, str) or not re.fullmatch(r"[0-9a-f]{64}", checksum):
+                problems.append(f"source-line checksum absent or malformed: {path}")
+                continue
+            token = references[0][1:]
+            ends = token.split("-", 1)
+            first = int(ends[0])
+            last = int(ends[1].removeprefix("L")) if len(ends) == 2 else first
+            lines = (root / path).read_bytes().splitlines(keepends=True)
+            # L0 is the only valid reference for an empty source file.
+            if not ((first == last == 0 and not lines) or
+                    (1 <= first <= last <= len(lines))):
+                problems.append(f"source-line span outside file: {path}")
+                continue
+            excerpt = b"" if first == 0 else b"".join(lines[first - 1:last])
+            if hashlib.sha256(excerpt).hexdigest() != checksum:
+                problems.append(f"source-line checksum mismatch: {path}")
     # Coverage must be computed from a freshly generated local census,
     # not from the adversarial/submitted source/risk classification.
     source = {x["path"] for x in current["files"] if x["source"]}

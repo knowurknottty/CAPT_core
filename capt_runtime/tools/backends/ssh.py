@@ -10,7 +10,6 @@ import base64
 import hashlib
 import ipaddress
 import json
-import os
 import posixpath
 import re
 import shutil
@@ -22,6 +21,7 @@ from pathlib import Path
 from typing import Iterable, Optional, Tuple
 
 from capt_runtime.errors import AuthorityViolation
+from capt_runtime.tools.backends.inversion_guardian import _effective_addresses
 from capt_runtime.tools.backends.local import LocalProcessBackend, LocalProcessRequest
 from capt_runtime.tools.backends.ssh_bootstrap import bootstrap_command
 
@@ -180,10 +180,21 @@ def _address_class(address: ipaddress._BaseAddress) -> str:
 
 
 def _network_allows(policy: SSHNetworkPolicy, address: ipaddress._BaseAddress) -> bool:
-    for cidr in policy.allowed_cidrs:
-        if address in ipaddress.ip_network(cidr, strict=False):
-            return True
-    return _address_class(address) in set(policy.allowed_destination_classes)
+    """Authorize both the transport address and any encapsulated IPv4 target.
+
+    Reuse the Guardian's effective-address interpretation. An explicitly
+    permitted IPv6 tunneling prefix must not implicitly authorize loopback,
+    link-local or private IPv4 destinations tunneled inside it.
+    """
+    effective = _effective_addresses(address)
+    def allowed(ip: ipaddress._BaseAddress) -> bool:
+        return (
+            any(ip.version == network.version and ip in network
+                for cidr in policy.allowed_cidrs
+                if (network := ipaddress.ip_network(cidr, strict=False)))
+            or _address_class(ip) in set(policy.allowed_destination_classes)
+        )
+    return all(allowed(ip) for ip in effective)
 
 
 def _resolve_target(profile: SSHProfile) -> str:
