@@ -33,6 +33,7 @@ import os
 import secrets
 import socket
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -190,9 +191,19 @@ def _reconcile_stranded_driver_runs(runtime: RuntimeComposition, now: str) -> No
                 correlation_id="corr-recovery-" + run_id, actor_id="exec-recovery",
                 actor_kind="execution_plane", issued_at=now, replay_policy="never",
             )
-        # A created run has not reached submission. Every later non-terminal
-        # state is ambiguous: consume any open reservation and forbid replay.
+        # A "created" DriverRun can already have an irreversible HTTP
+        # request_started boundary: the provider dispatcher persists that
+        # boundary before it updates run state. Never claim such a run failed
+        # on restart, since its external outcome is indeterminate. Preserve
+        # its recorded boundary and require manual reconciliation; never
+        # redispatch or synthesize a completion/failure receipt.
+        # Only definitely pre-dispatch boundaries permit an automatic
+        # created -> failed recovery.
         if run["state"] == "created":
+            if run.get("dispatchBoundary", "unknown") not in (
+                "not_dispatched", "prepared", "budget_rejected"
+            ):
+                continue
             svc.transition_driver_run(run_id, "failed", recovery_meta("created-failed"))
             task = store.load_state("task-" + task_id)
             if task and task.get("state") in ("assigned", "running"):
@@ -1317,6 +1328,55 @@ def _register_optional_biocapt_qipc(
         raise RuntimeError("BIOCAPT_QIPC_REGISTRATION_TRIGGERED_EXECUTION")
 
 
+def _runtime_pid_path(sock_path: Path) -> Path:
+    """PID metadata is advisory; launchd + the ledger lock own actual service life."""
+    path = Path(sock_path)
+    return path.with_suffix(".pid")
+
+
+def _publish_runtime_pid(sock_path: Path, *, pid: int | None = None) -> Path:
+    """Atomically advertise this process after the real Unix socket is listening."""
+    path = _runtime_pid_path(sock_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    value = os.getpid() if pid is None else pid
+    if type(value) is not int or value <= 0:
+        raise ValueError("RUNTIME_PID_INVALID")
+    fd, tmp = tempfile.mkstemp(prefix=".runtime-pid-", dir=str(path.parent))
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="ascii") as handle:
+            fd = -1
+            handle.write(str(value) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+        return path
+    finally:
+        if fd >= 0:
+            os.close(fd)
+        if os.path.lexists(tmp):
+            os.unlink(tmp)
+
+
+def _clear_runtime_pid_if_owned(sock_path: Path, *, pid: int | None = None) -> bool:
+    """Never erase a newer launchd successor's PID metadata."""
+    path = _runtime_pid_path(sock_path)
+    value = os.getpid() if pid is None else pid
+    if path.is_symlink():
+        return False
+    try:
+        actual = path.read_text(encoding="ascii").strip()
+    except (FileNotFoundError, OSError):
+        return False
+    if actual != str(value):
+        return False
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return False
+    return True
+
+
 def serve(
     ledger_path: str, sock_path: Path, token_file: str, seed: bool,
     *, enable_biocapt_qipc: bool = False,
@@ -1417,6 +1477,7 @@ def serve(
     srv.bind(str(sock_path))
     srv.listen(8)
     srv.settimeout(0.2)
+    _publish_runtime_pid(sock_path)
     shutdown_requested = threading.Event()
     fixed_work_receipts: Dict[str, Dict[str, Any]] = {}
     checkpoint_receipts: Dict[str, Dict[str, Any]] = {}
@@ -2242,6 +2303,7 @@ def serve(
             sock_path.unlink()
         except OSError:
             pass
+        _clear_runtime_pid_if_owned(sock_path)
         try:
             fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
         except OSError:

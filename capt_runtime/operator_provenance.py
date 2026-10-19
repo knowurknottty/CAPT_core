@@ -12,8 +12,21 @@ from .contracts import digest
 
 RESPONSE_MODES = ("MAX", "SPOCK", "CAVE CAPT", "MIN")
 ENHANCEMENT_ENGINES = ("OFF", "AUTO", "OMNI", "META", "FORGE", "SIGMA")
-# A small one-shot smoke tier plus the existing production context selectors.
+# Suggested UI presets, NOT a ceiling on the selected model's context window.
+# CAPT Memory chooses small relevant packs; the model/provider's verified limit
+# and execution/resource policies independently constrain actual dispatch.
 CONTEXT_BUDGETS = (4_096,) + tuple(range(32_000, 256_001, 32_000))
+
+
+def valid_requested_context_budget(value: object) -> bool:
+    """Accept any positive token request without imposing the UI preset menu.
+
+    Unlike a packed Memory ContextPack allocation, this is a requested
+    *capacity*. Provider/model capacity must be checked at dispatch. Retain
+    strict integers to avoid floats, bools and implicit coercion.
+    """
+    return type(value) is int and value > 0
+
 # A refused/absent context reference must NOT be rendered as a digest. Hashing a
 # sentinel string yields a value indistinguishable from a real governed-pack
 # digest, so provenance reads as authoritative while addressing nothing. Absence
@@ -59,9 +72,9 @@ def _render_authored_skill_context(context: Mapping[str, Any]) -> str:
 
 def effective_context_budget(requested: int, provider_cap: int) -> Optional[int]:
     """Return known enforceable capacity, never treating unknown as requested."""
-    if requested not in CONTEXT_BUDGETS:
+    if not valid_requested_context_budget(requested):
         raise ValueError("REQUESTED_CONTEXT_BUDGET_INVALID")
-    if provider_cap <= 0:
+    if type(provider_cap) is not int or provider_cap <= 0:
         return None
     return min(requested, provider_cap)
 

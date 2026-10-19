@@ -81,7 +81,7 @@ def test_openrouter_prompt_transport_uses_bearer_key_without_model_discovery(mon
         return Response()
 
     monkeypatch.setattr("desktop.prompt_compiler_provider.resolve_secret", lambda *_args, **_kwargs: "secret-test-key")
-    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("capt_runtime.http_client.open_url", fake_urlopen)
 
     compiler = build_prompt_compiler(ui)
     assert compiler is not None
@@ -118,7 +118,7 @@ def test_configured_remote_preference_is_persisted_compilation_authorization(mon
             return json.dumps({"choices": [{"message": {"content": json.dumps(stage)}}]}).encode()
 
     monkeypatch.setattr("desktop.prompt_compiler_provider.resolve_secret", lambda *_a, **_k: "secret-test-key")
-    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen", lambda *_a, **_k: Response())
+    monkeypatch.setattr("capt_runtime.http_client.open_url", lambda *_a, **_k: Response())
     compiler = build_prompt_compiler(ui)
     proposal = compiler.compile(PromptCompileRequest(
         original_prompt="Enhance this.", requested_engine="OMNI",
@@ -159,7 +159,7 @@ def test_remote_glm_malformed_stage_falls_back_to_configured_local_compiler(monk
         return Response({"choices": [{"message": {"content": json.dumps(valid_stage)}}]})
 
     monkeypatch.setattr("desktop.prompt_compiler_provider.resolve_secret", lambda *_a, **_k: "secret-test-key")
-    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("capt_runtime.http_client.open_url", fake_urlopen)
 
     compiler = build_prompt_compiler(ui)
     proposal = compiler.compile(PromptCompileRequest(
@@ -203,7 +203,7 @@ def test_without_compiler_override_pi_uses_selected_execution_provider_model(mon
         return Response()
 
     monkeypatch.setattr("desktop.prompt_compiler_provider.resolve_secret", lambda *_a, **_k: "synthetic-key")
-    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("capt_runtime.http_client.open_url", fake_urlopen)
 
     compiler = build_prompt_compiler(ui)
     proposal = compiler.compile(PromptCompileRequest(
@@ -235,7 +235,7 @@ def test_unreachable_single_local_compiler_degrades_to_original_proposal(monkeyp
     (ui / "models.json").write_text(json.dumps({"default": {"provider": "mtplx", "model": "Youssofal/Qwen3.8-27B-MTPLX-Optimized-Speed"}}))
 
     monkeypatch.setattr(
-        "desktop.prompt_compiler_provider.urllib.request.urlopen",
+        "capt_runtime.http_client.open_url",
         lambda *_a, **_k: (_ for _ in ()).throw(URLError("connection refused")),
     )
 
@@ -289,7 +289,7 @@ def test_unreachable_local_preference_fails_over_before_chat_dispatch(monkeypatc
             return Response({"choices": [{"message": {"content": json.dumps(stage)}}]})
         raise AssertionError(request.full_url)
 
-    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("capt_runtime.http_client.open_url", fake_urlopen)
     compiler = build_prompt_compiler(ui)
     proposal = compiler.compile(PromptCompileRequest(original_prompt="Enhance safely.", requested_engine="OMNI"))
 
@@ -328,7 +328,7 @@ def test_all_compilers_fail_with_safe_persistable_failure_codes(monkeypatch, tmp
 
     monkeypatch.setattr("desktop.prompt_compiler_provider.resolve_secret",
                         lambda *_a, **_k: "secret-test-key")
-    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen",
+    monkeypatch.setattr("capt_runtime.http_client.open_url",
                         failing_urlopen)
     compiler = build_prompt_compiler(ui)
     proposal = compiler.compile(PromptCompileRequest(
@@ -401,7 +401,7 @@ def test_two_stage_pipeline_runs_with_strict_schema_in_mock_transport(monkeypatc
 
     monkeypatch.setattr("desktop.prompt_compiler_provider.resolve_secret",
                         lambda *_a, **_k: "dummy-key")
-    monkeypatch.setattr("desktop.prompt_compiler_provider.urllib.request.urlopen",
+    monkeypatch.setattr("capt_runtime.http_client.open_url",
                         fake_urlopen)
     compiler = build_prompt_compiler(ui)
     proposal = compiler.compile(PromptCompileRequest(

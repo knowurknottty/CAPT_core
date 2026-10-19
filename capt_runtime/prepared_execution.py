@@ -13,7 +13,7 @@ class FrozenDict(dict):
     def _immutable(self, *_args, **_kwargs):
         raise TypeError("prepared execution is immutable")
 
-    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = _immutable
+    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = __ior__ = _immutable
 
 
 def freeze(value: Any) -> Any:

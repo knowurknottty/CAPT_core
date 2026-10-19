@@ -4,7 +4,7 @@
 
 > The model is an inference component. CAPT keeps durable state, memory, authority, evidence, and recovery outside the model session.
 
-Before evaluating advanced features, read [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md). The 2026-09-15 source snapshot is `1e85bac5d17cde342a1ae55e6ee3da5fa681ff61`: PR #146, #148 plus the semantic operator-control API, #153 Model Council alpha, #155 hardening, and #156 SOMA M0 are merged. Merged integration, the `0.5.0` package line, and release authorization are intentionally different states; older exact-SHA security receipts do not authorize this HEAD.
+Begin with the [documentation index](docs/README.md) and [role-based onboarding](docs/ONBOARDING.md) if you are new to the system. The [state report](docs/CURRENT_STATE.md) is a **dated October 8 snapshot**, not current-HEAD release certification. This guide's earlier September 15 snapshot (`1e85bac5d17cde342a1ae55e6ee3da5fa681ff61`) is historical lineage; the earlier OMEGA pass examined `0d8e46d095243e80febd4e30f5ae52c9202316d9`; a later 2026-10-18 check pinned `main` at `c956c45e33119cd31ce7e61c55334e803f20bf3f`. Package version `0.5.0`, source integration, and release authorization remain separate states.
 
 ## Install the CLI and TUI
 
@@ -39,6 +39,20 @@ capt checkpoint
 ```
 
 `capt memory store/search` use the local CAPT Solo MemoryEngine directly, while `capt start/status/evidence/checkpoint` use RuntimeService. A successful memory search does not prove EventStore admission or model-visible continuation context.
+
+**Disposable first exercise (optional):** if you prefer not to write to your existing Solo memory, use a temporary local state root. This example stores and searches one record, then removes **only** the temporary directory created for this exercise:
+
+```zsh
+(
+  scratch="$(mktemp -d /tmp/capt-solo-docs.XXXXXX)" || exit 1
+  trap 'rm -rf "$scratch"' EXIT
+  export CAPT_SOLO_HOME="$scratch/solo"
+  capt memory store "CAPT documentation trial" --namespace docs-demo
+  capt memory search "CAPT documentation trial"
+)
+```
+
+**Expected:** the store and search both exit successfully, and the search prints the saved text and a memory ID. This was exercised in an isolated temporary directory using the pinned 2026-10-18 checkout; it does **not** test the canonical runtime event ledger or a model provider.
 
 Evidence, verification, ClaimGuard, task completion, and mission completion are distinct authority states.
 

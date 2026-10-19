@@ -59,7 +59,45 @@
         "python -m pytest -q tests -k 'foundry or harness'",
         "ruff check --select S605,S602,S604 capt_solo"
       ],
-      "status": "open"
+      "status": "merged",
+      "claimedBy": "claude-opus-5.5-2026-10-18",
+      "history": [
+        {
+          "at": "2026-10-18T13:17:06Z",
+          "agent": "claude-opus-5.5-2026-10-18",
+          "from": "open",
+          "to": "claimed"
+        },
+        {
+          "at": "2026-10-18T13:17:06Z",
+          "agent": "claude-opus-5.5-2026-10-18",
+          "from": "claimed",
+          "to": "red",
+          "note": "4cfdab0: 9/9 new tests fail on unfixed foundry/plugin"
+        },
+        {
+          "at": "2026-10-18T13:17:06Z",
+          "agent": "claude-opus-5.5-2026-10-18",
+          "from": "red",
+          "to": "green",
+          "evidence": "full suite 2 failed (baseline) / 2272 passed; log sha256 12c01f5e…"
+        },
+        {
+          "at": "2026-10-18T13:17:06Z",
+          "agent": "claude-opus-5.5-2026-10-18",
+          "from": "green",
+          "to": "in_review",
+          "evidence": "PR #217 head add7221"
+        },
+        {
+          "at": "2026-10-18T13:19:51Z",
+          "agent": "knowurknot-operator",
+          "from": "in_review",
+          "to": "merged",
+          "note": "Owner-directed merge 2026-10-18, executed by Claude via GitHub API after full CI green; separate adversary/verifier gates (G5/G6) not run.",
+          "evidence": "PR #217 merged as a3988b9"
+        }
+      ]
     },
     {
       "id": "CAPT-UPG-026",
@@ -82,13 +120,51 @@
       "acceptance": [
         "capt_publish_skill is removed from the plugin tool surface and plugin.json, or replaced by capt_request_skill_review, which only reaches 'reviewing'.",
         "SkillFoundry.approve rejects a reviewer equal to the skill author or creating session, and rejects any reviewer not supplied by a human-authenticated path.",
-        "verify_procedure distinguishes self-reported runs from CAPT-observed runs; self-reported runs alone cannot reach 'verified'.",
-        "Tests cover the self-approval refusal and the self-report refusal."
+        "Tests cover the self-approval refusal and the self-report refusal.",
+        "Split 2026-10-18: the self-reported-run rule moved to CAPT-UPG-107 because it needs a capt_solo schema migration (operator hard stop)."
       ],
       "verification": [
         "python -m pytest -q tests -k 'foundry or plugin or procedure'"
       ],
-      "status": "open"
+      "status": "merged",
+      "claimedBy": "claude-opus-5.5-2026-10-18",
+      "history": [
+        {
+          "at": "2026-10-18T13:17:06Z",
+          "agent": "claude-opus-5.5-2026-10-18",
+          "from": "open",
+          "to": "claimed"
+        },
+        {
+          "at": "2026-10-18T13:17:06Z",
+          "agent": "claude-opus-5.5-2026-10-18",
+          "from": "claimed",
+          "to": "red",
+          "note": "4cfdab0: 9/9 new tests fail on unfixed foundry/plugin"
+        },
+        {
+          "at": "2026-10-18T13:17:06Z",
+          "agent": "claude-opus-5.5-2026-10-18",
+          "from": "red",
+          "to": "green",
+          "evidence": "full suite 2 failed (baseline) / 2272 passed; log sha256 12c01f5e…"
+        },
+        {
+          "at": "2026-10-18T13:17:06Z",
+          "agent": "claude-opus-5.5-2026-10-18",
+          "from": "green",
+          "to": "in_review",
+          "evidence": "PR #217 head add7221"
+        },
+        {
+          "at": "2026-10-18T13:19:51Z",
+          "agent": "knowurknot-operator",
+          "from": "in_review",
+          "to": "merged",
+          "note": "Owner-directed merge 2026-10-18, executed by Claude via GitHub API after full CI green; separate adversary/verifier gates (G5/G6) not run.",
+          "evidence": "PR #217 merged as a3988b9"
+        }
+      ]
     },
     {
       "id": "CAPT-UPG-027",
@@ -124,7 +200,45 @@
         "python -m pytest -q tests -k 'redirect or provider'",
         "! grep -rn 'urllib.request.urlopen(' capt_runtime capt_ui desktop --include=*.py | grep -v http_client.py"
       ],
-      "status": "open"
+      "status": "merged",
+      "claimedBy": "claude-opus-5.5-2026-10-18",
+      "history": [
+        {
+          "at": "2026-10-18T13:17:06Z",
+          "agent": "claude-opus-5.5-2026-10-18",
+          "from": "open",
+          "to": "claimed"
+        },
+        {
+          "at": "2026-10-18T13:17:06Z",
+          "agent": "claude-opus-5.5-2026-10-18",
+          "from": "claimed",
+          "to": "red",
+          "note": "5e8e5d7: redirect target received Bearer token on unfixed billing path"
+        },
+        {
+          "at": "2026-10-18T13:17:06Z",
+          "agent": "claude-opus-5.5-2026-10-18",
+          "from": "red",
+          "to": "green",
+          "evidence": "full suite 2 failed (baseline) / 2261 passed; log sha256 42001818…"
+        },
+        {
+          "at": "2026-10-18T13:17:06Z",
+          "agent": "claude-opus-5.5-2026-10-18",
+          "from": "green",
+          "to": "in_review",
+          "evidence": "PR #215 head 247acda"
+        },
+        {
+          "at": "2026-10-18T13:17:06Z",
+          "agent": "knowurknot-operator",
+          "from": "in_review",
+          "to": "merged",
+          "note": "Owner-directed merge 2026-10-18, executed by Claude via GitHub API after full CI green; separate adversary/verifier gates (G5/G6) not run.",
+          "evidence": "PR #215 merged as ee9e5e3"
+        }
+      ]
     },
     {
       "id": "CAPT-UPG-028",
@@ -151,7 +265,45 @@
       "verification": [
         "python -m pytest -q tests/capt_runtime -k 'store or event'"
       ],
-      "status": "open"
+      "status": "merged",
+      "claimedBy": "claude-opus-5.5-2026-10-18",
+      "history": [
+        {
+          "at": "2026-10-18T13:17:05Z",
+          "agent": "claude-opus-5.5-2026-10-18",
+          "from": "open",
+          "to": "claimed"
+        },
+        {
+          "at": "2026-10-18T13:17:05Z",
+          "agent": "claude-opus-5.5-2026-10-18",
+          "from": "claimed",
+          "to": "red",
+          "note": "75e5497: AST gate + dirty-read regression fail on unfixed store"
+        },
+        {
+          "at": "2026-10-18T13:17:06Z",
+          "agent": "claude-opus-5.5-2026-10-18",
+          "from": "red",
+          "to": "green",
+          "evidence": "full suite 2 failed (host-dependent baseline) / 2259 passed; log sha256 10dd8cba…"
+        },
+        {
+          "at": "2026-10-18T13:17:06Z",
+          "agent": "claude-opus-5.5-2026-10-18",
+          "from": "green",
+          "to": "in_review",
+          "evidence": "PR #214 head 710142d"
+        },
+        {
+          "at": "2026-10-18T13:17:06Z",
+          "agent": "knowurknot-operator",
+          "from": "in_review",
+          "to": "merged",
+          "note": "Owner-directed merge 2026-10-18, executed by Claude via GitHub API after full CI green; separate adversary/verifier gates (G5/G6) not run.",
+          "evidence": "PR #214 merged as 09854ee"
+        }
+      ]
     },
     {
       "id": "CAPT-UPG-029",
@@ -206,7 +358,45 @@
       "verification": [
         "python -m pytest -q tests -k 'local_backend or terminal_local'"
       ],
-      "status": "open"
+      "status": "merged",
+      "claimedBy": "claude-opus-5.5-2026-10-18",
+      "history": [
+        {
+          "at": "2026-10-18T13:17:06Z",
+          "agent": "claude-opus-5.5-2026-10-18",
+          "from": "open",
+          "to": "claimed"
+        },
+        {
+          "at": "2026-10-18T13:17:06Z",
+          "agent": "claude-opus-5.5-2026-10-18",
+          "from": "claimed",
+          "to": "red",
+          "note": "f96b2e3: 3 failures (output reader did not terminate; missing descendants_terminated)"
+        },
+        {
+          "at": "2026-10-18T13:17:06Z",
+          "agent": "claude-opus-5.5-2026-10-18",
+          "from": "red",
+          "to": "green",
+          "evidence": "full suite 2 failed (baseline) / 2262 passed; log sha256 52da8117…"
+        },
+        {
+          "at": "2026-10-18T13:17:06Z",
+          "agent": "claude-opus-5.5-2026-10-18",
+          "from": "green",
+          "to": "in_review",
+          "evidence": "PR #216 head 14bb4b1"
+        },
+        {
+          "at": "2026-10-18T13:17:06Z",
+          "agent": "knowurknot-operator",
+          "from": "in_review",
+          "to": "merged",
+          "note": "Owner-directed merge 2026-10-18, executed by Claude via GitHub API after full CI green; separate adversary/verifier gates (G5/G6) not run.",
+          "evidence": "PR #216 merged as a8d3cac"
+        }
+      ]
     },
     {
       "id": "CAPT-UPG-031",
@@ -2202,6 +2392,36 @@
       "verification": [
         "python -m pytest -q tests -k reference_intake"
       ]
+    },
+    {
+      "id": "CAPT-UPG-107",
+      "title": "Procedure verification must not rest on self-reported runs",
+      "tier": "P1",
+      "kind": "weak_spot",
+      "provenance": "V",
+      "summary": "ProcedureStore.verify_procedure counts success_count and any non-empty verification_result. In shipped code the only caller of record_run is the model-facing Hermes plugin, so verification evidence is self-reported by the agent being verified. Split from CAPT-UPG-026.",
+      "files": [
+        "capt_solo/lifecycle/procedures.py",
+        "capt_solo/memory/engine.py",
+        "capt_solo/plugin/__init__.py"
+      ],
+      "creates": [],
+      "depends_on": [
+        "CAPT-UPG-026"
+      ],
+      "risk": "medium",
+      "needs_adr": false,
+      "owner_role": "implementer",
+      "acceptance": [
+        "Schema migration v5 adds procedure_runs.source (default 'unknown'); export/import carry it; covered by a migration test from a v4 database.",
+        "The plugin path records source='self_reported'; only CAPT-observed sources (for example a ToolBroker execution receipt id) count toward verify_procedure.",
+        "verify_procedure refuses promotion when the qualifying runs are all self_reported or unknown; tests cover both.",
+        "Operator approval of the migration is recorded on the PR (hard stop in the campaign workflow)."
+      ],
+      "verification": [
+        "python -m pytest -q tests -k 'procedure or migration'"
+      ],
+      "status": "open"
     }
   ]
 }

@@ -1,6 +1,6 @@
 {
   "schemaVersion": "capt.external-donor-review-queue.v2",
-  "updatedAt": "2026-10-12",
+  "updatedAt": "2026-10-18",
   "purpose": "Append-only next-batch external donor intake; does not alter archived/approved frozen council inputs.",
   "upstreamReference": {
     "historicalManifest": "docs/missions/CAPT_DONOR_CHERRYPICK_INTEGRATION_R1.json",
@@ -520,6 +520,55 @@
         "state persistence/restart side effects"
       ],
       "integrationPreference": "Selectively cherry-pick or reimplement independently behind CAPT RuntimeService/EventStore/ToolBroker/ClaimGuard; do not transplant a new authority plane.",
+      "disposition": "QUEUED_NOT_REVIEWED",
+      "lastReviewReceipt": null,
+      "sourceAuditReceipt": null,
+      "integrated": false
+    },
+    {
+      "repository": "microsoft/SkillOpt",
+      "url": "https://github.com/microsoft/SkillOpt",
+      "defaultBranch": "main",
+      "observedHead": "ae2f766ea02cb41855b6f8f10e38e10264ce0a1b",
+      "observedAt": "2026-10-18",
+      "licenseStatus": "MIT",
+      "licenseEvidence": "LICENSE at pinned SHA ae2f766ea02cb41855b6f8f10e38e10264ce0a1b is MIT, Microsoft Corporation 2026 (Git blob cf7bcb2ba475e33648180599c0f83c425f1705d9). Preserve copyright and permission notices on reuse; dependency/transitive licensing not yet reviewed.",
+      "classification": "CHERRY_PICK_CANDIDATE_PENDING_RRDS_1",
+      "proposedSurfaces": "CAPT skill foundry; authored skills; CAPT Bot; Hermes skill registry; CAPTResearch; experimental bioCAPT/CAPTRYS skill evaluation",
+      "mechanisms": [
+        "Text-space skill optimizer: rollouts -> reflection -> aggregation -> bounded add/delete/replace edits -> held-out score gate, with deployable best_skill.md",
+        "Explicit train/validation/test partitions, objective-specific EnvAdapter, reproducible task scores and a freeze of target model weights",
+        "Candidate/accepted/rejected skill patch ledger; immutable original skill and per-run rollback, no self-promotion",
+        "Per-task no-regression checking and staged human adoption from skillopt_sleep, never automatic authority transfer",
+        "OpenAI-compatible backend interface and offline/mock evaluation for local-first cost-controlled trials"
+      ],
+      "relevantPaths": [
+        "skillopt/",
+        "skillopt_sleep/",
+        "docs/sleep/README.md",
+        "docs/guide/new-backend.md",
+        "docs/guide/new-benchmark.md",
+        "configs/",
+        "tests/",
+        "LICENSE"
+      ],
+      "preliminaryRisks": [
+        "Skill and long-term memory poisoning from harvested transcripts or prompt injection",
+        "SkillOpt-Sleep real backends can send transcript excerpts and local path data outside the host; no proven secret-free guarantee",
+        "Optimization overfitting, validation/test leakage, model-judge gaming and regressions hidden by aggregate scores",
+        "Autonomous scheduled mining/replay can spend API budget and bypass explicit CAPT human egress approval",
+        "A stand-alone best_skill.md could be elevated to executable authority without CAPT policy/approval/skill pinning",
+        "Backend-dependent isolation and CVE/dependency exposure require pinned source and license review"
+      ],
+      "redTeamTargets": [
+        "malicious session transcript -> reflected skill injection and exfiltration attempt",
+        "poisoned gradient that scores well on training but fails held-out adversarial tasks",
+        "replay leakage into supposedly untouched test set; judge self-deception",
+        "no-regression false negatives and missing/non-finite validation score fail-closed behavior",
+        "sleep scheduler, tool and provider requests without scoped CAPT approval or cost ceilings",
+        "multi-user retention, privacy deletion and read-only harvest provenance"
+      ],
+      "integrationPreference": "Priority P1 donor. Extract the bounded textual skill-diff/gate/evaluation protocol as a separate governed skill-improvement pipeline. Every proposal stays untrusted until independently scored, human-approved and SHA-pinned under CAPT RuntimeService/ClaimGuard; use mock/local evaluation first and forbid unsanctioned SkillOpt-Sleep transcript egress or automatic adoption. Do not import alternate provider, scheduler, memory or authority planes.",
       "disposition": "QUEUED_NOT_REVIEWED",
       "lastReviewReceipt": null,
       "sourceAuditReceipt": null,

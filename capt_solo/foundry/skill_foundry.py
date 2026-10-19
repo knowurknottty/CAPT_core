@@ -39,6 +39,13 @@ from capt_solo.foundry.proof import ProofEngine, ProofRequirement, sha256_of
 from capt_solo.lifecycle.procedures import ProcedureStore, Procedure
 
 
+# Identities that belong to automated components, never to a human reviewer
+# (CAPT-UPG-026). Compared case-insensitively after stripping whitespace.
+_NON_HUMAN_REVIEWERS = frozenset({
+    "hermes", "skill_foundry", "capt", "capt-solo", "capt_solo", "model",
+    "agent", "assistant", "bot", "system", "automation",
+})
+
 SKILL_LIFECYCLE = {
     "candidate", "generated", "validating", "validated",
     "reviewing", "approved", "published", "deprecated", "revoked",
@@ -315,8 +322,16 @@ class SkillFoundry:
             raise MemoryError_(
                 f"skill '{skill_id}' must be in 'reviewing' state (current="
                 f"{s.lifecycle_state})")
-        if not reviewer:
+        if not reviewer or not reviewer.strip():
             raise MemoryError_("human approval requires a named reviewer")
+        normalized = reviewer.strip().lower()
+        creator = str(s.creation_metadata.get("created_by", "")).strip().lower()
+        if normalized in _NON_HUMAN_REVIEWERS or (creator and normalized == creator):
+            # CAPT-UPG-026: an automated identity may not approve. This is a
+            # denylist backstop; the structural control is that no model-facing
+            # surface exposes approve/publish (human presence: CAPT-UPG-041).
+            raise MemoryError_(
+                f"approval refused: {reviewer.strip()!r} is a non-human reviewer identity")
         meta = dict(s.creation_metadata)
         meta["approved_by"] = reviewer
         meta["approved_at"] = time.time()

@@ -1,0 +1,16 @@
+path,sha256,inspected_lines,journaled_node_operation
+capt_runtime/services.py,fafcb2888d47d283379972bc0adf8807dc66a218db19b0569f96c1c5ca2bdd21,L40-L63: RuntimeService commit then dispatch,capt-node:omega-rrds-c956-source-receipts-20261018-01:stdout
+capt_runtime/store.py,f6c582deed490e7ad0ea1a4a4dab227c4c6f8cf51cd8791e8dbe283fcbc0ebe6,L136-L166: EventStore connection/transactional setup,capt-node:omega-rrds-c956-source-receipts-20261018-01:stdout
+capt_runtime/governed_service.py,fffb6e5a9cc616663d38377f4e6cfbcc4bfc11bfbe390e47f761e2f733d4f9e0,L187-L212: govern Bot identity registration,capt-node:omega-rrds-c956-source-receipts-20261018-01:stdout
+capt_runtime/cli_ramp.py,9ac236cffce5b84454b7711de61d7c5b770908ac9d05a0db465aecfaf6219a2a,L52-L89: authenticated IPC runtime health probe,capt-node:omega-rrds-c956-source-receipts-20261018-01:stdout
+capt_runtime/provider_model_preflight.py,fa04ffe0e7458e61c7689b8ee6bb4541db5ae445a2ac444f4393a150c5a14b4c,L27-L76: official OpenRouter catalog preflight,capt-node:omega-rrds-c956-source-receipts-20261018-01:stdout
+capt_runtime/drivers/provider.py,f0cd8a3122bf2bd3d263db7792432d1aed43401f2d619324662e6274d2f51c34,L943-L960: preflight before inference,capt-node:omega-rrds-c956-source-receipts-20261018-01:stdout
+capt_runtime/aggregates/human_approval.py,07a25b0851bf75f79641fb49bb79810df7edef274b8b85ebdea25c5dc6f51a55,L40-L80: human approval bounded state,capt-node:omega-rrds-c956-source-receipts-20261018-01:stdout
+capt_runtime/aggregates/bot.py,f433b913a8bb77029bbee0b9dff89c8d98f3d5f41ffcf670e2cda526d58fcfc9,L30-L47: Bot identity and metadata,capt-node:omega-rrds-c956-source-receipts-20261018-01:stdout
+capt_runtime/biocapt_cohort_reader.py,29e7c0877bf29e5ff7991cc311a3426ab50aaeace2c4d61a9edf31e8d85e4148,L44-L90: grant and lease read-only boundary,capt-node:omega-rrds-c956-source-receipts-20261018-01:stdout
+capt_runtime/tool_broker.py,c54bbcea0a892ca5b3a11e4fec1ad30aec27e4aa7538832c47fd7b9fd4ede9e7,L70-L105: tool authority boundary,capt-node:omega-rrds-c956-source-receipts-20261018-01:stdout
+capt_runtime/driver_host.py,df48fb8795cba5426b85f39879fa83795155a98b029b2ed96253186595fd5989,L30-L80: driver lifecycle,capt-node:omega-rrds-c956-source-receipts-20261018-01:stdout
+scripts/capt_repo_audit_gate.py,a2cafc3a4a1212725095e15a83394465975010323b9af8b0154faeca3dc188e8,L95-L160: RRDS digest comparison and gate,capt-node:omega-rrds-c956-source-receipts-20261018-01:stdout
+tests/capt_runtime/test_provider_model_preflight.py,f78168b293d3c7968f71a167126522564cf325d4316a15f10b4f0878e6e72add,L1-L50: provider preflight test fixture,capt-node:omega-rrds-c956-source-receipts-20261018-01:stdout
+tests/capt_runtime/test_bot_foundation_service.py,49b65288702339773dd91b71e8a4b83d04e08b5463e8c254c77d72632749f570,L1-L45: governed Bot test fixture,capt-node:omega-rrds-c956-source-receipts-20261018-01:stdout
+capt_cli.py,725a6586e52b858b0f85797dd0cc9e87551e4ac3fd39eaa4a57ca6ee46da5695,L115-L139: CLI parsing and Solo memory,capt-node:omega-rrds-c956-source-receipts-20261018-01:stdout

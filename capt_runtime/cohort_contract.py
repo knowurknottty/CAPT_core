@@ -131,6 +131,18 @@ def normalize_cohort_spec(value: Any) -> Optional[Dict[str, Any]]:
         normalized["vesselCharterPolicy"] = normalize_charter_policy(
             value.get("vesselCharterPolicy"), vessels
         )
+    # One approved cohort is not permission for unlimited provider round-trips.
+    # Strict charter councils default to ONE physical inference even if a
+    # read-only ToolBridge is otherwise authorized. Explicit higher limits must
+    # participate in the immutable HumanApproval cohort binding.
+    if "maxPhysicalProviderRequests" in value or (
+        isinstance(normalized.get("vesselCharterPolicy"), dict)
+        and normalized["vesselCharterPolicy"].get("strictLedger")
+    ):
+        limit = value.get("maxPhysicalProviderRequests", 1)
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 24:
+            raise ValueError("COHORT_PHYSICAL_PROVIDER_REQUEST_LIMIT_INVALID")
+        normalized["maxPhysicalProviderRequests"] = limit
     return normalized
 
 
@@ -217,6 +229,25 @@ def compile_cohort_objective(
     first = f"{cohort_id}-v0001"
     last = f"{cohort_id}-v{count:04d}"
     modality = str(spec.get("outputModality") or "text")
+    policy = spec.get("vesselCharterPolicy")
+    if modality == "text" and isinstance(policy, dict) and policy.get("strictLedger"):
+        candidate_count = count * int(policy["candidateMultiplier"])
+        # Strict cohorts must preserve the mandatory audit evidence even if a
+        # lengthy user objective consumes the model's finite output window.
+        # This changes only FUTURE prompt bindings; never revise a frozen
+        # approval or previously submitted provider request.
+        base = (
+            "CAPT STRICT OUTPUT ORDER (MANDATORY; BEFORE ANY REPORT PROSE):\n"
+            f"1. Emit at least {candidate_count} unique, complete CAPT_CANDIDATE rows.\n"
+            "2. Emit the single CAPT_CHARTER_AUDIT row for the physical candidates.\n"
+            f"3. Emit exactly {count} complete CAPT_VESSEL rows with unique SOURCE ids.\n"
+            "4. ONLY THEN write the requested review, findings, dispositions and "
+            "synthesis. These do not replace the mandatory ledger.\n"
+            "If output or context limits prevent completing the physical ledger, "
+            "write CAPT_COHORT_INCOMPLETE and disclose the missing rows instead "
+            "of claiming completion. No partial report is certified.\n\n"
+            + base
+        )
     common = (
         base
         + "\n\nCAPT native cohort execution contract:\n"
@@ -227,6 +258,10 @@ def compile_cohort_objective(
         + f"- output_modality: {modality}\n"
         + f"- logical_vessels: {count}\n"
         + f"- vessel_namespace: {first}..{last}\n"
+        + (
+            f"- approved_max_physical_provider_requests: {spec['maxPhysicalProviderRequests']}\n"
+            if "maxPhysicalProviderRequests" in spec else ""
+        )
         + "- this is ONE provider inference for the whole cohort; never fan "
           "logical vessels out into separate provider calls;\n"
     )

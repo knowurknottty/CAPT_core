@@ -311,11 +311,12 @@ class EventStore(object):
         bounded = max(0, int(limit))
         if bounded == 0:
             return []
-        rows = self._conn.execute(
-            "SELECT event_id, envelope_json FROM events WHERE global_sequence > ? "
-            "ORDER BY global_sequence DESC LIMIT ?",
-            (after_sequence, bounded),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT event_id, envelope_json FROM events WHERE global_sequence > ? "
+                "ORDER BY global_sequence DESC LIMIT ?",
+                (after_sequence, bounded),
+            ).fetchall()
         decoded = [self._open_json(
             r["envelope_json"], table="events", column="envelope_json", key=r["event_id"]
         ) for r in rows]

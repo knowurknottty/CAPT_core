@@ -1,0 +1,214 @@
+path_at_0d8e46d09524,h1_title,last_touch_commit,preliminary_group,review_state
+docs/ANTI_TOKEN_EXTRACTION.md,Anti-Token-Extraction Component (v0.4.1),e399d65e,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/API.md,CAPT Public Integration Reference,e5de0b6d,canonical_public_reference,UNASSESSED_BY_DEEP_REVIEW
+docs/ARCHITECTURE.md,CAPT Core Architecture,f4dd216c,canonical_public_reference,UNASSESSED_BY_DEEP_REVIEW
+docs/ARCHITECTURE_REVIEW_ATE_ADAPTER.md,Architecture Review Gate — `_ate_stdio_server.py` Deletion,b6a59503,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/AUTHORED_SKILLS.md,CAPT Authored Skills,f4dd216c,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/BIOCAPT_QIPC_RUNTIME_STARTUP_OPTIN_20261008.md,R5 — explicit CAPT RuntimeService startup option for native bioCAPT QIPC,1a85e859,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/BRANCH_RECONCILIATION_FINAL.md,Branch Reconciliation Final,677168f3,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/CAPABILITY_MATRIX.md,CAPT Capability Matrix,f4dd216c,canonical_public_reference,UNASSESSED_BY_DEEP_REVIEW
+docs/CAPABILITY_REGISTRY.md,CAPT Solo v0.4 — Capability Registry,abeff5c1,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/CAPT_HARDENING_BACKLOG.md,CAPT Hardening Backlog,e683253d,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/CHANGELOG.md,CAPT Core Changelog,8bb28986,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/CHAT_PI_BEACHBALL_REPAIR_2026-10-08.md,Native Chat spinning beachball during Prompt Intelligence — 2026-10-08,b6a8c0db,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/CHEATSHEETS/01_OPERATOR_COCKPIT.md,01 — Operator Cockpit,4a654a74,existing_cheatsheet,UNASSESSED_BY_DEEP_REVIEW
+docs/CHEATSHEETS/02_TUI_AND_PROVIDERS.md,02 — TUI and Provider Operations,4a654a74,existing_cheatsheet,UNASSESSED_BY_DEEP_REVIEW
+docs/CHEATSHEETS/03_GOVERNED_EXECUTION.md,03 — Governed Execution Lifecycle,4a654a74,existing_cheatsheet,UNASSESSED_BY_DEEP_REVIEW
+docs/CHEATSHEETS/04_STATE_RECOVERY_EVIDENCE.md,"04 — State, Recovery, Evidence, and Verification",4a654a74,existing_cheatsheet,UNASSESSED_BY_DEEP_REVIEW
+docs/CHEATSHEETS/05_MEMORY_DISCOVERY_FOUNDRY.md,"05 — Memory, Discovery, Foundry, and Desktop Surfaces",4a654a74,existing_cheatsheet,UNASSESSED_BY_DEEP_REVIEW
+docs/CHEATSHEETS/06_API_SOURCE_ATLAS.md,06 — API and Source Atlas,4a654a74,existing_cheatsheet,UNASSESSED_BY_DEEP_REVIEW
+docs/CHEATSHEETS/07_COMMAND_REFERENCE.md,07 — Command Reference and Diagnostic Playbooks,4a654a74,existing_cheatsheet,UNASSESSED_BY_DEEP_REVIEW
+docs/CHEATSHEETS/README.md,CAPT Current-System Cheat Sheets,4a654a74,existing_cheatsheet,UNASSESSED_BY_DEEP_REVIEW
+docs/CLAIMGUARD.md,CAPT Solo v0.4 — ClaimGuard,abeff5c1,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/CLI.md,CAPT CLI and Operator Commands,f4dd216c,canonical_public_reference,UNASSESSED_BY_DEEP_REVIEW
+docs/CURRENT_STATE.md,CAPT Core — Current State,b640093b,canonical_public_reference,UNASSESSED_BY_DEEP_REVIEW
+docs/DATA_MODEL.md,CAPT Core Data Model,114ad5ce,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/DEMOS.md,CAPT Demos,4a654a74,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/DESIGN.md,CAPT Core Design Rationale,f4dd216c,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/DESKTOP.md,CAPT Desktop,f4dd216c,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/EXTENDING.md,Extending CAPT Solo,2e493b9c,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/FUNCTIONALITY_MATRIX.md,CAPT Functionality Matrix,8bb28986,canonical_public_reference,UNASSESSED_BY_DEEP_REVIEW
+docs/GOVERNANCE.md,CAPT Solo v0.4 — Governance Layer,abeff5c1,canonical_public_reference,UNASSESSED_BY_DEEP_REVIEW
+docs/GOVERNED_MULTIMODAL_EXECUTION_R2_2026-10-08.md,"Governed multimodal R2A — executable media runtime, 2026-10-08",1da2fa5b,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/GOVERNED_MULTIMODAL_R2B_INLINE_AND_URL_2026-10-08.md,CAPT governed multimodal R2B — inline document/video + image URL results,8c52ff00,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/GOVERNED_MULTIMODAL_R2C_FILES_2026-10-08.md,Governed multimodal R2C — large-file upload and reference consumption,80d3b82e,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/INSTALLATION.md,CAPT Installation,f4dd216c,canonical_public_reference,UNASSESSED_BY_DEEP_REVIEW
+docs/KNOWLEDGE_BUBBLES.md,CAPT Solo v0.4 — Knowledge Bubbles,abeff5c1,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/MENTAL_MODEL.md,Mental Model — How CAPT Works,f4dd216c,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/MIGRATIONS.md,CAPT Solo v0.4 — Migrations,abeff5c1,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/MODEL_PROVIDERS.md,Model Providers,cc93c4e9,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/NATIVE_MULTIMODAL_R1_AND_PROVIDER_ADAPTERS_2026-10-08.md,CAPT native file and media management — R1 / R2 contracts,316e0cf9,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/PI_COMPILER_DIAGNOSIS_2026-10-08.md,Prompt Intelligence compiler repair — 2026-10-08,413108c8,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/PI_DURABLE_REATTACHMENT_2026-10-08.md,PI Durable Request Reattachment — Implementation and Acceptance,4b8ccbac,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/PLUGIN_GUIDE.md,CAPT Runtime and Integration Guide,f4dd216c,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/PROOF_ENGINE.md,CAPT Solo v0.4 — Proof Engine,abeff5c1,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/PROVIDERS.md,CAPT Providers,f4dd216c,canonical_public_reference,UNASSESSED_BY_DEEP_REVIEW
+docs/PR_TOPOLOGY.md,CAPT Core Pull-Request Topology,f4dd216c,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/README.md,CAPT Core Documentation,f4dd216c,canonical_public_reference,UNASSESSED_BY_DEEP_REVIEW
+docs/RELEASE_AUDIT_v0.4.md,CAPT Solo v0.4 — Release Audit & Gate Matrix,75ac4887,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/RELEASE_CANDIDATE_v0.4.0.md,CAPT Solo v0.4.0 — Release Candidate Report,abeff5c1,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/RELEASE_EVIDENCE.md,Release and Integration Evidence,f4dd216c,canonical_public_reference,UNASSESSED_BY_DEEP_REVIEW
+docs/ROADMAP.md,CAPT Core Roadmap,f4dd216c,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/SECURITY.md,CAPT Core Security Boundaries,f4dd216c,canonical_public_reference,UNASSESSED_BY_DEEP_REVIEW
+docs/SKILL_FOUNDRY.md,CAPT Solo v0.4 — Skill Foundry,abeff5c1,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/SKILL_GUIDE.md,CAPT Solo Skill Guide,703ce4cb,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/TROUBLESHOOTING.md,Troubleshooting,f4dd216c,canonical_public_reference,UNASSESSED_BY_DEEP_REVIEW
+docs/TUI.md,CAPT TUI — Textual Operator Console,f4dd216c,canonical_public_reference,UNASSESSED_BY_DEEP_REVIEW
+docs/USER_GUIDE.md,CAPT User Guide,f4dd216c,canonical_public_reference,UNASSESSED_BY_DEEP_REVIEW
+docs/V0_6_PRODUCTIZATION_SOURCE_OF_TRUTH.md,CAPT Core v0.6 — Historical Productization Source of Truth,d4ae4739,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/V0_6_UI_UX_PRODUCTIZATION.md,CAPT v0.6/v0.7 — Historical UI/UX Productization Requirements,cc93c4e9,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/VALIDATION.md,CAPT Solo v0.4 — Validation Harness,abeff5c1,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/WHITEPAPER.md,CAPT Core,f4dd216c,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_BOT_CLOUDFLARE_R3.md,CAPT Bot Cloudflare Execution Plane R3,496db4ec,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_BOT_CLOUDFLARE_WORKFLOWS_R4.md,CAPT Bot Cloudflare Workflows Orchestration R4,496db4ec,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_BOT_CREW_STANDUP_R2.md,CAPT Bot Crew + Standup R2,496db4ec,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_BOT_FOUNDATION_R1.md,CAPT Bot Foundation R1,496db4ec,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_KANBAN_COLLABORATION_R1_2026-10-08.md,CAPT Core Collaborative Kanban — R1,783f06bd,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_PROMPT_COMPILER_TOKEN_BUDGET_20261017.md,Prompt Intelligence compiler token budgets,b980a032,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_RUNTIME_ARCHITECTURE_SPEC.md,CAPT Runtime Architecture Specification,a875fb47,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_RUNTIME_BASELINE_MAP.md,CAPT Runtime — Repository Forensic Baseline Map (Gate 0),be3cf465,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_RUNTIME_M0A_DECISION.md,CAPT Runtime M0-A — Decision Document,8f65ab30,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_RUNTIME_M0A_TRIPLE_RECURSION_LEDGER.md,CAPT Runtime M0-A — Triple-Recursion Ledger,8f65ab30,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_RUNTIME_M0A_VERIFICATION_REPORT.md,CAPT Runtime M0-A — Verification Report,8f65ab30,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_RUNTIME_M0_AUTHORITY_MATRIX.md,CAPT Runtime M0 Authority & Ownership Matrix,9e0210c6,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_RUNTIME_M0_COMPATIBILITY_POLICY.md,CAPT Runtime M0 Compatibility Policy,bfd1ef3c,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_RUNTIME_M0_CONTRACT_INVENTORY.md,CAPT Runtime M0 Contract Inventory,9e0210c6,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_RUNTIME_M0_DRIVER_BOUNDARY.md,CAPT Runtime M0 ExecutionDriver Boundary,bfd1ef3c,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_RUNTIME_M0_FINAL_VERIFICATION.md,CAPT Runtime M0 — Final Composed-Stack Verification,ceafa32e,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_RUNTIME_M0_FREEZE.md,CAPT Runtime M0 Freeze,0ba1a756,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_RUNTIME_M0_FREEZE_MARKER.md,CAPT Runtime M0 — Freeze Marker,ceafa32e,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_RUNTIME_M0_FREEZE_TRIPLE_RECURSION_LEDGER.md,CAPT Runtime M0 Freeze — Triple Recursion Ledger,f76b1cb1,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_RUNTIME_M0_FREEZE_VERIFICATION.md,CAPT Runtime M0 Freeze Verification,f76b1cb1,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_RUNTIME_M0_INTEGRATION_LEDGER.md,CAPT Runtime M0 — Integration Ledger (Triple Recursion),5082521e,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_RUNTIME_M0_INTEGRATION_MAP.md,CAPT Runtime M0 — Integration Map,5082521e,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_RUNTIME_M0_MERGE_PLAN.md,CAPT Runtime M0 — Merge Plan,52c77237,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_RUNTIME_NEXT_GATE_PROMPT.md,CAPT Runtime — Next Program Gate Prompt,ff315005,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CAPT_RUNTIME_TRIPLE_RECURSION_LEDGER.md,CAPT Runtime Architecture — Triple-Recursion Ledger,fc7efcda,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/CLAIM_ONCE_HANDOFF_DONOR_R1.md,Claim-once handoff primitive — donor adaptation R1,3239a017,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/M0A_FORENSIC_AND_GAP.md,M0-A Forensic Implementation Map & Gap Analysis,baa26e8d,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/M0B_RUNTIMEAGGREGATE_EVIDENCE.md,"M0-B RuntimeAggregate Evidence Log (Part 16, expanded)",0d851c45,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/M0B_TRIPLE_RECURSION_LEDGER.md,M0-B Triple Recursion Ledger (Part 17),0d851c45,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/decisions/ADR-0101-canonical-schema-language.md,ADR-0101 — Canonical schema language and schema versioning,646f957d,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/decisions/ADR-0102-generated-binding-strategy.md,ADR-0102 — Generated TypeScript and Python binding strategy,646f957d,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/decisions/ADR-0103-aggregate-ownership.md,ADR-0103 — Aggregate ownership and mutation boundaries,646f957d,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/decisions/ADR-0104-transactional-store-and-ledger.md,ADR-0104 — Transactional state store and event-ledger semantics,646f957d,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/decisions/ADR-0105-outbox-behavior.md,ADR-0105 — Outbox behavior,646f957d,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/decisions/ADR-0106-ordering-and-concurrency.md,ADR-0106 — Event ordering and optimistic concurrency,646f957d,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/decisions/ADR-0107-capability-lifecycle.md,"ADR-0107 — Capability grants, leases, reservations, revocation, and consumption",646f957d,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/decisions/ADR-0108-idempotency-and-replay.md,ADR-0108 — Idempotency and replay semantics,646f957d,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/decisions/ADR-0109-checkpoint-and-recovery.md,ADR-0109 — Checkpoint manifest and recovery semantics,646f957d,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/decisions/ADR-0110-trusted-state-vs-untrusted-observations.md,ADR-0110 — Trusted CAPT state versus untrusted external observations,646f957d,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/decisions/ADR-0111-m0a-exclusions.md,ADR-0111 — M0-A exclusions and deferred work,646f957d,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/decisions/ADR-0120-driver-trust-boundary.md,ADR-0120 — Driver trust boundary,0581d970,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/decisions/ADR-0121-driver-selection.md,ADR-0121 — ExecutionDriver selection,0581d970,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/decisions/ADR-0122-readonly-capability-types.md,ADR-0122 — Read-only capability types,0581d970,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/decisions/ADR-0123-driver-lifecycle.md,ADR-0123 — Driver lifecycle state machine,0581d970,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/decisions/ADR-0124-driver-reconciliation.md,ADR-0124 — Driver reconciliation,0581d970,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/decisions/ADR-0125-contextslice-minimization.md,ADR-0125 — ContextSlice minimization,0581d970,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/decisions/ADR-0126-observation-validation.md,ADR-0126 — Observation and receipt ingestion,0581d970,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/decisions/ADR-0127-m0b-exclusions.md,ADR-0127 — M0-B exclusions,0581d970,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/decisions/ADR-0128-human-approval-capability-transfer.md,ADR-0128 — HumanApproval-to-Capability authority transfer,c9138151,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/decisions/README.md,CAPT Runtime — Architecture Decision Records,c9138151,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/governance/M0B_ACCEPTANCE_DECISION.md,M0-B Acceptance Decision,ef03c92b,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/governance/M0B_INDEPENDENT_REVIEW.md,M0-B Independent Review (Post–M0-B Pass),ef03c92b,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/governance/NEXT_GATE_PROMPT.md,"Next Gate Prompt (prepared, not executed)",ef03c92b,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/governance/POST_M0B_GOVERNANCE_INCIDENT_REPORT.md,Post-M0-B Governance Incident Report,ef03c92b,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/governance/POST_M0B_RUNTIMEAGGREGATE_ADR_PROPOSAL.md,"ADR Proposal: Post-M0-B RuntimeAggregate (deferred, minimal scope)",ef03c92b,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/architecture/governance/RELEASE_SECURITY_DEPENDENCY_DECISION.md,Release Security Dependency Decision (anti-token-extraction),ef03c92b,architecture_reference_scope_check,UNASSESSED_BY_DEEP_REVIEW
+docs/hermes/HERMES_CONFORMANCE_REPORT.md,Hermes Conformance Report,66156463,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/hermes/HERMES_EXECUTION_DRIVER_ARCHITECTURE.md,Hermes ExecutionDriver Architecture,10052a22,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/hermes/HERMES_INTEGRATION_FORENSIC_CORRECTION.md,Hermes Integration — Forensic Correction,0eaf7d9d,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/hermes/HERMES_INTEGRATION_MODE_ADR.md,ADR: Hermes Integration Mode,10052a22,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/hermes/HERMES_MOA_DRIFT_CAPT_COURSE_CORRECTION_CASE_STUDY.md,From Orchestration Drift to Governed Continuity,d2a25070,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/hermes/HERMES_MODEL_TURN_OWNERSHIP_TRACE.md,Hermes Model-Turn Ownership Trace,049eb969,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/hermes/HERMES_REMOVAL_SWAP_PROOF.md,Hermes Removal / Swap Proof,049eb969,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/hermes/HERMES_RESTART_RECONCILIATION_REPORT.md,Hermes Restart / Reconciliation Report,049eb969,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/hermes/HERMES_RUNTIME_LOADING_REPORT.md,Hermes Runtime Loading Report,10052a22,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/hermes/HERMES_SECURITY_REVIEW.md,Hermes Security Review,049eb969,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/hermes/HERMES_SOURCE_LICENSE_PROVENANCE.md,Hermes Source / Licence / Provenance,049eb969,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/hermes/HERMES_TRIPLE_RECURSION_LEDGER.md,Hermes Triple-Recursion Ledger,049eb969,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/hermes/HERMES_TRUST_BOUNDARY.md,Hermes Trust Boundary,10052a22,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/integrations/biocapt-codex-skills-archaeology-2026-10-09.md,bioCAPT × CAPT — Codex skill archaeology and integration decisions (2026-10-09),e8412431,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/integrations/biocapt-optional-cohort-admission-2026-10-09.md,"CAPT Core — bioCAPT optional cohort admission (October 9, 2026)",325b4ca1,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/launch-design-review/CAPT_TUI_DOGFOOD_R5_EXECUTION.md,CAPT TUI Dogfood - R5 Execution Record,4a654a74,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/launch-design-review/TERRA_ACCEPTANCE_CLOSURE_R3_NO_REPEAT.md,Terra Acceptance Closure Matrix — R3 no-repeat pass,4a654a74,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/missions/CAPT_KANBAN_RECONCILIATION_20261017.md,CAPT Kanban reviewed reconciliation — 2026-10-17,0525e6cd,dated_mission_or_planning_check,UNASSESSED_BY_DEEP_REVIEW
+docs/missions/CAPT_RUNTIME_REPLAY_SINGLE_OWNER_HARDENING_20261017.md,CAPT Runtime Replay + Single-Authority Hardening — 2026-10-17,b75d10c6,dated_mission_or_planning_check,UNASSESSED_BY_DEEP_REVIEW
+docs/missions/live_work_queue_triage_2026-10-08.md,Live CAPT mission triage — 2026-10-08,298ab01b,dated_mission_or_planning_check,UNASSESSED_BY_DEEP_REVIEW
+docs/native_swift_capability_parity_2026-10-08.md,Native macOS CAPT — RuntimeService capability parity tracker,5b2983d9,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/operations/governed-openrouter-media-routes-20261017.md,CAPT media routes: OpenRouter foundation (2026-10-17),01178518,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/recovery/CAPT_RUNTIME_STABILITY_TRIAGE_2026-10-18.md,CAPT runtime stability incident and scoped corrective work — 2026-10-18,4a25ca54,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/recovery/CAPT_WORKTREE_RECOVERY_REGISTER_2026-10-17.md,CAPT worktree recovery register — 2026-10-17,603d728b,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/release-audit-v0.5/00 — CAPT Standalone Harness v0.5 Audit Index.md,00 — CAPT Standalone Harness v0.5 Audit Index,d388ca45,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/release-audit-v0.5/01 — VerificationResult Frozen-Contract Defect and Repair.md,VerificationResult Frozen-Contract Defect and Repair,d388ca45,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/release-audit-v0.5/02 — Standalone CAPT Core Harness Functionality Audit.md,02 — Standalone CAPT Core Harness Functionality Audit,d388ca45,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/release-audit-v0.5/03 — CAPT Model Operator Status and Authority Boundary.md,CAPT Model Operator Status and Authority Boundary,d388ca45,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+"docs/release-audit-v0.5/04 — Test, Contract, and Quality Evidence.md","04 — Test, Contract, and Quality Evidence",d388ca45,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/release-audit-v0.5/05 — Public Claim Audit.md,(no H1; review),d388ca45,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/release-audit-v0.5/06 — Treasure Chest Function Reconciliation.md,CAPT Standalone Harness v0.5 — Treasure Chest Function Reconciliation,d388ca45,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/release-audit-v0.5/07 — Branch Shadow Reconciliation.md,CAPT Standalone Harness v0.5 — Branch Shadow Reconciliation,d388ca45,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/release-audit-v0.5/08 — Release Evidence Manifest.md,CAPT Standalone Harness v0.5 — Release Evidence Manifest,d388ca45,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/release-audit-v0.5/09 — Residual Backlog.md,CAPT Standalone Harness v0.5 — Residual Backlog,d388ca45,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/release-audit-v0.5/10 — Canonical CAPT Release Handoff.md,CAPT Standalone Harness v0.5 — Canonical CAPT Release Handoff,d388ca45,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/release-audit-v0.5/11 — Audit Package Validation Report.md,CAPT Standalone Harness v0.5 — Audit Package Validation Report,d388ca45,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/release-audit-v0.5/12 — Git Release Provenance.md,CAPT Standalone Harness v0.5 — Git Release Provenance,d388ca45,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/release-audit-v0.5/evidence/evidence-manifest.md,CAPT Standalone Harness v0.5 — Release Evidence Manifest,d388ca45,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/release-audit-v0.5/evidence/execution-limitation-statement.md,CAPT Standalone Harness v0.5 — Execution Limitation Statement,d388ca45,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/release-audit-v0.5/evidence/operator-handoff.md,CAPT Standalone Harness v0.5 — Persistent Operator Handoff,d388ca45,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/release-audit-v0.5/evidence/release-decision.md,CAPT Standalone Harness v0.5 — Terminal Release Decision,d388ca45,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/release-audit-v0.5/evidence/residual-backlog.md,CAPT Standalone Harness v0.5 — Residual Backlog (post-release),d388ca45,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/release-audit-v0.5/evidence/version-map.md,CAPT Standalone Harness v0.5 — Version Map (version-axis authority),d388ca45,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/review-evidence/CAPT_EXTERNAL_REPOSITORY_SHORTLIST_R2.md,CAPT external repository shortlist — R2 intake addendum,5343fe0e,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/session-archives/2026-08-13-deepseekpro-ouroboros/FILE_INTERACTION_MANIFEST.md,DeepSeek Pro File Interaction Manifest,a6601d61,dated_mission_or_planning_check,UNASSESSED_BY_DEEP_REVIEW
+docs/session-archives/2026-08-13-deepseekpro-ouroboros/ouroboros-repair-post-driver-failure.md,Ouroboros Repair — CAPT Core Post-Driver-Failure Finalization,a6601d61,dated_mission_or_planning_check,UNASSESSED_BY_DEEP_REVIEW
+docs/session-archives/2026-08-13-deepseekpro-ouroboros/session-transcript.md,DeepSeek Pro Ouroboros Session Transcript,a6601d61,dated_mission_or_planning_check,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/plans/2026-08-18-native-capt-macos-chat.md,Native CAPT macOS Chat Surface Implementation Plan,4a654a74,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/plans/2026-08-19-cohort-council-implementation-plan.md,Cohort Council Implementation Plan,7e0072dc,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/plans/2026-08-19-composer-context-palette-implementation-plan.md,Composer Context Palette Implementation Plan,54ac3142,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/plans/2026-08-19-human-first-results-implementation-plan.md,Human-First Results Implementation Plan,54ac3142,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/plans/2026-08-19-projects-implementation-plan.md,CAPT Projects Implementation Plan,54ac3142,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/plans/2026-08-19-public-release-master-implementation-plan.md,CAPT Public Release Tranche Implementation Plan,7e0072dc,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/plans/2026-08-19-search-deep-research-governance-implementation-plan.md,Search + Deep Research Governance Implementation Plan,54ac3142,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/plans/2026-08-19-secure-intake-quarantine-implementation-plan.md,Secure Intake / Quarantine Implementation Plan,54ac3142,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/plans/2026-08-19-tool-broker-slice-a.md,ToolBroker Slice A Implementation Plan,bcfdff9d,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/plans/2026-08-25-native-authored-skills.md,CAPT Native Authored Skills R1 Implementation Plan,3aee7370,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/plans/2026-09-07-macos-gui-control-center.md,CAPT macOS GUI Control Center Implementation Plan,08277f0e,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/plans/2026-09-08-capt-bot-crew-standup-r2.md,CAPT Bot Crew + Standup R2 Implementation Plan,496db4ec,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/plans/2026-09-08-capt-bot-foundation-r1.md,CAPT Bot Foundation R1 Implementation Plan,496db4ec,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/plans/2026-09-09-capt-cloudflare-workflows-r4.md,CAPT Cloudflare Workflows R4 Implementation Plan,496db4ec,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/plans/2026-09-09-inversion-sandbox-r1.md,InversionSandbox R1 Implementation Plan,496db4ec,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/plans/2026-09-09-inversion-sandbox-r2-persistent-leases.md,InversionSandbox R2 Persistent Governed Leases Implementation Plan,496db4ec,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/plans/2026-09-10-model-council-alpha-implementation-plan.md,CAPT Model Council Alpha Implementation Plan,b1952db1,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/specs/2026-08-18-native-capt-macos-chat-design.md,Native CAPT macOS Chat Surface Design,4a654a74,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/specs/2026-08-19-public-release-composer-parity-contract.md,CAPT Public Release Composer Parity Contract,7e0072dc,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/specs/2026-08-19-public-release-quarantine-projects-council-design.md,"CAPT Public Release: Secure Intake, Projects, Human-First Results, and Council Design",7e0072dc,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/specs/2026-08-19-release-tool-broker-terminal-v1-design.md,CAPT Initial Release ToolBroker + Terminal Backend Design,bcfdff9d,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/specs/2026-08-25-native-authored-skills-design.md,CAPT Native Authored Skills R1 Design,3aee7370,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/specs/2026-08-29-world-receipt-file-effect-design.md,THE WORLD RECEIPT — File Effect Vertical Slice,3be3fd6c,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/specs/2026-09-07-macos-gui-control-center-design.md,CAPT macOS GUI Control Center Design,08277f0e,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/specs/2026-09-09-inversion-sandbox-r1-design.md,InversionSandbox R1 Design,496db4ec,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/specs/2026-09-09-inversion-sandbox-r2-persistent-leases-design.md,InversionSandbox R2: Persistent Governed Leases Design,496db4ec,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/specs/2026-09-10-model-council-alpha-design.md,CAPT Model Council Alpha Design,b1952db1,subsystem_or_history_review,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/verification/2026-09-09-inversion-sandbox-r1.md,InversionSandbox R1 Verification,496db4ec,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/superpowers/verification/2026-09-09-inversion-sandbox-r2.md,InversionSandbox R2 Verification — 2026-09-09,496db4ec,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/upgrade-campaign/CAPT-UPG-001-005_CONVERGENCE_RECONCILIATION.md,CAPT-UPG-001–005 Convergence Reconciliation,4a654a74,dated_mission_or_planning_check,UNASSESSED_BY_DEEP_REVIEW
+docs/upgrade-campaign/CAPT-UPG-006-009_CONVERGENCE_RECONCILIATION.md,CAPT-UPG-006–009 Convergence Reconciliation,4a654a74,dated_mission_or_planning_check,UNASSESSED_BY_DEEP_REVIEW
+docs/upgrade-campaign/CAPT-UPG-010-011_CONVERGENCE_RECONCILIATION.md,CAPT-UPG-010–011 Convergence Reconciliation,4a654a74,dated_mission_or_planning_check,UNASSESSED_BY_DEEP_REVIEW
+docs/upgrade-campaign/CAPT-UPG-012-015_CONVERGENCE_RECONCILIATION.md,CAPT-UPG-012–015 Convergence Reconciliation,4a654a74,dated_mission_or_planning_check,UNASSESSED_BY_DEEP_REVIEW
+docs/upgrade-campaign/CAPT-UPG-016_CONVERGENCE_RECONCILIATION.md,CAPT-UPG-016 Convergence Reconciliation,4a654a74,dated_mission_or_planning_check,UNASSESSED_BY_DEEP_REVIEW
+docs/upgrade-campaign/CAPT-UPG-017-019_CONVERGENCE_RECONCILIATION.md,CAPT-UPG-017–019 Convergence Reconciliation,4a654a74,dated_mission_or_planning_check,UNASSESSED_BY_DEEP_REVIEW
+docs/upgrade-campaign/CAPT-UPG-020_reciprocal_review_benchmark.md,CAPT-UPG-020: Reciprocal-Review Effectiveness Benchmark,ea4852ce,dated_mission_or_planning_check,UNASSESSED_BY_DEEP_REVIEW
+docs/upgrade-campaign/CAPT-UPG-021_symbol_index.md,CAPT-UPG-021: Discovery-Guided AST/Symbol Sparse Index,21b97238,dated_mission_or_planning_check,UNASSESSED_BY_DEEP_REVIEW
+docs/upgrade-campaign/CAPT-UPG-022_tree_sitter_hash.md,CAPT-UPG-022: Tree-sitter Structural/Semantic Hashing Probe,3597cbea,dated_mission_or_planning_check,UNASSESSED_BY_DEEP_REVIEW
+docs/upgrade-campaign/CAPT-UPG-023_fastcdc_probe.md,CAPT-UPG-023: FastCDC / Content-Defined Chunking Evaluation,b5dd728a,dated_mission_or_planning_check,UNASSESSED_BY_DEEP_REVIEW
+docs/upgrade-campaign/CAPT-UPG-024_cognitive_debt.md,CAPT-UPG-024: Concrete Cognitive Debt Accounting + Operator Surface,c9eea804,dated_mission_or_planning_check,UNASSESSED_BY_DEEP_REVIEW
+docs/upgrade-campaign/CAPT-UPG-025-068_SAME_UID_HARDENING_AND_EVOLUTION.md,CAPT-UPG-025 → 068 — Same-UID Hardening and Evolution Program,b7d8888e,dated_mission_or_planning_check,UNASSESSED_BY_DEEP_REVIEW
+docs/upgrade-campaign/CAPT-UPG-069-084_OPENWORKER_CHERRY_PICKS.md,CAPT-UPG-069…084 — OpenWorker cherry-picks for CAPT Core / CAPT-Bot,c3a73708,dated_mission_or_planning_check,UNASSESSED_BY_DEEP_REVIEW
+docs/upgrade-campaign/CAPT-UPG-085-106_NINETEEN_REPO_CHERRY_PICKS.md,CAPT-UPG-085…106 — Diamonds from 19 repositories,c3a73708,dated_mission_or_planning_check,UNASSESSED_BY_DEEP_REVIEW
+docs/verification/CAPT_KANBAN_R1_ACCEPTANCE_2026-10-08.md,CAPT Kanban R1 — verification and release boundary (2026-10-08),9bcdf7e0,historical_or_pinned_evidence_check,UNASSESSED_BY_DEEP_REVIEW
+docs/workflows/CAPT_CORE_MAIN_CONVERGENCE_MACOS_MCP_R1.md,CAPT Core Main Convergence + macOS/MCP Integration Workflow R1,4a654a74,repository_policy_or_workflow,UNASSESSED_BY_DEEP_REVIEW
+docs/workflows/CAPT_OPERATOR_RECOVERY_V1.md,CAPT operator morning recovery — candidate v1,dd75446c,repository_policy_or_workflow,UNASSESSED_BY_DEEP_REVIEW
+docs/workflows/CAPT_REPOSITORY_REVIEW_DEPTH_STANDARD.md,CAPT Repository Review Depth Standard (RRDS-1),9d5d7f4a,repository_policy_or_workflow,UNASSESSED_BY_DEEP_REVIEW
+docs/workflows/CAPT_REVIEWER_VERIFIER_CONTRACT.md,RRDS-1: CAPT reviewer and verifier contracts,9d5d7f4a,repository_policy_or_workflow,UNASSESSED_BY_DEEP_REVIEW
+docs/workflows/CAPT_RUNTIME_CONTRACTS_AND_M0_IMPLEMENTATION_WORKFLOW.md,CAPT Runtime Contracts and M0 Implementation Workflow,022f970c,repository_policy_or_workflow,UNASSESSED_BY_DEEP_REVIEW
+docs/workflows/CAPT_UPG_025_AGENT_INTEGRATION_WORKFLOW.md,CAPT-UPG-025 Agent Integration Workflow,b7d8888e,repository_policy_or_workflow,UNASSESSED_BY_DEEP_REVIEW

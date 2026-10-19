@@ -16,6 +16,7 @@ from pathlib import PurePosixPath
 from typing import Iterable
 from urllib.parse import urlparse
 
+from capt_runtime import http_client
 from capt_runtime.errors import AuthorityViolation
 
 MAX_REMOTE_CAPTURE_BYTES = 16 * 1024 * 1024
@@ -157,7 +158,7 @@ class CloudflareHTTPBridge:
             headers["Content-Type"] = "application/json"
         req = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
-            return urllib.request.urlopen(req, timeout=timeout)
+            return http_client.open_url(req, timeout=timeout)
         except urllib.error.HTTPError as exc:
             body = exc.read(4096).decode("utf-8", errors="replace")
             raise RuntimeError(f"Cloudflare bridge HTTP {exc.code}: {body}") from exc
