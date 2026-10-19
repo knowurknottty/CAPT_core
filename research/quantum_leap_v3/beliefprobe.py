@@ -65,6 +65,43 @@ def evaluate_inner(tree,c):
         if definition.get("additionalProperties") is not False or any(k in definition for k in ("allOf","anyOf","oneOf","$ref","patternProperties","unevaluatedProperties")):
             raise ProbeError("schema shape open or composed, absence not proven")
         return WITHIN,"matching property absent in simple closed definition"
+    if kind=="symbol_at_line":
+        text=tree.read(a["path"])
+        lines=text.splitlines()
+        line=int(a["line"])
+        if line<1 or line>len(lines):
+            return EXCEEDS,"anchor beyond file end"
+        name=a["name"]
+        if not isinstance(name,str) or not name.isidentifier(): raise ProbeError("invalid symbol name")
+        n=re.escape(name)
+        form=a.get("form","define")
+        if form=="mention":
+            pattern=r"\b"+n+r"\b"
+        elif form=="define":
+            pattern=(r"^\s*(?:async\s+)?(?:def|class)\s+"+n+r"\b"
+                     +r"|^\s*"+n+r"\s*(?::[^=]+)?=(?!=)"
+                     +r"|\b"+n+r"\s*(?:=|!=|==)\s*"+"['"+'"'+"]")
+        else: raise ProbeError("invalid anchor form")
+        found=bool(expression(pattern).search(lines[line-1]))
+        return WITHIN if found else EXCEEDS,"line "+str(line)+": "+lines[line-1].strip()[:100]
+    if kind=="collection_size":
+        module=ast.parse(tree.read(a["path"]))
+        for node in ast.walk(module):
+            targets=[]; val=None
+            if isinstance(node,ast.Assign): targets,val=node.targets,node.value
+            elif isinstance(node,ast.AnnAssign): targets,val=[node.target],node.value
+            if not any(isinstance(x,ast.Name) and x.id==a["name"] for x in targets): continue
+            if isinstance(val,ast.Call):
+                if (not isinstance(val.func,ast.Name) or val.func.id not in ("set","frozenset","tuple","list")
+                    or len(val.args)!=1 or val.keywords): raise ProbeError("nonliteral collection constructor")
+                val=val.args[0]
+            if not isinstance(val,(ast.List,ast.Tuple,ast.Set)): raise ProbeError("nonliteral collection")
+            n=len(val.elts)
+            ops={"==":lambda x,y:x==y,">=":lambda x,y:x>=y,"<=":lambda x,y:x<=y,">":lambda x,y:x>y,"<":lambda x,y:x<y}
+            if a["op"] not in ops: raise ProbeError("invalid comparison")
+            good=ops[a["op"]](n,int(a["n"]))
+            return WITHIN if good else EXCEEDS,"literal collection size="+str(n)
+        return EXCEEDS,"literal collection not defined"
     if kind=="pattern_count":
         paths=match_paths(tree,a); r=expression(a["regex"])
         n=sum(len(r.findall(tree.read(p))) for p in paths)
@@ -85,7 +122,7 @@ def evaluate_inner(tree,c):
     return WITHIN if ok else EXCEEDS,"count="+str(n)
 
 def evaluate(tree,c):
-    if c.get("kind") not in ("symbol_defined","schema_property_absent","pattern_count","file_count","line_total","path_exists"):
+    if c.get("kind") not in ("symbol_defined","schema_property_absent","pattern_count","file_count","line_total","path_exists","symbol_at_line","collection_size"):
         return {"predicate_status":UNSUPPORTED,"detail":"unsupported predicate","semantic_entailment":"NOT_ASSESSED","promotion_eligible":False}
     def timeout(_signum,_frame): raise ProbeError("evaluation timeout")
     if not hasattr(signal,"setitimer"): raise RuntimeError("POSIX signal budget required")

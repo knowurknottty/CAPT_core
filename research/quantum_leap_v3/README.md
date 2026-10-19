@@ -1,9 +1,30 @@
-# Quantum Leap v3: isolated prototype
+# Quantum Leap v3 — read-only experimental claim probes
 
-This research branch is pinned to e28b665; it is not installed or integrated into RuntimeService, EventStore, approvals, ClaimGuard, or the learning plane.
+Source provenance: `knowurknottty/CAPT_core` at `e28b665`. This research area is separate from CAPT's installed runtime. It does **not** mutate authority, issue approval, verify natural-language entailment, or promote claims.
 
-The predicates are manually encoded. WITHIN means only that the specified finite predicate held at the pinned Git commit. It does not establish natural-language entailment. Every result has semantic_entailment NOT_ASSESSED and promotion_eligible false. Source scopes remain bounded, and malformed queries return INCONCLUSIVE or UNSUPPORTED.
+The `beliefprobe.py` verifier evaluates eight manually encoded predicate kinds against immutable Git objects. A `WITHIN` verdict only says that the encoded predicate held at the pin. Output always has `semantic_entailment=NOT_ASSESSED` and `promotion_eligible=false`.
 
-Run: python3 -I research/quantum_leap_v3/test_beliefprobe.py ; python3 -I research/quantum_leap_v3/beliefprobe.py . research/quantum_leap_v3/spotcheck_claims.json e28b665
+## Inputs and results
 
-Caveat: regex is bounded by POSIX signal time in the main thread, and object size is limited; execution in non-main threads is unsupported. Simple AST presence and regex checks cannot prove arbitrary execution semantics. The included spotchecks are authored probes, not an independent semantic adjudication corpus.
+- `claims_v3_original.json`: all 52 maintainer-supplied v3 claims, unchanged.
+- `spotcheck_claims.json`: earlier eight-example smoke test.
+- `phase2_audit.py`: deterministic three-pin comparison, bounded first-parent history, predicate-mutation controls, D_proxy accounting.
+- `phase2_results.json`: full output with source digest and Git SHAs.
+- `phase2_report.md`: limitations, audit verdicts and risk boundaries.
+- `test_beliefprobe.py`: twelve real temporary-Git fixtures.
+
+Run regression tests:
+
+```zsh
+python3 -I research/quantum_leap_v3/test_beliefprobe.py
+```
+
+Generate an independent history audit under an unused output filename:
+
+```zsh
+python3 -I research/quantum_leap_v3/phase2_audit.py . research/quantum_leap_v3/claims_v3_original.json /tmp/quantum-leap-audit-new.json
+```
+
+The historical run can be slow. The audit refuses to overwrite its output. Use the exact source pin recorded in output; do not substitute the running runtime's assumed source identity. No automation or claim-promotion integration is authorized by this experiment.
+
+**Certainty:** `D_proxy` is an obligation-counting proxy, *not* measured semantic truth or a production Ratchet.

@@ -39,4 +39,32 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(self.check("symbol_defined",{"path":"missing.py","name":"public"})["predicate_status"],m.INCONCLUSIVE)
     def test_unknown_kind_unsupported(self):
         self.assertEqual(self.check("magic",{})["predicate_status"],m.UNSUPPORTED)
+
+    def probe(self, kind, args):
+        return m.evaluate(self.tree, {"kind":kind,"args":args})
+    def test_symbol_at_line_define_and_mention(self):
+        self.assertEqual(self.probe("symbol_at_line",{"path":"api.py","name":"outer","line":1})["predicate_status"],m.WITHIN)
+        self.assertEqual(self.probe("symbol_at_line",{"path":"api.py","name":"outer","line":2})["predicate_status"],m.EXCEEDS)
+        self.assertEqual(self.probe("symbol_at_line",{"path":"api.py","name":"secret","line":2,"form":"mention"})["predicate_status"],m.WITHIN)
+    def test_collection_size_literal(self):
+        (self.root/"collection.py").write_text("COL = frozenset({'a','b'})\n")
+        subprocess.run(["git","-C",str(self.root),"add","."],check=True,capture_output=True)
+        subprocess.run(["git","-C",str(self.root),"commit","-qm","fixture collection"],check=True,capture_output=True)
+        tree=m.Tree(str(self.root),"HEAD")
+        self.assertEqual(m.evaluate(tree,{"kind":"collection_size","args":{"path":"collection.py","name":"COL","op":"==","n":2}})["predicate_status"],m.WITHIN)
+    def test_collection_size_unknown_constructor(self):
+        (self.root/"collection.py").write_text("COL = unknown_constructor(['a','b'])\n")
+        subprocess.run(["git","-C",str(self.root),"add","."],check=True,capture_output=True)
+        subprocess.run(["git","-C",str(self.root),"commit","-qm","fixture dynamic"],check=True,capture_output=True)
+        tree=m.Tree(str(self.root),"HEAD")
+        self.assertEqual(m.evaluate(tree,{"kind":"collection_size","args":{"path":"collection.py","name":"COL","op":"==","n":2}})["predicate_status"],m.INCONCLUSIVE)
+    def test_permitted_outputs_never_authorize_claims(self):
+        claims_path=HERE/"claims_v3_original.json" if "HERE" in globals() else p.with_name("claims_v3_original.json")
+        self.assertEqual(len(json.loads(claims_path.read_text())),52)
+        for c in json.loads(claims_path.read_text()):
+            if c["kind"] is None: continue
+            result=m.evaluate(self.tree,c)
+            self.assertFalse(result["promotion_eligible"])
+            self.assertEqual(result["semantic_entailment"],"NOT_ASSESSED")
+
 if __name__=="__main__":unittest.main(verbosity=2)
