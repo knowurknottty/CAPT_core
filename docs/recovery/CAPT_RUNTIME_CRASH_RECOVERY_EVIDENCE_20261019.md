@@ -26,9 +26,16 @@ Read-only authenticated RuntimeService census:
 
 ## Evidence and limitations
 
-Subprocess crash tests cover process death after moving the old runtime, after moving the candidate, and during postcheck, plus denied recovery when authentication is missing. These use synthetic isolated filesystem fixtures; they **do not** certify a live daemon cutover.
+Evidence is layered; no isolated fixture confers production release authority:
 
-**Not completed:** actual authenticated process-stop/upgrade/start/rollback integration in a fresh isolated CAPT service; physical crash injection into that service; independent production post-restart witness; adjudication of 181 historical unresolved reservations.
+1. **11 local safety tests passed:** simulated process death after moving the old runtime, moving the candidate, and during postcheck; missing-auth denial; authenticated readiness guard; and legacy rollback compatibility.
+2. **Two slow real-daemon integration tests passed** in independent /tmp state roots, using *copies* of the old/new 58 MB venvs and a synthetic test-only `CAPT_STATE_KEY_B64`: (a) authenticated old RuntimeService start, checkpoint, shutdown, directory cutover, new RuntimeService start, candidate module digest and EventStore prefix readback; (b) hard `os._exit(79)` of the switch controller after the candidate move, recovery of the previous runtime, authenticated old-runtime restart and pinned EventStore prefix verification.
+3. **Observed legitimate startup continuation:** the new service may append a recovery event; continuity must verify the old checkpoint chain digest at its pinned global sequence and the new authenticated service's chain integrity, not require a frozen head sequence.
+4. **No production cutover claim:** these tests do not verify the launchd service/real operator's postcheck callbacks, actual production rollback after a failed upgrade, or adjudicate unresolved external effects.
+
+An initial isolated test without an explicit synthetic encryption key attempted a system Keychain access and timed out; the harness was corrected to supply its own test-only `CAPT_STATE_KEY_B64` to every child service. No claim is made about whether that timed-out Keychain command had any lasting effect.
+
+**Not completed:** live production cutover; independent production post-restart witness; evidence-backed adjudication of 181 historical unresolved reservations and any additional platform-specific release controller integration.
 
 No code in this branch automatically consumes approvals, retries provider calls, edits historical EventStore outcomes, overrides release gates, or activates the staged candidate. Production activation remains blocked until the evidence and independent release tests are complete.
 
