@@ -71,7 +71,7 @@ def test_pending_request_recovery_is_not_an_extra_slot(tmp_path):
 
 
 @pytest.mark.parametrize("receipt", [
-    {"status": "idempotent"}, {"status": "duplicate"}, {}, "unexpected",
+    {"status": "idempotent"}, {"status": "duplicate"}, {}, "unexpected", None,
 ])
 def test_replayed_request_boundary_never_opens_http(tmp_path, monkeypatch, receipt):
     """Even a command-idempotent EventStore replay is not a second HTTP permit."""
