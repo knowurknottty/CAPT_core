@@ -620,17 +620,19 @@ class CaptSoloPlugin:
         finally:
             eng.close()
 
-    def capt_publish_skill(self, skill_id: str, reviewer: str = "hermes",
-                           ctp_tx_id: Optional[str] = None) -> Dict[str, Any]:
-        """Approve + publish a skill through the governed pipeline."""
+    def capt_request_skill_review(self, skill_id: str) -> Dict[str, Any]:
+        """Submit a validated skill for human review. Never approves or publishes.
+
+        CAPT-UPG-026: approval and publication are human acts. They are
+        available to the operator (``capt foundry approve`` / ``publish``) and
+        deliberately absent from this model-facing tool surface.
+        """
         try:
             eng = MemoryEngine()
             pe = ProofEngine(eng._conn)
             sf = SkillFoundry(eng._conn, pe, ProcedureStore(eng))
             sf.submit_for_review(skill_id)
-            sf.approve(skill_id, reviewer=reviewer)
-            sf.publish(skill_id, ctp_tx_id=ctp_tx_id)
-            return {"ok": True, "lifecycle": "published"}
+            return {"ok": True, "lifecycle": "reviewing"}
         except Exception as e:
             return {"ok": False, "error": str(e)}
         finally:
@@ -798,7 +800,7 @@ TOOLS = {
     # v0.4 foundry tools
     "capt_generate_skill": CaptSoloPlugin.capt_generate_skill,
     "capt_validate_skill": CaptSoloPlugin.capt_validate_skill,
-    "capt_publish_skill": CaptSoloPlugin.capt_publish_skill,
+    "capt_request_skill_review": CaptSoloPlugin.capt_request_skill_review,
     "capt_query_capability": CaptSoloPlugin.capt_query_capability,
     "capt_verify_claim": CaptSoloPlugin.capt_verify_claim,
     "capt_build_bubble": CaptSoloPlugin.capt_build_bubble,

@@ -17,9 +17,7 @@ Properties proved:
 """
 from __future__ import annotations
 
-import io
 import json
-import urllib.request
 from pathlib import Path
 
 import pytest
@@ -127,7 +125,7 @@ def test_chain_durability_before_dispatch(tmp_path: Path, monkeypatch) -> None:
             witnessed["calls"] = witnessed.get("calls", 0) + 1
             return _FakeResponse({"choices": [{"message": {"content": "ok"}}]})
 
-        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+        monkeypatch.setattr("capt_runtime.http_client.open_url", fake_urlopen)
         data = driver._post_json(
             run_id, "http://127.0.0.1:1/v1/chat", {"model": "m"}, {})
         assert data["choices"][0]["message"]["content"] == "ok"
@@ -210,7 +208,7 @@ def test_chain_recorder_failure_aborts_dispatch(tmp_path: Path, monkeypatch) -> 
             calls["n"] += 1
             return _FakeResponse({})
 
-        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+        monkeypatch.setattr("capt_runtime.http_client.open_url", fake_urlopen)
         with pytest.raises(DispatchBoundaryError, match="not durably recorded"):
             driver._post_json(run_id, "http://127.0.0.1:1/v1/chat", {}, {})
         assert calls["n"] == 0, "external call must not happen when recording fails"

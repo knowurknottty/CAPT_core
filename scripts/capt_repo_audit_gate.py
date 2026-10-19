@@ -68,6 +68,12 @@ def census(root: Path, excluded: set[str] | None = None) -> dict:
             p = base / name
             rel = p.relative_to(root).as_posix()
             try:
+                # Linked Git worktrees store repository-control metadata in a
+                # regular root-level .git pointer file (rather than a .git
+                # directory). Do not hash that checkout-specific pointer as
+                # project content; preserve detection of unresolved symlinks.
+                if base == root and name == ".git" and p.is_file() and not p.is_symlink():
+                    continue
                 if p.is_symlink():
                     links.append(rel)
                 elif p.is_file():
@@ -101,11 +107,22 @@ def verify(c: dict, inspection: dict, minimum: float = 0.70) -> dict:
     actual = {x["path"]: x for x in current["files"]}
     if not c.get("head") or c["head"] != current["head"]:
         problems.append("unpinned or changed Git HEAD")
+    if len(expected) != len(c["files"]):
+        problems.append("duplicate census paths")
     if set(expected) != set(actual):
         problems.append("tree membership drift")
+    if c.get("root") != current["root"]:
+        problems.append("census root drift")
+    if sorted(c.get("source_directories", [])) != current["source_directories"]:
+        problems.append("source directory classification drift")
+    if c.get("directories") != current["directories"]:
+        problems.append("directory census drift")
     for path in sorted(set(expected) & set(actual)):
-        if expected[path]["sha256"] != actual[path]["sha256"]:
+        if expected[path].get("sha256") != actual[path]["sha256"]:
             problems.append(f"changed bytes: {path}")
+        for field in ("bytes", "source", "risk"):
+            if expected[path].get(field) != actual[path][field]:
+                problems.append(f"census {field} classification drift: {path}")
     if current["errors"] or c.get("errors"):
         problems.append("inaccessible or unreadable files")
     if current["symlinks"] != c.get("symlinks") or current["symlinks"]:
@@ -133,13 +150,38 @@ def verify(c: dict, inspection: dict, minimum: float = 0.70) -> dict:
             problems.append(f"line evidence absent: {path}")
         elif not row.get("node_evidence_ref"):
             problems.append(f"journaled read receipt absent: {path}")
-    source = {x["path"] for x in c["files"] if x["source"]}
+        else:
+            line_ref = str(row.get("line_evidence", ""))
+            references = RECEIPT_LINE.findall(line_ref)
+            if len(references) != 1:
+                problems.append(f"ambiguous source-line span: {path}")
+                continue
+            checksum = row.get("line_sha256")
+            if not isinstance(checksum, str) or not re.fullmatch(r"[0-9a-f]{64}", checksum):
+                problems.append(f"source-line checksum absent or malformed: {path}")
+                continue
+            token = references[0][1:]
+            ends = token.split("-", 1)
+            first = int(ends[0])
+            last = int(ends[1].removeprefix("L")) if len(ends) == 2 else first
+            lines = (root / path).read_bytes().splitlines(keepends=True)
+            # L0 is the only valid reference for an empty source file.
+            if not ((first == last == 0 and not lines) or
+                    (1 <= first <= last <= len(lines))):
+                problems.append(f"source-line span outside file: {path}")
+                continue
+            excerpt = b"" if first == 0 else b"".join(lines[first - 1:last])
+            if hashlib.sha256(excerpt).hexdigest() != checksum:
+                problems.append(f"source-line checksum mismatch: {path}")
+    # Coverage must be computed from a freshly generated local census,
+    # not from the adversarial/submitted source/risk classification.
+    source = {x["path"] for x in current["files"] if x["source"]}
     reviewed = observed & source
     present_dirs = {str(Path(path).parent) for path in reviewed}
-    absent_dirs = sorted(set(c["source_directories"]) - present_dirs)
+    absent_dirs = sorted(set(current["source_directories"]) - present_dirs)
     if absent_dirs:
         problems.append(f"{len(absent_dirs)} uninspected source directories")
-    risk = {x["path"] for x in c["files"] if x["risk"]}
+    risk = {x["path"] for x in current["files"] if x["risk"]}
     undeclared = sorted(risk - set(critical))
     missing_critical = sorted(set(critical) - observed)
     if undeclared:
@@ -148,15 +190,17 @@ def verify(c: dict, inspection: dict, minimum: float = 0.70) -> dict:
         problems.append(f"{len(missing_critical)} uninspected critical paths")
     if not critical and source:
         problems.append("critical path declaration missing")
-    fraction = len(reviewed) / len(source) if source else 1.0
+    if not source:
+        problems.append("no source files found; cannot certify deep review")
+    fraction = len(reviewed) / len(source) if source else 0.0
     if fraction < minimum:
         problems.append(f"source-file breadth {fraction:.1%} < diagnostic floor {minimum:.1%}")
     if fraction < 1.0:
         problems.append("incomplete first-party source-file receipts; deep review requires 100%")
     return dict(status="DEEP_COVERAGE_GATE_PASS" if not problems else "PARTIAL_OR_UNVERIFIED",
                 git_head=c.get("head"), source_files=len(source),
-                inspected_source_files=len(reviewed), source_directories=len(c["source_directories"]),
-                inspected_source_directories=len(present_dirs & set(c["source_directories"])),
+                inspected_source_files=len(reviewed), source_directories=len(current["source_directories"]),
+                inspected_source_directories=len(present_dirs & set(current["source_directories"])),
                 uninspected_directories=absent_dirs, uninspected_critical=missing_critical,
                 undeclared_risk=undeclared, problems=problems,
                 caveat="Hash/path coverage and Node references do not establish comprehension or valid conclusions.")

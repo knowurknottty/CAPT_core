@@ -230,7 +230,7 @@ def read_preferences() -> Dict[str, Any]:
     # Mirror CAPT's PromptPreferences._validate()
     if prefs.get("responseMode") not in RESPONSE_MODES:
         prefs["responseMode"] = DEFAULT_MODE
-    if prefs.get("contextBudget") not in CONTEXT_BUDGETS:
+    if type(prefs.get("contextBudget")) is not int or prefs["contextBudget"] <= 0:
         prefs["contextBudget"] = 32_000
     prefs["humanVerificationRequired"] = bool(prefs.get("humanVerificationRequired", True))
     return prefs
@@ -242,9 +242,8 @@ def write_preferences(*, response_mode: str, context_budget: int,
     if response_mode not in RESPONSE_MODES:
         return False, "RESPONSE_MODE_INVALID: %s (valid: %s)" % (
             response_mode, ", ".join(RESPONSE_MODES))
-    if context_budget not in CONTEXT_BUDGETS:
-        return False, "REQUESTED_CONTEXT_BUDGET_INVALID: %s (valid: %s)" % (
-            context_budget, ", ".join(str(b) for b in CONTEXT_BUDGETS))
+    if type(context_budget) is not int or context_budget <= 0:
+        return False, "REQUESTED_CONTEXT_BUDGET_INVALID: positive integer required"
     payload = {
         "responseMode": response_mode,
         "contextBudget": int(context_budget),
@@ -615,8 +614,8 @@ MODE_TOOL_SCHEMA = {
             },
             "context_budget": {
                 "type": "integer",
-                "enum": list(CONTEXT_BUDGETS),
-                "description": "Requested context budget in tokens (32K-256K). Optional.",
+                "minimum": 1,
+                "description": "Positive requested context capacity in tokens. Provider/model capacity constrains actual dispatch; UI presets are suggestions.",
             },
         },
         "required": [],
@@ -966,7 +965,7 @@ def _cli_setup(parser: Any) -> None:
     p_mode = sub.add_parser("mode", help="Show or set the response mode")
     p_mode.add_argument("value", nargs="?", choices=list(RESPONSE_MODES),
                         help="MAX | SPOCK | CAVE CAPT | MIN")
-    p_mode.add_argument("--budget", type=int, choices=list(CONTEXT_BUDGETS))
+    p_mode.add_argument("--budget", type=int, help="Positive requested capacity; provider capability enforced at dispatch")
     p_ck = sub.add_parser("checkpoint", help="Log a milestone to the ledger")
     p_ck.add_argument("reason", help="What changed, why, artifact paths")
     sub.add_parser("recover", help="Post-compaction digest from the ledger")

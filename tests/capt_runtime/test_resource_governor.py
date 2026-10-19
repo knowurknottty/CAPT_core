@@ -48,7 +48,7 @@ def test_provider_driver_budget_rejection_occurs_before_network_dispatch(tmp_pat
         calls.append((args, kwargs))
         raise AssertionError("network dispatch must not occur after budget rejection")
 
-    monkeypatch.setattr("urllib.request.urlopen", forbidden_urlopen)
+    monkeypatch.setattr("capt_runtime.http_client.open_url", forbidden_urlopen)
     gov = TokenCostGovernor(max_requests_per_session=0)
     driver = ProviderDriver(
         str(tmp_path), provider_id="openrouter", model="test/model",
@@ -81,7 +81,7 @@ def test_shared_governor_survives_fresh_provider_driver_instances(tmp_path, monk
         calls.append((args, kwargs))
         return Response()
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("capt_runtime.http_client.open_url", fake_urlopen)
 
     gov = TokenCostGovernor(max_requests_per_session=1)
     import asyncio

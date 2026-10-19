@@ -14,8 +14,11 @@ from typing import Any, Dict, Optional
 
 from ..approval_dispatch import require_expected_prompt_digest
 from ..provider_endpoint import endpoint_class
+from ..provider_model_preflight import ProviderModelPreflightError, verify_openrouter_model
 from ..resource_governor import BudgetCeilingExceeded, TokenCostGovernor
 from ..reasoning import normalize_reasoning_effort, openai_reasoning_fields
+from .. import http_client
+from ..provider_error_types import openrouter_embedded_error, openrouter_error_type
 
 DRIVER_ID = "provider"
 DESCRIPTOR = {
@@ -31,11 +34,15 @@ class ProviderDriverFailure(RuntimeError):
     """Typed, sanitized diagnostic provenance kept separately from raw errors."""
 
     def __init__(self, message: str, *, diagnostic_code: str = "PROVIDER_UNCLASSIFIED_FAILURE",
-                 diagnostic_phase: str = "unknown", http_status: int | None = None) -> None:
+                 diagnostic_phase: str = "unknown", http_status: int | None = None,
+                 provider_error_type: str | None = None) -> None:
         super().__init__(message)
         self.diagnostic_code = diagnostic_code
         self.diagnostic_phase = diagnostic_phase
         self.http_status = http_status
+        # The durable projector independently revalidates this against a
+        # fixed vocabulary. Neither error.message nor metadata is persisted.
+        self.provider_error_type = provider_error_type
 
 
 class DispatchBoundaryError(ProviderDriverFailure):
@@ -274,6 +281,21 @@ class ProviderDriver:
             return None
         return value
 
+    def _physical_request_limit(self) -> int | None:
+        spec = self.cohort_spec
+        if not isinstance(spec, dict):
+            return None
+        configured = spec.get("maxPhysicalProviderRequests")
+        if configured is None:
+            return 1 if self._strict_charter_policy() is not None else None
+        if isinstance(configured, bool) or not isinstance(configured, int) or not 1 <= configured <= 24:
+            raise ProviderDriverFailure(
+                "invalid approval-bound provider request ceiling",
+                diagnostic_code="PROVIDER_BUDGET_EXCEEDED",
+                diagnostic_phase="pre_dispatch",
+            )
+        return configured
+
     def _strict_charter_policy(self) -> dict[str, Any] | None:
         spec = self.cohort_spec
         if not isinstance(spec, dict):
@@ -335,13 +357,29 @@ class ProviderDriver:
         # Physical request slots are reserved BEFORE each provider HTTP call,
         # including subsequent tool rounds (not merely DriverRun admission).
         estimate = max(1, len(json.dumps(body)) // 4)
-        try:
-            self.governor.reserve_provider_request(estimate)
-        except BudgetCeilingExceeded as exc:
-            raise ProviderDriverFailure(
-                "physical provider request budget exceeded",
-                diagnostic_code="PROVIDER_BUDGET_EXCEEDED", diagnostic_phase="pre_dispatch",
-            ) from exc
+        with self._lock:
+            # Some recovery/chain-integrity callers enter _post_json using a
+            # durable DriverRun that has not been materialized in this driver's
+            # process-local cache. Initialize only transient bookkeeping; the
+            # EventStore recorder remains the authoritative request witness.
+            run = self.runs.setdefault(rid, {"state": "running"})
+            limit = self._physical_request_limit()
+            attempts = int(run.get("physicalRequestSlotsConsumed", 0))
+            if limit is not None and attempts >= limit:
+                raise ProviderDriverFailure(
+                    "approval-bound physical provider request ceiling exhausted",
+                    diagnostic_code="PROVIDER_BUDGET_EXCEEDED",
+                    diagnostic_phase="pre_dispatch",
+                )
+            try:
+                self.governor.reserve_provider_request(estimate)
+            except BudgetCeilingExceeded as exc:
+                raise ProviderDriverFailure(
+                    "physical provider request budget exceeded",
+                    diagnostic_code="PROVIDER_BUDGET_EXCEEDED",
+                    diagnostic_phase="pre_dispatch",
+                ) from exc
+            run["physicalRequestSlotsConsumed"] = attempts + 1
         # The authoritative EventStore boundary is written before external I/O
         # and enforces the per-DriverRun attempt ceiling.
         self._note_dispatch_boundary(rid, "request_started")
@@ -355,7 +393,7 @@ class ProviderDriver:
             req = urllib.request.Request(
                 url, data=json.dumps(outbound).encode(), headers=headers, method="POST"
             )
-            response = urllib.request.urlopen(
+            response = http_client.open_url(
                 req, timeout=self._remaining_request_timeout(rid)
             )
             self._note_dispatch_boundary(rid, "response_started")
@@ -388,15 +426,35 @@ class ProviderDriver:
                         close_response()
             if not isinstance(data, dict):
                 raise ProviderDriverFailure("provider returned non-object JSON")
+            if self.provider_id == "openrouter" and self.base_url == "https://openrouter.ai/api/v1":
+                is_error, error_type = openrouter_embedded_error(data)
+                if is_error:
+                    raise ProviderDriverFailure(
+                        "provider returned embedded failure after HTTP 200",
+                        diagnostic_code="PROVIDER_UPSTREAM_ERROR",
+                        diagnostic_phase="response_body",
+                        provider_error_type=error_type,
+                    )
             return data
         except urllib.error.HTTPError as exc:
             with self._lock:
                 self.runs[rid]["state"] = "failed"
             message = "provider HTTP %s" % exc.code
-            # Never propagate upstream response bodies into receipts/logs.
+            error_type = None
+            if self.provider_id == "openrouter" and self.base_url == "https://openrouter.ai/api/v1":
+                try:
+                    # Read a bounded diagnostic only; never log or retain the
+                    # message, provider_code, raw output or other metadata.
+                    raw = exc.read(8193)
+                    if len(raw) <= 8192:
+                        parsed = json.loads(raw.decode("utf-8"))
+                        error_type = openrouter_error_type(parsed)
+                except (OSError, TimeoutError, ValueError, UnicodeError, TypeError):
+                    pass
             raise ProviderDriverFailure(
                 message, diagnostic_code="PROVIDER_HTTP_ERROR",
                 diagnostic_phase="response_headers", http_status=int(exc.code),
+                provider_error_type=error_type,
             ) from exc
         except TimeoutError as exc:
             with self._lock:
@@ -423,6 +481,16 @@ class ProviderDriver:
                 "provider interaction failed",
                 diagnostic_code=code, diagnostic_phase=phase,
             ) from exc
+
+    @staticmethod
+    def _safe_finish_reason(value: Any) -> str:
+        # Provider text is untrusted. Only stable enumerated finish categories
+        # may be stored in durable artifact headers and diagnostics.
+        if isinstance(value, str) and value in {
+            "stop", "length", "tool_calls", "content_filter", "function_call"
+        }:
+            return value
+        return "unknown"
 
     @staticmethod
     def _usage_from(data: dict[str, Any]) -> tuple[int | None, int | None, float]:
@@ -479,6 +547,14 @@ class ProviderDriver:
                 text = self._final_facing_text(message)
                 if not text:
                     raise ProviderDriverFailure("provider returned no content")
+                # A one-round final reply still travels through the tool-
+                # capable handler when read-only file operations are approved.
+                # Preserve its finish reason even when zero tools were called.
+                finish_reason = self._safe_finish_reason(
+                    choices[0].get("finish_reason") if choices and isinstance(choices[0], dict) else None
+                )
+                with self._lock:
+                    self.runs[rid]["providerFinishReason"] = finish_reason
                 return (
                     text,
                     prompt_tokens_total,
@@ -529,16 +605,30 @@ class ProviderDriver:
                     raise ProviderDriverFailure("provider tool call missing id")
                 if not isinstance(name, str) or not name:
                     raise ProviderDriverFailure("provider tool call missing function name")
-                tool_result = self.tool_bridge.execute_call(
-                    name,
-                    function.get("arguments", "{}"),
-                    call_id=call_id,
-                )
+                try:
+                    tool_result = self.tool_bridge.execute_call(
+                        name,
+                        function.get("arguments", "{}"),
+                        call_id=call_id,
+                    )
+                except Exception as exc:
+                    # Do not collapse a ToolBroker/authority failure into an
+                    # unclassified provider error. Never include exception text,
+                    # tool arguments or tool response in durable diagnostics.
+                    raise ProviderDriverFailure(
+                        "governed model tool execution failed",
+                        diagnostic_code="PROVIDER_TOOL_FAILURE",
+                        diagnostic_phase="tool_execution",
+                    ) from exc
                 tool_call_count += 1
+                # OpenAI-compatible tool replies are keyed by tool_call_id.
+                # Provider-facing "name" is not part of the standard tool
+                # reply schema and can cause strict routers to reject later
+                # rounds with HTTP 400. The name remains in the internal CAPT
+                # ToolBroker receipt, not the outbound provider message.
                 messages.append({
                     "role": "tool",
                     "tool_call_id": call_id,
-                    "name": name,
                     "content": json.dumps(tool_result, sort_keys=True, separators=(",", ":")),
                 })
             if tool_call_count >= max_tool_rounds:
@@ -634,15 +724,14 @@ class ProviderDriver:
         if not isinstance(message, dict):
             raise ProviderDriverFailure("provider returned malformed final assistant message")
         text = self._final_facing_text(message)
-        finish_reason = choice.get("finish_reason")
-        if not isinstance(finish_reason, str) or not finish_reason:
-            finish_reason = None
+        finish_reason = self._safe_finish_reason(choice.get("finish_reason"))
         with self._lock:
             run = self.runs.setdefault(rid, {})
             run.setdefault("toolClosureReason", reason)
             run["finalizationReasoningMode"] = "answer_only"
             run["finalizationTextSource"] = "closure_response" if text else "none"
             run["finalizationFinishReason"] = finish_reason
+            run["providerFinishReason"] = finish_reason
         if not text:
             raise ProviderDriverFailure(
                 "provider returned no final-facing content after tool budget closure"
@@ -864,6 +953,36 @@ class ProviderDriver:
             else "Provide a bounded evidence-backed observation."
         )
         estimated_prompt_tokens = max(1, len(prompt) // 4)
+        # Do not spend a provider call on a charter whose conservative physical
+        # row budget already exceeds the configured output ceiling.
+        minimum = self._charter_minimum_output_tokens()
+        if minimum > int(self.governor.max_output_tokens_per_request):
+            with self._lock:
+                self.runs[rid]["state"] = "failed"
+            self._note_dispatch_boundary(rid, "budget_rejected")
+            raise ProviderDriverFailure(
+                "strict charter cannot fit the configured output-token ceiling",
+                diagnostic_code="PROVIDER_BUDGET_EXCEEDED",
+                diagnostic_phase="pre_dispatch",
+            )
+        # This model-availability GET is non-inference and sends no prompt.
+        # Exact official OpenRouter routing only: never forward credentials
+        # to arbitrary OpenAI-compatible or local endpoints.
+        if self.provider_id == "openrouter" and self.base_url == "https://openrouter.ai/api/v1":
+            try:
+                verify_openrouter_model(
+                    self.model, api_key=self.api_key, modality=self.output_modality
+                )
+            except ProviderModelPreflightError as exc:
+                with self._lock:
+                    self.runs[rid]["state"] = "failed"
+                # No irreversible provider inference boundary has been crossed.
+                raise ProviderDriverFailure(
+                    "model availability preflight rejected dispatch",
+                    diagnostic_code=exc.code,
+                    diagnostic_phase="pre_dispatch",
+                    http_status=exc.http_status,
+                ) from exc
         try:
             self.governor.check_pre_dispatch(
                 estimated_prompt_tokens=estimated_prompt_tokens
@@ -887,11 +1006,18 @@ class ProviderDriver:
 
         tool_call_count = 0
         context_budget_tokens = self._work_order_context_budget_tokens(wo)
-        if self.provider_id == "ollama" and self.tool_bridge is not None:
+        # Tool-capable completion requires a second physical provider request
+        # after tool output. For a one-request-approved council, send only the
+        # already-bound prompt and never advertise a tool path that cannot
+        # complete within the operator's explicit physical request ceiling.
+        tool_bridge_enabled = (
+            self.tool_bridge is not None and self._physical_request_limit() != 1
+        )
+        if self.provider_id == "ollama" and tool_bridge_enabled:
             text, prompt_tokens, completion_tokens, cost_usd, tool_call_count = self._ollama_with_tools(
                 rid, prompt, headers
             )
-        elif self.tool_bridge is not None:
+        elif tool_bridge_enabled:
             text, prompt_tokens, completion_tokens, cost_usd, tool_call_count = self._openai_with_tools(
                 rid, prompt, headers, context_budget_tokens
             )
@@ -912,15 +1038,31 @@ class ProviderDriver:
                     **self._reasoning_fields,
                 }
             data = self._post_json(rid, url, body, headers)
-            text = (
-                data.get("response")
-                if self.provider_id == "ollama"
-                else ((data.get("choices") or [{}])[0].get("message", {}).get("content"))
-            ) or ""
+            # Capture only a fixed known finish classification. The no-tool
+            # path historically discarded finish_reason, hiding provider-side
+            # answer truncation after successful HTTP 200 and artifact staging.
+            choice = ((data.get("choices") or [{}])[0] if self.provider_id != "ollama" else {})
+            choice = choice if isinstance(choice, dict) else {}
+            finish_reason = self._safe_finish_reason(choice.get("finish_reason"))
+            with self._lock:
+                self.runs[rid]["providerFinishReason"] = finish_reason
+            # OpenAI-compatible providers can return visible content as a
+            # string or a list of text parts. Never mistake a reasoning-only
+            # completion for final-facing content, and never call .encode()
+            # on a raw list after the HTTP response has completed.
+            if self.provider_id == "ollama":
+                text = data.get("response")
+                text = text if isinstance(text, str) else ""
+            else:
+                text = self._final_facing_text(choice.get("message") or {})
             if not text:
                 with self._lock:
                     self.runs[rid]["state"] = "failed"
-                raise ProviderDriverFailure("provider returned no content")
+                raise ProviderDriverFailure(
+                    "provider returned no final-facing content",
+                    diagnostic_code="PROVIDER_NO_CONTENT",
+                    diagnostic_phase="response_body",
+                )
             usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
             prompt_tokens = usage.get("prompt_tokens")
             completion_tokens = usage.get("completion_tokens")
@@ -942,13 +1084,14 @@ class ProviderDriver:
         artifact = (
             "# CAPT Provider Observation\n\n"
             "Provider: %s\nModel: %s\nEndpointClass: %s\nReasoningEffort: %s\nPromptDigest: %s\n"
-            "ResponseDigest: %s\n\n%s\n"
+            "ProviderFinishReason: %s\nResponseDigest: %s\n\n%s\n"
             % (
                 self.provider_id,
                 self.model,
                 ep_class,
                 self.reasoning_effort or "provider-default",
                 prompt_digest,
+                self.runs[rid].get("providerFinishReason") or "unknown",
                 response_digest,
                 text,
             )
@@ -1006,6 +1149,8 @@ class ProviderDriver:
                 "finalizationReasoningMode": self.runs[rid].get("finalizationReasoningMode"),
                 "finalizationTextSource": self.runs[rid].get("finalizationTextSource"),
                 "finalizationFinishReason": self.runs[rid].get("finalizationFinishReason"),
+                "providerFinishReason": self.runs[rid].get("providerFinishReason"),
+                "providerOutputLengthLimited": self.runs[rid].get("providerFinishReason") == "length",
                 "resourceUsage": resource_receipt,
             },
         }

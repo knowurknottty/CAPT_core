@@ -9,6 +9,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
+from capt_runtime import http_client
+
 
 class BillingAssuranceError(RuntimeError):
     pass
@@ -49,9 +51,10 @@ def verify_openrouter_key_limit(
         method="GET",
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError) as exc:
+        with http_client.open_url(req, timeout=timeout) as response:
+            payload = json.loads(http_client.read_bounded(response, limit=1024 * 1024).decode("utf-8"))
+    except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError,
+            http_client.ResponseTooLarge) as exc:
         raise BillingAssuranceError("OPENROUTER_POLICY_QUERY_FAILED:%s" % type(exc).__name__) from exc
     data = payload.get("data") if isinstance(payload, dict) else None
     if not isinstance(data, dict):

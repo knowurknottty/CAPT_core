@@ -433,6 +433,20 @@ class RuntimeCommandService:
                     "responseMode": str(payload.get("responseMode") or "SPOCK"),
                     "humanVerificationRequired": bool(payload.get("humanVerificationRequired", True)),
                 }
+                # When the operator has just admitted a durable Mission/Task,
+                # bind the approval to that actual TaskNode rather than
+                # manufacturing an orphan synthetic task identifier.
+                if "taskId" in payload:
+                    linked_mission = str(payload.get("missionId") or "")
+                    linked_task = str(payload.get("taskId") or "")
+                    existing_task = self.store.load_state("task-" + linked_task)
+                    if (not linked_mission or not linked_task
+                            or not existing_task
+                            or existing_task.get("missionId") != linked_mission):
+                        raise AuthorityViolation("OPERATOR_PROPOSAL_TASK_MISSION_BINDING_MISMATCH")
+                    if existing_task.get("state") in ("completed", "cancelled", "failed", "succeeded"):
+                        raise AuthorityViolation("OPERATOR_PROPOSAL_TASK_TERMINAL")
+                    approval_payload["taskId"] = linked_task
                 for key in (
                     "missionId", "managedSkillNames", "autoSelectSkills",
                     "skillLimit", "authorityProfile", "executable",

@@ -12,6 +12,20 @@ If two documents appear to disagree, use this authority order:
 
 A package version, merged capability, branch-local implementation, exact-head verification, and release-proven artifact are deliberately different states.
 
+## Reader pathways
+
+- [CAPT explained simply](EXPLAINED_SIMPLY.md) — plain-language mental model and accurate limitations.
+- [Role-based onboarding](ONBOARDING.md) — evaluator, new operator, integrator, contributor, maintainer and reviewer paths.
+- [Technical manual](TECHNICAL_MANUAL.md) — authoritative subsystems and entry points with source links.
+- [Glossary](GLOSSARY.md) — precise CAPT terminology and boundaries.
+- [Documentation maintenance](DOCS_MAINTENANCE.md) — change review, evidence, freshness and validation.
+- [Selected current-HEAD delta notes](CURRENT_HEAD_DELTA.md) — source/test-proven post-October-8 slices, with gaps exposed.
+- [MiMo peer-review correction ledger](missions/OMEGA_MIMO26_PEER_REVIEW_20261018.md) — verified suggestions, corrected inaccuracies and release boundaries.
+- [RRDS-1 partial audit at `c956c45e`](missions/OMEGA_RRDS_C956C45E_PARTIAL.md) — real reviewer receipts, separate-worktree checks, residual scope and limitations.
+- [Cheatsheet collection](CHEATSHEETS/README.md) — existing operator/task quick references.
+
+**Freshness (pinned 2026-10-18):** [Current State](CURRENT_STATE.md) preserves an October 8 snapshot. This OMEGA review used `c956c45e`, **134 commits later**. Subsequent merges, including [PR #223](https://github.com/knowurknottty/CAPT_core/pull/223) and [PR #227](https://github.com/knowurknottty/CAPT_core/pull/227), are outside the pinned source census. Selected source and tests are recorded in [current-HEAD delta notes](CURRENT_HEAD_DELTA.md). The [RRDS-1 audit ledger](missions/OMEGA_RRDS_C956C45E_PARTIAL.md) is explicitly **PARTIAL**, not a deep-review PASS. Old dated claims must not be promoted to current-head proof.
+
 ## Start here
 
 - [Start Here](../START_HERE.md) — install and first success.

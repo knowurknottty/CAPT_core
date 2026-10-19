@@ -49,6 +49,54 @@ final class CAPTRuntimeClientTests: XCTestCase {
         XCTAssertEqual(value, 1)
     }
 
+    func testPartialHeaderStallHasBoundedReceiveDeadline() throws {
+        var pair: [Int32] = [-1, -1]
+        XCTAssertEqual(Darwin.socketpair(AF_UNIX, SOCK_STREAM, 0, &pair), 0)
+        defer { Darwin.close(pair[0]); Darwin.close(pair[1]) }
+        try CAPTRuntimeClient.configureIOTimeout(fd: pair[0])
+        var byte: UInt8 = 19
+        XCTAssertEqual(Darwin.send(pair[1], &byte, 1, 0), 1)
+        let started = ProcessInfo.processInfo.systemUptime
+        XCTAssertThrowsError(try CAPTRuntimeClient.readExactFromSocket(
+            fd: pair[0], count: 4,
+            deadline: started + 0.2
+        )) { error in
+            guard case CAPTRuntimeClientError.socketFailure(let message) = error else {
+                XCTFail("Unexpected error: \(error)"); return
+            }
+            XCTAssertTrue(message.contains("deadline"))
+        }
+        XCTAssertLessThan(ProcessInfo.processInfo.systemUptime - started, 2)
+    }
+
+    func testPartialBodyStallHasBoundedReceiveDeadline() throws {
+        var pair: [Int32] = [-1, -1]
+        XCTAssertEqual(Darwin.socketpair(AF_UNIX, SOCK_STREAM, 0, &pair), 0)
+        defer { Darwin.close(pair[0]); Darwin.close(pair[1]) }
+        try CAPTRuntimeClient.configureIOTimeout(fd: pair[0])
+        var bytes: [UInt8] = [65, 66]
+        XCTAssertEqual(Darwin.send(pair[1], &bytes, 2, 0), 2)
+        XCTAssertThrowsError(try CAPTRuntimeClient.readExactFromSocket(
+            fd: pair[0], count: 9,
+            deadline: ProcessInfo.processInfo.systemUptime + 0.2
+        ))
+    }
+
+    func testSocketIOTimeoutAppliesToSendAndReceive() throws {
+        var pair: [Int32] = [-1, -1]
+        XCTAssertEqual(Darwin.socketpair(AF_UNIX, SOCK_STREAM, 0, &pair), 0)
+        defer { Darwin.close(pair[0]); Darwin.close(pair[1]) }
+        try CAPTRuntimeClient.configureIOTimeout(fd: pair[0])
+        var receive = timeval()
+        var length = socklen_t(MemoryLayout<timeval>.size)
+        XCTAssertEqual(Darwin.getsockopt(pair[0], SOL_SOCKET, SO_RCVTIMEO, &receive, &length), 0)
+        XCTAssertEqual(receive.tv_sec, 1)
+        var send = timeval()
+        length = socklen_t(MemoryLayout<timeval>.size)
+        XCTAssertEqual(Darwin.getsockopt(pair[0], SOL_SOCKET, SO_SNDTIMEO, &send, &length), 0)
+        XCTAssertEqual(send.tv_sec, 1)
+    }
+
     func testCommandEnvelopeBindsAuthenticatedIdentity() throws {
         let envelope = try CAPTRuntimeClient.makeCommandEnvelope(
             op: "shutdown", payload: [:], operatorID: "operator-1",

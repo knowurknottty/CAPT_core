@@ -1,0 +1,209 @@
+"""No inference network tests: exact OpenRouter model preflight and fail closed."""
+import asyncio
+import io
+import json
+from pathlib import Path
+import urllib.error
+
+import pytest
+
+from capt_runtime import provider_model_preflight as preflight
+from capt_runtime.drivers.provider import ProviderDriver, ProviderDriverFailure
+
+
+class _JsonResponse:
+    def __init__(self,payload):
+        self.payload=json.dumps(payload).encode()
+    def __enter__(self):return self
+    def __exit__(self,*_a):pass
+    def read(self,n=-1):return self.payload[:n]
+
+
+def test_catalog_get_is_read_only_exact_origin_no_prompt(monkeypatch):
+    seen=[]
+    def fake(req,*,timeout):
+        seen.append((req.get_full_url(),req.get_method(),dict(req.header_items()),timeout))
+        if req.get_full_url().endswith("/endpoints"):
+            return _JsonResponse({"data":{"id":"deepseek/deepseek-v4.1-flash-1017","endpoints":[{"provider_name":"Test Provider"}]}})
+        return _JsonResponse({"data":{"id":"deepseek/deepseek-v4.1-flash-1017","context_length":1048576}})
+    monkeypatch.setattr(preflight.http_client,"open_url",fake)
+    receipt=preflight.verify_openrouter_model("deepseek/deepseek-v4.1-flash-1017",api_key="fixture",modality="text")
+    assert receipt=={"model":"deepseek/deepseek-v4.1-flash-1017","modality":"text","available":True}
+    assert len(seen)==2
+    url,method,headers,timeout=seen[0]
+    assert url=="https://openrouter.ai/api/v1/model/deepseek/deepseek-v4.1-flash-1017"
+    assert seen[1][0]=="https://openrouter.ai/api/v1/models/deepseek/deepseek-v4.1-flash-1017/endpoints"
+    assert all(item[1]=="GET" and item[3]==6.0 for item in seen)
+    assert "fixture" not in url and "fixture" not in seen[1][0]
+
+
+def test_text_catalog_mismatched_id_fails_closed_before_inference(monkeypatch,tmp_path):
+    """Catalog responses cannot substitute an unapproved text-model identity."""
+    requested="deepseek/deepseek-v4.1-flash"
+    returned="other/available-model"
+    seen=[]
+    def fake(req,*,timeout):
+        seen.append((req.get_full_url(),req.get_method()))
+        return _JsonResponse({"data":{"id":returned,"context_length":200000}})
+    monkeypatch.setattr(preflight.http_client,"open_url",fake)
+    driver=ProviderDriver(str(tmp_path/"stage"),provider_id="openrouter",
+                          model=requested,base_url="https://openrouter.ai/api/v1",
+                          api_key="fixture",dispatch_prompt="never send this")
+    monkeypatch.setattr(driver,"_post_json",
+                        lambda *args,**kw:pytest.fail("unapproved inference POST"))
+    with pytest.raises(ProviderDriverFailure) as failure:
+        asyncio.run(driver.submit({"driverRunId":"dr-preflight-model-mismatch",
+                                   "missionId":"m","taskId":"t","contextSlice":{}}))
+    assert failure.value.diagnostic_code=="PROVIDER_MODEL_PREFLIGHT_INVALID"
+    assert driver.runs["dr-preflight-model-mismatch"]["state"]=="failed"
+    assert driver.runs["dr-preflight-model-mismatch"]["dispatchBoundary"]=="prepared"
+    assert seen == [(
+        "https://openrouter.ai/api/v1/model/deepseek/deepseek-v4.1-flash","GET"
+    )]
+
+
+def test_model_404_is_classified_before_inference(monkeypatch,tmp_path):
+    def fake(req,*,timeout):
+        raise urllib.error.HTTPError(req.full_url,404,"not found",{},io.BytesIO(b"upstream details"))
+    monkeypatch.setattr(preflight.http_client,"open_url",fake)
+    driver=ProviderDriver(str(tmp_path/"stage"),provider_id="openrouter",
+                          model="deepseek/deepseek-v4.1-flash-1017",
+                          base_url="https://openrouter.ai/api/v1",api_key="fixture",
+                          dispatch_prompt="Synthetic no-cost fixture")
+    monkeypatch.setattr(driver,"_post_json",lambda *args,**kw: pytest.fail("provider inference POST must not run"))
+    with pytest.raises(ProviderDriverFailure) as failure:
+        asyncio.run(driver.submit({"driverRunId":"dr-preflight-404","missionId":"m","taskId":"t","contextSlice":{}}))
+    assert failure.value.diagnostic_code=="PROVIDER_MODEL_UNAVAILABLE"
+    assert failure.value.http_status==404
+    assert driver.runs["dr-preflight-404"]["state"]=="failed"
+    assert driver.runs["dr-preflight-404"]["dispatchBoundary"]=="prepared"
+
+
+def test_metadata_402_fails_before_inference(monkeypatch,tmp_path):
+    def fake(req,*,timeout):
+        raise urllib.error.HTTPError(req.full_url,402,"insufficient",{},io.BytesIO(b"provider error"))
+    monkeypatch.setattr(preflight.http_client,"open_url",fake)
+    driver=ProviderDriver(str(tmp_path/"stage"),provider_id="openrouter",
+                          model="deepseek/deepseek-v4.1-flash",base_url="https://openrouter.ai/api/v1",
+                          api_key="fixture",dispatch_prompt="fixture")
+    monkeypatch.setattr(driver,"_post_json",lambda *args,**kw:pytest.fail("inference POST not allowed"))
+    with pytest.raises(ProviderDriverFailure) as failure:
+        asyncio.run(driver.submit({"driverRunId":"dr-preflight-402","missionId":"m","taskId":"t","contextSlice":{}}))
+    assert failure.value.diagnostic_code=="PROVIDER_ACCOUNT_UNAVAILABLE"
+    assert failure.value.http_status==402
+
+
+def test_image_adapter_catalog_must_match_output_modality(monkeypatch):
+    monkeypatch.setattr(preflight.http_client,"open_url",
+        lambda req,*,timeout:_JsonResponse({"data":[
+            {"id":"image/not-generation","architecture":{"output_modalities":["text"]}},
+            {"id":"image/proper","architecture":{"output_modalities":["image"]}},
+        ]}))
+    assert preflight.verify_openrouter_model("image/proper",api_key="fixture",modality="image")["available"]
+    with pytest.raises(preflight.ProviderModelPreflightError,match="UNAVAILABLE"):
+        preflight.verify_openrouter_model("image/not-generation",api_key="fixture",modality="image")
+
+
+@pytest.mark.parametrize("model",["","../../escape","evil/test/extra","space name/model","evil/%2f"])
+def test_bad_model_ids_do_not_emit_http(monkeypatch,model):
+    monkeypatch.setattr(preflight.http_client,"open_url",
+        lambda *a,**kw:pytest.fail("invalid model must not call HTTP"))
+    with pytest.raises(preflight.ProviderModelPreflightError,match="INVALID"):
+        preflight.verify_openrouter_model(model,api_key="fixture")
+
+
+def test_uncertain_metadata_failure_is_not_blindly_billed(monkeypatch):
+    monkeypatch.setattr(preflight.http_client,"open_url",
+        lambda *a,**kw:(_ for _ in ()).throw(TimeoutError("timeout")))
+    with pytest.raises(preflight.ProviderModelPreflightError,match="UNAVAILABLE"):
+        preflight.verify_openrouter_model("deepseek/deepseek-v4.1-flash",api_key="fixture")
+
+
+def test_preflight_never_downgrades_unrelated_local_provider(monkeypatch,tmp_path):
+    driver=ProviderDriver(str(tmp_path/"stage"),provider_id="mtplx",
+                          model="local/test",base_url="https://example.invalid/v1",dispatch_prompt="fixture")
+    monkeypatch.setattr(preflight.http_client,"open_url",
+        lambda *a,**kw:pytest.fail("local models must not contact OpenRouter metadata"))
+    monkeypatch.setattr(driver,"_post_json",lambda *args,**kw:{
+        "choices":[{"message":{"content":"LOCAL_TEST_OK"},"finish_reason":"stop"}],
+        "usage":{"prompt_tokens":2,"completion_tokens":2},
+    })
+    result=asyncio.run(driver.submit({"driverRunId":"dr-local-proof","missionId":"m","taskId":"t","contextSlice":{}}))
+    assert result["state"]=="completed"
+
+
+def test_model_preflight_rejects_metadata_for_different_model(monkeypatch):
+    monkeypatch.setattr(
+        preflight.http_client,
+        "open_url",
+        lambda req, *, timeout: _JsonResponse({"data": {"id": "different/model"}}),
+    )
+    with pytest.raises(preflight.ProviderModelPreflightError, match="PREFLIGHT_INVALID"):
+        preflight.verify_openrouter_model(
+            "deepseek/deepseek-v4.1-flash-1017", api_key="fixture"
+        )
+
+@pytest.mark.parametrize("endpoints", [[], [{}]])
+def test_catalog_present_but_no_routable_endpoints_is_not_inference_ready(monkeypatch,tmp_path,endpoints):
+    model="deepseek/deepseek-v4-flash"
+    urls=[]
+    def fake(req,*,timeout):
+        urls.append(req.full_url)
+        if req.full_url.endswith("/endpoints"):
+            return _JsonResponse({"data":{"id":model,"endpoints":endpoints}})
+        return _JsonResponse({"data":{"id":model}})
+    monkeypatch.setattr(preflight.http_client,"open_url",fake)
+    driver=ProviderDriver(str(tmp_path/"stage"),provider_id="openrouter",
+                          model=model,base_url="https://openrouter.ai/api/v1",
+                          api_key="fixture",dispatch_prompt="private fixture prompt")
+    monkeypatch.setattr(driver,"_post_json",lambda *a,**kw:pytest.fail("MUST NOT DISPATCH"))
+    with pytest.raises(ProviderDriverFailure) as failure:
+        asyncio.run(driver.submit({"driverRunId":"dr-empty-endpoints","missionId":"m",
+                                   "taskId":"t","contextSlice":{}}))
+    assert failure.value.diagnostic_code=="PROVIDER_ENDPOINT_UNAVAILABLE"
+    assert driver.runs["dr-empty-endpoints"]["dispatchBoundary"]=="prepared"
+    assert len(urls)==2
+    assert all("private fixture prompt" not in url and "fixture" not in url for url in urls)
+
+
+def test_endpoint_metadata_404_classified_without_inference_post(monkeypatch,tmp_path):
+    model="deepseek/deepseek-v4-flash"
+    def fake(req,*,timeout):
+        if req.full_url.endswith("/endpoints"):
+            raise urllib.error.HTTPError(req.full_url,404,"not found",{},io.BytesIO(b"untrusted text"))
+        return _JsonResponse({"data":{"id":model}})
+    monkeypatch.setattr(preflight.http_client,"open_url",fake)
+    driver=ProviderDriver(str(tmp_path/"stage"),provider_id="openrouter",
+                          model=model,base_url="https://openrouter.ai/api/v1",
+                          api_key="fixture",dispatch_prompt="fixture")
+    monkeypatch.setattr(driver,"_post_json",lambda *a,**kw:pytest.fail("MUST NOT DISPATCH"))
+    with pytest.raises(ProviderDriverFailure) as failure:
+        asyncio.run(driver.submit({"driverRunId":"dr-endpoint-404","missionId":"m",
+                                   "taskId":"t","contextSlice":{}}))
+    assert failure.value.diagnostic_code=="PROVIDER_ENDPOINT_UNAVAILABLE"
+    assert failure.value.http_status==404
+
+
+@pytest.mark.parametrize("payload", [
+    {"data":{"id":"different/model","endpoints":[{"provider":"valid"}]}},
+    {"data":{"id":"deepseek/deepseek-v4-flash","endpoints":"not-a-list"}},
+    {"data":{"id":"deepseek/deepseek-v4-flash","endpoints":[{"provider":"valid"},"poison"]}},
+])
+def test_endpoint_metadata_invalid_identity_or_schema_fails_closed(monkeypatch,payload):
+    def fake(req,*,timeout):
+        if req.full_url.endswith("/endpoints"):
+            return _JsonResponse(payload)
+        return _JsonResponse({"data":{"id":"deepseek/deepseek-v4-flash"}})
+    monkeypatch.setattr(preflight.http_client,"open_url",fake)
+    with pytest.raises(preflight.ProviderModelPreflightError, match="PREFLIGHT_INVALID"):
+        preflight.verify_openrouter_model("deepseek/deepseek-v4-flash",api_key="fixture")
+
+
+def test_endpoint_metadata_timeout_does_not_post_inference(monkeypatch):
+    def fake(req,*,timeout):
+        if req.full_url.endswith("/endpoints"):
+            raise TimeoutError("refuse to infer route from failure")
+        return _JsonResponse({"data":{"id":"deepseek/deepseek-v4-flash"}})
+    monkeypatch.setattr(preflight.http_client,"open_url",fake)
+    with pytest.raises(preflight.ProviderModelPreflightError, match="PREFLIGHT_UNAVAILABLE"):
+        preflight.verify_openrouter_model("deepseek/deepseek-v4-flash",api_key="fixture")

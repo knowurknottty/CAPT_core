@@ -1,5 +1,7 @@
 # CAPT Core — Current State
 
+> **Freshness clarification (2026-10-18):** This page's substantive capability and evidence discussion was authored for the **2026-10-08** snapshot `80d3b82`. It is retained as a **dated, source-specific status record**, not a newly verified statement about present `main` or a current release. A later 2026-10-18 observation pinned local and remote `main` at `c956c45e33119cd31ce7e61c55334e803f20bf3f`, with **134 commits** since the old snapshot (superseding the earlier `0d8e46d`/128-commit note). Their feature claims require fresh source-by-source review and exact-head verification. See [OMEGA mission status](missions/OMEGA_20261018_STATUS.md), [onboarding](ONBOARDING.md) and [release evidence](RELEASE_EVIDENCE.md).
+
 This is the concise public status source for the repository. It separates package version, merged source state, exact-head engineering evidence, release-security authorization, and independent work.
 
 Snapshot date: **2026-10-08**. Reconciled source HEAD: `80d3b82` (media R2C attestation). Governed execution evidence for this snapshot was harvested on the operator Mac under CAPT Node (see §3).

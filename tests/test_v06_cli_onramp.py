@@ -15,6 +15,7 @@ so tests are isolated and deterministic.
 import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -86,10 +87,21 @@ def test_start_status_evidence_stop_lifecycle(cli_home, state_dir):
     assert p.returncode == 0, p.stderr
     assert "HEALTHY" in p.stdout
 
-    # status
+    # status: the health check MUST authenticate the first connection.
+    # A raw connect/close before RuntimeClient auth used to write a
+    # false unauthenticated_ipc_attempt on every status poll.
+    with sqlite3.connect(str(state_dir / "runtime.db")) as db:
+        before_denials = db.execute(
+            "SELECT count(*) FROM security_rejections WHERE rejection_kind='unauthenticated_ipc_attempt'"
+        ).fetchone()[0]
     s = _run("status", state_dir=state_dir)
     assert s.returncode == 0, s.stderr
     assert "HEALTHY" in s.stdout
+    with sqlite3.connect(str(state_dir / "runtime.db")) as db:
+        after_denials = db.execute(
+            "SELECT count(*) FROM security_rejections WHERE rejection_kind='unauthenticated_ipc_attempt'"
+        ).fetchone()[0]
+    assert after_denials == before_denials
 
     # evidence (seeded demo mission should be inspectable)
     ev = _run("--json", "evidence", state_dir=state_dir)
