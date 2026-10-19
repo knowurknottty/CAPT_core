@@ -4,7 +4,7 @@
 1. **Pinned inputs:** repository canonical URL/name, checked-out HEAD, worktree, status, precise task, limitations.
 2. **Complete recursive census:** all source-bearing directories, files, and their SHA-256; report excluded/vendor/generated trees and any symlinks and unreadable paths. One-level enumeration is SAMPLE only.
 3. **Cross-boundary architecture analysis:** entrypoint -> capability/authorization -> effect -> witness for every proposed change; alternate call sites and tests.
-4. **Receipts:** file path and digest plus exact line/symbol evidence; mark observed, code-read, inferred, or proposed. Failed/omitted probes remain visible.
+4. **Receipts:** file path and digest plus one exact source-line span (L1, L1-L3, or L0 for empty files) and SHA-256 of its original byte span (line_sha256). The verifier checks the byte hash against the pinned source tree and rejects absent, malformed, out-of-range or ambiguous spans. Distinguish automated-structural checks, authenticated Node read evidence, human/model code reading, inference, and proposals. A line hash or unverified node_evidence_ref string does NOT authenticate the Node journal or establish semantic comprehension. Failed/omitted probes remain visible.
 5. **Coverage:** execute scripts/capt_repo_audit_gate.py verify against the frozen census and inspection records. If the verdict isn't DEEP_COVERAGE_GATE_PASS, publish PARTIAL with a continuation frontier.
 6. **Risk decisions:** no cherry-pick based solely on a sampled review; license and provenance check required.
 Reviewer never self-declares independent verification or merges work.
