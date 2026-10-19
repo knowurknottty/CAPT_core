@@ -24,6 +24,24 @@ TERMINAL_LOCAL_DESCRIPTOR = {
     "artifactOutputs": ["stdout", "stderr"],
 }
 
+TERMINAL_INSPECT_DESCRIPTOR = {
+    "schemaVersion": "1.0.0",
+    "toolId": "terminal.inspect",
+    "displayName": "Read-only Terminal Inspection",
+    "family": "terminal",
+    "operations": ["terminal.inspect"],
+    "requiredCapabilities": ["terminal.inspect"],
+    "operationEffects": [
+        {"operation": "terminal.inspect", "effectClass": "pure_read_only"},
+    ],
+    "terminalBackends": ["local"],
+    "platforms": ["macos", "linux"],
+    "supportsTimeout": True,
+    "supportsCancellation": True,
+    "idempotencySupport": "broker_settled_replay",
+    "artifactOutputs": ["stdout", "stderr", "admissionPolicy"],
+}
+
 TERMINAL_SSH_DESCRIPTOR = {
     "schemaVersion": "1.0.0",
     "toolId": "terminal.ssh",

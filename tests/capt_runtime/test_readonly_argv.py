@@ -23,10 +23,8 @@ from capt_runtime.tools.readonly_argv import (
     ["cat", "README.md"],
     ["grep", "-rn", "TODO", "src"],
     ["rg", "-n", "retry", "capt_runtime"],
-    ["sort", "-u", "a.txt"],
     ["uniq", "-c", "a.txt"],
     ["find", ".", "-name", "*.py", "-newer", "x"],
-    ["jq", ".a", "data.json"],
     ["git", "status"],
     ["git", "log", "--oneline", "-5"],
     ["git", "-C", "sub", "diff", "HEAD~1"],
@@ -81,7 +79,6 @@ def test_refusal_is_an_authority_violation():
 def test_flag_value_files_are_read_targets():
     assert "/etc/shadow" in admit(["grep", "--file=/etc/shadow", "x", "."]).read_targets
     assert "/etc/shadow" in admit(["grep", "-f", "/etc/shadow", "."]).read_targets
-    assert "/etc/shadow" in admit(["jq", "--rawfile", "x", "/etc/shadow", "-n", "1"]).read_targets
     plan = admit(["grep", "pattern", "a.txt"])
     assert plan.read_targets == ("a.txt",)  # pattern is not a path
 
@@ -194,3 +191,54 @@ def test_hardened_plans_execute_nothing(hostile_repo, argv):
     result = _run(final, repo, run_env)
     assert result.returncode == 0, result.stderr.decode()
     assert not sentinel.exists(), sentinel.read_text()
+
+@pytest.mark.parametrize("argv", [
+    ["rg", "--follow", "canary", "."],
+    ["rg", "-L", "canary", "."],
+    ["rg", "--follow=true", "canary", "."],
+])
+def test_rg_follow_refuses_at_classifier_before_executable_resolution(argv):
+    # This must reject even if /usr/bin/rg exists. Adapter-only refusal
+    # can otherwise be a false positive from missing OS system executable.
+    with pytest.raises(ReadOnlyRefused):
+        admit(argv)
+
+@pytest.mark.parametrize("argv", [
+    ["sort", "--random-source=/tmp/outside", "data"],
+    ["sort", "--temporary-directory=/tmp/outside", "data"],
+    ["sort", "-T", "/tmp/outside", "data"],
+    ["du", "--exclude-from=/tmp/outside", "."],
+    ["du", "-X", "/tmp/outside", "."],
+])
+def test_indirect_file_inputs_and_temp_writes_are_not_readonly(argv):
+    with pytest.raises(ReadOnlyRefused):
+        admit(argv)
+
+@pytest.mark.parametrize("argv", [
+    ["jq", ".a", "data.json"],
+    ["jq", "include \"private\"; .", "data.json"],
+    ["jq", "--rawfile", "x", "/tmp/outside", ".", "data.json"],
+])
+def test_jq_unbounded_imports_are_not_readonly_argv(argv):
+    # Don't advertise a safe admission through the reusable classifier
+    # while the only current adapter rejects jq for implicit file imports.
+    with pytest.raises(ReadOnlyRefused):
+        admit(argv)
+
+@pytest.mark.parametrize("argv", [
+    ["sort", "big.csv"],
+    ["sort", "-u", "big.csv"],
+    ["sort", "--random-source=/tmp/outside", "big.csv"],
+])
+def test_sort_scratch_files_cannot_be_classified_as_pure_read(argv):
+    # GNU/BSD sort can spill to TMPDIR regardless of explicit --output.
+    with pytest.raises(ReadOnlyRefused):
+        admit(argv)
+
+def test_df_path_operand_requires_filesystem_scope(tmp_path):
+    # Filesystem metadata for an explicit path is still an out-of-scope read.
+    plan = admit(["df", "/etc"])
+    assert plan.read_targets == ("/etc",)
+    with pytest.raises(AuthorityViolation):
+        require_targets_in_scope(plan, tmp_path, tmp_path)
+    assert admit(["df", "-h"]).read_targets == ()

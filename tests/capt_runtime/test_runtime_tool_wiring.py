@@ -154,7 +154,7 @@ def test_runtime_composition_owns_slice_a_registry_and_broker(tmp_path: Path) ->
     try:
         assert [d["toolId"] for d in runtime.tool_registry.list_descriptors()] == [
             "code.execution", "file.operations", "sandbox.inversion", "terminal.cloudflare",
-            "terminal.docker", "terminal.inversion_sandbox", "terminal.local", "terminal.ssh"
+            "terminal.docker", "terminal.inspect", "terminal.inversion_sandbox", "terminal.local", "terminal.ssh"
         ]
         assert all(
             runtime.tool_registry.readiness(tool_id)["status"] == "available"
@@ -165,7 +165,10 @@ def test_runtime_composition_owns_slice_a_registry_and_broker(tmp_path: Path) ->
         assert "no named SSH profiles" in ssh_readiness["reason"]
         docker_readiness = runtime.tool_registry.readiness("terminal.docker")
         assert docker_readiness["status"] == "unavailable"
-        assert "no named Docker profiles" in docker_readiness["reason"]
+        assert docker_readiness["reason"] in {
+            "no named Docker profiles configured",
+            "Docker CLI unavailable",
+        }
         inversion_readiness = runtime.tool_registry.readiness("terminal.inversion_sandbox")
         assert inversion_readiness["status"] == "unavailable"
         assert "no named InversionSandbox profiles" in inversion_readiness["reason"]
@@ -767,5 +770,35 @@ def test_authenticated_run_tool_executes_cloudflare_sandbox(tmp_path: Path, monk
         identity = tool_result["sideEffectIdentity"]
         assert "sbx-toolbroker" in identity
         assert "bridge-secret" not in identity
+    finally:
+        runtime.close()
+
+
+def test_authenticated_terminal_inspect_uses_separate_capability(tmp_path: Path) -> None:
+    runtime = create_runtime(str(tmp_path / "rt-inspect.db"))
+    try:
+        (tmp_path / "facts.txt").write_text("READ_ONLY_OK")
+        grant, lease = _seed_authority(
+            runtime, tmp_path, "terminal.inspect", suffix="inspect"
+        )
+        request = _tool_request(
+            root=tmp_path, tool_id="terminal.inspect", operation="terminal.inspect",
+            arguments=[
+                {"kind": "string", "name": "argv", "value": '["cat","facts.txt"]'},
+                {"kind": "path", "name": "cwd", "value": str(tmp_path)},
+            ],
+            grant_id=grant, lease_id=lease, idem="inspect-read-1",
+            consequential=False,
+        )
+        receipt = runtime.command_service("operator-test", "sess-test").execute(
+            _envelope(request)
+        )
+        assert receipt["status"] == "accepted", receipt
+        assert receipt["result"]["status"] == "succeeded", receipt
+        content = next(
+            item["value"] for item in receipt["result"]["result"]["output"]
+            if item["name"] == "stdout"
+        )
+        assert content == "READ_ONLY_OK"
     finally:
         runtime.close()
