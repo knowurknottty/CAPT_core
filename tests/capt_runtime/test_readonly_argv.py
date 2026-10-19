@@ -234,3 +234,11 @@ def test_sort_scratch_files_cannot_be_classified_as_pure_read(argv):
     # GNU/BSD sort can spill to TMPDIR regardless of explicit --output.
     with pytest.raises(ReadOnlyRefused):
         admit(argv)
+
+def test_df_path_operand_requires_filesystem_scope(tmp_path):
+    # Filesystem metadata for an explicit path is still an out-of-scope read.
+    plan = admit(["df", "/etc"])
+    assert plan.read_targets == ("/etc",)
+    with pytest.raises(AuthorityViolation):
+        require_targets_in_scope(plan, tmp_path, tmp_path)
+    assert admit(["df", "-h"]).read_targets == ()

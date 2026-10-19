@@ -86,7 +86,7 @@ _PATH_VALUE_FLAGS = {
     "diff": ("--from-file", "--to-file"),
 }
 _PATTERN_FIRST = {"grep", "egrep", "fgrep", "rg", "jq"}
-_NO_PATH_OPERANDS = {"pwd", "whoami", "id", "uname", "basename", "dirname", "date", "which", "df"}
+_NO_PATH_OPERANDS = {"pwd", "whoami", "id", "uname", "basename", "dirname", "date", "which"}
 _FIND_DENY = (
     "-exec", "-execdir", "-ok", "-okdir", "-delete", "-L", "-H",
     "-fprint", "-fprint0", "-fprintf", "-fls",

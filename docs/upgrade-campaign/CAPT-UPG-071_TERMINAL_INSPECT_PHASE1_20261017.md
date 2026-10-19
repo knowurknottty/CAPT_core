@@ -94,3 +94,9 @@ inherited TMPDIR, which is typically outside the declared filesystem root.
 The reusable read-only classifier now refuses every sort command rather
 than assuming this is a pure read. Normal sort execution remains available
 through separate governed terminal.exec grants, not terminal.inspect.
+
+
+## df scope parity
+Explicit df filesystem operands undergo the same scope check as stat/du
+instead of being omitted as if they were non-path operands. Metadata reads
+outside filesystemScope are refused; no-operand df remains allowed.
