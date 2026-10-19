@@ -49,3 +49,32 @@ def test_runtime_installer_scrubs_python_import_overrides(tmp_path: Path) -> Non
     assert (runtime / "bin/capt").is_file()
     assert (runtime / "CAPT_SOURCE_HEAD").read_text().strip()
     assert (runtime / "CAPT_WHEEL_SHA256").read_text().strip()
+
+
+@pytest.mark.slow
+def test_runtime_installer_stages_without_touching_existing_active_runtime(tmp_path: Path) -> None:
+    """A real wheel build must not replace or mutate a pre-existing installation."""
+    repo = Path(__file__).resolve().parents[1]
+    script = repo / "capt_ui/surfaces/desktop_swift/script/install_local_runtime.sh"
+    state = tmp_path / "state"
+    active = state / "runtime-venv"
+    active.mkdir(parents=True)
+    marker = active / "CAPT_SOURCE_HEAD"
+    marker.write_text("preexisting-production-marker")
+    env = dict(os.environ)
+    env["CAPT_STATE_DIR"] = str(state)
+    completed = subprocess.run(
+        [str(script)],
+        cwd=repo, env=env, capture_output=True,
+        text=True, timeout=120, check=False,
+    )
+    assert completed.returncode == 7, completed.stdout + completed.stderr
+    assert "CAPT_RELEASE_QUIESCENCE_REQUIRED" in completed.stderr
+    assert marker.read_text() == "preexisting-production-marker"
+    assert active.is_dir() and not active.is_symlink()
+    release_dirs = list((state / "runtime-releases").iterdir())
+    assert len(release_dirs) == 1
+    candidate = release_dirs[0]
+    assert (candidate / "CAPT_SOURCE_HEAD").read_text().strip()
+    assert (candidate / "CAPT_WHEEL_SHA256").read_text().strip()
+    assert (candidate / "bin/capt").is_file()

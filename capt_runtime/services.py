@@ -2262,12 +2262,25 @@ class RuntimeService(object):
                 mission_id=mission_id,
                 task_id=task_id,
             )
+            provider_call_binding = {}
+            if driver_id == "provider":
+                from .cohort_contract import normalize_cohort_spec
+                raw_spec = binding.get("cohortSpec")
+                if raw_spec is not None and not isinstance(raw_spec, dict):
+                    raise AuthorityViolation("MODEL_APPROVED_COHORT_SPEC_INVALID")
+                approved_spec = normalize_cohort_spec(raw_spec)
+                ceiling = (approved_spec or {}).get("maxPhysicalProviderRequests", 24)
+                if type(ceiling) is not int or not 1 <= ceiling <= 24:
+                    raise AuthorityViolation("MODEL_APPROVED_PROVIDER_CEILING_INVALID")
+                provider_call_binding = {"providerHttpRequestLimit": ceiling,
+                                         "providerRequestApprovalId": request_id}
             run = {
                 "schemaVersion": "1.0.0", "driverRunId": driver_run_id,
                 "driverId": driver_id, "missionId": mission_id, "taskId": task_id,
                 "workOrderVersion": 1, "externalRunId": None, "state": "created",
                 "reconciliationStatus": "not_required", "createdAt": consumed_at,
                 "dispatchBoundary": "not_dispatched",
+                **provider_call_binding,
             }
             require("DriverRun", run)
             run_stream = DriverRunAggregate.stream_id(driver_run_id)

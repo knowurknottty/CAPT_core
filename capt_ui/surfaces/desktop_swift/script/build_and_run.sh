@@ -45,6 +45,8 @@ if [[ ! -x "$RUNTIME_CLI" || "$INSTALLED_HEAD" != "$SOURCE_HEAD" ]]; then
     echo "CAPT private runtime is missing; installing $SOURCE_HEAD"
   fi
   CAPT_STATE_DIR="$STATE_DIR" "$ROOT/script/install_local_runtime.sh"
+  echo "Runtime staged only. Governed quiescence/checkpoint and reversible activation are required." >&2
+  exit 4
 fi
 [[ -x "$RUNTIME_PYTHON" ]] || { echo "CAPT runtime Python is unavailable" >&2; exit 4; }
 
