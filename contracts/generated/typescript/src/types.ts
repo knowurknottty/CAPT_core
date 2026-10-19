@@ -4,7 +4,7 @@
 // regenerate:     python3 contracts/tools/generate.py
 // drift check:    python3 contracts/tools/check_drift.py
 // schema version: 1.0.0
-// source digest:  sha256:fd0d108e26a1e8d79952c8714ccc938c060b21e608249607307fee109f165f93
+// source digest:  sha256:15c464b84b09a2a7ff83cbeda28df5d970d2af112a85dd3644587a59306f5885
 //
 // The JSON Schema source is normative (ADR-0101). Edits made here are
 // erased on the next generation and will fail the CI drift check.
@@ -1665,6 +1665,19 @@ export interface CouncilAnalysisRecordedPayload {
   readonly eventType: "CouncilAnalysisRecorded";
 }
 
+/** DecisionOfferingIssuedPayload */
+export interface DecisionOfferingIssuedPayload {
+  readonly eventType: "DecisionOfferingIssued";
+  readonly receipt: DecisionOfferingReceipt;
+}
+
+/** DecisionOfferingRevokedPayload */
+export interface DecisionOfferingRevokedPayload {
+  readonly eventType: "DecisionOfferingRevoked";
+  readonly offeringId: Identifier;
+  readonly revokedAt: Timestamp;
+}
+
 /** DelegateAssignedPayload */
 export interface DelegateAssignedPayload {
   readonly assignment: DelegateAssignment;
@@ -1785,10 +1798,12 @@ export type EventPayload =
   | CloudflareResourceAdoptionApprovalConsumedPayload
   | CloudflareResourceBindingCreatedPayload
   | SandboxLeaseReservedPayload
-  | SandboxLeaseTransitionedPayload;
+  | SandboxLeaseTransitionedPayload
+  | DecisionOfferingIssuedPayload
+  | DecisionOfferingRevokedPayload;
 
 /** Closed set of authoritative event types. A driver-supplied name is not a member and is rejected by the store (ADR-0110). */
-export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "DriverRunDispatchBoundaryRecorded" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalRevoked" | "HumanApprovalConsumed" | "HumanApprovalConsumedForCapability" | "PromptProposalCreated" | "PromptProposalRevised" | "PromptProposalCancelled" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "CouncilAdmitted" | "CouncilAnalysisRecorded" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated" | "BotRegistered" | "CognitiveCandidateProposed" | "CognitiveCandidateDecided" | "SkillCandidateCreated" | "SkillCandidateTransitioned" | "LabBoardItemCreated" | "LabBoardItemTransitioned" | "DelegateAssigned" | "DelegateAssignmentTransitioned" | "CloudflareResourceAdoptionApprovalConsumed" | "CloudflareResourceBindingCreated" | "SandboxLeaseReserved" | "SandboxLeaseTransitioned";
+export type EventType = "MissionCreated" | "PolicyEvaluated" | "MissionStateChanged" | "CheckpointCreated" | "MissionResumed" | "TaskCreated" | "TaskTransitioned" | "TaskResultSubmitted" | "CapabilityGranted" | "CapabilityLeaseActivated" | "CapabilityUseReserved" | "CapabilityUseFinalized" | "CapabilityGrantRevoked" | "CapabilityLeaseRevoked" | "DriverRunCreated" | "DriverRunStateChanged" | "DriverRunDispatchBoundaryRecorded" | "ClaimCreated" | "EvidenceRecorded" | "ClaimVerified" | "ClaimGuardDecided" | "HumanApprovalRequested" | "HumanApprovalDecided" | "HumanApprovalRevoked" | "HumanApprovalConsumed" | "HumanApprovalConsumedForCapability" | "PromptProposalCreated" | "PromptProposalRevised" | "PromptProposalCancelled" | "ArtifactPromotionPrepared" | "ArtifactPromotionAuthorized" | "ArtifactPromotionAdopted" | "ArtifactPromotionDiscarded" | "CohortCreated" | "CohortSnapshotPersisted" | "CohortSteered" | "CouncilAdmitted" | "CouncilAnalysisRecorded" | "ReplayForkCreated" | "ToolExecutionPrepared" | "ToolExecutionAdmitted" | "ToolExecutionDispatching" | "ToolExecutionEffectObserved" | "ToolExecutionSettling" | "ToolExecutionTerminated" | "BotRegistered" | "CognitiveCandidateProposed" | "CognitiveCandidateDecided" | "SkillCandidateCreated" | "SkillCandidateTransitioned" | "LabBoardItemCreated" | "LabBoardItemTransitioned" | "DelegateAssigned" | "DelegateAssignmentTransitioned" | "CloudflareResourceAdoptionApprovalConsumed" | "CloudflareResourceBindingCreated" | "SandboxLeaseReserved" | "SandboxLeaseTransitioned" | "DecisionOfferingIssued" | "DecisionOfferingRevoked";
 export const EventTypeValues = [
   "MissionCreated",
   "PolicyEvaluated",
@@ -1848,6 +1863,8 @@ export const EventTypeValues = [
   "CloudflareResourceBindingCreated",
   "SandboxLeaseReserved",
   "SandboxLeaseTransitioned",
+  "DecisionOfferingIssued",
+  "DecisionOfferingRevoked",
 ] as const;
 
 /** EvidenceRecordedPayload */
@@ -2504,6 +2521,32 @@ export interface BooleanArgument {
   readonly kind: "boolean";
   readonly name: string;
   readonly value: boolean;
+}
+
+/** Runtime-governance-issued, durable bounded *proposal* receipt. Not a capability or permission to dispatch. */
+export interface DecisionOfferingReceipt {
+  readonly descriptorDigest: Digest;
+  readonly expiresAt: Timestamp;
+  readonly grantId: string | null;
+  readonly issuedAt: Timestamp;
+  readonly issuedBy: Identifier;
+  readonly leaseId: string | null;
+  readonly ledgerBasisDigest: Digest;
+  readonly nonce: string;
+  readonly offeringId: Identifier;
+  readonly operation: string;
+  readonly operationFingerprint: Digest;
+  readonly receiptDigest: Digest;
+  readonly schemaVersion: SchemaVersion;
+  readonly toolId: Identifier;
+  readonly toolRequestDigest: Digest;
+}
+
+export interface DecisionOfferingState {
+  readonly receipt: DecisionOfferingReceipt;
+  readonly revokedAt: Timestamp | null;
+  readonly revokedBy: Identifier | null;
+  readonly status: string;
 }
 
 /** EffectIntent */

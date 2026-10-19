@@ -941,6 +941,130 @@
           ]
         }
       }
+    },
+    "DecisionOfferingReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "offeringId",
+        "issuedBy",
+        "issuedAt",
+        "expiresAt",
+        "nonce",
+        "ledgerBasisDigest",
+        "toolId",
+        "operation",
+        "operationFingerprint",
+        "descriptorDigest",
+        "grantId",
+        "leaseId",
+        "receiptDigest",
+        "toolRequestDigest"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "$ref": "common.schema.json#/$defs/SchemaVersion"
+        },
+        "offeringId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "issuedBy": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "issuedAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "expiresAt": {
+          "$ref": "common.schema.json#/$defs/Timestamp"
+        },
+        "nonce": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "ledgerBasisDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "toolId": {
+          "$ref": "common.schema.json#/$defs/Identifier"
+        },
+        "operation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "operationFingerprint": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "descriptorDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "grantId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "leaseId": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "receiptDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "toolRequestDigest": {
+          "$ref": "common.schema.json#/$defs/Digest"
+        }
+      },
+      "description": "Runtime-governance-issued, durable bounded *proposal* receipt. Not a capability or permission to dispatch."
+    },
+    "DecisionOfferingState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receipt",
+        "status",
+        "revokedAt",
+        "revokedBy"
+      ],
+      "properties": {
+        "receipt": {
+          "$ref": "tool.schema.json#/$defs/DecisionOfferingReceipt"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "revoked"
+          ]
+        },
+        "revokedAt": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "revokedBy": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
     }
   }
 }

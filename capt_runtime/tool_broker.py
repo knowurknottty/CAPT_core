@@ -82,6 +82,29 @@ class ToolBroker:
         self.registry = registry
         self._now = now
 
+    def issue_decision_offering(
+        self, request: Dict[str, Any], metadata: Dict[str, Any], *, ttl_seconds: int = 60
+    ) -> Dict[str, Any]:
+        """Persist a governance-issued *proposal* receipt; does not dispatch."""
+        from .governed_decision_offering import GovernedDecisionOfferingService
+        return GovernedDecisionOfferingService(self).issue(
+            request, metadata, ttl_seconds=ttl_seconds
+        )
+
+    def revoke_decision_offering(
+        self, offering_id: str, metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Persist governance/human revocation; never grants authority."""
+        from .governed_decision_offering import GovernedDecisionOfferingService
+        return GovernedDecisionOfferingService(self).revoke(offering_id, metadata)
+
+    def inspect_decision_offering(
+        self, receipt: Dict[str, Any], request: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Read only: cannot admit, execute, or verify task completion."""
+        from .governed_decision_offering import GovernedDecisionOfferingService
+        return GovernedDecisionOfferingService(self).inspect(receipt, request)
+
     @staticmethod
     def execution_id(idempotency_key: str) -> str:
         return _stable_id("tool-exec-", idempotency_key)
