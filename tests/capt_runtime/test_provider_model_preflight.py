@@ -35,6 +35,31 @@ def test_catalog_get_is_read_only_exact_origin_no_prompt(monkeypatch):
     assert "fixture" not in url
 
 
+def test_text_catalog_mismatched_id_fails_closed_before_inference(monkeypatch,tmp_path):
+    """Catalog responses cannot substitute an unapproved text-model identity."""
+    requested="deepseek/deepseek-v4.1-flash"
+    returned="other/available-model"
+    seen=[]
+    def fake(req,*,timeout):
+        seen.append((req.get_full_url(),req.get_method()))
+        return _JsonResponse({"data":{"id":returned,"context_length":200000}})
+    monkeypatch.setattr(preflight.http_client,"open_url",fake)
+    driver=ProviderDriver(str(tmp_path/"stage"),provider_id="openrouter",
+                          model=requested,base_url="https://openrouter.ai/api/v1",
+                          api_key="fixture",dispatch_prompt="never send this")
+    monkeypatch.setattr(driver,"_post_json",
+                        lambda *args,**kw:pytest.fail("unapproved inference POST"))
+    with pytest.raises(ProviderDriverFailure) as failure:
+        asyncio.run(driver.submit({"driverRunId":"dr-preflight-model-mismatch",
+                                   "missionId":"m","taskId":"t","contextSlice":{}}))
+    assert failure.value.diagnostic_code=="PROVIDER_MODEL_PREFLIGHT_INVALID"
+    assert driver.runs["dr-preflight-model-mismatch"]["state"]=="failed"
+    assert driver.runs["dr-preflight-model-mismatch"]["dispatchBoundary"]=="prepared"
+    assert seen == [(
+        "https://openrouter.ai/api/v1/model/deepseek/deepseek-v4.1-flash","GET"
+    )]
+
+
 def test_model_404_is_classified_before_inference(monkeypatch,tmp_path):
     def fake(req,*,timeout):
         raise urllib.error.HTTPError(req.full_url,404,"not found",{},io.BytesIO(b"upstream details"))
