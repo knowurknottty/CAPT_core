@@ -76,3 +76,13 @@ This improves static grammar safety, not complete filesystem isolation:
 remaining allowed host executables can be subject to symlink TOCTOU, implicit
 system config reads, platform-specific flags and indirect file access. No
 unattended production enablement or no-prompt filesystem authority is claimed.
+
+
+## 2026-10-19 reusable classifier consistency
+The downstream terminal.inspect adapter refused jq imports, but the
+standalone readonly_argv.admit helper still returned a safe plan for jq
+and external file/module cases. The classifier now also refuses jq as an
+unknown unbounded-read command; tests no longer claim its import grammar
+can be secured only by positional file checks. New admission tests and
+the adapter/runtime suites passed 107/107. No filesystem isolation claim
+is made.

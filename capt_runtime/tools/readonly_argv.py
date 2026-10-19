@@ -72,7 +72,6 @@ _SIMPLE: dict = {
     "du": ("--files0-from", "-L", "-H", "-D", "--dereference", "--dereference-args", "-X", "--exclude-from"),
     "grep": ("-R", "--dereference-recursive"), "egrep": ("-R", "--dereference-recursive"), "fgrep": ("-R", "--dereference-recursive"),
     "rg": ("--pre", "--pre-glob", "-z", "--search-zip", "--hostname-bin", "-L", "--follow"),
-    "jq": (),
     "find": (),  # policed below
 }
 

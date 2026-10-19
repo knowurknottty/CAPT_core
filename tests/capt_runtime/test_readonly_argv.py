@@ -26,7 +26,6 @@ from capt_runtime.tools.readonly_argv import (
     ["sort", "-u", "a.txt"],
     ["uniq", "-c", "a.txt"],
     ["find", ".", "-name", "*.py", "-newer", "x"],
-    ["jq", ".a", "data.json"],
     ["git", "status"],
     ["git", "log", "--oneline", "-5"],
     ["git", "-C", "sub", "diff", "HEAD~1"],
@@ -81,7 +80,6 @@ def test_refusal_is_an_authority_violation():
 def test_flag_value_files_are_read_targets():
     assert "/etc/shadow" in admit(["grep", "--file=/etc/shadow", "x", "."]).read_targets
     assert "/etc/shadow" in admit(["grep", "-f", "/etc/shadow", "."]).read_targets
-    assert "/etc/shadow" in admit(["jq", "--rawfile", "x", "/etc/shadow", "-n", "1"]).read_targets
     plan = admit(["grep", "pattern", "a.txt"])
     assert plan.read_targets == ("a.txt",)  # pattern is not a path
 
@@ -214,5 +212,16 @@ def test_rg_follow_refuses_at_classifier_before_executable_resolution(argv):
     ["du", "-X", "/tmp/outside", "."],
 ])
 def test_indirect_file_inputs_and_temp_writes_are_not_readonly(argv):
+    with pytest.raises(ReadOnlyRefused):
+        admit(argv)
+
+@pytest.mark.parametrize("argv", [
+    ["jq", ".a", "data.json"],
+    ["jq", "include \"private\"; .", "data.json"],
+    ["jq", "--rawfile", "x", "/tmp/outside", ".", "data.json"],
+])
+def test_jq_unbounded_imports_are_not_readonly_argv(argv):
+    # Don't advertise a safe admission through the reusable classifier
+    # while the only current adapter rejects jq for implicit file imports.
     with pytest.raises(ReadOnlyRefused):
         admit(argv)
