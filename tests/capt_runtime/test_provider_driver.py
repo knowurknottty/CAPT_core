@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import pytest
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -459,6 +460,7 @@ def test_openai_provider_tool_loop_executes_real_capt_toolbridge(tmp_path: Path)
         second_messages = _ToolLoopServer.calls[1]["body"]["messages"]
         tool_message = next(item for item in second_messages if item["role"] == "tool")
         assert "CAPT_TOOL_LOOP_OK" in tool_message["content"]
+        assert set(tool_message) == {"role", "tool_call_id", "content"}
         assert out["diagnostics"]["toolCallCount"] == 1
     finally:
         server.shutdown()
@@ -1268,3 +1270,53 @@ def test_strict_charter_finalization_prioritizes_physical_ledger(tmp_path: Path,
     assert "ledger first" in closure.lower()
     assert seen["body"]["max_tokens"] == 48_000
     assert seen["kwargs"]["reasoning_policy"] == "answer_only"
+
+def test_provider_no_tool_multimodal_visible_parts_are_persisted(tmp_path: Path, monkeypatch):
+    driver = ProviderDriver(
+        str(tmp_path / "staging-textparts"),
+        provider_id="openrouter",
+        model="fixture-model",
+        base_url="https://example.invalid/v1",
+        dispatch_prompt="Synthetic source evidence.",
+    )
+    def fake_post(_rid, _url, _body, _headers, **_kwargs):
+        return {
+            "choices": [{"message": {"content": [
+                {"type": "text", "text": "CAPT TEXT PART"},
+                {"type": "text", "text": "visible evidence"},
+            ]}, "finish_reason":"stop"}],
+            "usage": {"prompt_tokens": 12, "completion_tokens": 8},
+        }
+    monkeypatch.setattr(driver, "_post_json", fake_post)
+    out=asyncio.run(driver.submit({
+        "driverRunId":"dr-textparts","missionId":"m-textparts",
+        "taskId":"t-textparts","contextSlice":{},
+        "submittedAt":"2026-10-18T12:00:00Z",
+    }))
+    assert out["state"] == "completed"
+    assert "CAPT TEXT PART" in out["observations"][0]["summary"]
+    assert "visible evidence" in Path(out["artifactCandidate"]["artifactPath"]).read_text()
+
+
+def test_provider_no_tool_hidden_reasoning_does_not_persist_as_answer(tmp_path: Path, monkeypatch):
+    from capt_runtime.drivers.provider import ProviderDriverFailure
+    driver = ProviderDriver(
+        str(tmp_path / "staging-reasoningonly"),
+        provider_id="openrouter",
+        model="fixture-model",
+        base_url="https://example.invalid/v1",
+        dispatch_prompt="Synthetic test.",
+    )
+    monkeypatch.setattr(driver, "_post_json", lambda *args,**kwargs:{
+        "choices": [{"message": {"content":None,"reasoning":"secret"}, "finish_reason":"stop"}],
+        "usage": {"prompt_tokens":3,"completion_tokens":2},
+    })
+    with pytest.raises(ProviderDriverFailure) as caught:
+        asyncio.run(driver.submit({
+            "driverRunId":"dr-hiddenreason","missionId":"m-hiddenreason",
+            "taskId":"t-hiddenreason","contextSlice":{},
+            "submittedAt":"2026-10-18T12:00:00Z",
+        }))
+    assert caught.value.diagnostic_code == "PROVIDER_NO_CONTENT"
+    assert caught.value.diagnostic_phase == "response_body"
+    assert not list((tmp_path / "staging-reasoningonly").glob("provider-analysis-*"))
