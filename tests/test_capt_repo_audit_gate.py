@@ -49,8 +49,10 @@ def complete(c):
 def test_complete_fixture_passes(repo):
     c=m.census(repo)
     r=m.verify(c,complete(c))
-    assert r["status"]=="DEEP_COVERAGE_GATE_PASS"
+    assert r["structural_status"]=="PASS"
     assert r["inspected_source_directories"]==3
+    assert r["status"]=="PARTIAL_OR_UNVERIFIED"
+    assert any("Node read verification unavailable" in p for p in r["problems"])
 
 def test_one_level_is_not_deep(repo):
     c=m.census(repo)
@@ -231,7 +233,7 @@ def test_empty_source_requires_zero_line_hash(repo):
     i=complete(c)
     r=next(x for x in i["inspected"] if x["path"]=="src/deep/empty.py")
     assert r["line_evidence"].startswith("L0:")
-    assert m.verify(c,i)["status"]=="DEEP_COVERAGE_GATE_PASS"
+    assert m.verify(c,i)["structural_status"]=="PASS"
     r["line_evidence"]="L1: fake"
     assert m.verify(c,i)["status"]=="PARTIAL_OR_UNVERIFIED"
 
@@ -247,6 +249,28 @@ def test_multiline_source_span_matches_exact_bytes(repo):
     r=next(x for x in i["inspected"] if x["path"]=="src/main.py")
     r["line_evidence"]="L1-L2: reviewed exact source"
     r["line_sha256"]=hashlib.sha256(b"first\r\nsecond\n").hexdigest()
-    assert m.verify(c,i)["status"]=="DEEP_COVERAGE_GATE_PASS"
+    assert m.verify(c,i)["structural_status"]=="PASS"
     r["line_sha256"]=hashlib.sha256(b"first\nsecond\n").hexdigest()
     assert m.verify(c,i)["status"]=="PARTIAL_OR_UNVERIFIED"
+
+
+def test_forged_node_reference_never_certifies_deep_review(repo):
+    c=m.census(repo)
+    i=complete(c)
+    for row in i["inspected"]:
+        row["node_evidence_ref"]="node-evidence://made-up-attestation"
+        row["node_authenticated"]=True
+    result=m.verify(c,i)
+    assert result["structural_status"]=="PASS"
+    assert result["status"]=="PARTIAL_OR_UNVERIFIED"
+    assert any("Node read verification unavailable" in p for p in result["problems"])
+
+
+def test_invalid_line_checksum_does_not_count_as_inspected(repo):
+    c=m.census(repo)
+    i=complete(c)
+    i["inspected"][0]["line_sha256"]="0"*64
+    result=m.verify(c,i)
+    assert result["inspected_source_files"]==2
+    assert result["structural_status"]=="FAIL"
+    assert any("checksum mismatch" in msg for msg in result["problems"])
