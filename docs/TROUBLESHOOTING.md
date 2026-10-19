@@ -20,12 +20,18 @@ Then check the exact surface you are using.
 | provider registered but generation unavailable | adapter/configuration, endpoint, model, or admission failure | merged Core includes ProviderDriver; inspect exact adapter health, model, credentials, and governed rejection before retrying |
 | provider endpoint unreachable | local service stopped/network/endpoint wrong | test provider health; verify endpoint and LOCAL/REMOTE selection; health does not prove completed inference |
 | provider secret missing | secret reference cannot resolve | set the referenced environment/keychain secret; do not put raw secret in logs/evidence |
+| `PROVIDER_MODEL_UNAVAILABLE` during OpenRouter preflight | requested model missing or rejected by exact catalog endpoint | inspect the **exact authorized** provider/model identity and metadata; do not silently switch models or dispatch billable retries |
+| `PROVIDER_ACCOUNT_UNAVAILABLE` (HTTP 401/402/403) | credential, account, or credit-state failure during metadata GET | inspect provider account state **outside CAPT**, without exposing tokens; obtain new authority before billable retries |
+| `PROVIDER_MODEL_PREFLIGHT_UNAVAILABLE` | catalog GET failed or returned indeterminate data | record the failure as unknown; do not treat provider availability as verified or blindly replay a possibly consequential prior attempt |
+| `PROVIDER_NO_CONTENT` after provider response | no final-facing text could be extracted from a provider response | inspect the sanitized diagnostic and exact DriverRun/evidence; a completed HTTP response alone does not establish an accepted answer |
 | context request larger than model/effective limit | requested budget exceeds provider/model/runtime policy | inspect requested vs effective context provenance in the merged cockpit path |
 | approval blocks run | governed action requires operator approval | approve/deny through TUI or supported runtime operation; do not bypass |
 | checkpoint/resume rejected | runtime state/idempotency/recovery conflict | inspect `capt status`, evidence, and logs before retrying |
 | indeterminate external execution | runtime cannot prove whether dispatch occurred | expect suspension/manual reconciliation; CAPT should not silently redispatch |
 | Hermes workspace uses wrong npm | system npm may violate the workspace's declared engine requirement | follow the checked-out Hermes workspace's own engine/package-manager declaration; do not rely on the currently unavailable LOCAL-002 report |
 | Windows failure | platform remains unverified | use a proven macOS/Linux path or produce separate Windows evidence |
+
+**Runtime-health behavior (current source):** local `capt status` checks now use an authenticated, token-file-validated Unix-socket handshake rather than an unauthenticated connect/close probe. See [`capt_runtime/cli_ramp.py`](../capt_runtime/cli_ramp.py). A failed health check may reflect missing/stale socket or invalid token permissions; do not work around it by weakening file permissions or creating an alternate ledger.
 
 ## Operator control and answer display
 
