@@ -37,3 +37,7 @@
 6. Keep PR #242 **draft**. No production dispatch, model inference, HumanApproval mutation, or deployed service restart was performed.
 
 **Review verdict:** The issuance commit race is addressed at the SQLite transaction boundary. Version interoperability and authenticated issuer custody are **open blockers**.
+
+## R3 compatibility mitigation
+
+The R2 mixed-reader blocker for *main-ledger format exposure* is addressed in the isolated-ledger experiment: [R3 compatibility and remaining gate record](QUANTUM_LEAP_GOVERNED_OFFERING_R3_COMPAT.md). The new events are no longer written to the main EventStore when using the R3 design. Sidecar version negotiation, issuer custody, independent target readback, and full release testing are still open.

@@ -960,7 +960,8 @@
         "grantId",
         "leaseId",
         "receiptDigest",
-        "toolRequestDigest"
+        "toolRequestDigest",
+        "offeringLedgerBasisDigest"
       ],
       "properties": {
         "schemaVersion": {
@@ -1020,6 +1021,10 @@
         },
         "toolRequestDigest": {
           "$ref": "common.schema.json#/$defs/Digest"
+        },
+        "offeringLedgerBasisDigest": {
+          "$ref": "common.schema.json#/$defs/Digest",
+          "description": "Predecessor of the physically isolated offering event ledger; distinct from main CAPT ledger."
         }
       },
       "description": "Runtime-governance-issued, durable bounded *proposal* receipt. Not a capability or permission to dispatch."

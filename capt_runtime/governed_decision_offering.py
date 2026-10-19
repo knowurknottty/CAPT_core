@@ -13,9 +13,10 @@ from typing import Any, TYPE_CHECKING
 
 from . import commands
 from .authority import require_authority
-from .contracts import digest, require
+from .contracts import SPEC, digest, require
 from .errors import AuthorityViolation, CapabilityDenied, IntegrityViolation
 from .store import AppendRequest
+from .services import RuntimeService
 
 if TYPE_CHECKING:
     from .tool_broker import ToolBroker
@@ -45,7 +46,49 @@ class GovernedDecisionOfferingService:
         self.broker = broker
         self.runtime = broker.runtime
         self.registry = broker.registry
-        self.store = broker.store
+        self.main_store = broker.store
+        self.store = broker.decision_offering_store
+        self.offering_runtime = RuntimeService(self.store) if self.store is not None else None
+    def _require_extension_manifest(self, *, initialize: bool = False) -> None:
+        """Pin the optional sidecar schema; inspection must never initialize it."""
+        source_digest = SPEC["sourceDigest"]
+        if initialize:
+            with self.store.transaction() as conn:
+                conn.execute(
+                    "CREATE TABLE IF NOT EXISTS decision_offering_contract ("
+                    " singleton INTEGER PRIMARY KEY CHECK(singleton=1),"
+                    " profile TEXT NOT NULL, source_digest TEXT NOT NULL)"
+                )
+                prior = conn.execute(
+                    "SELECT profile,source_digest FROM decision_offering_contract WHERE singleton=1"
+                ).fetchone()
+                if prior is None:
+                    conn.execute(
+                        "INSERT INTO decision_offering_contract VALUES (1,?,?)",
+                        ("capt.decision-offering-ledger.v1", source_digest),
+                    )
+                elif (
+                    prior["profile"] != "capt.decision-offering-ledger.v1"
+                    or prior["source_digest"] != source_digest
+                ):
+                    raise IntegrityViolation("DECISION_OFFERING_CONTRACT_MIGRATION_REQUIRED")
+            return
+
+        with self.store.authority_section():
+            table = self.store._conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' "
+                "AND name='decision_offering_contract'"
+            ).fetchone()
+            if table is None:
+                raise IntegrityViolation("DECISION_OFFERING_UNINITIALIZED_SIDECAR")
+            prior = self.store._conn.execute(
+                "SELECT profile,source_digest FROM decision_offering_contract WHERE singleton=1"
+            ).fetchone()
+        if prior is None or (
+            prior["profile"] != "capt.decision-offering-ledger.v1"
+            or prior["source_digest"] != source_digest
+        ):
+            raise IntegrityViolation("DECISION_OFFERING_CONTRACT_MIGRATION_REQUIRED")
 
     @staticmethod
     def stream_id(offering_id: str) -> str:
@@ -82,10 +125,11 @@ class GovernedDecisionOfferingService:
         )
         if metadata["operationFingerprint"] != expected_fp:
             raise IntegrityViolation("DECISION_OFFERING_ISSUE_COMMAND_FINGERPRINT_MISMATCH")
+        self._require_extension_manifest(initialize=True)
         oid = _offering_id(metadata["idempotencyKey"])
         stream = self.stream_id(oid)
         if self.store.find_idempotent(metadata["idempotencyKey"]) is not None:
-            result = self.runtime._commit([], metadata)
+            result = self.offering_runtime._commit([], metadata)
             state = self.store.require_state(stream)
             require("DecisionOfferingState", state)
             return {"receipt": state["receipt"], "command": result, "dispatchAllowed": False}
@@ -109,7 +153,8 @@ class GovernedDecisionOfferingService:
             "issuedAt": issued_at,
             "expiresAt": expires_at,
             "nonce": secrets.token_hex(32),
-            "ledgerBasisDigest": self.store.head_chain(),
+            "ledgerBasisDigest": self.main_store.head_chain(),
+            "offeringLedgerBasisDigest": self.store.head_chain(),
             "toolId": request["toolId"],
             "operation": request["operation"],
             "operationFingerprint": request["operationFingerprint"],
@@ -130,10 +175,15 @@ class GovernedDecisionOfferingService:
             payload={"eventType":"DecisionOfferingIssued","receipt":receipt},
             metadata=metadata,occurred_at=issued_at
         )
-        result = self.runtime._commit(
+        result = self.offering_runtime._commit(
             [AppendRequest(stream,"decision_offering",0,envelope,state)], metadata,
-            expected_chain_digest=material["ledgerBasisDigest"],
+            expected_chain_digest=material["offeringLedgerBasisDigest"],
         )
+        # No cross-database atomicity exists. If the live CAPT ledger changed
+        # between issue preparation and this check, fail closed. Any resulting
+        # sidecar event remains an audit record, not an authority grant.
+        if self.main_store.head_chain() != material["ledgerBasisDigest"]:
+            raise IntegrityViolation("MAIN_LEDGER_CHANGED_DURING_OFFERING_ISSUANCE")
         return {"receipt":receipt,"command":result,"dispatchAllowed":False}
 
     def revoke(self, offering_id: str, metadata:dict) -> dict:
@@ -141,10 +191,11 @@ class GovernedDecisionOfferingService:
             raise AuthorityViolation("DECISION_OFFERINGS_DISABLED_UNTIL_GATED")
         require("CommandMetadata",metadata)
         require_authority("revoke_decision_offering", metadata["actor"]["kind"])
+        self._require_extension_manifest()
         if metadata["operationFingerprint"]!=self.revoke_fingerprint(offering_id):
             raise IntegrityViolation("DECISION_OFFERING_REVOKE_COMMAND_FINGERPRINT_MISMATCH")
         if self.store.find_idempotent(metadata["idempotencyKey"]) is not None:
-            return self.runtime._commit([],metadata)
+            return self.offering_runtime._commit([],metadata)
         stream=self.stream_id(offering_id)
         version=self.store.aggregate_version(stream)
         state=self.store.require_state(stream)
@@ -162,7 +213,7 @@ class GovernedDecisionOfferingService:
                      "offeringId":offering_id,"revokedAt":revoked_at},
             metadata=metadata,occurred_at=revoked_at,
         )
-        return self.runtime._commit(
+        return self.offering_runtime._commit(
             [AppendRequest(stream,"decision_offering",version,envelope,nxt)],metadata
         )
 
@@ -177,6 +228,7 @@ class GovernedDecisionOfferingService:
         if not self.broker._governed_offerings_enabled:
             return outcome("DECISION_OFFERINGS_DISABLED")
         try:
+            self._require_extension_manifest()
             require("DecisionOfferingReceipt",receipt)
             require("ToolRequest",request)
             if digest({k:v for k,v in receipt.items() if k!="receiptDigest"})!=receipt["receiptDigest"]:
@@ -187,6 +239,8 @@ class GovernedDecisionOfferingService:
                 return outcome("RECEIPT_NOT_IN_AUTHORITATIVE_LEDGER")
             if state["status"]!="active":
                 return outcome("RECEIPT_REVOKED")
+            if self.main_store.head_chain() != receipt["ledgerBasisDigest"]:
+                return outcome("MAIN_LEDGER_CHANGED_SINCE_ISSUANCE")
             now=_utc(self.broker._now())
             if now>=_utc(receipt["expiresAt"]) or now<_utc(receipt["issuedAt"]):
                 return outcome("RECEIPT_EXPIRED_OR_NOT_YET_VALID")

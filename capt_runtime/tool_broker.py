@@ -8,8 +8,10 @@ reconciliation. Adapters never receive authority merely by being registered.
 from __future__ import annotations
 
 import hashlib
+import os
 from copy import deepcopy
-from typing import Any, Callable, Dict, Iterable
+from pathlib import Path
+from typing import Any, Callable, Dict, Iterable, Optional
 
 from . import commands
 from .aggregates.capability import CapabilityAggregate
@@ -22,6 +24,7 @@ from .errors import (
     IntegrityViolation,
 )
 from .services import RuntimeService
+from .store import EventStore
 from .tools.registry import ToolRegistry
 from .tools.sandbox_broker_hooks import (
     CapabilityLeaseBoundary,
@@ -77,10 +80,25 @@ class ToolBroker:
         *,
         now: Callable[[], str],
         governed_offerings_enabled: bool = False,
+        decision_offering_store: Optional[EventStore] = None,
     ) -> None:
         if type(governed_offerings_enabled) is not bool:
             raise TypeError("governed_offerings_enabled must be a bool")
+        if governed_offerings_enabled:
+            if decision_offering_store is None:
+                raise ValueError("DECISION_OFFERING_SEPARATE_LEDGER_REQUIRED")
+            if decision_offering_store is runtime.store:
+                raise ValueError("DECISION_OFFERING_MAIN_LEDGER_FORBIDDEN")
+            if decision_offering_store.path != ":memory:" and runtime.store.path != ":memory:":
+                sidecar_path = Path(decision_offering_store.path).resolve()
+                main_path = Path(runtime.store.path).resolve()
+                if sidecar_path == main_path or (
+                    sidecar_path.exists() and main_path.exists()
+                    and os.path.samefile(sidecar_path, main_path)
+                ):
+                    raise ValueError("DECISION_OFFERING_MAIN_LEDGER_FORBIDDEN")
         self._governed_offerings_enabled = governed_offerings_enabled
+        self.decision_offering_store = decision_offering_store
         self.runtime = runtime
         self.store = runtime.store
         self.registry = registry
