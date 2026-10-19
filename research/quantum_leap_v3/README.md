@@ -37,3 +37,10 @@ The historical run can be slow. The audit refuses to overwrite its output. Use t
 - `shadow_ratchet_result.json`: verified read-only 19→20 D_proxy comparison, advisory-only.
 
 The semantic entailment and production-custody gates remain closed.
+
+## Phase 3 adversarial evidence
+
+- `phase3_semantic_boundary.md`: scope, limitations and custody gates.
+- `semantic_counterexamples.py` and `semantic_counterexamples_result.json`: five synthetic Git counterexamples, not CAPT defect allegations.
+- `semantic_review_register.json`: all 52 original claims remain semantically unadjudicated.
+- `request_preflight.py` and `test_request_preflight.py`: real CAPT ToolRequest schema and fingerprint identity check, no live admission or execution.
