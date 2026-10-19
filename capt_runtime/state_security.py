@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -16,6 +17,7 @@ _KEY_ENV = "CAPT_STATE_KEY_B64"
 _KEYCHAIN_SERVICE = "capt-runtime-state"
 _KEYCHAIN_ACCOUNT = "state-v1"
 _KEY_CACHE: Optional[bytes] = None
+_KEY_INIT_LOCK = threading.Lock()
 MAX_PERSISTED_JSON_BYTES = 4 * 1024 * 1024
 MAX_MEMORY_CONTENT_BYTES = 1024 * 1024
 
@@ -67,23 +69,48 @@ def _decode_key(text: str) -> bytes:
 
 
 def _keychain_key() -> Optional[bytes]:
+    """Get the existing macOS key or create it exactly once.
+
+    Never use Keychain's -U/update operation: concurrent first starts can
+    replace an already-used encryption key and orphan ciphertext.
+    """
     if sys.platform != "darwin" or not shutil.which("security"):
         return None
-    find = subprocess.run(
-        ["security", "find-generic-password", "-s", _KEYCHAIN_SERVICE,
-         "-a", _KEYCHAIN_ACCOUNT, "-w"],
-        capture_output=True, text=True, timeout=5, check=False,
-    )
-    if find.returncode == 0 and find.stdout.strip():
-        return _decode_key(find.stdout.strip())
-    key = os.urandom(32)
-    encoded = base64.b64encode(key).decode("ascii")
+
+    def find_key() -> Optional[bytes]:
+        found = subprocess.run(
+            ["security", "find-generic-password", "-s", _KEYCHAIN_SERVICE,
+             "-a", _KEYCHAIN_ACCOUNT, "-w"],
+            capture_output=True, text=True, timeout=5, check=False,
+        )
+        if found.returncode == 0:
+            # A successful lookup with empty/invalid bytes is corruption,
+            # not authorization to create a different encryption key.
+            return _decode_key(found.stdout)
+        if found.returncode == 44:  # security CLI: item not found
+            return None
+        raise AtRestProtectionError("STATE_KEYCHAIN_LOOKUP_FAILED")
+
+    existing = find_key()
+    if existing is not None:
+        return existing
+    candidate = os.urandom(32)
     add = subprocess.run(
-        ["security", "add-generic-password", "-U", "-s", _KEYCHAIN_SERVICE,
-         "-a", _KEYCHAIN_ACCOUNT, "-w", encoded],
+        ["security", "add-generic-password", "-s", _KEYCHAIN_SERVICE,
+         "-a", _KEYCHAIN_ACCOUNT,
+         "-w", base64.b64encode(candidate).decode("ascii")],
         capture_output=True, text=True, timeout=5, check=False,
     )
-    return key if add.returncode == 0 else None
+    # Another process may have won the create race. Reread the winning
+    # persistent key in both cases, rather than keeping a local candidate.
+    winner = find_key()
+    if winner is None:
+        raise AtRestProtectionError("STATE_KEYCHAIN_CREATE_FAILED")
+    if add.returncode == 0 and winner != candidate:
+        # A concurrent updater outside the create-only contract changed
+        # the credential. Never continue writing encrypted records.
+        raise AtRestProtectionError("STATE_KEYCHAIN_CHANGED_DURING_INIT")
+    return winner
 
 
 def _file_key() -> bytes:
@@ -116,9 +143,11 @@ def state_key() -> bytes:
     env = os.environ.get(_KEY_ENV, "").strip()
     if env:
         return _decode_key(env)
-    if _KEY_CACHE is None:
-        _KEY_CACHE = _keychain_key() or _file_key()
-    return _KEY_CACHE
+    with _KEY_INIT_LOCK:
+        if _KEY_CACHE is None:
+            key = _keychain_key()
+            _KEY_CACHE = key if key is not None else _file_key()
+        return _KEY_CACHE
 
 
 class AtRestProtector:

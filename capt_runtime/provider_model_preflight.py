@@ -1,6 +1,6 @@
 """Non-inference model availability probe for OpenRouter.
 
-One read-only authenticated GET before costly inference, restricted to the exact
+Read-only authenticated metadata GETs before costly inference, restricted to the exact
 official OpenRouter origin. It cannot select a replacement model or change
 CAPT-granted tool authority. No prompt or user content is transmitted.
 """
@@ -76,5 +76,43 @@ def verify_openrouter_model(model: str, *, api_key: str, modality: str = "text")
     if record["id"] != model:
         # A nonmatching metadata response is not proof that this exact
         # approval-bound model is available; never silently substitute.
+        raise ProviderModelPreflightError("PROVIDER_MODEL_PREFLIGHT_INVALID")
+
+    # A catalog entry may exist even when it has no reachable inference
+    # endpoint. This second GET is metadata only and sends no prompts.
+    author, slug = model.split("/", 1)
+    url = (
+        "https://openrouter.ai/api/v1/models/"
+        + urllib.parse.quote(author, safe="")
+        + "/" + urllib.parse.quote(slug, safe="")
+        + "/endpoints"
+    )
+    request = urllib.request.Request(url, method="GET", headers={
+        "Accept": "application/json",
+        "Authorization": "Bearer " + api_key,
+    })
+    try:
+        with http_client.open_url(request, timeout=6.0) as response:
+            endpoints_data = json.loads(http_client.read_bounded(response, limit=2_000_000))
+    except urllib.error.HTTPError as exc:
+        status = int(exc.code)
+        if status == 404:
+            raise ProviderModelPreflightError("PROVIDER_ENDPOINT_UNAVAILABLE", http_status=404) from exc
+        if status in (401, 402, 403):
+            raise ProviderModelPreflightError("PROVIDER_ACCOUNT_UNAVAILABLE", http_status=status) from exc
+        raise ProviderModelPreflightError("PROVIDER_MODEL_PREFLIGHT_UNAVAILABLE", http_status=status) from exc
+    except (TimeoutError, OSError, ValueError, UnicodeError, http_client.ResponseTooLarge) as exc:
+        raise ProviderModelPreflightError("PROVIDER_MODEL_PREFLIGHT_UNAVAILABLE") from exc
+    if not isinstance(endpoints_data, dict) or not isinstance(endpoints_data.get("data"), dict):
+        raise ProviderModelPreflightError("PROVIDER_MODEL_PREFLIGHT_INVALID")
+    endpoint_record = endpoints_data["data"]
+    if endpoint_record.get("id") != model:
+        raise ProviderModelPreflightError("PROVIDER_MODEL_PREFLIGHT_INVALID")
+    endpoints = endpoint_record.get("endpoints")
+    if not isinstance(endpoints, list):
+        raise ProviderModelPreflightError("PROVIDER_MODEL_PREFLIGHT_INVALID")
+    if not endpoints or not any(isinstance(value, dict) and value for value in endpoints):
+        raise ProviderModelPreflightError("PROVIDER_ENDPOINT_UNAVAILABLE")
+    if any(not isinstance(value, dict) for value in endpoints):
         raise ProviderModelPreflightError("PROVIDER_MODEL_PREFLIGHT_INVALID")
     return {"model":model, "modality":"text", "available":True}
