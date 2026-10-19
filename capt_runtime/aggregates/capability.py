@@ -366,3 +366,15 @@ class CapabilityAggregate(object):
     @staticmethod
     def open_reservations(state: Dict[str, Any]) -> List[str]:
         return [r["reservationId"] for r in state["reservations"] if r["state"] == "open"]
+
+    @staticmethod
+    def unresolved_reservations(state: Dict[str, Any]) -> List[str]:
+        """Outstanding effects include indeterminate finalized reservations.
+
+        These do not free a use or establish the external outcome, and must
+        block the checkpoint/release gate until explicitly reconciled.
+        """
+        return [
+            r["reservationId"] for r in state["reservations"]
+            if r["state"] in ("open", "awaiting_reconciliation")
+        ]
