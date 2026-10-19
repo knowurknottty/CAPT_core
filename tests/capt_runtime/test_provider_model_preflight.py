@@ -103,3 +103,15 @@ def test_preflight_never_downgrades_unrelated_local_provider(monkeypatch,tmp_pat
     })
     result=asyncio.run(driver.submit({"driverRunId":"dr-local-proof","missionId":"m","taskId":"t","contextSlice":{}}))
     assert result["state"]=="completed"
+
+
+def test_model_preflight_rejects_metadata_for_different_model(monkeypatch):
+    monkeypatch.setattr(
+        preflight.http_client,
+        "open_url",
+        lambda req, *, timeout: _JsonResponse({"data": {"id": "different/model"}}),
+    )
+    with pytest.raises(preflight.ProviderModelPreflightError, match="PREFLIGHT_INVALID"):
+        preflight.verify_openrouter_model(
+            "deepseek/deepseek-v4.1-flash-1017", api_key="fixture"
+        )
