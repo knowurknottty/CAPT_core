@@ -1,0 +1,16 @@
+{
+  "D_proxy_delta": 1,
+  "baseline_D_proxy": 19,
+  "baseline_commit": "3f11800c31252b8e9d2037fc29cf3c195dcfb7f4",
+  "candidate_D_proxy": 20,
+  "candidate_commit": "e28b66504c422946a66409d0de12e71f1646aae6",
+  "new_unconfirmed": [
+    "PU7"
+  ],
+  "newly_cleared": [],
+  "runtime_release_authorized": false,
+  "scope": "advisory; D_proxy only; NOT a production gate",
+  "semantic_verification": "NOT_ASSESSED",
+  "shadow_state": "WOULD_PAUSE_FOR_REVIEW",
+  "source_results_sha256": "622bcf52bc5cebbed111640b70c15d3ab0b357f5b57e757cde78e49c97adfab2"
+}

@@ -28,3 +28,12 @@ python3 -I research/quantum_leap_v3/phase2_audit.py . research/quantum_leap_v3/c
 The historical run can be slow. The audit refuses to overwrite its output. Use the exact source pin recorded in output; do not substitute the running runtime's assumed source identity. No automation or claim-promotion integration is authorized by this experiment.
 
 **Certainty:** `D_proxy` is an obligation-counting proxy, *not* measured semantic truth or a production Ratchet.
+
+## System One donor assessment and shadow-only next steps
+
+- `systemone_cherrypick.md`: evidence-bound donor comparison at a pinned commit, with licensing, rejected mechanisms and integration gates.
+- `finite_decision.py` / `test_finite_decision.py`: research-only finite proposal compiler; never executes, completes or grants actions (22 tests).
+- `shadow_ratchet.py` / `test_shadow_ratchet.py`: experimental drift advisory over the original claims (8 tests).
+- `shadow_ratchet_result.json`: verified read-only 19→20 D_proxy comparison, advisory-only.
+
+The semantic entailment and production-custody gates remain closed.
