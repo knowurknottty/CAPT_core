@@ -253,7 +253,12 @@ class MemoryTriggerPolicy:
             # Lower authority cannot widen any bound set by higher authority.
             # It may only narrow. We validate each proposed change.
             pass
-        max_steps = model_safe_limit_steps or self.model_safe_limit_steps
+        max_steps = (
+            model_safe_limit_steps
+            if model_safe_limit_steps is not None
+            else self.model_safe_limit_steps
+        )
+        validate_policy_steps("model_safe_limit_steps", max_steps)
         proposed = {
             "retrieval_trigger_steps": retrieval_trigger_steps,
             "compression_trigger_steps": compression_trigger_steps,
@@ -269,13 +274,22 @@ class MemoryTriggerPolicy:
             "hard_stop_trigger_steps": self.hard_stop_trigger_steps,
         }
         # Enforce: lower authority may not widen a higher-authority bound.
-        if precedence_rank(new_source) < precedence_rank(self.source):
+        lower_authority = precedence_rank(new_source) < precedence_rank(self.source)
+        if lower_authority:
             for k, v in proposed.items():
                 if v is not None and v > current[k]:
                     raise ValueError(
-                        "%s (authority %s) may not widen %s=%d set by %s"
-                        % (new_source, k, k, current[k], self.source)
+                        "%s may not widen %s=%d set by %s"
+                        % (new_source, k, current[k], self.source)
                     )
+            if max_steps > self.model_safe_limit_steps:
+                raise ValueError(
+                    "%s may not widen model_safe_limit_steps=%d set by %s"
+                    % (new_source, self.model_safe_limit_steps, self.source)
+                )
+        # Preserve inherited authority across lower-priority narrowing.
+        # Otherwise sequential updates can lose the original ceiling owner.
+        effective_source = self.source if lower_authority else new_source
         return MemoryTriggerPolicy(
             policy_version=self.policy_version + 1,
             retrieval_trigger_steps=retrieval_trigger_steps
@@ -289,7 +303,7 @@ class MemoryTriggerPolicy:
             hard_stop_trigger_steps=hard_stop_trigger_steps
             if hard_stop_trigger_steps is not None else self.hard_stop_trigger_steps,
             model_safe_limit_steps=max_steps,
-            source=new_source,
+            source=effective_source,
             operator_id=operator_id or self.operator_id,
             previous_policy_digest=self.policy_digest,
             command_id=command_id,
