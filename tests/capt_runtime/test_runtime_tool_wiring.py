@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -165,7 +166,12 @@ def test_runtime_composition_owns_slice_a_registry_and_broker(tmp_path: Path) ->
         assert "no named SSH profiles" in ssh_readiness["reason"]
         docker_readiness = runtime.tool_registry.readiness("terminal.docker")
         assert docker_readiness["status"] == "unavailable"
-        assert "no named Docker profiles" in docker_readiness["reason"]
+        # Docker readiness is blocked either by a missing CLI or by no
+        # configured named profiles; assert the actual environment condition.
+        if shutil.which("docker") is None:
+            assert "Docker CLI unavailable" in docker_readiness["reason"]
+        else:
+            assert "no named Docker profiles" in docker_readiness["reason"]
         inversion_readiness = runtime.tool_registry.readiness("terminal.inversion_sandbox")
         assert inversion_readiness["status"] == "unavailable"
         assert "no named InversionSandbox profiles" in inversion_readiness["reason"]

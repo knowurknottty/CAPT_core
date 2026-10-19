@@ -73,7 +73,8 @@ def create_checkpoint(
 ) -> Dict[str, Any]:
     """Build, validate, and persist a CheckpointManifest.
 
-    recoveryState is DERIVED from open reservations, never supplied by a
+    recoveryState is DERIVED from unresolved reservations (open OR awaiting
+    reconciliation), never supplied by a
     caller: a checkpoint cannot be declared clean while consequential work is
     unresolved (ledger Finding K).
     """
@@ -94,7 +95,7 @@ def create_checkpoint(
             lease = state.get("lease")
             if lease is not None and lease["state"] == "active":
                 active_lease_ids.append(lease["leaseId"])
-            open_reservation_ids.extend(CapabilityAggregate.open_reservations(state))
+            open_reservation_ids.extend(CapabilityAggregate.unresolved_reservations(state))
 
     if open_reservation_ids:
         recovery_state: Dict[str, Any] = {
