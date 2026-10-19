@@ -68,6 +68,12 @@ def census(root: Path, excluded: set[str] | None = None) -> dict:
             p = base / name
             rel = p.relative_to(root).as_posix()
             try:
+                # Linked Git worktrees store repository-control metadata in a
+                # regular root-level .git pointer file (rather than a .git
+                # directory). Do not hash that checkout-specific pointer as
+                # project content; preserve detection of unresolved symlinks.
+                if base == root and name == ".git" and p.is_file() and not p.is_symlink():
+                    continue
                 if p.is_symlink():
                     links.append(rel)
                 elif p.is_file():
