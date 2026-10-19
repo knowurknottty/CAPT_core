@@ -76,8 +76,10 @@ def _tree_digest(path: str) -> str:
             try:
                 h.update(p.resolve().as_posix().encode("utf-8"))
                 h.update(p.read_bytes())
-            except OSError:
-                continue
+            except OSError as exc:
+                # An unreadable path makes the tree digest unknowable. Never
+                # turn missing bytes into a claim that the repository is unchanged.
+                raise VerificationFailure(f"cannot digest file {p}: {exc}") from exc
     return "sha256:" + h.hexdigest()
 
 
