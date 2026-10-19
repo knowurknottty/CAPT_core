@@ -14,6 +14,7 @@ from typing import Any, Dict, Optional
 
 from ..approval_dispatch import require_expected_prompt_digest
 from ..provider_endpoint import endpoint_class
+from ..provider_model_preflight import ProviderModelPreflightError, verify_openrouter_model
 from ..resource_governor import BudgetCeilingExceeded, TokenCostGovernor
 from ..reasoning import normalize_reasoning_effort, openai_reasoning_fields
 from .. import http_client
@@ -939,6 +940,24 @@ class ProviderDriver:
                 diagnostic_code="PROVIDER_BUDGET_EXCEEDED",
                 diagnostic_phase="pre_dispatch",
             )
+        # This model-availability GET is non-inference and sends no prompt.
+        # Exact official OpenRouter routing only: never forward credentials
+        # to arbitrary OpenAI-compatible or local endpoints.
+        if self.provider_id == "openrouter" and self.base_url == "https://openrouter.ai/api/v1":
+            try:
+                verify_openrouter_model(
+                    self.model, api_key=self.api_key, modality=self.output_modality
+                )
+            except ProviderModelPreflightError as exc:
+                with self._lock:
+                    self.runs[rid]["state"] = "failed"
+                # No irreversible provider inference boundary has been crossed.
+                raise ProviderDriverFailure(
+                    "model availability preflight rejected dispatch",
+                    diagnostic_code=exc.code,
+                    diagnostic_phase="pre_dispatch",
+                    http_status=exc.http_status,
+                ) from exc
         try:
             self.governor.check_pre_dispatch(
                 estimated_prompt_tokens=estimated_prompt_tokens
