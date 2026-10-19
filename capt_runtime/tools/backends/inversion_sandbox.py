@@ -741,7 +741,8 @@ class InversionSandboxProcessBackend:
         return actual
 
     def _verify_persistent_guardian(
-        self, identity: SandboxRuntimeIdentity, profile: InversionSandboxProfile
+        self, identity: SandboxRuntimeIdentity, profile: InversionSandboxProfile,
+        *, allow_stale_source_for_close: bool = False,
     ) -> dict[str, Any] | None:
         if profile.network_policy.mode != "allowlist":
             if any(
@@ -789,7 +790,11 @@ class InversionSandboxProcessBackend:
         if not isinstance(labels, dict) or any(labels.get(k) != v for k, v in expected_labels.items()):
             raise AuthorityViolation("InversionSandbox persistent guardian labels drifted")
         config = guardian.get("Config") or {}
-        self._verify_guardian_source_command(config, profile)
+        # Only cleanup may accept a stale Guardian command. All ownership,
+        # immutable container/image, labels, isolation and network checks
+        # below still apply. Start, exec and normal inspection remain strict.
+        if not allow_stale_source_for_close:
+            self._verify_guardian_source_command(config, profile)
         host = guardian.get("HostConfig") or {}
         if config.get("User") != f"{profile.uid}:{profile.gid}":
             raise AuthorityViolation("InversionSandbox persistent guardian user drifted")
@@ -1022,8 +1027,15 @@ class InversionSandboxProcessBackend:
         return not result.timed_out and ("no such" in text or "not found" in text)
 
     def close_persistent(self, identity: SandboxRuntimeIdentity) -> PersistentSandboxCloseResult:
-        _profile, _prepared = self._persistent_prepared_from_identity(identity)
-        self.inspect_persistent(identity)
+        profile, prepared = self._persistent_prepared_from_identity(identity)
+        # sandbox.close is already an independently approved durable effect.
+        # Validate the exact workload and Guardian identities before cleanup,
+        # but do not require a stale Guardian to pass the reuse-only source
+        # attestation. Otherwise the vulnerable container could never close.
+        self._verify_persistent_workload(identity, profile, prepared)
+        self._verify_persistent_guardian(
+            identity, profile, allow_stale_source_for_close=True
+        )
         errors: list[str] = []
         cleaned, cleanup_error = self.docker_backend._cleanup(
             identity.context_endpoint, identity.workload_container_id

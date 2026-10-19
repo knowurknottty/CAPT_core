@@ -92,3 +92,56 @@ def test_persistent_guardian_inspection_rejects_stale_source_before_reuse(monkey
     monkeypatch.setattr(backend.docker_backend, "_inspect_exact", lambda *_: record)
     with pytest.raises(AuthorityViolation, match="Guardian source"):
         backend._verify_persistent_guardian(identity, profile)
+
+
+def test_close_path_requires_exact_lease_identity_before_stale_cleanup(monkeypatch):
+    profile, backend = _case()
+    identity = SandboxRuntimeIdentity(
+        sandbox_lease_id="lease-stale", profile_id=profile.profile_id,
+        profile_digest=profile.profile_digest(),
+        context_endpoint="unix:///tmp/test.sock",
+        daemon_identity_digest="sha256:" + "1" * 64,
+        workload_container_id="b" * 64,
+        workload_image_id="sha256:" + "a" * 64,
+        security_profile_digest="sha256:" + "2" * 64,
+        network_policy_digest="sha256:" + profile.network_policy.digest(),
+        filesystem_scope_digest="sha256:" + "3" * 64,
+        persistent_entrypoint_digest=profile.persistent_entrypoint_digest(),
+        creation_attestation_digest="sha256:" + "4" * 64,
+        guardian_container_id="c" * 64,
+        guardian_image_id="sha256:" + "d" * 64,
+        internal_network_name="test-capt-internal",
+        internal_network_id="e" * 64,
+    )
+    seen = []
+    monkeypatch.setattr(backend, "_persistent_prepared_from_identity",
+                        lambda i: (profile, object()))
+    monkeypatch.setattr(backend, "_verify_persistent_workload",
+                        lambda *a: seen.append("workload") or {})
+    def verify_guardian(i, p, *, allow_stale_source_for_close=False):
+        assert i is identity
+        assert allow_stale_source_for_close is True
+        seen.append("guardian")
+        return {}
+    monkeypatch.setattr(backend, "_verify_persistent_guardian", verify_guardian)
+    monkeypatch.setattr(backend.docker_backend, "_cleanup",
+                        lambda *a: (seen.append("cleanup") or True, ""))
+    monkeypatch.setattr(backend.docker_backend, "_run_endpoint",
+                        lambda *a, **kw: type("Result", (), {
+                            "exit_code": 0, "timed_out": False, "stderr": "",
+                            "stdout": ""
+                        })())
+    monkeypatch.setattr(backend, "_container_absent", lambda *a: True)
+    monkeypatch.setattr(backend, "_network_absent", lambda *a: True)
+    receipt = backend.close_persistent(identity)
+    assert receipt.cleanup_succeeded is True
+    assert seen[:2] == ["workload", "guardian"]
+    assert "cleanup" in seen
+
+    def refuse_identity(*args):
+        raise AuthorityViolation("workload identity mismatch")
+    seen.clear()
+    monkeypatch.setattr(backend, "_verify_persistent_workload", refuse_identity)
+    with pytest.raises(AuthorityViolation, match="workload identity mismatch"):
+        backend.close_persistent(identity)
+    assert not seen  # no container cleanup after an identity failure

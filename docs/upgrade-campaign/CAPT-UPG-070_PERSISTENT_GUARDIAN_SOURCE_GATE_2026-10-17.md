@@ -49,3 +49,15 @@ The user's approval is **in principle** for preparing UPG-070 first.
 No production sandbox may be recycled or a paused mission resumed on that
 basis alone. Specific lease ID(s), current state, protected scope and
 exact HumanApproval are separate requirements.
+
+
+## Cleanup safety follow-up (2026-10-19)
+The original close_persistent path called inspect_persistent and therefore
+refused the exact stale Guardian it needed to remove. The close path now
+checks current workload identity, immutable image identity, expected labels,
+UID/capability and network topology, but permits a stale Config.Cmd only
+inside this separately authorized, existing sandbox.close effect. Start,
+exec and normal inspection continue to reject stale Guardians. Cleanup
+still verifies container and network absence; no automatic retry, recycle,
+or lease recreation is added. Real Docker and exact-approval tests remain
+release prerequisites.
