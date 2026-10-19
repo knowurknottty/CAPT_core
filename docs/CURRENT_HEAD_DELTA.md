@@ -1,6 +1,6 @@
 # CAPT Core current-HEAD delta — selected evidence, not full rebaseline
 
-**Checked:** October 18, 2026 (US Central). **Latest pinned Core:** `c956c45e33119cd31ce7e61c55334e803f20bf3f` on local and remote `main`. The preceding OMEGA model-review pass used `0d8e46d095243e80febd4e30f5ae52c9202316d9`. **Audit status: PARTIAL, not release-certified.**
+**Checked:** October 18, 2026 (US Central). **Reviewed Core snapshot:** `c956c45e33119cd31ce7e61c55334e803f20bf3f` (then-current `main`, not a continually refreshed revision). The preceding OMEGA model-review pass used `0d8e46d095243e80febd4e30f5ae52c9202316d9`. **Audit status: PARTIAL, not release-certified.**
 
 The [capability matrix](CAPABILITY_MATRIX.md) is a September 15 snapshot; [functionality](FUNCTIONALITY_MATRIX.md) and [current-state](CURRENT_STATE.md) documents preserve October 8 evidence. There are **134 intervening commits** (`80d3b82..c956c45e`); the prior 128-commit/156-path baseline described the earlier `0d8e46d` head. Commit subjects are discovery leads, not proof of full feature or release maturity.
 
@@ -31,7 +31,7 @@ From the pinned checkout, using its existing Python 3.12 environment:
 
 ## Latest source changes, PR #221 and PR #222
 
-| Change at current main | Verified exact source boundary | Consequence / remaining proof |
+| Change at reviewed `c956c45e` | Verified exact source boundary | Consequence / remaining proof |
 |---|---|---|
 | OpenRouter catalog preflight (PR #222, `a30a3808`) | [`provider_model_preflight.py`](../capt_runtime/provider_model_preflight.py) L27–L76; [`drivers/provider.py`](../capt_runtime/drivers/provider.py) L943–L960 | Bounded authenticated official-origin **GET** before authorized inference; text/image modality classification and failure codes. **No live provider smoke or billable inference run** in this documentation pass |
 | Authenticated local runtime-health probe (PR #221) | [`cli_ramp.py`](../capt_runtime/cli_ramp.py) L52–L89 | Validates local token-file permissions and IPC authentication instead of generating unauthenticated connect/close noise; actual installed-runtime effect not release-certified |

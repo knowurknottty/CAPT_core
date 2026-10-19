@@ -1,6 +1,6 @@
 # CAPT Core technical manual — architecture and authority boundaries
 
-> **Original source scope:** `knowurknottty/CAPT_core` at `0d8e46d095243e80febd4e30f5ae52c9202316d9` (2026-10-18); an additional [source/test delta review](CURRENT_HEAD_DELTA.md) covers current `c956c45e` and does not automatically upgrade every section in this manual. **Evidence status:** source cross-reference and selected tests, **not** a complete RRDS-1 deep review or live-provider/release certification. This manual consolidates entry points into existing source and canonical references; detailed contracts remain authoritative.
+> **Original source scope:** `knowurknottty/CAPT_core` at `0d8e46d095243e80febd4e30f5ae52c9202316d9` (2026-10-18); an additional [source/test delta review](CURRENT_HEAD_DELTA.md) covers the later pinned `c956c45e` (not subsequent main) and does not automatically upgrade every section in this manual. **Evidence status:** source cross-reference and selected tests, **not** a complete RRDS-1 deep review or live-provider/release certification. This manual consolidates entry points into existing source and canonical references; detailed contracts remain authoritative.
 
 ## 1. System purpose and trust boundaries
 

@@ -84,7 +84,7 @@ After draft PR #224 opened, a separate read-only **MiMo 2.6 Flash** source/docum
 | Priority | Finding / scope | Proposed action |
 |---|---|---|
 | HIGH (audit quality) | Worktree `.git` control file is counted as reviewed tree material despite being revision-irrelevant; Git-ignored cache files produce census drift | Separate tracked/source accounting from worktree metadata; add regression tests before any product-code change |
-| MEDIUM (preflight, source hypothesis) | The text-model preflight validates a returned record contains an `id` string but does not compare it with the requested exact model ID (L73–L76) | Add a negative fixture for a mismatched record ID and require exact equality after maintainers review; do not claim exploit/production impact without acceptance evidence |
+| MEDIUM (preflight, now resolved on later main) | At audited `c956c45e`, the text metadata preflight accepted a string `id` without requiring equality to the approved model (L73–L76). | **Resolved in merged [PR #223](https://github.com/knowurknottty/CAPT_core/pull/223)** after the audited SHA, using `PROVIDER_MODEL_PREFLIGHT_INVALID` and a negative fixture; a follow-up end-to-end no-inference regression is tracked in [PR #226](https://github.com/knowurknottty/CAPT_core/pull/226). Historical findings remain bound to their pinned source. |
 | HIGH (documentation freshness) | October 8 state report and September/October matrices lag 134 commits | Preserve snapshots; maintain current-HEAD delta with source/test provenance and release gates |
 | HIGH (coverage) | 666/681 source files and 398 risk-classified source paths lack deep-review receipts | Batch governed source reads, run the gate again and secure a genuinely independent verifier |
 
