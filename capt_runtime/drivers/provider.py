@@ -595,10 +595,14 @@ class ProviderDriver:
                         diagnostic_phase="tool_execution",
                     ) from exc
                 tool_call_count += 1
+                # OpenAI-compatible tool replies are keyed by tool_call_id.
+                # Provider-facing "name" is not part of the standard tool
+                # reply schema and can cause strict routers to reject later
+                # rounds with HTTP 400. The name remains in the internal CAPT
+                # ToolBroker receipt, not the outbound provider message.
                 messages.append({
                     "role": "tool",
                     "tool_call_id": call_id,
-                    "name": name,
                     "content": json.dumps(tool_result, sort_keys=True, separators=(",", ":")),
                 })
             if tool_call_count >= max_tool_rounds:

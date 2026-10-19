@@ -460,6 +460,7 @@ def test_openai_provider_tool_loop_executes_real_capt_toolbridge(tmp_path: Path)
         second_messages = _ToolLoopServer.calls[1]["body"]["messages"]
         tool_message = next(item for item in second_messages if item["role"] == "tool")
         assert "CAPT_TOOL_LOOP_OK" in tool_message["content"]
+        assert set(tool_message) == {"role", "tool_call_id", "content"}
         assert out["diagnostics"]["toolCallCount"] == 1
     finally:
         server.shutdown()

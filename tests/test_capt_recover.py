@@ -21,7 +21,7 @@ def test_missing_profile_is_not_provisioned(tmp_path: Path):
 
 
 def test_local_socket_probe_checks_live_accept(tmp_path: Path):
-    path = tmp_path / "actual.sock"
+    path = Path("/tmp") / ("capt-recover-test-%d.sock" % os.getpid())
     assert not capt.is_live(str(path))
     server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     server.bind(str(path))
@@ -32,6 +32,7 @@ def test_local_socket_probe_checks_live_accept(tmp_path: Path):
         incoming.close()
     finally:
         server.close()
+        path.unlink(missing_ok=True)
 
 
 def test_headless_refresh_refuses_before_mutation(tmp_path: Path):
