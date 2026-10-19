@@ -530,3 +530,53 @@ def test_inspection_never_creates_an_uninitialized_sidecar_manifest(tmp_path):
         assert store.head_sequence()==0
         assert svc.store.head_sequence()==0
     finally:svc.store.close();store.close()
+
+def test_preexisting_legacy_event_ledger_cannot_be_reused_as_offering_sidecar(tmp_path):
+    """Do not contaminate a different CAPT ledger merely because it is not active main."""
+    store,clock,svc,request=sample(tmp_path)
+    existing=EventStore(str(tmp_path/"unrelated-main.db"))
+    try:
+        _append_legacy_fixture_event(existing)
+        assert [e["eventType"] for e in existing.read_events()]==["TaskTransitioned"]
+        broker=ToolBroker(
+            RuntimeService(store),registry_for(clock),now=clock,
+            governed_offerings_enabled=True,decision_offering_store=existing,
+        )
+        candidate=GovernedDecisionOfferingService(broker)
+        with pytest.raises(IntegrityViolation, match="DECISION_OFFERING_SIDECAR_MUST_BE_EMPTY"):
+            candidate.issue(request,issue_meta(candidate,request,key="polluting-existing-ledger"))
+        assert [e["eventType"] for e in existing.read_events()]==["TaskTransitioned"]
+        assert store.head_sequence()==0
+        manifest=existing._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='decision_offering_contract'"
+        ).fetchone()
+        # An aborted SQLite transaction cannot install a durable manifest.
+        assert manifest is None
+    finally:
+        existing.close()
+        svc.store.close()
+        store.close()
+
+
+def test_sidecar_with_prior_idempotency_claim_cannot_be_adopted(tmp_path):
+    """Even without events, an unrelated command history precludes clean migration."""
+    store,clock,svc,request=sample(tmp_path)
+    foreign=EventStore(str(tmp_path/"foreign-claims.db"))
+    try:
+        claim=foreign.claim_command(
+            "foreign-claim","sha256:"+"5"*64,"foreign-command"
+        )
+        assert claim["status"]=="in_progress"
+        broker=ToolBroker(
+            RuntimeService(store),registry_for(clock),now=clock,
+            governed_offerings_enabled=True,decision_offering_store=foreign,
+        )
+        candidate=GovernedDecisionOfferingService(broker)
+        with pytest.raises(IntegrityViolation, match="DECISION_OFFERING_SIDECAR_MUST_BE_EMPTY"):
+            candidate.issue(request,issue_meta(candidate,request,key="foreign-history"))
+        assert foreign.idempotent_result("foreign-claim") is not None
+        assert store.head_sequence()==0
+    finally:
+        foreign.close()
+        svc.store.close()
+        store.close()
