@@ -16,7 +16,7 @@ R3 keeps these events entirely out of the main EventStore:
 - `GovernedDecisionOfferingService` owns the separate ledger for issuance, revocation, immutable event history and idempotency. The main runtime remains responsible for current tool descriptor and capability lease validation.
 - The receipt contains two separate digests: `ledgerBasisDigest` for the **main CAPT ledger** and `offeringLedgerBasisDigest` for the **isolated offering ledger**.
 - The offering-ledger predecessor is compared *inside that ledger's SQLite write transaction*; main-ledger identity is checked before and after issuance and on later inspection.
-- A sidecar-local `decision_offering_contract` manifest pins the **exact generated source digest**, refusing a changed sidecar schema until an explicit migration. Only a validated issuance initializes this manifest; inspection and revocation validate it read-only. The manifest does not modify the main CAPT ledger.
+- A sidecar-local `decision_offering_contract` manifest pins the **exact generated source digest**, refusing a changed sidecar schema until an explicit migration. Before a new manifest can be installed, an atomic check refuses any pre-existing events, aggregates, idempotency claims, outbox records, checkpoints, security rejections, provider diagnostics, or council receipts; otherwise an unrelated CAPT ledger at a different path could be mislabeled as an extension-only store. Only a validated issuance initializes this manifest; inspection and revocation validate it read-only. The manifest does not modify the main CAPT ledger.
 - Every result remains `dispatchAllowed=false`, `externalWorldVerified=false`, `humanPresenceVerified=false`, `completionVerified=false`.
 
 ## Observed backwards-compatibility result
@@ -37,6 +37,6 @@ Issuer authentication remains inherited from existing CAPT CommandMetadata actor
 
 ## Tests
 
-- `tests/capt_runtime/test_decision_offering_receipts.py` includes real SQLite main+sidecar histories, old-reader subprocess validation, main-store reuse refusal, sidecar manifest source-digest refusal, main-ledger drift invalidation and receipt lifecycle tests.
+- `tests/capt_runtime/test_decision_offering_receipts.py` includes real SQLite main+sidecar histories, old-reader subprocess validation, main-store reuse refusal, sidecar manifest source-digest refusal, main-ledger drift invalidation and receipt lifecycle tests. Additional real-database negative controls prevent adoption of an existing legacy-event ledger and an idempotency-only foreign ledger, with no partial manifest persistence.
 - Contract bindings were regenerated from authoritative schemas; schema drift and Python/TypeScript parity must pass before commit.
 - No provider calls, actual human approvals, production ledger mutations, deployment or runtime restart were authorized or performed.

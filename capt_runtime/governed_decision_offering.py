@@ -63,6 +63,24 @@ class GovernedDecisionOfferingService:
                     "SELECT profile,source_digest FROM decision_offering_contract WHERE singleton=1"
                 ).fetchone()
                 if prior is None:
+                    # A caller-chosen sidecar path is not proof that the file
+                    # is a new, exclusive extension ledger. Refuse to attach
+                    # the extension manifest to an existing CAPT event store
+                    # with unrelated records. Check under BEGIN IMMEDIATE to
+                    # avoid a second process slipping an event in first.
+                    existing_tables = (
+                        "events", "aggregates", "idempotency", "outbox",
+                        "checkpoints", "security_rejections",
+                        "provider_failure_diagnostics", "council_receipts",
+                    )
+                    if any(
+                        conn.execute("SELECT 1 FROM " + table + " LIMIT 1").fetchone()
+                        is not None
+                        for table in existing_tables
+                    ):
+                        raise IntegrityViolation(
+                            "DECISION_OFFERING_SIDECAR_MUST_BE_EMPTY"
+                        )
                     conn.execute(
                         "INSERT INTO decision_offering_contract VALUES (1,?,?)",
                         ("capt.decision-offering-ledger.v1", source_digest),
