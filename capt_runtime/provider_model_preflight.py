@@ -73,4 +73,8 @@ def verify_openrouter_model(model: str, *, api_key: str, modality: str = "text")
     record=data["data"]
     if not isinstance(record,dict) or not isinstance(record.get("id"),str):
         raise ProviderModelPreflightError("PROVIDER_MODEL_PREFLIGHT_INVALID")
+    if record["id"] != model:
+        # A nonmatching metadata response is not proof that this exact
+        # approval-bound model is available; never silently substitute.
+        raise ProviderModelPreflightError("PROVIDER_MODEL_PREFLIGHT_INVALID")
     return {"model":model, "modality":"text", "available":True}
