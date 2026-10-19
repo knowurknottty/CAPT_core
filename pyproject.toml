@@ -12,11 +12,10 @@ dependencies = [
     "textual>=0.80",
     "cryptography>=47.0.0",
 ]
-license = { text = "MIT" }
+license = { text = "Cognitive Sovereignty License v1.0" }
 keywords = ["capt", "hermes", "memory", "cognitive", "local-first"]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
 

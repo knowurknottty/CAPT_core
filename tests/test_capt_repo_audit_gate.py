@@ -1,5 +1,6 @@
 from __future__ import annotations
 import importlib.util
+import hashlib
 import json
 import subprocess
 import sys
@@ -30,7 +31,11 @@ def repo(tmp_path):
 
 def receipt(c,path):
     entry=next(x for x in c["files"] if x["path"]==path)
-    return dict(path=path,sha256=entry["sha256"],line_evidence="L1: examined",
+    source_lines=(Path(c["root"])/path).read_bytes().splitlines(keepends=True)
+    evidence="L1: examined" if source_lines else "L0: empty source"
+    span=source_lines[0] if source_lines else b""
+    return dict(path=path,sha256=entry["sha256"],line_evidence=evidence,
+                line_sha256=hashlib.sha256(span).hexdigest(),
                 node_evidence_ref="node-evidence://test-fixture-not-real")
 
 def inspection(c, paths):
@@ -179,3 +184,69 @@ def test_census_metadata_drift_without_byte_drift_is_rejected(repo):
     v=m.verify(forged,complete(forged))
     assert v["status"]=="PARTIAL_OR_UNVERIFIED"
     assert any("census bytes classification drift" in msg for msg in v["problems"])
+
+
+def test_forged_line_hash_cannot_pass(repo):
+    c=m.census(repo)
+    i=complete(c)
+    i["inspected"][0]["line_sha256"]="0"*64
+    verdict=m.verify(c,i)
+    assert verdict["status"]=="PARTIAL_OR_UNVERIFIED"
+    assert any("checksum mismatch" in msg for msg in verdict["problems"])
+
+
+def test_line_outside_source_cannot_pass(repo):
+    c=m.census(repo)
+    i=complete(c)
+    i["inspected"][0]["line_evidence"]="L9999: invented"
+    verdict=m.verify(c,i)
+    assert any("source-line span outside file" in msg for msg in verdict["problems"])
+
+
+def test_missing_or_malformed_line_checksum_fails(repo):
+    c=m.census(repo)
+    for invalid in (None,"bogus","A"*64):
+        i=complete(c)
+        i["inspected"][0]["line_sha256"]=invalid
+        verdict=m.verify(c,i)
+        assert any("source-line checksum absent or malformed" in msg
+                   for msg in verdict["problems"])
+
+
+def test_ambiguous_line_receipt_cannot_select_convenient_span(repo):
+    c=m.census(repo)
+    i=complete(c)
+    i["inspected"][0]["line_evidence"]="L999: invented, L1: examined"
+    verdict=m.verify(c,i)
+    assert any("ambiguous source-line span" in msg for msg in verdict["problems"])
+
+
+def test_empty_source_requires_zero_line_hash(repo):
+    path=repo/"src/deep/empty.py"
+    path.write_bytes(b"")
+    subprocess.run(["git","-C",str(repo),"add","."],check=True)
+    subprocess.run(["git","-C",str(repo),"-c","user.name=Fixture","-c",
+                    "user.email=fixture@example.invalid","commit","-qm","empty"],check=True)
+    c=m.census(repo)
+    i=complete(c)
+    r=next(x for x in i["inspected"] if x["path"]=="src/deep/empty.py")
+    assert r["line_evidence"].startswith("L0:")
+    assert m.verify(c,i)["status"]=="DEEP_COVERAGE_GATE_PASS"
+    r["line_evidence"]="L1: fake"
+    assert m.verify(c,i)["status"]=="PARTIAL_OR_UNVERIFIED"
+
+
+def test_multiline_source_span_matches_exact_bytes(repo):
+    p=repo/"src/main.py"
+    p.write_bytes(b"first\r\nsecond\nthird")
+    subprocess.run(["git","-C",str(repo),"add","."],check=True)
+    subprocess.run(["git","-C",str(repo),"-c","user.name=Fixture","-c",
+                    "user.email=fixture@example.invalid","commit","-qm","multiline"],check=True)
+    c=m.census(repo)
+    i=complete(c)
+    r=next(x for x in i["inspected"] if x["path"]=="src/main.py")
+    r["line_evidence"]="L1-L2: reviewed exact source"
+    r["line_sha256"]=hashlib.sha256(b"first\r\nsecond\n").hexdigest()
+    assert m.verify(c,i)["status"]=="DEEP_COVERAGE_GATE_PASS"
+    r["line_sha256"]=hashlib.sha256(b"first\nsecond\n").hexdigest()
+    assert m.verify(c,i)["status"]=="PARTIAL_OR_UNVERIFIED"
