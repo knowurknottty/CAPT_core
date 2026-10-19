@@ -109,3 +109,31 @@ def test_each_directory_inspected_but_not_every_source_file_fails(repo):
     assert outcome["status"]=="PARTIAL_OR_UNVERIFIED"
     assert outcome["inspected_source_directories"]==3
     assert any("100%" in p for p in outcome["problems"])
+
+
+def test_linked_git_worktree_metadata_is_not_source_drift(repo, tmp_path):
+    """Two checkouts at one Git HEAD must not mismatch only on .git pointers."""
+    second = tmp_path / "independent"
+    subprocess.run(
+        ["git", "-C", str(repo), "worktree", "add", "--detach", str(second), "HEAD"],
+        check=True, capture_output=True, text=True,
+    )
+    assert (second / ".git").is_file()
+    primary = m.census(repo)
+    other = m.census(second)
+    assert primary["head"] == other["head"]
+    assert {x["path"]: x["sha256"] for x in primary["files"]} == {
+        x["path"]: x["sha256"] for x in other["files"]
+    }
+    assert ".git" not in {x["path"] for x in other["files"]}
+    assert not other["errors"] and not other["symlinks"]
+
+
+def test_git_metadata_exclusion_does_not_hide_other_symlinks(repo, tmp_path):
+    """Excluding the root Git pointer cannot hide other tree symlinks."""
+    # A directory symlink elsewhere in the tree remains an unresolved boundary.
+    alias = repo / "src" / "deep" / "linked-dir"
+    alias.symlink_to(tmp_path, target_is_directory=True)
+    result = m.census(repo)
+    assert "src/deep/linked-dir" in result["symlinks"]
+    assert m.verify(result, complete(result))["status"] == "PARTIAL_OR_UNVERIFIED"
