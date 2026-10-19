@@ -56,4 +56,6 @@ The local [CAPT-Bot repository](https://github.com/knowurknottty/CAPT-Bot), obse
 
 A governed **MiMo 2.6 Flash** source-review run was completed with a result artifact pending human verification. It did not execute as a CAPT-Bot worker. [Peer-review correction ledger](missions/OMEGA_MIMO26_PEER_REVIEW_20261018.md).
 
+**RRDS CI distinction:** A green PR `verify-coverage` workflow does **not** certify this deep review. The checked-in review index contains zero entries, while the explicit 15/681-source-file `verify` command returned `PARTIAL_OR_UNVERIFIED`. See [the formal reconciliation](missions/OMEGA_RRDS_C956C45E_PARTIAL.md).
+
 **Outstanding:** full source-cited 134-commit delta, independently certified RRDS-1 deep review, complete Python/Swift suite, clean install, live integration, release-security and distribution proof. [OMEGA mission status](missions/OMEGA_20261018_STATUS.md).

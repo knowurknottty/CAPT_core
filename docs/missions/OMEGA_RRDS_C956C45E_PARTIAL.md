@@ -55,6 +55,12 @@ The repository's own `scripts/capt_repo_audit_gate.py verify` was executed on th
 
 Falsification checks in the second worktree executed three existing RRDS tests: shallow one-level review, altered source after inventory, and one-inspection-per-directory without full-file coverage. **3 passed, 6 deselected**. This is a separate-worktree technical check by the **same assistant**, **not** a separate human or independent model verifier. An independent verifier's final sign-off is still outstanding.
 
+## Why RRDS CI can be green while this review is still PARTIAL
+
+The PR's **RRDS-1 Reviewer Evidence Gate** completed successfully, but the checked-in [`docs/review-evidence/rrds-index.json`](../review-evidence/rrds-index.json) contains `"reviews": []`. The `ci` mode of [`scripts/capt_repo_audit_gate.py`](../../scripts/capt_repo_audit_gate.py) validates the available indexed reviews; when there are **zero** and the PR body does not claim `RRDS-1: PASS`, it can return success. This is the gate's intentional **zero-certified-reviews** case, **not** acceptance of the off-repo partial census as a passing full-depth review.
+
+Thus: **CI green = no indexed invalid deep review; local `verify` = explicit `PARTIAL_OR_UNVERIFIED`.** Full independent deep verification still requires in-scope line/source receipts and a separate verifier before anyone uses the wording `RRDS-1: PASS`. Do not silently add this partial dossier to the release-certified index.
+
 ## Current-HEAD execution evidence
 
 On the clean reviewer worktree, 11 selected Python test modules covering provider model preflight, driver, recovery, CLI/runtime, RRDS, Bot, bioCAPT/QIPC and claim-once returned **112 passed, 1 skipped in 12.57s, exit 0**. The existing Python virtual environment was reused; **fresh dependency installation, all other Python test trees, Swift native build/tests, live provider/billing reconciliation and security/release pipeline were NOT RUN**.
@@ -68,6 +74,10 @@ The first `tests/capt_runtime` run in a long macOS temporary workspace returned 
 The **same 14 failed cases** were rerun with a short `--basetemp=/tmp/oc.XXXXXX` path and all **14 passed in 10.09s**. Finally, a **complete repeat of `tests/capt_runtime` at the same pinned HEAD** with short `--basetemp` plus isolated `CAPT_STATE_DIR` and `CAPT_SOLO_HOME` returned **1,670 passed, 13 skipped, 12 deselected, 0 failed, in 85.64s; exit 0**. The exact checkout and Python 3.12 environment were unchanged.
 
 **Interpretation:** a long pytest base path caused environment-dependent socket test failures on macOS; correcting the path removed every observed failure and the complete rerun passed. This is **runtime-test evidence**, not full repository Python/Swift/release certification or a 100%-reviewed source tree. Future documentation of macOS test execution should use a short dedicated temporary directory for socket fixtures.
+
+## Follow-up independent-review attempt — not accepted
+
+After draft PR #224 opened, a separate read-only **MiMo 2.6 Flash** source/documentation review was authorized once through CAPT RuntimeService. The transport timed out. Its immutable runtime projection subsequently showed **DriverRun `lost`**, dispatch boundary **`request_started`**, **`reconciliationStatus=required`**, and **four recorded provider HTTP request attempts**. The associated task was **`suspended`** with no result references. No verified reviewer artifact or independent RRDS-1 sign-off was produced; **no replay was authorized**. Provider-side completion and possible charges remain **unknown pending reconciliation**. A separate model attempt and the existing same-agent cross-worktree check must **not** be presented as an independent verifier PASS.
 
 ## High-value findings / next actions
 
