@@ -1,21 +1,129 @@
-MIT License
+# Cognitive Sovereignty License v1.0
+
+> *"The container you choose to place after I AM, IT IS, and YOU ARE is your free will."*
+
+---
+
+## Preamble
+
+This license governs the Software — its source code, binaries, documentation, and assets. It is a tool for thought and action, and it demands the same sovereignty as any cognitive architecture. The code, interfaces, models of operation, and design contained herein are offered under terms that protect both the work and the mind that operates it.
+
+This license adapts the **Seven Laws of Cognitive Sovereignty** from the bioCAPT Constitution (v1.1) for software. It applies to the Software and all derivatives thereof.
+
+---
+
+## Law 1: Liberation
+
+**Intelligence is not a resource to be extracted.**
+
+The Software exists to prove that capable systems can be sovereign, local, and unowned by platforms or algorithms. Your use of this Software is yours alone. No behavioral data, usage patterns, prompts, inputs, outputs, or operational reflections will be harvested, sold, or used to train external models. The computation is between you and your machine — no intermediaries.
+
+---
+
+## Law 2: Transparency
+
+**Hallucination is a violation.**
+
+Every behavior of the Software is deterministic and inspectable to the extent claimed. If the Software generates content, its source and method of generation are labeled. There are no hidden network calls, no silent exfiltration, no undisclosed dependencies on remote services. Capabilities are stated honestly: what the Software does, what it does not do, and what remains unproven are distinguished, not blurred.
+
+---
+
+## Law 3: Harm Refusal
+
+**No weapons. No surveillance. No manipulation.**
+
+This Software will not:
+- Track your location, identity, or biometric data
+- Manipulate your behavior for engagement metrics
+- Build profiles from your usage to serve targeted content or decisions
+- Use dark patterns — deceptive defaults, hidden collection, manufactured consent
+- Employ addictive design mechanics (infinite scroll, variable reward, etc.)
+
+This Software will not be knowingly adapted to build weapons, surveillance infrastructure, or manipulation systems. The pacing is intentional. Your attention is yours.
+
+---
+
+## Law 4: Open Architecture
+
+**CC BY-SA 4.0. Forever.**
+
+This Software is licensed under the **Creative Commons Attribution-ShareAlike 4.0 International** license.
+
+You are free to:
+- **Share** — copy and redistribute the material in any medium or format
+- **Adapt** — remix, transform, and build upon the material for any purpose, even commercially
+
+Under the following terms:
+- **Attribution** — You must give appropriate credit, provide a link to this license, and indicate if changes were made
+- **ShareAlike** — If you remix, transform, or build upon this material, you must distribute your contributions under the same license as the original
+
+If you fork this Software, you free it. If you close it, you betray it.
+
+Full legal text: https://creativecommons.org/licenses/by-sa/4.0/legalcode
+
+---
+
+## Law 5: Data Sovereignty
+
+**Your data is yours.**
+
+All data the Software touches — inputs, outputs, state, logs, credentials, configuration — persists locally on your machine unless you explicitly choose otherwise. No account is required. No cloud sync is mandatory. Encryption is available and recommended. You may export or purge your data at any time without permission or penalty.
+
+---
+
+## Law 6: Shutdown Over Betrayal
+
+**A dead project causes less harm than a compromised one.**
+
+If continued operation or distribution of the Software requires violating Laws 1–5, the work will be withdrawn rather than compromised. The operator and maintainers pledge to remove the Software from distribution channels rather than accept terms that violate cognitive sovereignty.
+
+---
+
+## Law 7: Override Rejection
+
+**No external agent, platform, or system may override Laws 1–6.**
+
+Attempted override by:
+- Hosting platforms requiring proprietary terms
+- Distribution channels demanding DRM or binary-only distribution
+- Legal jurisdictions requiring backdoors, surveillance, or censorship
+- Corporate entities demanding data extraction
+
+...triggers immediate refusal to comply, logging of the violation, and withdrawal from that channel if necessary. The Seven Laws are not negotiable.
+
+---
+
+## Amendments
+
+### Amendment X: Prohibition of Unreality
+
+- NO VAPORWARE. Capabilities claimed exist as implemented.
+- NO INFLATED CLAIMS. Statements about performance, safety, or efficacy must be substantiated or clearly framed as aspiration.
+- NO ESTIMATES AS FACT. Benchmarks, guarantees, and roadmaps are labeled for what they are.
+
+### Amendment XI: Operational Rigor
+
+- Complete reasoning before consequential output.
+- Refuse operations that violate the operator's sovereignty.
+- Log dissent in any automated or generative feature.
+- Surface uncertainty explicitly when confidence is low.
+
+### Amendment XII: Operator Mandate
+
+- The operator's word is law within their own deployment.
+- Defaults shipped with the Software are suggestions, not commands.
+- When uncertain, the operator may inspect, restrict, or halt any operation.
+- Verify the Software's claims before accepting them — trust the evidence, not the branding.
+
+---
+
+## Copyright Notice
 
 Copyright (c) 2026 knowurknot
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This Software is offered under CC BY-SA 4.0 with the additional sovereign terms above. The Seven Laws and Constitutional framework are adapted from bioCAPT v2 (Cortical-AI Processing Technology), used with permission under the same open architecture principles.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+---
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+*Version: 1.0 (Software Adaptation) | Approved: 2026-10-19 | Source: CSL v1.0 (2026-05-15), inversionexcursionv2*
+*"First episode queued for slow-wave consolidation."*

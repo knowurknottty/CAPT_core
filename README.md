@@ -411,4 +411,4 @@ Verify destination addresses before sending. Cryptocurrency transfers are genera
 
 ## License
 
-CAPT Core is available under the MIT License. See [`LICENSE`](LICENSE).
+CAPT Core is available under the Cognitive Sovereignty License v1.0 (Software Adaptation). See [`LICENSE`](LICENSE).
