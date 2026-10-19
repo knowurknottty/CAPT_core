@@ -39,3 +39,26 @@ separately governed provider adapter authorization.
 - Do not reinterpret legitimate authorized local endpoints as hostile.
 - Do not merge without GitHub security/contract/reviewer gates and
   reciprocal Core/Bot review.
+
+
+## October 19, 2026 — alternate host parsing attack surface
+The original media origin validator used ipaddress.ip_address but treated
+all parsing failures as ordinary hostnames. On macOS, legacy numeric names
+2130706433, 0x7f000001 and 127.1 were accepted by declaration while
+AI_NUMERICHOST resolved them locally to 127.0.0.1; no HTTP requests were made.
+Percent-encoded host components, empty userinfo, backslashes and Unicode
+numeric lookalikes also permit cross-library URL/IDNA disagreement.
+
+Media origin admission now rejects ambiguous numeric notation, non-ASCII
+Unicode hostnames, percent-coded/userinfo/backslash authorities and localhost
+subdomains. Internationalized names must be supplied as ASCII punycode.
+Normal DNS hostnames (including numeric labels like 123.example.com) remain
+permitted, with a caveat: runtime DNS and HTTP redirect targets still
+require separate enforceable egress checking; declaration acceptance does
+not imply arbitrary resolved addresses are safe.
+
+Negative-first regression fixtures: fourteen legacy/authority cases
+failed before the fix; additional Unicode/localhost fixtures were added.
+The updated combined SSH, media and Guardian suite passed 95 tests;
+Ruff critical lint and diff checks passed. Actual HTTP clients and
+DNS-rebinding/redirect chains have not been exercised.
