@@ -14,6 +14,7 @@ struct SettingsView: View {
                 executionSection
                 networkSection
                 effectiveIntentSection
+                CAPTPresenceEnrollmentView()
             }
             .padding(InversionVisualLanguage.pagePadding)
             .frame(maxWidth: 900, alignment: .topLeading)
