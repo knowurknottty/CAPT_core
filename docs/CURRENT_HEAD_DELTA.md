@@ -58,4 +58,6 @@ A governed **MiMo 2.6 Flash** source-review run was completed with a result arti
 
 **RRDS CI distinction:** A green PR `verify-coverage` workflow does **not** certify this deep review. The checked-in review index contains zero entries, while the explicit 15/681-source-file `verify` command returned `PARTIAL_OR_UNVERIFIED`. See [the formal reconciliation](missions/OMEGA_RRDS_C956C45E_PARTIAL.md).
 
+**Verification continuation:** [681-file structural evidence and independent Codex verifier verdict](review-evidence/omega-c956/README.md) are now available. The mechanical audit breadth gate passed, but a separate semantic verifier withheld independent sign-off. This evidence is pinned to c956c45e; after unrelated PR #223, main first moved to 40e9a964 and subsequently advanced further through other merges. Source claims at c956 are not automatically a 40e9 rebaseline. See the [full partial-review ledger](missions/OMEGA_RRDS_C956C45E_PARTIAL.md).
+
 **Outstanding:** full source-cited 134-commit delta, independently certified RRDS-1 deep review, complete Python/Swift suite, clean install, live integration, release-security and distribution proof. [OMEGA mission status](missions/OMEGA_20261018_STATUS.md).
