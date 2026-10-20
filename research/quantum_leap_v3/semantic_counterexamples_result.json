@@ -1,0 +1,62 @@
+{
+  "cases": [
+    {
+      "actual_CAPT_claim_truth": "NOT_ASSESSED",
+      "case": "C1",
+      "claim_id": "HO5",
+      "failure_mode": "unreachable_checker",
+      "fixture_source_sha256": "ef9f2f1d0eb3981b1b03b666de2922320f6b6d4c1c174d6d809eb7a87fa38972",
+      "predicate_verdict": "WITHIN",
+      "semantic_counterexample_established": true,
+      "semantic_entailment": "DISPROVEN_FOR_PREDICATE_IN_GENERAL",
+      "synthetic_commit_ephemeral": "635f253eb536c44abfb13b0774b3e4d81ac26b30"
+    },
+    {
+      "actual_CAPT_claim_truth": "NOT_ASSESSED",
+      "case": "C2",
+      "claim_id": "AS9",
+      "failure_mode": "constant_digest_function",
+      "fixture_source_sha256": "b1f200a206d1bb0bdba9f25bf02393a6433608d96e392bd9c87479ad25bd240b",
+      "predicate_verdict": "WITHIN",
+      "semantic_counterexample_established": true,
+      "semantic_entailment": "DISPROVEN_FOR_PREDICATE_IN_GENERAL",
+      "synthetic_commit_ephemeral": "30b6c2c4efb1da2ffbb2d5adb13f7e475cfd6275"
+    },
+    {
+      "actual_CAPT_claim_truth": "NOT_ASSESSED",
+      "case": "C3",
+      "claim_id": "AS6",
+      "failure_mode": "warning_only",
+      "fixture_source_sha256": "9586d0272205dad02d0527140c5ff37eb62f2b712f10ea89e2f4724d2afeae98",
+      "predicate_verdict": "WITHIN",
+      "semantic_counterexample_established": true,
+      "semantic_entailment": "DISPROVEN_FOR_PREDICATE_IN_GENERAL",
+      "synthetic_commit_ephemeral": "f8dea9ac509ae06ed5c7ce40b075c43011b51255"
+    },
+    {
+      "actual_CAPT_claim_truth": "NOT_ASSESSED",
+      "case": "C4",
+      "claim_id": "HO3",
+      "failure_mode": "empty_context_return",
+      "fixture_source_sha256": "8881ec8931730b26048fde887a9de691d7dd11bd0158a3923baba1e2fb26c10e",
+      "predicate_verdict": "WITHIN",
+      "semantic_counterexample_established": true,
+      "semantic_entailment": "DISPROVEN_FOR_PREDICATE_IN_GENERAL",
+      "synthetic_commit_ephemeral": "0753c5f65bb84402cce3266c3237716982c9abe6"
+    },
+    {
+      "actual_CAPT_claim_truth": "NOT_ASSESSED",
+      "case": "C5",
+      "claim_id": "PU13",
+      "failure_mode": "schema_in_separate_file",
+      "fixture_source_sha256": "3dfcd3df90d6dc99a3a3187813b121f310f81ba852c4669b604f3a06571894f4",
+      "predicate_verdict": "WITHIN",
+      "semantic_counterexample_established": true,
+      "semantic_entailment": "DISPROVEN_FOR_PREDICATE_IN_GENERAL",
+      "synthetic_commit_ephemeral": "b8725ad99038c9dda0cf75175f5e2588f25d681b"
+    }
+  ],
+  "count": 5,
+  "predicate_sufficiency_failures": 5,
+  "scope": "synthetic counterexample Git trees, not actual CAPT defect claims"
+}

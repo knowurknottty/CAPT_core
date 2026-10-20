@@ -1,0 +1,641 @@
+[
+ {
+  "id": "AS1a",
+  "source": "Astra",
+  "claim": "ToolBroker separates preparation ...",
+  "fidelity": "partial",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_runtime/tool_broker.py",
+   "regex": "def \\w*prepar\\w*",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "AS1b",
+  "source": "Astra",
+  "claim": "... admission ...",
+  "fidelity": "partial",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_runtime/tool_broker.py",
+   "regex": "def \\w*admi\\w*",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "AS1c",
+  "source": "Astra",
+  "claim": "... dispatch ...",
+  "fidelity": "partial",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_runtime/tool_broker.py",
+   "regex": "def \\w*dispatch\\w*",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "AS1d",
+  "source": "Astra",
+  "claim": "... settlement ...",
+  "fidelity": "partial",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_runtime/tool_broker.py",
+   "regex": "def \\w*settl\\w*",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "AS1e",
+  "source": "Astra",
+  "claim": "... and reconciliation",
+  "fidelity": "partial",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_runtime/tool_broker.py",
+   "regex": "def \\w*reconcil\\w*",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "AS2",
+  "source": "Astra",
+  "claim": "File adapter records preimages",
+  "fidelity": "partial",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_runtime/tools/adapters/file.py",
+   "regex": "preimage",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "AS3",
+  "source": "Astra",
+  "claim": "File adapter records target versions",
+  "fidelity": "partial",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_runtime/tools/adapters/file.py",
+   "regex": "target_?[vV]ersion",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "AS4",
+  "source": "Astra",
+  "claim": "File adapter records reversal handles",
+  "fidelity": "partial",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_runtime/tools/adapters/file.py",
+   "regex": "[rR]evers",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "AS5",
+  "source": "Astra",
+  "claim": "Locks explicitly coordinate cooperating CAPT writers only",
+  "fidelity": "full",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_runtime/tools/adapters/file.py",
+   "regex": "cooperat",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "AS6",
+  "source": "Astra",
+  "claim": "Replay forks do not reactivate historical authority",
+  "fidelity": "full",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_runtime/aggregates/replay_fork.py",
+   "regex": "REPLAY_FORK_CANNOT_REACTIVATE_HISTORICAL_AUTHORITY",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "AS7",
+  "source": "Astra",
+  "claim": "Continuation context can be frozen into approval identity",
+  "fidelity": "none",
+  "kind": null,
+  "why_unsupported": "behavioral property of the dispatch path; no static predicate in v0 vocabulary"
+ },
+ {
+  "id": "AS8",
+  "source": "Astra",
+  "claim": "ContextSlice excludes authority objects",
+  "fidelity": "partial",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_runtime/context_slice.py",
+   "regex": "[aA]uthority",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "AS9",
+  "source": "Astra",
+  "claim": "Prepared inputs are digest-bound",
+  "fidelity": "partial",
+  "kind": "symbol_defined",
+  "args": {
+   "path": "capt_runtime/prepared_execution.py",
+   "name": "prepared_execution_digest",
+   "kind": "function"
+  }
+ },
+ {
+  "id": "AS10a",
+  "source": "Astra",
+  "claim": "Swift package declares a macOS 13 ...",
+  "fidelity": "full",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_ui/surfaces/desktop_swift/Package.swift",
+   "regex": "\\.macOS\\(\\.v13\\)",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "AS10b",
+  "source": "Astra",
+  "claim": "... executable target",
+  "fidelity": "full",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_ui/surfaces/desktop_swift/Package.swift",
+   "regex": "\\.executableTarget",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "AS11a",
+  "source": "Astra",
+  "claim": "Learning plane describes interfaces without live training ...",
+  "fidelity": "full",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_runtime/learning.py",
+   "regex": "NOT implement live GRPO training",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "AS11b",
+  "source": "Astra",
+  "claim": "... or autonomous promotion",
+  "fidelity": "full",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_runtime/learning.py",
+   "regex": "auto-promotion",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "AS12",
+  "source": "Astra",
+  "claim": "SOMA reconstruction check counts retained critical events",
+  "fidelity": "partial",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_runtime/soma/reconstruction.py",
+   "regex": "critical",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "AS13",
+  "source": "Astra",
+  "claim": "Native macOS executable plus MCP/control surfaces share one authority service",
+  "fidelity": "none",
+  "kind": null,
+  "why_unsupported": "architecture claim spanning runtime topology; not a static source predicate"
+ },
+ {
+  "id": "HO1a",
+  "source": "Handoff",
+  "claim": "gate_result.py defines Within",
+  "fidelity": "full",
+  "kind": "symbol_defined",
+  "args": {
+   "path": "capt_runtime/gate_result.py",
+   "name": "Within",
+   "kind": "class"
+  }
+ },
+ {
+  "id": "HO1b",
+  "source": "Handoff",
+  "claim": "... Exceeds",
+  "fidelity": "full",
+  "kind": "symbol_defined",
+  "args": {
+   "path": "capt_runtime/gate_result.py",
+   "name": "Exceeds",
+   "kind": "class"
+  }
+ },
+ {
+  "id": "HO1c",
+  "source": "Handoff",
+  "claim": "... Unsupported",
+  "fidelity": "full",
+  "kind": "symbol_defined",
+  "args": {
+   "path": "capt_runtime/gate_result.py",
+   "name": "Unsupported",
+   "kind": "class"
+  }
+ },
+ {
+  "id": "HO1d",
+  "source": "Handoff",
+  "claim": "... Inconclusive",
+  "fidelity": "full",
+  "kind": "symbol_defined",
+  "args": {
+   "path": "capt_runtime/gate_result.py",
+   "name": "Inconclusive",
+   "kind": "class"
+  }
+ },
+ {
+  "id": "HO2",
+  "source": "Handoff",
+  "claim": "ClaimGuard accepts only a small closed set of procedural claims",
+  "fidelity": "full",
+  "kind": "collection_size",
+  "args": {
+   "path": "capt_runtime/verification.py",
+   "name": "_ALLOWED_CLAIM_STATEMENTS",
+   "op": "<=",
+   "n": 10
+  }
+ },
+ {
+  "id": "HO3",
+  "source": "Handoff",
+  "claim": "continuation_context.py preserves authoritative mission context across handoff",
+  "fidelity": "partial",
+  "kind": "symbol_defined",
+  "args": {
+   "path": "capt_runtime/continuation_context.py",
+   "name": "select_continuation_context",
+   "kind": "function"
+  }
+ },
+ {
+  "id": "HO4a",
+  "source": "Handoff",
+  "claim": "Model approval binding incorporates provider identity",
+  "fidelity": "full",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_runtime/model_approval_binding.py",
+   "regex": "provider: str",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "HO4b",
+  "source": "Handoff",
+  "claim": "... and model identity",
+  "fidelity": "full",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_runtime/model_approval_binding.py",
+   "regex": "model: str",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "HO5",
+  "source": "Handoff",
+  "claim": "Shared RuntimeService session token admits clients",
+  "fidelity": "full",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "desktop/capt_runtime_service.py",
+   "regex": "auth\\.get\\(\"token\"\\) != token",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "HO6",
+  "source": "Handoff",
+  "claim": "Server assigns actor_kind=\"human\"",
+  "fidelity": "full",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "desktop/capt_runtime_service.py",
+   "regex": "actor_kind=\"human\"",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "HO7",
+  "source": "Handoff",
+  "claim": "Approval decision timestamps are caller-supplied",
+  "fidelity": "full",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_runtime/services.py",
+   "regex": "decision\\.get\\(\"decidedAt\"\\) or metadata\\[\"issuedAt\"\\]",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "HO8",
+  "source": "Handoff",
+  "claim": "CAPT Node and Workspace MCP scopes include writable CAPT_core",
+  "fidelity": "none",
+  "kind": null,
+  "why_unsupported": "live capability configuration, not repository source"
+ },
+ {
+  "id": "MU1",
+  "source": "Muse",
+  "claim": "ClaimGuard is a closed five-sentence allowlist",
+  "fidelity": "full",
+  "kind": "collection_size",
+  "args": {
+   "path": "capt_runtime/verification.py",
+   "name": "_ALLOWED_CLAIM_STATEMENTS",
+   "op": "==",
+   "n": 5
+  }
+ },
+ {
+  "id": "MU2",
+  "source": "Muse",
+  "claim": "My v2 research executed 1,656 tests by hand",
+  "fidelity": "none",
+  "kind": null,
+  "why_unsupported": "claim about an execution event, not about source"
+ },
+ {
+  "id": "PU1",
+  "source": "PUS v1",
+  "claim": "chain_next defined at store.py:110",
+  "fidelity": "full",
+  "kind": "symbol_at_line",
+  "args": {
+   "path": "capt_runtime/store.py",
+   "name": "chain_next",
+   "line": 110
+  }
+ },
+ {
+  "id": "PU2",
+  "source": "PUS v1",
+  "claim": "verify_chain defined at store.py:752",
+  "fidelity": "full",
+  "kind": "symbol_at_line",
+  "args": {
+   "path": "capt_runtime/store.py",
+   "name": "verify_chain",
+   "line": 752
+  }
+ },
+ {
+  "id": "PU3",
+  "source": "PUS v1",
+  "claim": "Council counts distinct sources at council.py:419",
+  "fidelity": "full",
+  "kind": "symbol_at_line",
+  "args": {
+   "path": "capt_runtime/council.py",
+   "name": "distinct_sources",
+   "line": 419
+  }
+ },
+ {
+  "id": "PU4",
+  "source": "PUS v1",
+  "claim": "ClaimGuard rejects 6 overclaim substrings",
+  "fidelity": "full",
+  "kind": "collection_size",
+  "args": {
+   "path": "capt_runtime/verification.py",
+   "name": "_FORBIDDEN_CLAIM_SUBSTRINGS",
+   "op": "==",
+   "n": 6
+  }
+ },
+ {
+  "id": "PU5",
+  "source": "PUS v1",
+  "claim": "occurredAt is taken from metadata issuedAt across governed commands",
+  "fidelity": "full",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_runtime/governed_service.py",
+   "regex": "occurred_at=metadata\\[\"issuedAt\"\\]",
+   "op": ">=",
+   "n": 10
+  }
+ },
+ {
+  "id": "PU6",
+  "source": "PUS v1",
+  "claim": "HumanApprovalDecision carries no provenance/attestation field",
+  "fidelity": "full",
+  "kind": "schema_property_absent",
+  "args": {
+   "path": "contracts/schema/common.schema.json",
+   "def": "HumanApprovalDecision",
+   "regex": "attest|channel|presence|provenance"
+  }
+ },
+ {
+  "id": "PU7",
+  "source": "PUS v1",
+  "claim": "87 top-level capt_runtime modules",
+  "fidelity": "full",
+  "kind": "file_count",
+  "args": {
+   "glob": "capt_runtime/*.py",
+   "exclude": [
+    "capt_runtime/*/*"
+   ],
+   "op": "==",
+   "n": 87
+  }
+ },
+ {
+  "id": "PU8",
+  "source": "PUS v1",
+  "claim": "22,738 lines across top-level modules",
+  "fidelity": "full",
+  "kind": "line_total",
+  "args": {
+   "glob": "capt_runtime/*.py",
+   "exclude": [
+    "capt_runtime/*/*"
+   ],
+   "op": "==",
+   "n": 22738
+  }
+ },
+ {
+  "id": "PU9",
+  "source": "PUS v1",
+  "claim": "vessel_charter _orthogonality at line 154",
+  "fidelity": "full",
+  "kind": "symbol_at_line",
+  "args": {
+   "path": "capt_runtime/vessel_charter.py",
+   "name": "_orthogonality",
+   "line": 154
+  }
+ },
+ {
+  "id": "PU10",
+  "source": "PUS v1",
+  "claim": "actor_kind=\"human\" at capt_runtime_service.py:1886",
+  "fidelity": "full",
+  "kind": "symbol_at_line",
+  "args": {
+   "path": "desktop/capt_runtime_service.py",
+   "name": "actor_kind",
+   "line": 1886,
+   "form": "define"
+  }
+ },
+ {
+  "id": "PU11",
+  "source": "PUS v1",
+  "claim": "Token check at capt_runtime_service.py:1490",
+  "fidelity": "full",
+  "kind": "symbol_at_line",
+  "args": {
+   "path": "desktop/capt_runtime_service.py",
+   "name": "token",
+   "line": 1490,
+   "form": "mention"
+  }
+ },
+ {
+  "id": "PU12",
+  "source": "PUS v1",
+  "claim": "create_replay_fork at services.py:89",
+  "fidelity": "full",
+  "kind": "symbol_at_line",
+  "args": {
+   "path": "capt_runtime/services.py",
+   "name": "create_replay_fork",
+   "line": 89
+  }
+ },
+ {
+  "id": "PU13",
+  "source": "PUS v1",
+  "claim": "Events table has no commit-time column",
+  "fidelity": "full",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_runtime/store.py",
+   "regex": "recorded_at|committed_at|commit_time",
+   "op": "==",
+   "n": 0
+  }
+ },
+ {
+  "id": "PU14",
+  "source": "PUS v1",
+  "claim": "replay.py defines replay_equivalent",
+  "fidelity": "full",
+  "kind": "symbol_defined",
+  "args": {
+   "path": "capt_runtime/replay.py",
+   "name": "replay_equivalent",
+   "kind": "function"
+  }
+ },
+ {
+  "id": "PU15",
+  "source": "PUS v1",
+  "claim": "model_approval_binding digests exact text crossing the driver boundary",
+  "fidelity": "partial",
+  "kind": "symbol_defined",
+  "args": {
+   "path": "capt_runtime/model_approval_binding.py",
+   "name": "raw_text_digest",
+   "kind": "function"
+  }
+ },
+ {
+  "id": "PV1",
+  "source": "PUS v2",
+  "claim": "loop_detector.py exists and defines detect_action_loop",
+  "fidelity": "full",
+  "kind": "symbol_defined",
+  "args": {
+   "path": "capt_runtime/loop_detector.py",
+   "name": "detect_action_loop",
+   "kind": "function"
+  }
+ },
+ {
+  "id": "PV2",
+  "source": "PUS v2",
+  "claim": "cohort.py defines cognitive_debt",
+  "fidelity": "full",
+  "kind": "symbol_defined",
+  "args": {
+   "path": "capt_runtime/cohort.py",
+   "name": "cognitive_debt",
+   "kind": "function"
+  }
+ },
+ {
+  "id": "PV3",
+  "source": "PUS v2",
+  "claim": "continuation_context labels unverified prior output 'unverified'",
+  "fidelity": "full",
+  "kind": "pattern_count",
+  "args": {
+   "glob": "capt_runtime/continuation_context.py",
+   "regex": "unverified",
+   "op": ">=",
+   "n": 1
+  }
+ },
+ {
+  "id": "PV4",
+  "source": "PUS v2",
+  "claim": "A canary is a falsifier expected to fire (cbit.py)",
+  "fidelity": "none",
+  "kind": null,
+  "why_unsupported": "design proposal, not a source fact"
+ }
+]

@@ -1,0 +1,78 @@
+[
+  {
+    "id": "QL-HO5",
+    "kind": "pattern_count",
+    "args": {
+      "glob": "desktop/capt_runtime_service.py",
+      "regex": "auth\\.get\\(\"token\"\\) != token",
+      "op": ">=",
+      "n": 1
+    }
+  },
+  {
+    "id": "QL-HO6",
+    "kind": "pattern_count",
+    "args": {
+      "glob": "desktop/capt_runtime_service.py",
+      "regex": "actor_kind=\"human\"",
+      "op": ">=",
+      "n": 1
+    }
+  },
+  {
+    "id": "QL-HO7",
+    "kind": "pattern_count",
+    "args": {
+      "glob": "capt_runtime/services.py",
+      "regex": "decision\\.get\\(\"decidedAt\"\\) or metadata\\[\"issuedAt\"\\]",
+      "op": ">=",
+      "n": 1
+    }
+  },
+  {
+    "id": "QL-MU1",
+    "kind": "pattern_count",
+    "args": {
+      "glob": "capt_runtime/verification.py",
+      "regex": "_ALLOWED_CLAIM_STATEMENTS = frozenset",
+      "op": "==",
+      "n": 1
+    }
+  },
+  {
+    "id": "QL-SCHEMA",
+    "kind": "schema_property_absent",
+    "args": {
+      "path": "contracts/schema/common.schema.json",
+      "def": "HumanApprovalDecision",
+      "regex": "attest|channel|presence|provenance"
+    }
+  },
+  {
+    "id": "QL-PV1",
+    "kind": "symbol_defined",
+    "args": {
+      "path": "capt_runtime/loop_detector.py",
+      "name": "detect_action_loop",
+      "kind": "function"
+    }
+  },
+  {
+    "id": "QL-PV2",
+    "kind": "symbol_defined",
+    "args": {
+      "path": "capt_runtime/cohort.py",
+      "name": "cognitive_debt",
+      "kind": "function"
+    }
+  },
+  {
+    "id": "QL-AS9",
+    "kind": "symbol_defined",
+    "args": {
+      "path": "capt_runtime/prepared_execution.py",
+      "name": "prepared_execution_digest",
+      "kind": "function"
+    }
+  }
+]

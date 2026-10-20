@@ -1,0 +1,2006 @@
+{
+  "D_proxy_definition": "52 - count(full-fidelity claims with WITHIN predicate verdict)",
+  "D_proxy_is_not_semantic_certainty_debt": true,
+  "author_supplied_fidelity": true,
+  "first_parent_history": {
+    "claims_flipped": 10,
+    "commits_scanned": 99,
+    "first": "fe04589bbafaa78fcd8c089f6a22eebe41006858",
+    "last": "e28b66504c422946a66409d0de12e71f1646aae6",
+    "since_utc": "2026-10-08T00:00:00+00:00",
+    "transitions": {
+      "HO1a": [
+        {
+          "commit": "047a16019239",
+          "from": "INCONCLUSIVE",
+          "to": "WITHIN"
+        }
+      ],
+      "HO1b": [
+        {
+          "commit": "047a16019239",
+          "from": "INCONCLUSIVE",
+          "to": "WITHIN"
+        }
+      ],
+      "HO1c": [
+        {
+          "commit": "047a16019239",
+          "from": "INCONCLUSIVE",
+          "to": "WITHIN"
+        }
+      ],
+      "HO1d": [
+        {
+          "commit": "047a16019239",
+          "from": "INCONCLUSIVE",
+          "to": "WITHIN"
+        }
+      ],
+      "PU1": [
+        {
+          "commit": "f5aef2f8e90b",
+          "from": "EXCEEDS",
+          "to": "WITHIN"
+        }
+      ],
+      "PU10": [
+        {
+          "commit": "fb38fee818a0",
+          "from": "EXCEEDS",
+          "to": "WITHIN"
+        }
+      ],
+      "PU11": [
+        {
+          "commit": "fb38fee818a0",
+          "from": "EXCEEDS",
+          "to": "WITHIN"
+        }
+      ],
+      "PU2": [
+        {
+          "commit": "09854ee70397",
+          "from": "EXCEEDS",
+          "to": "WITHIN"
+        }
+      ],
+      "PU7": [
+        {
+          "commit": "c956c45e3311",
+          "from": "EXCEEDS",
+          "to": "WITHIN"
+        },
+        {
+          "commit": "e28b66504c42",
+          "from": "WITHIN",
+          "to": "EXCEEDS"
+        }
+      ],
+      "PV1": [
+        {
+          "commit": "186cd316439c",
+          "from": "INCONCLUSIVE",
+          "to": "WITHIN"
+        }
+      ]
+    }
+  },
+  "generated_utc": "2026-10-19T07:55:17.273875+00:00",
+  "mutation_at_head": {
+    "eligible": 42,
+    "killed": 42,
+    "per_claim": [
+      {
+        "id": "AS1c",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "AS1d",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "AS1e",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "AS2",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "AS4",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "AS5",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "AS6",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "AS8",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "AS9",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "AS10a",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "AS10b",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "AS11a",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "AS11b",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "AS12",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "HO1a",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "HO1b",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "HO1c",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "HO1d",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "HO2",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "HO3",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "HO4a",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "HO4b",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "HO5",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "HO6",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "HO7",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "MU1",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "PU1",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "PU2",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "PU3",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "PU4",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "PU5",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "PU6",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "PU9",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "PU10",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "PU11",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "PU12",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "PU13",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "PU14",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "PU15",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "PV1",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "PV2",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      },
+      {
+        "id": "PV3",
+        "killed": true,
+        "mutant_status": "EXCEEDS"
+      }
+    ],
+    "scope": "predicate perturbation only, NOT tree mutation or proof of semantic entailment",
+    "survivors": []
+  },
+  "pins": {
+    "3f11800": {
+      "claims": [
+        {
+          "detail": "count=0",
+          "fidelity": "partial",
+          "id": "AS1a",
+          "predicate_status": "EXCEEDS",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=0",
+          "fidelity": "partial",
+          "id": "AS1b",
+          "predicate_status": "EXCEEDS",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=2",
+          "fidelity": "partial",
+          "id": "AS1c",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "partial",
+          "id": "AS1d",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=2",
+          "fidelity": "partial",
+          "id": "AS1e",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=3",
+          "fidelity": "partial",
+          "id": "AS2",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=0",
+          "fidelity": "partial",
+          "id": "AS3",
+          "predicate_status": "EXCEEDS",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=37",
+          "fidelity": "partial",
+          "id": "AS4",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "AS5",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "AS6",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "unsupported predicate",
+          "fidelity": "none",
+          "id": "AS7",
+          "predicate_status": "UNSUPPORTED",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=3",
+          "fidelity": "partial",
+          "id": "AS8",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "partial",
+          "id": "AS9",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "AS10a",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "AS10b",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "AS11a",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "AS11b",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=6",
+          "fidelity": "partial",
+          "id": "AS12",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "unsupported predicate",
+          "fidelity": "none",
+          "id": "AS13",
+          "predicate_status": "UNSUPPORTED",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "full",
+          "id": "HO1a",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "full",
+          "id": "HO1b",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "full",
+          "id": "HO1c",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "full",
+          "id": "HO1d",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "literal collection size=5",
+          "fidelity": "full",
+          "id": "HO2",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "partial",
+          "id": "HO3",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "HO4a",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "HO4b",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "HO5",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "HO6",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "HO7",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "unsupported predicate",
+          "fidelity": "none",
+          "id": "HO8",
+          "predicate_status": "UNSUPPORTED",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "literal collection size=5",
+          "fidelity": "full",
+          "id": "MU1",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Muse"
+        },
+        {
+          "detail": "unsupported predicate",
+          "fidelity": "none",
+          "id": "MU2",
+          "predicate_status": "UNSUPPORTED",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Muse"
+        },
+        {
+          "detail": "line 110: def chain_next(previous: str, payload_digest: str, event_id: str) -> str:",
+          "fidelity": "full",
+          "id": "PU1",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "line 752: def verify_chain(self) -> str:",
+          "fidelity": "full",
+          "id": "PU2",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "line 419: distinct_sources = len({",
+          "fidelity": "full",
+          "id": "PU3",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "literal collection size=6",
+          "fidelity": "full",
+          "id": "PU4",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "count=17",
+          "fidelity": "full",
+          "id": "PU5",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "matching property absent in simple closed definition",
+          "fidelity": "full",
+          "id": "PU6",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "count=87",
+          "fidelity": "full",
+          "id": "PU7",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "count=22739",
+          "fidelity": "full",
+          "id": "PU8",
+          "predicate_status": "EXCEEDS",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "line 154: def _orthogonality(",
+          "fidelity": "full",
+          "id": "PU9",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "line 1886: actor_kind=\"human\",",
+          "fidelity": "full",
+          "id": "PU10",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "line 1490: if not auth or auth.get(\"token\") != token:",
+          "fidelity": "full",
+          "id": "PU11",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "line 89: def create_replay_fork(",
+          "fidelity": "full",
+          "id": "PU12",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "count=0",
+          "fidelity": "full",
+          "id": "PU13",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "full",
+          "id": "PU14",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "partial",
+          "id": "PU15",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "full",
+          "id": "PV1",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v2"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "full",
+          "id": "PV2",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v2"
+        },
+        {
+          "detail": "count=3",
+          "fidelity": "full",
+          "id": "PV3",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v2"
+        },
+        {
+          "detail": "unsupported predicate",
+          "fidelity": "none",
+          "id": "PV4",
+          "predicate_status": "UNSUPPORTED",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v2"
+        }
+      ],
+      "sha": "3f11800c31252b8e9d2037fc29cf3c195dcfb7f4",
+      "summary": {
+        "D_proxy": 19,
+        "compiled": 47,
+        "exceptions": [
+          {
+            "detail": "count=0",
+            "fidelity": "partial",
+            "id": "AS1a",
+            "status": "EXCEEDS"
+          },
+          {
+            "detail": "count=0",
+            "fidelity": "partial",
+            "id": "AS1b",
+            "status": "EXCEEDS"
+          },
+          {
+            "detail": "count=0",
+            "fidelity": "partial",
+            "id": "AS3",
+            "status": "EXCEEDS"
+          },
+          {
+            "detail": "unsupported predicate",
+            "fidelity": "none",
+            "id": "AS7",
+            "status": "UNSUPPORTED"
+          },
+          {
+            "detail": "unsupported predicate",
+            "fidelity": "none",
+            "id": "AS13",
+            "status": "UNSUPPORTED"
+          },
+          {
+            "detail": "unsupported predicate",
+            "fidelity": "none",
+            "id": "HO8",
+            "status": "UNSUPPORTED"
+          },
+          {
+            "detail": "unsupported predicate",
+            "fidelity": "none",
+            "id": "MU2",
+            "status": "UNSUPPORTED"
+          },
+          {
+            "detail": "count=22739",
+            "fidelity": "full",
+            "id": "PU8",
+            "status": "EXCEEDS"
+          },
+          {
+            "detail": "unsupported predicate",
+            "fidelity": "none",
+            "id": "PV4",
+            "status": "UNSUPPORTED"
+          }
+        ],
+        "full_fidelity_within": 33,
+        "status_counts": {
+          "EXCEEDS": 4,
+          "INCONCLUSIVE": 0,
+          "UNSUPPORTED": 5,
+          "WITHIN": 43
+        },
+        "total": 52,
+        "unconfirmed_claim_ids": [
+          "AS1a",
+          "AS1b",
+          "AS1c",
+          "AS1d",
+          "AS1e",
+          "AS2",
+          "AS3",
+          "AS4",
+          "AS7",
+          "AS8",
+          "AS9",
+          "AS12",
+          "AS13",
+          "HO3",
+          "HO8",
+          "MU2",
+          "PU8",
+          "PU15",
+          "PV4"
+        ]
+      }
+    },
+    "c5b6f6a": {
+      "claims": [
+        {
+          "detail": "count=0",
+          "fidelity": "partial",
+          "id": "AS1a",
+          "predicate_status": "EXCEEDS",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=0",
+          "fidelity": "partial",
+          "id": "AS1b",
+          "predicate_status": "EXCEEDS",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=2",
+          "fidelity": "partial",
+          "id": "AS1c",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "partial",
+          "id": "AS1d",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=2",
+          "fidelity": "partial",
+          "id": "AS1e",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=3",
+          "fidelity": "partial",
+          "id": "AS2",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=0",
+          "fidelity": "partial",
+          "id": "AS3",
+          "predicate_status": "EXCEEDS",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=37",
+          "fidelity": "partial",
+          "id": "AS4",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "AS5",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "AS6",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "unsupported predicate",
+          "fidelity": "none",
+          "id": "AS7",
+          "predicate_status": "UNSUPPORTED",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=3",
+          "fidelity": "partial",
+          "id": "AS8",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "partial",
+          "id": "AS9",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "AS10a",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "AS10b",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "AS11a",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "AS11b",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=6",
+          "fidelity": "partial",
+          "id": "AS12",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "unsupported predicate",
+          "fidelity": "none",
+          "id": "AS13",
+          "predicate_status": "UNSUPPORTED",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "full",
+          "id": "HO1a",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "full",
+          "id": "HO1b",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "full",
+          "id": "HO1c",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "full",
+          "id": "HO1d",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "literal collection size=5",
+          "fidelity": "full",
+          "id": "HO2",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "partial",
+          "id": "HO3",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "HO4a",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "HO4b",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "HO5",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "HO6",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "HO7",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "unsupported predicate",
+          "fidelity": "none",
+          "id": "HO8",
+          "predicate_status": "UNSUPPORTED",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "literal collection size=5",
+          "fidelity": "full",
+          "id": "MU1",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Muse"
+        },
+        {
+          "detail": "unsupported predicate",
+          "fidelity": "none",
+          "id": "MU2",
+          "predicate_status": "UNSUPPORTED",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Muse"
+        },
+        {
+          "detail": "line 110: def chain_next(previous: str, payload_digest: str, event_id: str) -> str:",
+          "fidelity": "full",
+          "id": "PU1",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "line 752: def verify_chain(self) -> str:",
+          "fidelity": "full",
+          "id": "PU2",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "line 419: distinct_sources = len({",
+          "fidelity": "full",
+          "id": "PU3",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "literal collection size=6",
+          "fidelity": "full",
+          "id": "PU4",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "count=17",
+          "fidelity": "full",
+          "id": "PU5",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "matching property absent in simple closed definition",
+          "fidelity": "full",
+          "id": "PU6",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "count=87",
+          "fidelity": "full",
+          "id": "PU7",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "count=22739",
+          "fidelity": "full",
+          "id": "PU8",
+          "predicate_status": "EXCEEDS",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "line 154: def _orthogonality(",
+          "fidelity": "full",
+          "id": "PU9",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "line 1886: actor_kind=\"human\",",
+          "fidelity": "full",
+          "id": "PU10",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "line 1490: if not auth or auth.get(\"token\") != token:",
+          "fidelity": "full",
+          "id": "PU11",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "line 89: def create_replay_fork(",
+          "fidelity": "full",
+          "id": "PU12",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "count=0",
+          "fidelity": "full",
+          "id": "PU13",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "full",
+          "id": "PU14",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "partial",
+          "id": "PU15",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "full",
+          "id": "PV1",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v2"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "full",
+          "id": "PV2",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v2"
+        },
+        {
+          "detail": "count=3",
+          "fidelity": "full",
+          "id": "PV3",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v2"
+        },
+        {
+          "detail": "unsupported predicate",
+          "fidelity": "none",
+          "id": "PV4",
+          "predicate_status": "UNSUPPORTED",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v2"
+        }
+      ],
+      "sha": "c5b6f6afcb280f325af9746ba9beebad0df143f6",
+      "summary": {
+        "D_proxy": 19,
+        "compiled": 47,
+        "exceptions": [
+          {
+            "detail": "count=0",
+            "fidelity": "partial",
+            "id": "AS1a",
+            "status": "EXCEEDS"
+          },
+          {
+            "detail": "count=0",
+            "fidelity": "partial",
+            "id": "AS1b",
+            "status": "EXCEEDS"
+          },
+          {
+            "detail": "count=0",
+            "fidelity": "partial",
+            "id": "AS3",
+            "status": "EXCEEDS"
+          },
+          {
+            "detail": "unsupported predicate",
+            "fidelity": "none",
+            "id": "AS7",
+            "status": "UNSUPPORTED"
+          },
+          {
+            "detail": "unsupported predicate",
+            "fidelity": "none",
+            "id": "AS13",
+            "status": "UNSUPPORTED"
+          },
+          {
+            "detail": "unsupported predicate",
+            "fidelity": "none",
+            "id": "HO8",
+            "status": "UNSUPPORTED"
+          },
+          {
+            "detail": "unsupported predicate",
+            "fidelity": "none",
+            "id": "MU2",
+            "status": "UNSUPPORTED"
+          },
+          {
+            "detail": "count=22739",
+            "fidelity": "full",
+            "id": "PU8",
+            "status": "EXCEEDS"
+          },
+          {
+            "detail": "unsupported predicate",
+            "fidelity": "none",
+            "id": "PV4",
+            "status": "UNSUPPORTED"
+          }
+        ],
+        "full_fidelity_within": 33,
+        "status_counts": {
+          "EXCEEDS": 4,
+          "INCONCLUSIVE": 0,
+          "UNSUPPORTED": 5,
+          "WITHIN": 43
+        },
+        "total": 52,
+        "unconfirmed_claim_ids": [
+          "AS1a",
+          "AS1b",
+          "AS1c",
+          "AS1d",
+          "AS1e",
+          "AS2",
+          "AS3",
+          "AS4",
+          "AS7",
+          "AS8",
+          "AS9",
+          "AS12",
+          "AS13",
+          "HO3",
+          "HO8",
+          "MU2",
+          "PU8",
+          "PU15",
+          "PV4"
+        ]
+      }
+    },
+    "e28b665": {
+      "claims": [
+        {
+          "detail": "count=0",
+          "fidelity": "partial",
+          "id": "AS1a",
+          "predicate_status": "EXCEEDS",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=0",
+          "fidelity": "partial",
+          "id": "AS1b",
+          "predicate_status": "EXCEEDS",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=2",
+          "fidelity": "partial",
+          "id": "AS1c",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "partial",
+          "id": "AS1d",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=2",
+          "fidelity": "partial",
+          "id": "AS1e",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=3",
+          "fidelity": "partial",
+          "id": "AS2",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=0",
+          "fidelity": "partial",
+          "id": "AS3",
+          "predicate_status": "EXCEEDS",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=37",
+          "fidelity": "partial",
+          "id": "AS4",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "AS5",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "AS6",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "unsupported predicate",
+          "fidelity": "none",
+          "id": "AS7",
+          "predicate_status": "UNSUPPORTED",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=3",
+          "fidelity": "partial",
+          "id": "AS8",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "partial",
+          "id": "AS9",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "AS10a",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "AS10b",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "AS11a",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "AS11b",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "count=6",
+          "fidelity": "partial",
+          "id": "AS12",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "unsupported predicate",
+          "fidelity": "none",
+          "id": "AS13",
+          "predicate_status": "UNSUPPORTED",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Astra"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "full",
+          "id": "HO1a",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "full",
+          "id": "HO1b",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "full",
+          "id": "HO1c",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "full",
+          "id": "HO1d",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "literal collection size=5",
+          "fidelity": "full",
+          "id": "HO2",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "partial",
+          "id": "HO3",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "HO4a",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "HO4b",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "HO5",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "HO6",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "count=1",
+          "fidelity": "full",
+          "id": "HO7",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "unsupported predicate",
+          "fidelity": "none",
+          "id": "HO8",
+          "predicate_status": "UNSUPPORTED",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Handoff"
+        },
+        {
+          "detail": "literal collection size=5",
+          "fidelity": "full",
+          "id": "MU1",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Muse"
+        },
+        {
+          "detail": "unsupported predicate",
+          "fidelity": "none",
+          "id": "MU2",
+          "predicate_status": "UNSUPPORTED",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "Muse"
+        },
+        {
+          "detail": "line 110: def chain_next(previous: str, payload_digest: str, event_id: str) -> str:",
+          "fidelity": "full",
+          "id": "PU1",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "line 752: def verify_chain(self) -> str:",
+          "fidelity": "full",
+          "id": "PU2",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "line 419: distinct_sources = len({",
+          "fidelity": "full",
+          "id": "PU3",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "literal collection size=6",
+          "fidelity": "full",
+          "id": "PU4",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "count=17",
+          "fidelity": "full",
+          "id": "PU5",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "matching property absent in simple closed definition",
+          "fidelity": "full",
+          "id": "PU6",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "count=88",
+          "fidelity": "full",
+          "id": "PU7",
+          "predicate_status": "EXCEEDS",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "count=22846",
+          "fidelity": "full",
+          "id": "PU8",
+          "predicate_status": "EXCEEDS",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "line 154: def _orthogonality(",
+          "fidelity": "full",
+          "id": "PU9",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "line 1886: actor_kind=\"human\",",
+          "fidelity": "full",
+          "id": "PU10",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "line 1490: if not auth or auth.get(\"token\") != token:",
+          "fidelity": "full",
+          "id": "PU11",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "line 89: def create_replay_fork(",
+          "fidelity": "full",
+          "id": "PU12",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "count=0",
+          "fidelity": "full",
+          "id": "PU13",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "full",
+          "id": "PU14",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "partial",
+          "id": "PU15",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v1"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "full",
+          "id": "PV1",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v2"
+        },
+        {
+          "detail": "symbol found in module scope",
+          "fidelity": "full",
+          "id": "PV2",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v2"
+        },
+        {
+          "detail": "count=3",
+          "fidelity": "full",
+          "id": "PV3",
+          "predicate_status": "WITHIN",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v2"
+        },
+        {
+          "detail": "unsupported predicate",
+          "fidelity": "none",
+          "id": "PV4",
+          "predicate_status": "UNSUPPORTED",
+          "promotion_eligible": false,
+          "semantic_entailment": "NOT_ASSESSED",
+          "source": "PUS v2"
+        }
+      ],
+      "sha": "e28b66504c422946a66409d0de12e71f1646aae6",
+      "summary": {
+        "D_proxy": 20,
+        "compiled": 47,
+        "exceptions": [
+          {
+            "detail": "count=0",
+            "fidelity": "partial",
+            "id": "AS1a",
+            "status": "EXCEEDS"
+          },
+          {
+            "detail": "count=0",
+            "fidelity": "partial",
+            "id": "AS1b",
+            "status": "EXCEEDS"
+          },
+          {
+            "detail": "count=0",
+            "fidelity": "partial",
+            "id": "AS3",
+            "status": "EXCEEDS"
+          },
+          {
+            "detail": "unsupported predicate",
+            "fidelity": "none",
+            "id": "AS7",
+            "status": "UNSUPPORTED"
+          },
+          {
+            "detail": "unsupported predicate",
+            "fidelity": "none",
+            "id": "AS13",
+            "status": "UNSUPPORTED"
+          },
+          {
+            "detail": "unsupported predicate",
+            "fidelity": "none",
+            "id": "HO8",
+            "status": "UNSUPPORTED"
+          },
+          {
+            "detail": "unsupported predicate",
+            "fidelity": "none",
+            "id": "MU2",
+            "status": "UNSUPPORTED"
+          },
+          {
+            "detail": "count=88",
+            "fidelity": "full",
+            "id": "PU7",
+            "status": "EXCEEDS"
+          },
+          {
+            "detail": "count=22846",
+            "fidelity": "full",
+            "id": "PU8",
+            "status": "EXCEEDS"
+          },
+          {
+            "detail": "unsupported predicate",
+            "fidelity": "none",
+            "id": "PV4",
+            "status": "UNSUPPORTED"
+          }
+        ],
+        "full_fidelity_within": 32,
+        "status_counts": {
+          "EXCEEDS": 5,
+          "INCONCLUSIVE": 0,
+          "UNSUPPORTED": 5,
+          "WITHIN": 42
+        },
+        "total": 52,
+        "unconfirmed_claim_ids": [
+          "AS1a",
+          "AS1b",
+          "AS1c",
+          "AS1d",
+          "AS1e",
+          "AS2",
+          "AS3",
+          "AS4",
+          "AS7",
+          "AS8",
+          "AS9",
+          "AS12",
+          "AS13",
+          "HO3",
+          "HO8",
+          "MU2",
+          "PU7",
+          "PU8",
+          "PU15",
+          "PV4"
+        ]
+      }
+    }
+  },
+  "promotion_eligible": false,
+  "source_corpus_sha256": "0cb55a016847d4c34951efb6bceccfe3505720ddda99cd7d6871973cb394bae3",
+  "verification_scope": "predicates only; no independent claim-to-probe semantic entailment"
+}
