@@ -240,7 +240,9 @@ def test_allowlist_orchestration_observes_before_guardian_start_and_workload_sta
             events.append("guardian-connected")
             return _command_result()
         if args[:2] == ("inspect", guardian_id):
-            return _command_result(json.dumps([{"Id": guardian_id, "Image": guardian_image_id, "State": {"Status": "created"}, "Config": {"User": f"{profile.uid}:{profile.gid}"}, "HostConfig": {"ReadonlyRootfs": True, "CapDrop": ["ALL"], "SecurityOpt": ["no-new-privileges:true"], "Privileged": False, "Devices": [], "NetworkMode": "bridge"}}]))
+            return _command_result(json.dumps([{"Id": guardian_id, "Image": guardian_image_id, "State": {"Status": "created"}, "Config": {"User": f"{profile.uid}:{profile.gid}",
+                        "Cmd": [profile.guardian_python, "-c", backend._guardian_source()],
+                        "Entrypoint": []}, "HostConfig": {"ReadonlyRootfs": True, "CapDrop": ["ALL"], "SecurityOpt": ["no-new-privileges:true"], "Privileged": False, "Devices": [], "NetworkMode": "bridge"}}]))
         if args[:2] == ("inspect", workload_id):
             record = _created_record(profile, prepared.docker.image_id, workload_id)
             record["HostConfig"]["NetworkMode"] = network_name_box[0]
@@ -311,7 +313,9 @@ def test_allowlist_guardian_failure_after_observation_cleans_everything(
         if args and args[0] == "create": return _command_result(guardian_id + "\n")
         if args[:2] == ("network", "connect"): return _command_result()
         if args[:2] == ("inspect", guardian_id):
-            return _command_result(json.dumps([{"Id": guardian_id, "Image": guardian_image_id, "State": {"Status": "created"}, "Config": {"User": f"{profile.uid}:{profile.gid}"}, "HostConfig": {"ReadonlyRootfs": True, "CapDrop": ["ALL"], "SecurityOpt": ["no-new-privileges:true"], "Privileged": False, "Devices": [], "NetworkMode": "bridge"}}]))
+            return _command_result(json.dumps([{"Id": guardian_id, "Image": guardian_image_id, "State": {"Status": "created"}, "Config": {"User": f"{profile.uid}:{profile.gid}",
+                        "Cmd": [profile.guardian_python, "-c", backend._guardian_source()],
+                        "Entrypoint": []}, "HostConfig": {"ReadonlyRootfs": True, "CapDrop": ["ALL"], "SecurityOpt": ["no-new-privileges:true"], "Privileged": False, "Devices": [], "NetworkMode": "bridge"}}]))
         if args[:2] == ("inspect", workload_id):
             record = _created_record(profile, prepared.docker.image_id, workload_id)
             record["HostConfig"]["NetworkMode"] = network_name[0]

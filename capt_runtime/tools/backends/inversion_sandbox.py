@@ -711,8 +711,44 @@ class InversionSandboxProcessBackend:
         )
         return record
 
+    def _verify_guardian_source_command(
+        self, config: dict[str, Any], profile: InversionSandboxProfile
+    ) -> str:
+        """Bind an existing Guardian to the actual, current Docker command bytes.
+
+        A freshly recomputed guardianSourceDigest in an effect receipt does not
+        prove what an existing container will run. Verify its Docker Config.Cmd
+        before persistent restart, inspection, or execution. Absent/old evidence
+        is fail-closed: never silently recreate or approve a sandbox.
+        """
+        cmd = config.get("Cmd") if isinstance(config, dict) else None
+        # Docker executes Config.Entrypoint before Config.Cmd; validating
+        # Cmd alone is insufficient if the image carries an entrypoint.
+        if not isinstance(config, dict) or config.get("Entrypoint") not in (None, []):
+            raise AuthorityViolation(
+                "Guardian source unverified: unexpected Docker Entrypoint"
+            )
+        if (
+            not isinstance(cmd, list)
+            or len(cmd) != 3
+            or cmd[0] != profile.guardian_python
+            or cmd[1] != "-c"
+            or not isinstance(cmd[2], str)
+        ):
+            raise AuthorityViolation(
+                "Guardian source unverified in persistent Docker command; recycle required"
+            )
+        actual = hashlib.sha256(cmd[2].encode("utf-8")).hexdigest()
+        current = hashlib.sha256(self._guardian_source().encode("utf-8")).hexdigest()
+        if actual != current:
+            raise AuthorityViolation(
+                "Guardian source stale in persistent Docker command; recycle required"
+            )
+        return actual
+
     def _verify_persistent_guardian(
-        self, identity: SandboxRuntimeIdentity, profile: InversionSandboxProfile
+        self, identity: SandboxRuntimeIdentity, profile: InversionSandboxProfile,
+        *, allow_stale_source_for_close: bool = False,
     ) -> dict[str, Any] | None:
         if profile.network_policy.mode != "allowlist":
             if any(
@@ -760,6 +796,11 @@ class InversionSandboxProcessBackend:
         if not isinstance(labels, dict) or any(labels.get(k) != v for k, v in expected_labels.items()):
             raise AuthorityViolation("InversionSandbox persistent guardian labels drifted")
         config = guardian.get("Config") or {}
+        # Only cleanup may accept a stale Guardian command. All ownership,
+        # immutable container/image, labels, isolation and network checks
+        # below still apply. Start, exec and normal inspection remain strict.
+        if not allow_stale_source_for_close:
+            self._verify_guardian_source_command(config, profile)
         host = guardian.get("HostConfig") or {}
         if config.get("User") != f"{profile.uid}:{profile.gid}":
             raise AuthorityViolation("InversionSandbox persistent guardian user drifted")
@@ -992,8 +1033,15 @@ class InversionSandboxProcessBackend:
         return not result.timed_out and ("no such" in text or "not found" in text)
 
     def close_persistent(self, identity: SandboxRuntimeIdentity) -> PersistentSandboxCloseResult:
-        _profile, _prepared = self._persistent_prepared_from_identity(identity)
-        self.inspect_persistent(identity)
+        profile, prepared = self._persistent_prepared_from_identity(identity)
+        # sandbox.close is already an independently approved durable effect.
+        # Validate the exact workload and Guardian identities before cleanup,
+        # but do not require a stale Guardian to pass the reuse-only source
+        # attestation. Otherwise the vulnerable container could never close.
+        self._verify_persistent_workload(identity, profile, prepared)
+        self._verify_persistent_guardian(
+            identity, profile, allow_stale_source_for_close=True
+        )
         errors: list[str] = []
         cleaned, cleanup_error = self.docker_backend._cleanup(
             identity.context_endpoint, identity.workload_container_id
@@ -1177,6 +1225,9 @@ class InversionSandboxProcessBackend:
         config = record.get("Config") or {}
         if record.get("Id") != guardian_id or record.get("Image") != image_id or (record.get("State") or {}).get("Status") != "created":
             raise AuthorityViolation("InversionSandbox guardian identity/state drifted")
+        # Initial creation must prove the same baked source and lack of
+        # arbitrary image Entrypoint as all future persistent reuse.
+        self._verify_guardian_source_command(config, profile)
         if config.get("User") != f"{profile.uid}:{profile.gid}":
             raise AuthorityViolation("InversionSandbox guardian user drifted")
         if host.get("ReadonlyRootfs") is not True or host.get("Privileged") is not False:
