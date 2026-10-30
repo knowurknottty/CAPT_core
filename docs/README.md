@@ -21,6 +21,7 @@ A package version, merged capability, branch-local implementation, exact-head ve
 - [Documentation maintenance](DOCS_MAINTENANCE.md) — change review, evidence, freshness and validation.
 - [Selected current-HEAD delta notes](CURRENT_HEAD_DELTA.md) — source/test-proven post-October-8 slices, with gaps exposed.
 - [MiMo peer-review correction ledger](missions/OMEGA_MIMO26_PEER_REVIEW_20261018.md) — verified suggestions, corrected inaccuracies and release boundaries.
+- [681-source-file structural evidence and independent verifier verdict](review-evidence/omega-c956/README.md) — full byte/line accounting, adversarial findings and withheld semantic certification.
 - [RRDS-1 partial audit at `c956c45e`](missions/OMEGA_RRDS_C956C45E_PARTIAL.md) — real reviewer receipts, separate-worktree checks, residual scope and limitations.
 - [Cheatsheet collection](CHEATSHEETS/README.md) — existing operator/task quick references.
 
