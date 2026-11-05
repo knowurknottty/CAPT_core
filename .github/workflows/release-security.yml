@@ -24,8 +24,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install test and audit tooling
-        run: python -m pip install --upgrade pip pytest jsonschema build pip-audit pyyaml
+      - name: Install test tooling (auditor isolated below)
+        run: python -m pip install --upgrade pip pytest jsonschema build pyyaml
       - name: Build wheel (no editable install before wheel proof)
         run: python -m build --wheel
       - name: Install wheel
@@ -117,10 +117,19 @@ jobs:
           assert cfg["mcp_server"]["credentials_in_args"] is False
           assert cfg["mcp_server"]["network_enabled"] is False
           PY
-      - name: Audit shipped Python dependency closure
+      - name: Freeze clean wheel runtime dependency closure
         run: |
-          python -m pip freeze --exclude-editable > /tmp/runtime-requirements.txt
-          pip-audit -r /tmp/runtime-requirements.txt
+          python -m venv /tmp/capt-runtime-audit
+          /tmp/capt-runtime-audit/bin/python -m pip install --force-reinstall dist/*.whl
+          /tmp/capt-runtime-audit/bin/python -m pip freeze --exclude-editable > /tmp/runtime-requirements.txt
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Audit shipped Python dependency closure from isolated toolchain
+        run: |
+          python -m venv /tmp/capt-audit-tool
+          /tmp/capt-audit-tool/bin/python -m pip install pip-audit
+          /tmp/capt-audit-tool/bin/pip-audit -r /tmp/runtime-requirements.txt
 
   billing-assurance:
     runs-on: ubuntu-latest
