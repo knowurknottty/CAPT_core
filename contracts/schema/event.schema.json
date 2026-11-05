@@ -66,7 +66,9 @@
         "CloudflareResourceAdoptionApprovalConsumed",
         "CloudflareResourceBindingCreated",
         "SandboxLeaseReserved",
-        "SandboxLeaseTransitioned"
+        "SandboxLeaseTransitioned",
+        "DecisionOfferingIssued",
+        "DecisionOfferingRevoked"
       ]
     },
     "EventPayload": {
@@ -550,18 +552,41 @@
           "title": "HumanApprovalRevokedPayload",
           "type": "object",
           "additionalProperties": false,
-          "required": ["eventType", "revocation"],
+          "required": [
+            "eventType",
+            "revocation"
+          ],
           "properties": {
-            "eventType": {"type": "string", "const": "HumanApprovalRevoked"},
+            "eventType": {
+              "type": "string",
+              "const": "HumanApprovalRevoked"
+            },
             "revocation": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["requestId", "operatorId", "revokedAt", "reason"],
+              "required": [
+                "requestId",
+                "operatorId",
+                "revokedAt",
+                "reason"
+              ],
               "properties": {
-                "requestId": {"$ref": "common.schema.json#/$defs/Identifier"},
-                "operatorId": {"$ref": "common.schema.json#/$defs/Identifier"},
-                "revokedAt": {"type": "string", "minLength": 20, "maxLength": 40},
-                "reason": {"type": "string", "minLength": 1, "maxLength": 1024}
+                "requestId": {
+                  "$ref": "common.schema.json#/$defs/Identifier"
+                },
+                "operatorId": {
+                  "$ref": "common.schema.json#/$defs/Identifier"
+                },
+                "revokedAt": {
+                  "type": "string",
+                  "minLength": 20,
+                  "maxLength": 40
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                }
               }
             }
           }
@@ -1317,6 +1342,46 @@
             },
             "lease": {
               "$ref": "sandbox.schema.json#/$defs/SandboxLease"
+            }
+          }
+        },
+        {
+          "title": "DecisionOfferingIssuedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "receipt"
+          ],
+          "properties": {
+            "eventType": {
+              "const": "DecisionOfferingIssued",
+              "type": "string"
+            },
+            "receipt": {
+              "$ref": "tool.schema.json#/$defs/DecisionOfferingReceipt"
+            }
+          }
+        },
+        {
+          "title": "DecisionOfferingRevokedPayload",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "eventType",
+            "offeringId",
+            "revokedAt"
+          ],
+          "properties": {
+            "eventType": {
+              "const": "DecisionOfferingRevoked",
+              "type": "string"
+            },
+            "offeringId": {
+              "$ref": "common.schema.json#/$defs/Identifier"
+            },
+            "revokedAt": {
+              "$ref": "common.schema.json#/$defs/Timestamp"
             }
           }
         }

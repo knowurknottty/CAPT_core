@@ -50,12 +50,14 @@ class RuntimeService(object):
         appends: List[AppendRequest],
         metadata: Dict[str, Any],
         dispatch: bool = True,
+        expected_chain_digest: Optional[str] = None,
     ) -> Dict[str, Any]:
         result = self.store.commit_command(
             appends,
             metadata["idempotencyKey"],
             metadata["operationFingerprint"],
             metadata["commandId"],
+            expected_chain_digest=expected_chain_digest,
         )
         if dispatch:
             # Strictly AFTER commit returns (spec invariant 10).
