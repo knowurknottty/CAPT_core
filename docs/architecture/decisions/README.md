@@ -24,6 +24,8 @@ Numbering starts at **0101** to avoid collision with `ADR-001`…`ADR-006`, whic
 | [0126](ADR-0126-observation-validation.md) | Observation and receipt ingestion | Accepted (M0-B) |
 | [0127](ADR-0127-m0b-exclusions.md) | M0-B exclusions | Accepted (M0-B) |
 | [0128](ADR-0128-human-approval-capability-transfer.md) | HumanApproval-to-Capability authority transfer | Proposed (post-M0-B) |
+| [0130](ADR-0130-capt-foundry-boundary.md) | CAPT Foundry research-asset ownership boundary | Accepted (Foundry M0) |
+| [0131](ADR-0131-canonical-architecture-reconciliation.md) | Canonical architecture reconciliation | Proposed (recommendation only) |
 
 Every record carries: status, context, decision, alternatives considered, consequences, reversal conditions, and evidence drawn from the current repository (file and line references, not documentation claims).
 
