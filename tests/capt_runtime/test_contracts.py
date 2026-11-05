@@ -51,6 +51,24 @@ def test_drift_check_clean():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_drift_scanner_excludes_installed_build_artifacts_not_unknown_sources(tmp_path):
+    """Installing TypeScript must not masquerade as drift in generated sources."""
+    from contracts.tools.check_drift import tree_digests
+
+    root = tmp_path / "generated"
+    (root / "typescript/src").mkdir(parents=True)
+    (root / "typescript/dist").mkdir()
+    (root / "typescript/node_modules/typescript/bin").mkdir(parents=True)
+    (root / "typescript/src/types.ts").write_text("export type X = string;\n")
+    (root / "typescript/dist/index.js").write_text("export {};\n")
+    (root / "typescript/node_modules/typescript/bin/tsc").write_text("compiler")
+    (root / "typescript/package-lock.json").write_text("{}")
+
+    assert set(tree_digests(root)) == {"typescript/src/types.ts"}
+    (root / "typescript/unexpected.ts").write_text("unmanaged")
+    assert set(tree_digests(root)) == {"typescript/src/types.ts", "typescript/unexpected.ts"}
+
+
 def _node_bin_or_skip():
     """Resolve node via the portable discovery helper; skip only if absent."""
     from contracts.tools.node_discovery import discover_node_bin
