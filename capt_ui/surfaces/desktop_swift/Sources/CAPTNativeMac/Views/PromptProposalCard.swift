@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import CAPTCoreDesktop
 
 struct PromptProposalCard: View {
@@ -9,7 +10,7 @@ struct PromptProposalCard: View {
 
     @State private var editing = false
     @State private var editedPrompt = ""
-    @State private var showPromptDetails = false
+    @State private var showPromptDetails = true
     @State private var showVerification = true
     @State private var showConsiderations = true
 
@@ -26,7 +27,7 @@ struct PromptProposalCard: View {
 
     private var statusTone: InversionTone {
         if !proposal.isApprovalSelectable { return .warning }
-        return proposal.hasMaterialUpgrade ? .violet : .cyan
+        return .neutral
     }
 
     private var compilerLabel: String {
@@ -47,13 +48,13 @@ struct PromptProposalCard: View {
 
     var body: some View {
         InversionPanel(tone: statusTone) {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 14) {
                 header
                 stagePipeline
-                actionBoundary
-                if editing { editSection }
                 if showPromptDetails { promptComparison }
                 verificationSection
+                if editing { editSection }
+                actionBoundary
             }
         }
         .task(id: proposal.proposalID) { editedPrompt = proposal.proposedPrompt }
@@ -63,8 +64,9 @@ struct PromptProposalCard: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
                 InversionSectionHeader(
-                    "Prompt Intelligence proposal",
-                    eyebrow: "PRE-EXECUTION",
+                    proposal.status == "compiler_unavailable" ? "Compilation unavailable"
+                        : (proposal.hasMaterialUpgrade ? "Enhanced proposal ready" : "Prompt Intelligence proposal"),
+                    eyebrow: "PRE-EXECUTION · GOVERNED REVIEW",
                     detail: proposal.status == "compiler_unavailable"
                         ? "Prompt enhancement did not produce an approvable upgrade. The original request was preserved; earlier transport attempts may have incurred usage. Use the original, or cancel and retry after repairing the compiler."
                         : "Review the Prompt Intelligence result before choosing the exact prompt bytes for HumanApproval. No execution authority has been consumed.",
@@ -159,7 +161,7 @@ struct PromptProposalCard: View {
         VStack(alignment: .leading, spacing: 10) {
             InversionDivider()
             HStack(spacing: 8) {
-                Label("SELECT APPROVAL BASIS", systemImage: "signature")
+                Label("PROMPT SELECTION · HUMAN APPROVAL FOLLOWS", systemImage: "signature")
                     .font(.caption2.weight(.semibold))
                     .tracking(0.9)
                     .foregroundStyle(statusTone.color)
@@ -187,7 +189,7 @@ struct PromptProposalCard: View {
                 Button {
                     select(.upgrade, "")
                 } label: {
-                    Label("Use CAPT Upgrade", systemImage: "sparkles")
+                    Label("Use Enhanced Prompt", systemImage: "arrow.right")
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!canSelect || !proposal.hasMaterialUpgrade)
@@ -267,7 +269,21 @@ struct PromptProposalCard: View {
                         .frame(maxWidth: .infinity, alignment: .topLeading)
                         .textSelection(.enabled)
                 }
-                .frame(minHeight: 110, maxHeight: 230)
+                .frame(minHeight: 145, maxHeight: 280)
+                HStack {
+                    Text("\(text.count) characters")
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(text, forType: .string)
+                    } label: {
+                        Label("Copy prompt", systemImage: "doc.on.doc")
+                    }
+                    .buttonStyle(.plain)
+                    .controlSize(.small)
+                }
             }
         }
         .frame(maxWidth: .infinity)
