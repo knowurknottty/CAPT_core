@@ -162,6 +162,7 @@ struct SidebarView: View {
             }
         }
         .listStyle(.sidebar)
+        .tint(InversionTone.amber.color)
         .navigationTitle("CAPT")
     }
 
