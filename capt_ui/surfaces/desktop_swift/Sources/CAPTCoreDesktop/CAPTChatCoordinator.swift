@@ -30,6 +30,7 @@ public final class CAPTChatCoordinator {
         provider: String,
         model: String,
         promptIntelligence: String = "AUTO",
+        developmentMode: Bool = false,
         reasoningEffort: String = "",
         remoteCompilationAuthorized: Bool = false,
         piRequestID: String? = nil
@@ -41,7 +42,7 @@ public final class CAPTChatCoordinator {
                 "originalPrompt": original,
                 "targetRoot": targetRoot,
                 "promptIntelligence": promptIntelligence,
-                "mode": "normal",
+                "mode": developmentMode ? "software-development" : "normal",
                 "provider": provider,
                 "model": model,
                 "reasoningEffort": reasoningEffort,
