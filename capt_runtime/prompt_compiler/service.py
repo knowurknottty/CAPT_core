@@ -104,7 +104,7 @@ class PromptCompiler:
             next_prompt = (
                 current_prompt
                 if stage is PromptStageName.META
-                else render_execution_prompt(request.original_prompt, result)
+                else render_execution_prompt(current_prompt, result)
             )
             records.append(self._record(stage, current_prompt, next_prompt, True))
             unresolved.extend(result.ambiguities)
