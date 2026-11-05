@@ -19,7 +19,36 @@ struct ChatView: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(spacing: 16) {
+                    VStack(spacing: 15) {
+                        if !store.messages.isEmpty {
+                            HStack(alignment: .top, spacing: 12) {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("GOVERNED WORKSPACE")
+                                        .font(.caption2.weight(.semibold))
+                                        .tracking(1.2)
+                                        .foregroundStyle(.secondary)
+                                    Text(store.activeSessionTitle)
+                                        .font(.title2.weight(.semibold))
+                                        .lineLimit(2)
+                                    Text("Execution identity, runtime evidence, and human authority remain separate.")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                                if let proposal = store.promptProposal {
+                                    InversionStatusBadge(proposal.status,
+                                        tone: proposal.isApprovalSelectable ? .neutral : .warning)
+                                }
+                            }
+                            .padding(17)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color(nsColor: .controlBackgroundColor),
+                                in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                    .strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
+                            }
+                        }
                         if store.messages.count > visibleMessageLimit {
                             Button("Show older messages (\(store.messages.count - visibleMessageLimit) hidden)") {
                                 visibleMessageLimit += 40
@@ -126,9 +155,9 @@ struct ChatView: View {
                             .id("human-verification-" + driverRunID)
                         }
                     }
-                    .padding(.horizontal, 28)
-                    .padding(.vertical, 24)
-                    .frame(maxWidth: 1040)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 20)
+                    .frame(maxWidth: 1160)
                     .frame(maxWidth: .infinity)
                 }
                 .onChange(of: store.messages.count) { _ in
@@ -170,6 +199,9 @@ struct ChatView: View {
             ComposerView(
                 draft: $draft,
                 promptIntelligence: $store.promptIntelligence,
+                developmentMode: Binding(
+                    get: { store.developmentMode }, set: { store.setDevelopmentMode($0) }
+                ),
                 cohortEnabled: Binding(
                     get: { store.cohortEnabled }, set: { store.setCohortEnabled($0) }
                 ),
@@ -290,7 +322,7 @@ private struct ChatContextRail: View {
                 .overlay(alignment: .top) { InversionDivider() }
             }
         }
-        .background(.ultraThinMaterial)
+        .background(Color(nsColor: .controlBackgroundColor))
     }
 
     private var reasoningLabel: String {
@@ -435,9 +467,9 @@ private struct MessageRow: View {
                     .frame(width: 2)
             }
         }
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 15, style: .continuous)
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
                 .strokeBorder(roleTone.color.opacity(0.14), lineWidth: 1)
         }
     }
@@ -620,6 +652,7 @@ private struct ApprovalCard: View {
 private struct ComposerView: View {
     @Binding var draft: String
     @Binding var promptIntelligence: String
+    @Binding var developmentMode: Bool
     @Binding var cohortEnabled: Bool
     @Binding var vesselsPerCohort: Int
     @Binding var reasoningEffort: String
@@ -637,7 +670,10 @@ private struct ComposerView: View {
     let send: () -> Void
     @State private var previewURL: URL?
 
-    private let modes = ["AUTO", "OFF", "OMNI", "META", "FORGE", "SIGMA"]
+    private var modes: [String] {
+        developmentMode ? ["AUTO", "OFF", "OMNI", "META", "FORGE", "SIGMA"]
+                        : ["AUTO", "OFF", "OMNI", "META"]
+    }
     private let reasoningModes = ["", "none", "minimal", "low", "medium", "high", "xhigh"]
 
     var body: some View {
@@ -670,6 +706,13 @@ private struct ComposerView: View {
                         }
                         .help("Reasoning effort frozen into the proposal, HumanApproval, and provider dispatch")
 
+                        Toggle("DEV MODE", isOn: $developmentMode)
+                            .toggleStyle(.switch)
+                            .tint(InversionTone.amber.color)
+                            .controlSize(.mini)
+                            .disabled(!enabled)
+                            .help("Enable engineering-only FORGE/SIGMA analysis. General writing stays OMNI/META.")
+
                         if showRemotePromptCompilationControl {
                             Toggle("REMOTE PI", isOn: $remotePromptCompilationAllowed)
                                 .toggleStyle(.switch)
@@ -679,7 +722,8 @@ private struct ComposerView: View {
                         }
 
                         Text(promptIntelligence == "AUTO"
-                             ? "CAPT selects the governed stage chain from the task."
+                             ? (developmentMode ? "Engineering work may use FORGE/SIGMA; other tasks stay OMNI/META."
+                                                : "General mode: OMNI/META only.")
                              : "Explicit stage mode is recorded in proposal provenance.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -799,7 +843,7 @@ private struct ComposerView: View {
                             .font(.body)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 10)
-                            .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                             .overlay {
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                                     .strokeBorder(
@@ -826,7 +870,7 @@ private struct ComposerView: View {
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 13)
-            .background(.regularMaterial)
+            .background(Color(nsColor: .controlBackgroundColor))
             .quickLookPreview($previewURL)
         }
     }
