@@ -22,9 +22,10 @@ COMMITTED = CONTRACTS_DIR / "generated"
 def tree_digests(root: Path):
     """Digest every generated SOURCE file under root.
 
-    `typescript/dist/` is excluded: it is tsc build output, is gitignored, and
-    is not produced by the generator. Including it would make the drift check
-    report failure purely because a developer had run a local build.
+    Only schema-generated source is compared. Node dependency installs,
+    npm lockfiles and TypeScript dist/ artifacts are not produced by this
+    generator; their presence must not cause false drift failures. Any other
+    unexpected generated-tree source path still fails closed.
     """
     result = {}
     if not root.exists():
@@ -33,7 +34,11 @@ def tree_digests(root: Path):
         if not path.is_file():
             continue
         rel = path.relative_to(root).as_posix()
-        if rel.startswith("typescript/dist/") or "__pycache__" in rel:
+        if (
+            rel.startswith(("typescript/dist/", "typescript/node_modules/"))
+            or rel == "typescript/package-lock.json"
+            or "__pycache__" in rel
+        ):
             continue
         result[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
     return result
