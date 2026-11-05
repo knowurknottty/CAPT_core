@@ -19,12 +19,12 @@ enum InversionTone {
     var color: Color {
         switch self {
         case .neutral: return .secondary
-        case .amber: return Color(red: 0.95, green: 0.62, blue: 0.22)
-        case .cyan: return Color(red: 0.27, green: 0.78, blue: 0.86)
-        case .success: return .green
-        case .warning: return .orange
-        case .danger: return .red
-        case .violet: return Color(red: 0.64, green: 0.48, blue: 0.92)
+        case .amber: return Color(red: 0.70, green: 0.54, blue: 0.32)
+        case .cyan: return Color(red: 0.71, green: 0.71, blue: 0.68)
+        case .success: return Color(red: 0.39, green: 0.64, blue: 0.48)
+        case .warning: return Color(red: 0.77, green: 0.55, blue: 0.29)
+        case .danger: return Color(red: 0.79, green: 0.39, blue: 0.35)
+        case .violet: return Color(red: 0.74, green: 0.67, blue: 0.55)
         }
     }
 }
@@ -33,8 +33,8 @@ enum InversionVisualLanguage {
     static let pagePadding: CGFloat = 24
     static let sectionSpacing: CGFloat = 18
     static let panelPadding: CGFloat = 16
-    static let radius: CGFloat = 16
-    static let compactRadius: CGFloat = 11
+    static let radius: CGFloat = 12
+    static let compactRadius: CGFloat = 8
 
     static func tone(forState raw: String) -> InversionTone {
         switch CAPTRuntimeStateSemantics.tone(for: raw) {
@@ -68,11 +68,11 @@ struct InversionPanel<Content: View>: View {
             .padding(padding)
             .background {
                 RoundedRectangle(cornerRadius: InversionVisualLanguage.radius, style: .continuous)
-                    .fill(.thinMaterial)
+                    .fill(Color(nsColor: .controlBackgroundColor))
             }
             .overlay {
                 RoundedRectangle(cornerRadius: InversionVisualLanguage.radius, style: .continuous)
-                    .strokeBorder(tone.color.opacity(tone == .neutral ? 0.12 : 0.30), lineWidth: 1)
+                    .strokeBorder(tone.color.opacity(tone == .neutral ? 0.10 : 0.22), lineWidth: 1)
             }
     }
 }
@@ -235,15 +235,11 @@ struct InversionBrandMark: View {
     var body: some View {
         HStack(spacing: compact ? 7 : 10) {
             ZStack {
-                Circle()
-                    .stroke(InversionTone.amber.color.opacity(0.72), lineWidth: 1.2)
-                Circle()
-                    .trim(from: 0.12, to: 0.72)
-                    .stroke(InversionTone.cyan.color.opacity(0.78), style: StrokeStyle(lineWidth: 1.2, lineCap: .round))
-                    .rotationEffect(.degrees(48))
-                Circle()
-                    .fill(Color.primary.opacity(0.90))
-                    .frame(width: compact ? 4 : 5, height: compact ? 4 : 5)
+                RoundedRectangle(cornerRadius: compact ? 5 : 7)
+                    .strokeBorder(Color.primary.opacity(0.42), lineWidth: 1)
+                Text("C")
+                    .font(.system(size: compact ? 10 : 13, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.primary)
             }
             .frame(width: compact ? 20 : 26, height: compact ? 20 : 26)
 
