@@ -57,7 +57,9 @@ from desktop.ipc_principal import (
     IPC_FEATURES,
     PRINCIPAL_AGENT,
     agent_command_denial,
+    human_peer_denial,
     match_principal,
+    peer_uid,
     resolve_group_id,
     write_secret_file,
 )
@@ -1417,6 +1419,7 @@ def serve(
     biocapt_qipc_interpreter: str | None = None,
     agent_token_file: str | None = None,
     agent_group: str | None = None,
+    human_uids: list[int] | None = None,
 ) -> None:
     _validate_biocapt_qipc_startup_request(
         enabled=enable_biocapt_qipc,
@@ -1519,6 +1522,12 @@ def serve(
             raise RuntimeError("CAPT agent token read-back verification failed")
     elif agent_gid is not None:
         raise RuntimeError("--agent-group requires --agent-token-file")
+    # Peer-identity enforcement is on whenever an agent principal exists: a human
+    # token presented from any uid outside ``human_uids`` (default: this process's
+    # uid) is refused, so a leaked human token is useless to the agent uid.
+    enforced_human_uids: frozenset[int] | None = None
+    if agent_token is not None or human_uids:
+        enforced_human_uids = frozenset(human_uids or [os.geteuid()])
 
     srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     srv.bind(str(sock_path))
@@ -1542,6 +1551,19 @@ def serve(
             principal = match_principal(
                 auth.get("token") if isinstance(auth, dict) else None, token, agent_token
             )
+            peer = peer_uid(conn)
+            peer_denial = human_peer_denial(principal, peer, enforced_human_uids)
+            if peer_denial is not None:
+                try:
+                    store.record_security_rejection(
+                        rejection_id="rej-peer-" + secrets.token_hex(8),
+                        rejection_kind="human_token_from_non_human_peer",
+                        details={"reason": peer_denial, "peerUid": peer},
+                    )
+                except Exception:
+                    pass  # audit failure must not convert a denial into admission
+                _send_json(conn, {"ok": False, "error": "unauthenticated"})
+                return
             if principal is None:
                 try:
                     store.record_security_rejection(
@@ -2343,6 +2365,7 @@ def serve(
                 "ok": True, "authenticated": True,
                 "operatorId": operator_id, "sessionId": session_id,
                 "principal": principal, "features": list(IPC_FEATURES),
+                "peerUid": peer, "peerEnforced": enforced_human_uids is not None,
             })
             while True:
                 req = _recv_json(conn)
@@ -2408,6 +2431,10 @@ def main() -> int:
         help="Also issue an execute-only agent credential at this path (see desktop/ipc_principal.py)",
     )
     ap.add_argument(
+        "--human-uid", type=int, action="append",
+        help="uid allowed to present the human token (repeatable; default: this process)",
+    )
+    ap.add_argument(
         "--agent-group",
         help="Group (name or gid) granted read on the agent token and connect on the socket",
     )
@@ -2419,6 +2446,7 @@ def main() -> int:
         biocapt_qipc_interpreter=args.biocapt_qipc_interpreter,
         agent_token_file=args.agent_token_file,
         agent_group=args.agent_group,
+        human_uids=args.human_uid,
     )
     return 0
 

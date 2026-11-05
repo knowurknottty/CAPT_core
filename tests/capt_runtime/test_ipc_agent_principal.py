@@ -339,3 +339,43 @@ def test_agent_token_rejected_when_principal_not_configured(tmp_path: Path) -> N
     finally:
         proc.terminate()
         proc.wait(timeout=10)
+
+
+# --------------------------------------------------------------------------- peer identity
+
+def test_peer_uid_reports_this_process_on_socketpair() -> None:
+    from desktop.ipc_principal import peer_uid
+    a, b = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        if sys.platform.startswith("linux") or sys.platform == "darwin":
+            assert peer_uid(a) == os.geteuid()
+        else:
+            assert peer_uid(a) is None
+    finally:
+        a.close()
+        b.close()
+
+
+@pytest.mark.parametrize("principal,peer,uids,denied", [
+    ("human", 501, None, False),              # enforcement off: historical behaviour
+    ("human", 501, frozenset({501}), False),
+    ("human", 30034, frozenset({501}), True),  # leaked human token from another uid
+    ("human", None, frozenset({501}), True),   # unknown peer fails closed
+    ("agent", 30034, frozenset({501}), False), # agent principal is not peer-restricted here
+    (None, 30034, frozenset({501}), False),    # unauthenticated path handled separately
+])
+def test_human_peer_denial_table(principal, peer, uids, denied) -> None:
+    from desktop.ipc_principal import HUMAN_PRINCIPAL_PEER_DENIED, human_peer_denial
+    assert (human_peer_denial(principal, peer, uids) == HUMAN_PRINCIPAL_PEER_DENIED) is denied
+
+
+def test_peer_enforcement_is_reported_when_agent_principal_enabled(runtime) -> None:
+    human, agent = _human(runtime), _agent(runtime)
+    try:
+        assert human.auth["peerEnforced"] is True
+        assert human.auth["peerUid"] == os.geteuid()
+        assert agent.auth["peerUid"] == os.geteuid()
+        assert "peer_uid.v1" in human.auth["features"]
+    finally:
+        human.close()
+        agent.close()

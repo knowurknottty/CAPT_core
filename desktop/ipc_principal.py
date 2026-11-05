@@ -24,6 +24,9 @@ from __future__ import annotations
 
 import os
 import secrets
+import socket
+import struct
+import sys
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
@@ -42,9 +45,48 @@ PRINCIPAL_ACTOR_KIND = {
 AGENT_PRINCIPAL_COMMAND_OPS = frozenset({"run_tool"})
 
 #: Additive features advertised in the authentication reply.
-IPC_FEATURES = ("principal.v1", "tool_request_commitment.v1")
+IPC_FEATURES = ("principal.v1", "tool_request_commitment.v1", "peer_uid.v1")
 
 AGENT_PRINCIPAL_OP_DENIED = "AGENT_PRINCIPAL_OP_DENIED"
+HUMAN_PRINCIPAL_PEER_DENIED = "HUMAN_PRINCIPAL_PEER_DENIED"
+
+_XUCRED_VERSION = 0
+_XUCRED_SIZE = 76  # struct xucred: u_int version, uid_t uid, short ngroups, gid_t groups[16]
+
+
+def peer_uid(conn: socket.socket) -> Optional[int]:
+    """Effective uid of the peer of a connected AF_UNIX socket, or ``None``.
+
+    Linux: ``SO_PEERCRED``. macOS: ``LOCAL_PEERCRED`` (the mechanism behind
+    ``getpeereid(3)``), level ``SOL_LOCAL`` = 0; verified on macOS 26.4.1 /
+    Python 3.14.7, where ``socket.SOL_LOCAL`` is not exported. Other platforms: None.
+    """
+    try:
+        if sys.platform.startswith("linux") and hasattr(socket, "SO_PEERCRED"):
+            raw = conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
+            _pid, uid, _gid = struct.unpack("3i", raw)
+            return uid
+        if sys.platform == "darwin":
+            raw = conn.getsockopt(0, getattr(socket, "LOCAL_PEERCRED", 0x001), _XUCRED_SIZE)
+            version, uid = struct.unpack_from("=II", raw, 0)
+            return uid if version == _XUCRED_VERSION else None
+    except OSError:
+        return None
+    return None
+
+
+def human_peer_denial(principal: Optional[str], peer: Optional[int],
+                      human_uids: Optional[frozenset[int]]) -> Optional[str]:
+    """When peer enforcement is on, a human-token connection must come from a human uid.
+
+    ``human_uids is None`` means enforcement is off (historical single-user mode).
+    An undeterminable peer fails closed.
+    """
+    if human_uids is None or principal != PRINCIPAL_HUMAN:
+        return None
+    if peer is None or peer not in human_uids:
+        return HUMAN_PRINCIPAL_PEER_DENIED
+    return None
 
 
 def match_principal(
