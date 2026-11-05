@@ -57,8 +57,8 @@ schema source. Run this in CI on every PR.
 ## Cross-language parity
 
 ```bash
-cd contracts/generated/typescript && npm install && npm run build
-node contracts/tools/ts_parity.mjs
+cd contracts/generated/typescript && npm install && npm run build && npm run check
+cd ../../.. && node contracts/tools/ts_parity.mjs
 ```
 
 Reads the same fixture files as the Python suite and asserts both validators
