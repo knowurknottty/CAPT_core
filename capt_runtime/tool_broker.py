@@ -49,6 +49,11 @@ def _stable_id(prefix: str, material: str) -> str:
     return prefix + hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
 
 
+#: externalCommitments kind binding an approval to one exact ToolRequest.
+#: Its digest is ``tool_request_fingerprint`` of the request the human approved.
+TOOL_REQUEST_COMMITMENT_KIND = "capt.tool-request.v1"
+
+
 def tool_request_fingerprint(request: Dict[str, Any]) -> str:
     """Recompute semantic request identity instead of trusting caller digest."""
     semantic = {
@@ -433,6 +438,29 @@ class ToolBroker:
             execution["toolExecutionId"], execution["state"], result
         )
 
+    def _tool_request_commitment_denial(
+        self, request: Dict[str, Any], fingerprint: str
+    ) -> str | None:
+        """Refuse a request whose grant is committed to a different exact request.
+
+        A HumanApproval binds operations, scope, use budget and expiry; on its own
+        it does not bind the bytes a tool will write. When the approved grant
+        carries one or more ``capt.tool-request.v1`` commitments, only a request
+        whose recomputed fingerprint equals one of them may spend the grant.
+        Grants without such commitments are unaffected.
+        """
+        grant = self.store.load_state(CapabilityAggregate.stream_id(request["grantId"]))
+        if grant is None:
+            return None  # check_lease denies an unknown grant with its own reason
+        bound = [
+            item.get("digest")
+            for item in (grant.get("externalCommitments") or [])
+            if isinstance(item, dict) and item.get("kind") == TOOL_REQUEST_COMMITMENT_KIND
+        ]
+        if not bound or fingerprint in bound:
+            return None
+        return "TOOL_REQUEST_COMMITMENT_MISMATCH"
+
     def execute(
         self,
         request: Dict[str, Any],
@@ -484,6 +512,19 @@ class ToolBroker:
             denied = self._denied_result(request, "WORLD_RECEIPT_EFFECT_INTENT_EXPIRED")
             state = self._settle_predispatch_terminal(
                 execution, request, denied, "expiry-predispatch-settle"
+            )
+            return {
+                "toolExecutionId": execution_id,
+                "status": denied["status"],
+                "result": denied,
+                "state": state["state"],
+                "replayed": False,
+            }
+        commitment_denial = self._tool_request_commitment_denial(request, expected_fingerprint)
+        if commitment_denial is not None:
+            denied = self._denied_result(request, commitment_denial)
+            state = self._settle_predispatch_terminal(
+                execution, request, denied, "commitment-predispatch-settle"
             )
             return {
                 "toolExecutionId": execution_id,
