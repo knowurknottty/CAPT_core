@@ -53,8 +53,9 @@ jobs:
       - name: Build generated TypeScript
         working-directory: contracts/generated/typescript
         run: |
-          npm install --no-save --no-package-lock typescript@5.9.3
+          npm install --no-audit --no-fund
           npm run build
+          npm run check
       - name: Cross-language fixture parity
         run: node contracts/tools/ts_parity.mjs
 
