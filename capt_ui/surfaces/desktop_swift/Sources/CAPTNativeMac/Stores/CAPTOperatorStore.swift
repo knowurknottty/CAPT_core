@@ -21,6 +21,7 @@ final class CAPTOperatorStore: ObservableObject {
     @Published var targetRoot = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("CAPT_core", isDirectory: true).path
     @Published var promptIntelligence = "AUTO"
+    @Published var developmentMode = UserDefaults.standard.bool(forKey: "capt.prompt.developmentMode")
     @Published var reasoningEffort = ""
     @Published var cohortEnabled = false
     @Published var vesselsPerCohort = 6
@@ -314,6 +315,14 @@ final class CAPTOperatorStore: ObservableObject {
         runtimeIdentity = "Not connected"
     }
 
+    func setDevelopmentMode(_ enabled: Bool) {
+        developmentMode = enabled
+        UserDefaults.standard.set(enabled, forKey: "capt.prompt.developmentMode")
+        if !enabled && (promptIntelligence == "FORGE" || promptIntelligence == "SIGMA") {
+            promptIntelligence = "AUTO"
+        }
+    }
+
     func submitPrompt(_ text: String) {
         guard connectionState == .connected else { return }
         // A locally staged file is NOT a governed provider input yet.
@@ -353,6 +362,7 @@ final class CAPTOperatorStore: ObservableObject {
         let selectedModel = model
         let root = targetRoot
         let intelligence = promptIntelligence
+        let selectedDevelopmentMode = developmentMode
         let selectedReasoningEffort = reasoningEffort
         let remoteCompilationAuthorized = authoritySettings.remotePromptCompilationAllowed &&
             authoritySettings.providerNetwork == .remoteAllowed
@@ -376,6 +386,7 @@ final class CAPTOperatorStore: ObservableObject {
                 let proposal = try await proposalRuntime.compileProposal(
                     original: trimmed, targetRoot: root, provider: selectedProvider,
                     model: selectedModel, promptIntelligence: intelligence,
+                    developmentMode: selectedDevelopmentMode,
                     reasoningEffort: selectedReasoningEffort,
                     remoteCompilationAuthorized: remoteCompilationAuthorized,
                     piRequestID: piRequestID
