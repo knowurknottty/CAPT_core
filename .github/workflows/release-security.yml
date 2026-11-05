@@ -77,6 +77,13 @@ jobs:
             echo "::error::Security gate classification missing; cannot assume FULL_SECURITY_GATE."
             exit 1
           fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Prepare cross-language contract parity
+        run: |
+          npm --prefix contracts/generated/typescript install --no-audit --no-fund
+          npm --prefix contracts/generated/typescript run build
       - name: Test suite report
         id: tests
         continue-on-error: true
