@@ -75,7 +75,7 @@ struct StatusBarView: View {
             .font(.caption)
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
-            .background(.regularMaterial)
+            .background(Color(nsColor: .controlBackgroundColor))
         }
     }
 

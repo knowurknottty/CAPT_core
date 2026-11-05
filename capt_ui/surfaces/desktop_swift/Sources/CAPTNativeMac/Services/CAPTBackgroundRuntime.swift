@@ -420,6 +420,7 @@ actor CAPTBackgroundRuntime {
         provider: String,
         model: String,
         promptIntelligence: String,
+        developmentMode: Bool = false,
         reasoningEffort: String = "",
         remoteCompilationAuthorized: Bool = false,
         piRequestID: String? = nil
@@ -427,6 +428,7 @@ actor CAPTBackgroundRuntime {
         try coordinator.compileProposal(
             original: original, targetRoot: targetRoot, provider: provider, model: model,
             promptIntelligence: promptIntelligence,
+            developmentMode: developmentMode,
             reasoningEffort: reasoningEffort,
             remoteCompilationAuthorized: remoteCompilationAuthorized,
             piRequestID: piRequestID

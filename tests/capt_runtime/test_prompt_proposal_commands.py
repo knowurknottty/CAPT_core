@@ -75,7 +75,7 @@ def test_compile_creates_durable_proposal_without_human_approval(tmp_path):
     assert result["proposalId"]
     assert result["originalPrompt"] == _compile_payload(str(root))["originalPrompt"]
     assert result["proposedPrompt"] != result["originalPrompt"]
-    assert result["stageChain"] == ["OMNI", "META", "FORGE", "SIGMA"]
+    assert result["stageChain"] == ["OMNI", "META"]
     assert store.require_state("prompt_proposal-" + result["proposalId"])["revision"] == 0
     assert all(kind != "human_approval" for _, kind, _ in store.all_aggregates())
     store.close()

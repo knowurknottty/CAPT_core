@@ -235,8 +235,56 @@ def test_meta_observes_omni_without_rewriting_execution_prompt():
     assert proposal.proposed_prompt_digest == proposal.stage_records[0].output_digest
 
 
+def test_software_keywords_in_general_writing_never_activate_development_engines():
+    prompt = (
+        "Craft a whitepaper about the CAPT architecture and software development "
+        "capability, cohorts, vessels, ledger, and memory."
+    )
+    normal = route_stages(_request(original_prompt=prompt))
+    selected_dev = route_stages(_request(original_prompt=prompt, mode="software-development"))
+    assert normal.stage_chain == selected_dev.stage_chain == (
+        PromptStageName.OMNI, PromptStageName.META
+    )
+
+
+def test_technical_writing_never_leaks_into_dev_stages():
+    prompts = (
+        "Write a whitepaper about the CAPT API, code, tests, and governance.",
+        "Craft a report about software development and bug fixes.",
+        "Create slides explaining the repository and its APIs.",
+    )
+    for prompt in prompts:
+        route = route_stages(_request(original_prompt=prompt, mode="software-development"))
+        assert route.stage_chain == (PromptStageName.OMNI, PromptStageName.META)
+        for engine in ("FORGE", "SIGMA"):
+            with pytest.raises(ValueError, match="FORGE_SIGMA_REQUIRE_DEVELOPMENT_TASK_AND_MODE"):
+                route_stages(_request(
+                    original_prompt=prompt,
+                    mode="software-development",
+                    requested_engine=engine,
+                ))
+
+
+def test_software_task_requires_explicit_development_mode_for_specialists():
+    prompt = "Implement and test a provider selection fix."
+    assert route_stages(_request(original_prompt=prompt)).stage_chain == (
+        PromptStageName.OMNI, PromptStageName.META
+    )
+    assert route_stages(_request(original_prompt=prompt, mode="software-development")).stage_chain == (
+        PromptStageName.OMNI, PromptStageName.META,
+        PromptStageName.FORGE, PromptStageName.SIGMA,
+    )
+
+
+def test_manual_forge_sigma_cannot_bypass_development_gate():
+    with pytest.raises(ValueError, match="FORGE_SIGMA_REQUIRE_DEVELOPMENT_TASK_AND_MODE"):
+        route_stages(_request(original_prompt="Write a whitepaper about code.", requested_engine="FORGE"))
+    with pytest.raises(ValueError, match="FORGE_SIGMA_REQUIRE_DEVELOPMENT_TASK_AND_MODE"):
+        route_stages(_request(original_prompt="Write a whitepaper about code.", requested_engine="SIGMA", mode="software-development"))
+
+
 def test_auto_routes_software_work_through_all_standard_engines():
-    route = route_stages(_request(original_prompt="Implement and test a provider selection fix."))
+    route = route_stages(_request(original_prompt="Implement and test a provider selection fix.", mode="software-development"))
     assert route.stage_chain == (
         PromptStageName.OMNI,
         PromptStageName.META,
@@ -274,6 +322,7 @@ def test_forge_sigma_execute_with_bounded_repository_context(tmp_path):
         provider=CompilerProvider("mtplx", "qwen3.8-27b-mtplx", "local"),
     ).compile(_request(
         original_prompt="Implement and test a provider selection fix.",
+        mode="software-development",
         target_root=str(root),
     ))
 

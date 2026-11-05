@@ -17,7 +17,7 @@ struct InspectorView: View {
             }
             .padding(14)
         }
-        .background(.ultraThinMaterial)
+        .background(Color(nsColor: .windowBackgroundColor))
     }
 
     private var operatorHeader: some View {
@@ -28,7 +28,7 @@ struct InspectorView: View {
                     .font(.caption2.weight(.semibold))
                     .tracking(1.1)
                     .foregroundStyle(.secondary)
-                Text("Next governed execution")
+                Text("Live runtime / exact authority")
                     .font(.callout.weight(.semibold))
             }
             Spacer()

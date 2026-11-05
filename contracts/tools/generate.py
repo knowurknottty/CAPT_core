@@ -150,6 +150,7 @@ def generate(out_root: Path) -> int:
                 "name": "@capt/contracts",
                 "version": model.contract_schema_version,
                 "description": "GENERATED CAPT runtime contract bindings. Do not edit.",
+                "devDependencies": {"typescript": "5.9.3"},
                 "type": "module",
                 "main": "dist/index.js",
                 "types": "dist/index.d.ts",
