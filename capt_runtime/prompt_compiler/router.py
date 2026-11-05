@@ -27,21 +27,52 @@ def _underspecified(prompt: str) -> bool:
         "answer", "analyze", "audit", "build", "check", "code", "compare",
         "evaluate", "explain", "file", "find", "fix", "identify", "implement",
         "inspect", "list", "map", "match", "plan", "rank", "report", "research",
-        "review", "show", "summarize", "test", "write",
+        "review", "show", "summarize", "test", "write", "craft", "draft", "design", "create", "generate", "compose", "produce",
     )
     return not any(signal in lower for signal in signals)
 
 
 def _software_work(prompt: str) -> bool:
+    # Require actionable engineering intent; mentions of software do not count.
     lower = prompt.lower()
     tokens = set(re.findall(r"[a-z0-9_+-]+", lower))
-    token_signals = {
-        "implement", "code", "debug", "fix", "repo", "repository", "build",
-        "refactor", "test", "tests", "software", "app", "api", "function",
-        "class", "module", "package", "compile", "compiler",
+    # A document *about* software remains a writing task, even if Dev Mode
+    # is enabled. A technical noun is not an engineering instruction.
+    document_outputs = {
+        "whitepaper", "report", "article", "essay", "post", "deck",
+        "slides", "presentation", "summary", "overview", "explainer",
+        "announcement", "pitch", "memo",
     }
-    phrase_signals = ("pull request", "source code", "test suite", "bug fix")
-    return bool(tokens & token_signals) or any(phrase in lower for phrase in phrase_signals)
+    document_actions = {
+        "write", "craft", "draft", "create", "generate", "produce",
+        "design", "compose", "prepare",
+    }
+    if tokens & document_outputs and tokens & document_actions:
+        return False
+    engineering_targets = {
+        "repo", "repository", "code", "software", "app", "api",
+        "function", "module", "package", "compiler", "runtime",
+        "test", "tests", "bug", "script", "endpoint", "provider",
+        "frontend", "backend", "plugin",
+    }
+    strong_actions = {
+        "implement", "debug", "fix", "refactor", "patch",
+        "test", "deploy", "compile", "repair", "regress",
+    }
+    creation_targets = {
+        "app", "api", "function", "module", "package", "script",
+        "endpoint", "frontend", "backend", "plugin", "tests",
+        "test", "repository", "repo",
+    }
+    creation_actions = {"build", "develop", "create", "write", "code"}
+    review_actions = {"review", "audit", "inspect"}
+    review_targets = {"repo", "repository", "code", "module", "package"}
+    return (
+        (bool(tokens & strong_actions) and bool(tokens & engineering_targets))
+        or (bool(tokens & creation_actions) and bool(tokens & creation_targets))
+        or (bool(tokens & review_actions) and bool(tokens & review_targets))
+        or ("pull request" in lower and bool(tokens & review_actions))
+    )
 
 def _reconciliation_work(prompt: str) -> bool:
     lower = prompt.lower()
@@ -51,16 +82,12 @@ def _reconciliation_work(prompt: str) -> bool:
 def route_stages(request: PromptCompileRequest) -> PromptRoute:
     if request.requested_engine == "OFF":
         return PromptRoute((), "Prompt Intelligence is disabled by operator policy.")
-    if request.mode == "software-development":
-        return PromptRoute(
-            (
-                PromptStageName.OMNI,
-                PromptStageName.META,
-                PromptStageName.FORGE,
-                PromptStageName.SIGMA,
-            ),
-            "Software-development mode selects OMNI/META plus advisory FORGE/SIGMA routing metadata.",
-        )
+    development_task = (
+        request.mode == "software-development"
+        and _software_work(request.original_prompt)
+    )
+    if request.requested_engine in ("FORGE", "SIGMA") and not development_task:
+        raise ValueError("FORGE_SIGMA_REQUIRE_DEVELOPMENT_TASK_AND_MODE")
     if request.requested_engine != "AUTO":
         stage = PromptStageName(request.requested_engine)
         return PromptRoute((stage,), "Stage selected explicitly by operator policy.")
@@ -69,17 +96,12 @@ def route_stages(request: PromptCompileRequest) -> PromptRoute:
             (PromptStageName.OMNI,),
             "Input is underspecified; clarification is required before an execution contract can be drafted.",
         )
-    if _software_work(request.original_prompt):
+    if development_task:
         return PromptRoute(
             (PromptStageName.OMNI, PromptStageName.META, PromptStageName.FORGE, PromptStageName.SIGMA),
-            "Software work is routed through OMNI/META intent compilation plus bounded FORGE repository analysis and SIGMA reconciliation.",
-        )
-    if _reconciliation_work(request.original_prompt):
-        return PromptRoute(
-            (PromptStageName.OMNI, PromptStageName.META, PromptStageName.SIGMA),
-            "Reconciliation work adds SIGMA after OMNI/META to preserve alternatives, dissent, and tradeoffs.",
+            "Development Mode and an actionable software task select OMNI/META/FORGE/SIGMA.",
         )
     return PromptRoute(
         (PromptStageName.OMNI, PromptStageName.META),
-        "Substantive request is routed through OMNI intent completeness and META execution-contract analysis.",
+        "Substantive general tasks use OMNI/META only; FORGE/SIGMA require Development Mode and software-development intent.",
     )
