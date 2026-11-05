@@ -53,6 +53,14 @@ from capt_runtime.driver_host import tree_digest
 from capt_runtime.errors import AuthorityViolation
 from capt_runtime.store import EventStore
 from capt_runtime.ipc_framing import FrameProtocolError, recv_json, send_json
+from desktop.ipc_principal import (
+    IPC_FEATURES,
+    PRINCIPAL_AGENT,
+    agent_command_denial,
+    match_principal,
+    resolve_group_id,
+    write_secret_file,
+)
 from capt_runtime.resource_governor import TokenCostGovernor
 from capt_runtime.reasoning import ReasoningConfigurationError, normalize_reasoning_effort, legacy_cohort_configuration_reasoning_effort
 from capt_runtime.cohort_contract import compile_cohort_objective, normalize_cohort_spec
@@ -1378,11 +1386,37 @@ def _clear_runtime_pid_if_owned(sock_path: Path, *, pid: int | None = None) -> b
     return True
 
 
+def _agent_command_refusal(store: EventStore, cmd_svc: Any, command: Any, code: str) -> Dict[str, Any]:
+    """Durably audit and refuse a command an agent principal may not send."""
+    cmd = command if isinstance(command, dict) else {}
+    op = cmd.get("op")
+    command_id = cmd.get("commandId")
+    try:
+        store.record_security_rejection(
+            rejection_id="rej-agent-" + secrets.token_hex(8),
+            rejection_kind="agent_principal_op_denied",
+            details={
+                "reason": "operation_not_permitted_for_agent_principal",
+                "op": op if isinstance(op, str) else None,
+                "commandId": command_id if isinstance(command_id, str) else None,
+                "sessionId": cmd_svc.session_id,
+            },
+        )
+    except Exception:  # noqa: BLE001 - audit failure must not convert a refusal into admission
+        pass
+    return cmd_svc._receipt(
+        cmd, status="rejected", classification="unauthorized",
+        error=cmd_svc._error_envelope(cmd, "unauthorized", code),
+    )
+
+
 def serve(
     ledger_path: str, sock_path: Path, token_file: str, seed: bool,
     *, enable_biocapt_qipc: bool = False,
     biocapt_qipc_source_root: str | None = None,
     biocapt_qipc_interpreter: str | None = None,
+    agent_token_file: str | None = None,
+    agent_group: str | None = None,
 ) -> None:
     _validate_biocapt_qipc_startup_request(
         enabled=enable_biocapt_qipc,
@@ -1465,17 +1499,34 @@ def serve(
     )
 
     token = secrets.token_hex(32)
-    tf = Path(token_file)
-    tf.parent.mkdir(parents=True, exist_ok=True)
-    tf.write_text(token)
-    os.chmod(tf, 0o600)
-    persisted_token = tf.read_text(encoding="utf-8").strip()
+    persisted_token = write_secret_file(Path(token_file), token, mode=0o600)
     if not secrets.compare_digest(persisted_token, token):
         raise RuntimeError("CAPT runtime token read-back verification failed")
     token = persisted_token
+    # Optional execute-only agent principal (desktop/ipc_principal.py). Absent the
+    # flag, behaviour is unchanged: one credential, one human principal.
+    agent_gid = resolve_group_id(agent_group)
+    agent_token: str | None = None
+    if agent_token_file:
+        if Path(agent_token_file).resolve() == Path(token_file).resolve():
+            raise RuntimeError("CAPT agent token file must differ from the human token file")
+        agent_token = secrets.token_hex(32)
+        persisted_agent = write_secret_file(
+            Path(agent_token_file), agent_token,
+            mode=0o640 if agent_gid is not None else 0o600, gid=agent_gid,
+        )
+        if not secrets.compare_digest(persisted_agent, agent_token):
+            raise RuntimeError("CAPT agent token read-back verification failed")
+    elif agent_gid is not None:
+        raise RuntimeError("--agent-group requires --agent-token-file")
 
     srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     srv.bind(str(sock_path))
+    if agent_gid is not None:
+        # The agent principal runs under its own uid; it needs connect rights
+        # (write permission on the socket inode) through the shared group only.
+        os.chown(sock_path, -1, agent_gid)
+        os.chmod(sock_path, 0o660)
     srv.listen(8)
     srv.settimeout(0.2)
     _publish_runtime_pid(sock_path)
@@ -1488,7 +1539,10 @@ def serve(
         try:
             # Authenticate: first frame must be the session token.
             auth = _recv_json(conn)
-            if not auth or auth.get("token") != token:
+            principal = match_principal(
+                auth.get("token") if isinstance(auth, dict) else None, token, agent_token
+            )
+            if principal is None:
                 try:
                     store.record_security_rejection(
                         rejection_id="rej-" + secrets.token_hex(8),
@@ -1506,11 +1560,14 @@ def serve(
             # binding prevents the desktop from spoofing another operator or
             # reusing a stale session's authority (Phase 3).
             operator_id = "operator-" + (getpass.getuser() or "local")
-            session_id = "sess-" + secrets.token_hex(8)
+            session_id = (
+                "sess-agent-" if principal == PRINCIPAL_AGENT else "sess-"
+            ) + secrets.token_hex(8)
             cmd_svc = runtime.command_service(
                 operator_id, session_id, prompt_compiler=prompt_compiler,
                 operator_control=operator_control,
             )
+            cmd_svc.principal_kind = principal
             cmd_svc.pi_active_attempts = pi_active_attempts
             cmd_svc.media_registry = media_registry
             cmd_svc.media_credential_resolver = media_credential_resolver
@@ -2285,16 +2342,23 @@ def serve(
             _send_json(conn, {
                 "ok": True, "authenticated": True,
                 "operatorId": operator_id, "sessionId": session_id,
+                "principal": principal, "features": list(IPC_FEATURES),
             })
             while True:
                 req = _recv_json(conn)
                 if req is None:
                     return
                 if req.get("op") == "command":
+                    command = req.get("command", {})
+                    if principal == PRINCIPAL_AGENT:
+                        denial = agent_command_denial(command)
+                        if denial is not None:
+                            _send_json(conn, _agent_command_refusal(store, cmd_svc, command, denial))
+                            continue
                     # The command envelope must carry the SAME operatorId and
                     # sessionId bound to this connection, or it is rejected as
                     # unauthorized by the command service.
-                    _send_json(conn, cmd_svc.execute(req.get("command", {})))
+                    _send_json(conn, cmd_svc.execute(command))
                 else:
                     _send_json(conn, query.handle(req))
         except Exception:  # noqa: BLE001
@@ -2339,12 +2403,22 @@ def main() -> int:
     ap.add_argument("--enable-biocapt-qipc", action="store_true")
     ap.add_argument("--biocapt-qipc-source-root")
     ap.add_argument("--biocapt-qipc-interpreter")
+    ap.add_argument(
+        "--agent-token-file",
+        help="Also issue an execute-only agent credential at this path (see desktop/ipc_principal.py)",
+    )
+    ap.add_argument(
+        "--agent-group",
+        help="Group (name or gid) granted read on the agent token and connect on the socket",
+    )
     args = ap.parse_args()
     serve(
         args.ledger, args.sock, args.token_file, args.seed,
         enable_biocapt_qipc=args.enable_biocapt_qipc,
         biocapt_qipc_source_root=args.biocapt_qipc_source_root,
         biocapt_qipc_interpreter=args.biocapt_qipc_interpreter,
+        agent_token_file=args.agent_token_file,
+        agent_group=args.agent_group,
     )
     return 0
 

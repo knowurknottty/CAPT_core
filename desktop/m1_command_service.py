@@ -134,6 +134,9 @@ class RuntimeCommandService:
         self.runtime_checkpoint_runner = None
         self.shutdown_runner = None
         self.resume_runner = None
+        # IPC principal bound by RuntimeService for this connection
+        # (desktop/ipc_principal.py). Defaults to the historical human principal.
+        self.principal_kind = "human"
 
     def _validate_envelope(self, cmd: Dict[str, Any]) -> Optional[str]:
         if not isinstance(cmd, dict):
@@ -214,7 +217,10 @@ class RuntimeCommandService:
             operation_fingerprint=commands.fingerprint(cmd["op"], cmd["payload"]),
             correlation_id=cmd["correlationId"],
             actor_id=self.operator_id,
-            actor_kind="human",
+            # Defense in depth: an agent principal's commands are never "human",
+            # so the authority table refuses human acts even if the IPC allowlist
+            # (desktop/ipc_principal.py) regressed.
+            actor_kind="human" if self.principal_kind == "human" else "external_driver",
             issued_at=cmd.get("timestamp") or _now_rfc3339(),
             replay_policy="never",
         )
