@@ -61,9 +61,9 @@ Cutover: `deploy/macos/capt-node/CUTOVER.md`. Evidence: `docs/evidence/r04/`.
   - Deployed Node was untracked; imported verbatim with hashes (`docs/evidence/CAPT_NODE_IMPORT_PROVENANCE.md`).
   - Hermes not exercised (no plugin was deployed through the shared gateway).
 - **Simulated remote Commander caller attempting a human-authority op:** done by inspection of the live manifest and by bridge unit tests. The live tool was **not** invoked: it would mutate the live runtime.
-- **Computed enforcement report:** `PARTIAL` (Linux enforced for all 15 effects; macOS evidence missing). File: `docs/evidence/r04/enforcement_linux_only.json`.
+- **Computed enforcement report:** `ENFORCED_FOR_DECLARED_EFFECT_SET` for all 15 **declared Node service-identity staging effects** on real-user Linux and macOS JUnit. File: `docs/evidence/r04/enforcement_linux_macos.json` (computed from hashed receipts). This is **not a production enforcement claim**; parallel uid-501 surfaces and deployed Commander remain unsafe.
 - **Rollback:** implemented. The downgrade path needs `CAPT_NODE_ACCEPT_SAME_UID_EXPOSURE=YES`. Tested in the staging drill (pending owner run).
-- **Remaining blockers:** macOS evidence (3 owner runs); live exposure (edge, bridge, TIA); production cutover (approval).
+- **Remaining blockers:** macOS Node staging 16/16 and Interop split-uid 13/13 now passed; **staging deployment/rollback drill still unrun**; live exposure (edge, bridge, TIA); production cutover requires owner approval.
 
 ## Security test report (summary)
 
@@ -71,12 +71,13 @@ Cutover: `deploy/macos/capt-node/CUTOVER.md`. Evidence: `docs/evidence/r04/`.
 |---|---|---|---|
 | Node service identity, real users | Linux root sandbox | 16/16 | `docs/evidence/r04/linux_node_service_identity_20261106T052112Z.xml` (sha256 f4842699…df41b) |
 | same, CI job | GitHub Actions (0fe4e1b1) | success | run on PR #254 |
-| same, real macOS users | Mac (macOS 26.4.1, Core fac6ad0e, `_captnodestg` uid 450) | 16/16, live processes unchanged (owner-reported 2026-11-06; receipt not yet verified here) | `evidence/r04/macos_node_service_identity_20261106T145636Z.{txt,xml}` on the Mac |
+| same, real macOS users | Mac (macOS 26.4.1, Core fac6ad0e, `_captnodestg` uid 450) | **16/16, 0 failures, 0 skips; exit 0; live process table unchanged**; independently inspected JUnit and SHA-256 | `docs/evidence/r04/macos_node_service_identity_20261106T145636Z.{txt,xml}` (Mac originals byte-identical) |
 | Deployment kit drill | Mac | pending owner run | `deploy/macos/capt-node/staging-drill.sh` |
 | Keychain argv fix | Linux / macOS | 13+1 skip / 14/14 | PR #255 |
 | Bridge runtime gate + credential guard | Linux | 81 pass, 1 pre-existing | PR #20 |
 | R0.3 split-uid regression | Mac (Interop 6f3d6412, Core c417a835) | **6/13 FAIL**: harness orphaned the runtime on stop (sudo cannot relay SIGKILL), state lock blocked the restart; cascade. Not an authority bypass | `CAPT-Interop/evidence/macos_split_uid_20261106T150004Z.*` on the Mac |
-| same, harness fixed | Linux (Core c417a835) | 13/13, no runtime left behind | Interop PR #3 (80f307be) |
+| same, harness fixed | Linux (Core c417a835) | 13/13, no runtime left behind | Interop PR #3 (80f307be + PID safety hardening at 1614a1b9) |
+| same, harness fixed (real macOS rerun) | Mac (Interop 1614a1b9, Core c417a835) | **13/13 PASS**, zero failures, errors or skips; no disposable runtime survives | Interop PR #3 `evidence/r04/macos_split_uid_20261106T160426Z.{txt,xml}`; verified original Mac SHA-256 below |
 
 ## CI / repo ledger
 
@@ -112,20 +113,20 @@ There are no merges, no force-pushes and no direct writes to `main`. The reposit
 
 | Gate | Status | Basis |
 |---|---|---|
-| Identity | PARTIAL | Linux real-user proven; macOS pending; production still uid 501 |
+| Identity | PARTIAL | Linux and macOS 16/16 real-user **staging** proven; production still uid 501 |
 | Human token | PARTIAL | Unreadable by the service (Linux); still held by the Commander runtime plane |
-| Human IPC | PARTIAL | R0.3 13/13 macOS; R0.4 macOS regression 6/13 (harness defect, Interop #3); rerun pending |
-| Agent IPC | PARTIAL | as above |
+| Human IPC | PARTIAL | R0.4 macOS split-uid rerun **13/13 PASS** at Interop 1614a1b9 + Core c417a835; production still runs legacy principal |
+| Agent IPC | PARTIAL | same real-user macOS 13/13 rerun, but agent-principal production rollout pending |
 | Tool authority | PARTIAL | Scope ceiling enforced (Linux); bridge allowlist in #20, not deployed |
 | Approvals | FAIL | RR-1 live |
 | Attestations | FAIL | RR-1 live |
 | CAPT-Bot | FAIL | RR-2 live |
-| Filesystem | PARTIAL | Linux proven; macOS pending |
+| Filesystem | PARTIAL | Linux and macOS Node service-identity staging tested; production still exposed through uid-501 surfaces |
 | Credentials | PARTIAL | #255 (macOS-proven) and #20 not deployed; RR-8 live |
-| Concurrency | PARTIAL | Linux proven; macOS pending |
+| Concurrency | PARTIAL | Linux and both macOS staging suites passed; production not yet proven |
 | Recovery | PARTIAL | Revocation proven on Linux; launchd crash drill pending |
 | Linux E2E | PASS | 16/16 local + CI |
-| macOS E2E | PARTIAL | Node service identity 16/16 (owner-reported; receipt to be verified and fed to the enforcement report); split-uid regression rerun pending |
+| macOS E2E | PASS | Node service identity 16/16 and split-uid regression 13/13 with zero skips; deployment/rollback drill tracked separately |
 | Commander | FAIL | deployed edge and bridge stale |
 | Rollback | NOT TESTED | implemented; drill pending |
 | Source integrity | FAIL | deployed Commander ≠ `main`; edge unpinned |
@@ -135,4 +136,12 @@ There are no merges, no force-pushes and no direct writes to `main`. The reposit
 
 **PARTIAL — SPECIFIC GATES REMAIN.**
 
-The architecture holds wherever it was tested with real users, and no gap needs a redesign. The failing gates are live deployment state: a stale edge Worker and bridge, a Node not yet cut over, and uid-501 surfaces outside the three repos. Pending macOS evidence keeps the rest at PARTIAL. RR-1 and RR-2 exist today, independent of R0.4, and close with cutover §2.
+The architecture holds wherever it was tested with real users, and no gap needs a redesign. The failing gates are live deployment state: a stale edge Worker and bridge, a Node not yet cut over, and uid-501 surfaces outside the three repos. The Node service-identity macOS receipt is now verified and included in the staging enforcement computation; the patched split-uid regression subsequently passed 13/13 on macOS. The deployment/rollback drill remains pending. RR-1 and RR-2 exist today, independent of R0.4, and close with cutover §2.
+
+## November 6 — Mac evidence verification (R0.4 staging only)
+
+The exact original Mac receipt files were hashed, parsed and copied byte-for-byte into `docs/evidence/r04/`. JUnit: 16 tests, 0 failures, 0 errors, 0 skips. The text receipt ends in `live runtime: unchanged (same pids, uids, start times)` and `exit: 0`. SHA256 TXT `92f464900a64c5cc5ac3cf9f9a18640b1a7ca5ef339451c317296ffac15750e4`; XML `0bbdb7cccc75d261de359b777ebc351274db2de9ed816d22443e0f5b6880bc2d`. This is bounded evidence for the 15 declared effects, not for production isolation.
+
+## macOS Interop regression rerun — success after process-lifecycle fix
+
+At Interop checkout `1614a1b930ef5992cfcc416dd386b5b22d566a35` (PR #3) and Core checkout `c417a8352d08e113980715175c61657efbebf1f2` (PR #255), the 2026-11-06T16:04:26Z owner-authorized macOS split-uid suite finished **13/13** (failures=0, errors=0, skipped=0) and left no disposable RuntimeService process. Raw receipt SHA-256: TXT `689c98025076122b8449e0c72381235fb144512c735c94ef1c3070401144ed4e`; XML `f7f4c6c564496b82912ae742018fdef9611980db75d697cc77c862981ce1cc0a`. Note: the sudo-generated receipt itself omitted checkout commit SHAs due to Git safe-directory restrictions; these revisions were independently recorded immediately before and after the test. The prior 6/13 run is retained as failure evidence. Staging drill remains owner-only and not run.
