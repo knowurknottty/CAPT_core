@@ -1,0 +1,118 @@
+{
+  "declaredEffects": 15,
+  "effects": {
+    "capability_cannot_widen_deployed_roots": {
+      "linux": "ENFORCED",
+      "linux_tests": {
+        "test_scope_violations_fail_closed": "passed"
+      }
+    },
+    "durable_receipts_and_denials": {
+      "linux": "ENFORCED",
+      "linux_tests": {
+        "test_receipts_and_denials_are_durable_and_readable_by_the_human": "passed",
+        "test_restart_keeps_identity_and_replays_not_redispatches": "passed"
+      }
+    },
+    "emergency_revocation_leaves_nothing": {
+      "linux": "ENFORCED",
+      "linux_tests": {
+        "test_operation_close_is_not_revocation_but_service_revocation_is": "passed"
+      }
+    },
+    "human_credential_unreadable_by_remote_exec": {
+      "linux": "ENFORCED",
+      "linux_tests": {
+        "test_shell_exec_cannot_read_human_token_or_home": "passed",
+        "test_symlinks_do_not_launder_reach": "passed"
+      }
+    },
+    "no_privilege_escalation_from_service": {
+      "linux": "ENFORCED",
+      "linux_tests": {
+        "test_service_has_no_sudo": "passed"
+      }
+    },
+    "node_refuses_human_or_agent_uid": {
+      "linux": "ENFORCED",
+      "linux_tests": {
+        "test_preflight_refuses_human_and_agent_uids": "passed"
+      }
+    },
+    "node_runs_as_dedicated_service_uid": {
+      "linux": "ENFORCED",
+      "linux_tests": {
+        "test_node_runs_as_the_service_uid": "passed",
+        "test_restart_keeps_identity_and_replays_not_redispatches": "passed"
+      }
+    },
+    "node_spawned_process_cannot_drive_node": {
+      "linux": "ENFORCED",
+      "linux_tests": {
+        "test_only_the_human_peer_reaches_the_socket": "passed"
+      }
+    },
+    "only_human_peer_reaches_node": {
+      "linux": "ENFORCED",
+      "linux_tests": {
+        "test_only_the_human_peer_reaches_the_socket": "passed"
+      }
+    },
+    "operation_id_dispatches_once": {
+      "linux": "ENFORCED",
+      "linux_tests": {
+        "test_concurrent_reuse_of_one_operation_id_dispatches_once": "passed",
+        "test_restart_keeps_identity_and_replays_not_redispatches": "passed"
+      }
+    },
+    "permitted_work_still_works": {
+      "linux": "ENFORCED",
+      "linux_tests": {
+        "test_permitted_work_executes_and_human_reads_result": "passed"
+      }
+    },
+    "signing_keys_unreadable_by_remote_exec": {
+      "linux": "ENFORCED",
+      "linux_tests": {
+        "test_shell_exec_cannot_read_human_token_or_home": "passed"
+      }
+    },
+    "trust_config_code_immutable_by_remote_exec": {
+      "linux": "ENFORCED",
+      "linux_tests": {
+        "test_shell_exec_cannot_rewrite_trust_anchors_config_or_code": "passed"
+      }
+    },
+    "unsafe_deployment_refused_at_start": {
+      "linux": "ENFORCED",
+      "linux_tests": {
+        "test_preflight_only_reports_without_serving": "passed",
+        "test_preflight_refuses_reachable_human_credential": "passed",
+        "test_preflight_refuses_service_owned_trust_and_writable_code": "passed"
+      }
+    },
+    "workspace_scope_enforced": {
+      "linux": "ENFORCED",
+      "linux_tests": {
+        "test_scope_violations_fail_closed": "passed",
+        "test_symlinks_do_not_launder_reach": "passed"
+      }
+    }
+  },
+  "evidence": {
+    "linux": {
+      "sha256": "sha256:f4842699227403f66c7d4707eecf34b21f7e96ccad29eea52a2ec5f92a6df41b",
+      "source": "evidence/r04/linux_node_service_identity_20261106T052112Z.xml"
+    }
+  },
+  "missingPlatforms": [
+    "macos"
+  ],
+  "requiredPlatforms": [
+    "linux",
+    "macos"
+  ],
+  "schema": "capt.r04.enforcement-report.v1",
+  "scope": "CAPT Node service identity only; parallel uid-501 surfaces are out of this effect set",
+  "status": "PARTIAL"
+}

@@ -1,0 +1,33 @@
+name: capt-node-service-identity
+
+# R0.4: CAPT Node runs as a dedicated service uid that cannot reach the human credential.
+# This job proves it with real Unix users (root is required to create and switch between
+# them); CAPT_NODE_E2E_REQUIRED=1 turns a missing prerequisite into a failure, not a skip.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  real-users:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create service, human and agent accounts
+        run: sudo bash scripts/setup_capt_node_e2e_linux.sh
+      - name: Node service-identity E2E (real uids)
+        run: |
+          sudo env CAPT_NODE_E2E_REQUIRED=1 CAPT_NODE_E2E_PYTHON=/opt/capt-venv/bin/python \
+            /opt/capt-venv/bin/python -m pytest -q -rs -p no:cacheprovider \
+            tests/capt_runtime/test_node_service_identity_e2e.py 2>&1 | tee node-service-identity.log
+          test "${PIPESTATUS[0]}" -eq 0
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-service-identity
+          path: node-service-identity.log
