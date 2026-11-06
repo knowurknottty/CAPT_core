@@ -71,11 +71,12 @@ Cutover: `deploy/macos/capt-node/CUTOVER.md`. Evidence: `docs/evidence/r04/`.
 |---|---|---|---|
 | Node service identity, real users | Linux root sandbox | 16/16 | `docs/evidence/r04/linux_node_service_identity_20261106T052112Z.xml` (sha256 f4842699…df41b) |
 | same, CI job | GitHub Actions (0fe4e1b1) | success | run on PR #254 |
-| same, real macOS users | Mac | pending owner run | `deploy/macos/capt-node/staging-e2e.sh` |
+| same, real macOS users | Mac (macOS 26.4.1, Core fac6ad0e, `_captnodestg` uid 450) | 16/16, live processes unchanged (owner-reported 2026-11-06; receipt not yet verified here) | `evidence/r04/macos_node_service_identity_20261106T145636Z.{txt,xml}` on the Mac |
 | Deployment kit drill | Mac | pending owner run | `deploy/macos/capt-node/staging-drill.sh` |
 | Keychain argv fix | Linux / macOS | 13+1 skip / 14/14 | PR #255 |
 | Bridge runtime gate + credential guard | Linux | 81 pass, 1 pre-existing | PR #20 |
-| R0.3 split-uid regression | Mac | pending owner run | `CAPT-Interop/scripts/setup_split_uid_macos.sh` |
+| R0.3 split-uid regression | Mac (Interop 6f3d6412, Core c417a835) | **6/13 FAIL**: harness orphaned the runtime on stop (sudo cannot relay SIGKILL), state lock blocked the restart; cascade. Not an authority bypass | `CAPT-Interop/evidence/macos_split_uid_20261106T150004Z.*` on the Mac |
+| same, harness fixed | Linux (Core c417a835) | 13/13, no runtime left behind | Interop PR #3 (80f307be) |
 
 ## CI / repo ledger
 
@@ -84,7 +85,7 @@ Cutover: `deploy/macos/capt-node/CUTOVER.md`. Evidence: `docs/evidence/r04/`.
 | CAPT_core | `feat/r04-capt-node-service-identity` / #254 (draft) | see PR | CI green at 0fe4e1b1; later pushes queued |
 | CAPT_core | `fix/r04-keychain-state-key-argv` / #255 (draft) | c417a835 | CI green (11 checks) |
 | inversion-commander | `feat/r04-bridge-runtime-gate` / #20 (draft) | a815662b | GitGuardian green; no Actions workflows in this repo |
-| CAPT-Interop | — | `main` 6f3d6412 | no R0.4 changes; regression harness only |
+| CAPT-Interop | `fix/r04-split-uid-runtime-lifecycle` / #3 (draft) | 80f307be | harness stop/lock fix; Linux 13/13 |
 
 There are no merges, no force-pushes and no direct writes to `main`. The repositories stay private.
 
@@ -113,7 +114,7 @@ There are no merges, no force-pushes and no direct writes to `main`. The reposit
 |---|---|---|
 | Identity | PARTIAL | Linux real-user proven; macOS pending; production still uid 501 |
 | Human token | PARTIAL | Unreadable by the service (Linux); still held by the Commander runtime plane |
-| Human IPC | PARTIAL | R0.3 13/13 macOS; R0.4 regression pending |
+| Human IPC | PARTIAL | R0.3 13/13 macOS; R0.4 macOS regression 6/13 (harness defect, Interop #3); rerun pending |
 | Agent IPC | PARTIAL | as above |
 | Tool authority | PARTIAL | Scope ceiling enforced (Linux); bridge allowlist in #20, not deployed |
 | Approvals | FAIL | RR-1 live |
@@ -124,7 +125,7 @@ There are no merges, no force-pushes and no direct writes to `main`. The reposit
 | Concurrency | PARTIAL | Linux proven; macOS pending |
 | Recovery | PARTIAL | Revocation proven on Linux; launchd crash drill pending |
 | Linux E2E | PASS | 16/16 local + CI |
-| macOS E2E | NOT TESTED | pending owner run |
+| macOS E2E | PARTIAL | Node service identity 16/16 (owner-reported; receipt to be verified and fed to the enforcement report); split-uid regression rerun pending |
 | Commander | FAIL | deployed edge and bridge stale |
 | Rollback | NOT TESTED | implemented; drill pending |
 | Source integrity | FAIL | deployed Commander ≠ `main`; edge unpinned |
