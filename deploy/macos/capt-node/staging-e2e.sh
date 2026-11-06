@@ -102,7 +102,7 @@ BEFORE="$(live_capt)"
 {
   echo "CAPT R0.4 macOS Node service-identity staging receipt"
   echo "utc: $STAMP"
-  echo "source: $(git -C "$SRC" rev-parse HEAD 2>/dev/null || echo unknown) dirty=$(git -C "$SRC" status --porcelain 2>/dev/null | grep -v '^?? evidence/' | wc -l | tr -d ' ')"
+  echo "source: $(git -c safe.directory="$SRC" -C "$SRC" rev-parse HEAD 2>/dev/null || echo unknown) dirty=$(git -c safe.directory="$SRC" -C "$SRC" status --porcelain 2>/dev/null | grep -v '^?? evidence/' | wc -l | tr -d ' ')"
   echo "macos: $(sw_vers -productVersion) $(uname -m)"
   echo "service: $(id "$SVC")"
   echo "human:   $(id "$HUMAN")"

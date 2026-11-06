@@ -87,7 +87,7 @@ cmd_prepare() {
   local commit=""
   while [[ $# -gt 0 ]]; do case "$1" in --commit) commit="$2"; shift 2;; *) die "unknown option $1";; esac; done
   [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || die "--commit <full 40-hex sha> required"
-  git -C "$SRC" cat-file -e "$commit^{commit}" || die "commit $commit not present in $SRC"
+  git -c safe.directory="$SRC" -C "$SRC" cat-file -e "$commit^{commit}" || die "commit $commit not present in $SRC"
   local py=""; for c in "${PY_CANDIDATES[@]}"; do [[ -x "$c" ]] && { py="$c"; break; }; done
   [[ -n "$py" ]] || die "Homebrew python@3.14 or @3.13 required"
   ensure_accounts
@@ -98,7 +98,7 @@ cmd_prepare() {
   chmod +a "user:$HUMAN allow list,add_file,search,add_subdirectory,delete_child,readattr,writeattr,readextattr,writeextattr,readsecurity,file_inherit,directory_inherit" "$PREFIX/workspaces/main"
   # Code: an exact commit, exported (no .git, no working-tree edits), root-owned and read-only.
   local stage; stage="$(mktemp -d "/private/tmp/capt-node-app.XXXXXX")"
-  git -C "$SRC" archive --format=tar "$commit" | tar -x -C "$stage"
+  git -c safe.directory="$SRC" -C "$SRC" archive --format=tar "$commit" | tar -x -C "$stage"
   rm -rf "$PREFIX/app.new"; mv "$stage" "$PREFIX/app.new"
   "$py" -m venv "$PREFIX/app.new/.venv"
   "$PREFIX/app.new/.venv/bin/python" -m pip install --quiet --no-cache-dir --require-hashes --only-binary=:all: \
