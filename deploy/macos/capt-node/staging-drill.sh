@@ -32,6 +32,8 @@ check "app is root-owned and not writable by the service" 0 sudo -n -u "$SVC" /b
 check "operator (as the human, no sudo)" 0 sudo -n -u "$HUMAN" env CAPT_NODE_HUMAN="$HUMAN" bash "$I" --staging operator
 check "trust + preflight as the service uid" 0 bash "$I" --staging trust
 check "node key moved: operator no longer holds it" 0 /bin/sh -c "! ls /Users/$HUMAN/.capt-node-operator-staging/.capt-node-state/node.key"
+check "operator re-run after trust re-signs the capability, pairing untouched" 0 sudo -n -u "$HUMAN" env CAPT_NODE_HUMAN="$HUMAN" bash "$I" --staging operator
+check "trust anchors unchanged by the re-run" 0 cmp -s "$PREFIX/trust/pairings.json" "/Users/$HUMAN/.capt-node-operator-staging/.capt-node-state/pairings.json"
 
 # Failure drill A: a trust anchor the service can rewrite must block activation.
 chown "$SVC" "$PREFIX/trust/pairings.json"

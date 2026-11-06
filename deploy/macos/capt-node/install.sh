@@ -133,10 +133,21 @@ raw["emergencyStopHotkey"] = None
 json.dump(raw, open(cfg, "w"), indent=2)
 PY
   fi
-  local pend code
-  pend="$(node_cli_human pair --config "$cfg" --controller-id "$CONTROLLER")"
-  code="$("$PREFIX/app/.venv/bin/python" -I -c 'import json,sys;print(json.loads(sys.argv[1]).get("verificationCode",""))' "$pend")"
-  if [[ -n "$code" ]]; then node_cli_human pair --config "$cfg" --controller-id "$CONTROLLER" --approve-code "$code" >/dev/null; fi
+  # Pair once. Re-running `operator` later (e.g. to re-sign the capability) must not touch an
+  # active pairing: `pair` re-pends the record and needs node.key, which `trust` moved away.
+  local active
+  active="$("$PREFIX/app/.venv/bin/python" -I -c '
+import json, os, sys
+p = os.path.join(os.path.dirname(sys.argv[1]), ".capt-node-state", "pairings.json")
+recs = json.load(open(p)) if os.path.exists(p) else []
+print("yes" if any(r.get("controllerId", r.get("controller_id")) == sys.argv[2] and r.get("state") == "active" for r in recs) else "no")' "$cfg" "$CONTROLLER")"
+  if [[ "$active" != "yes" ]]; then
+    local pend code
+    pend="$(node_cli_human pair --config "$cfg" --controller-id "$CONTROLLER")"
+    code="$("$PREFIX/app/.venv/bin/python" -I -c 'import json,sys;print(json.loads(sys.argv[1]).get("verificationCode",""))' "$pend")"
+    [[ -n "$code" ]] || die "pairing returned no verification code"
+    node_cli_human pair --config "$cfg" --controller-id "$CONTROLLER" --approve-code "$code" >/dev/null
+  fi
   node_cli_human mcp-authorize --config "$cfg" --controller-id "$CONTROLLER" \
     --capability-file "$OPERATOR/$CONTROLLER.capability.json" --expires-minutes "${CAPT_NODE_CAPABILITY_MINUTES:-1440}" >/dev/null
   echo "operator ready in $OPERATOR (controller $CONTROLLER); next: sudo install.sh$FLAG trust"
