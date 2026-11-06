@@ -155,7 +155,10 @@ def test_timeout_raises_stable_code_without_command_line(monkeypatch, caplog):
     assert exc.value.__cause__ is None and exc.value.__suppress_context__ is True
     rendered="".join(traceback.format_exception(exc.value))
     logging.getLogger("capt").exception("keychain failure", exc_info=exc.value)
-    assert secret not in rendered and secret not in caplog.text and "-w" not in rendered
+    shown=rendered.replace(secret,"<<STATE-KEY>>")
+    assert secret not in rendered, shown
+    assert "TimeoutExpired" not in rendered, shown  # suppressed context: no command line chained
+    assert secret not in caplog.text, caplog.text.replace(secret,"<<STATE-KEY>>")
 
 
 def test_missing_security_binary_fails_closed(monkeypatch):
