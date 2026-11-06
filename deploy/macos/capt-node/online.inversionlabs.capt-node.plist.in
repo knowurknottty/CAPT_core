@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- R0.4 CAPT Node LaunchDaemon. Rendered by install.sh; @TOKENS@ are replaced at render time.
+     The identity of the RUNNING process is verified from the process table after start, never
+     inferred from this file. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>@LABEL@</string>
+  <key>UserName</key><string>@ACCOUNT@</string>
+  <key>GroupName</key><string>@ACCOUNT@</string>
+  <key>InitGroups</key><true/>
+  <key>ProgramArguments</key>
+  <array>
+    <string>@PREFIX@/app/.venv/bin/python</string>
+    <string>-I</string>
+    <string>-m</string>
+    <string>capt_runtime.node.cli</string>
+    <string>serve</string>
+    <string>--config</string>
+    <string>@PREFIX@/etc/node.json</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/usr/bin:/bin</string>
+    <key>HOME</key><string>@PREFIX@/state</string>
+    <key>PYTHONDONTWRITEBYTECODE</key><string>1</string>
+  </dict>
+  <key>WorkingDirectory</key><string>@PREFIX@/state</string>
+  <key>Umask</key><integer>23</integer>
+  <key>RunAtLoad</key><true/>
+  <!-- Restart only after a crash (terminated by a signal). Any exit, including a preflight
+       refusal (exit 3), leaves the service down: a refused deployment must stay down. The app
+       is on sys.path through a root-owned .pth in the venv, so -I (isolated) is safe. -->
+  <key>KeepAlive</key>
+  <dict>
+    <key>Crashed</key><true/>
+  </dict>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>StandardOutPath</key><string>@PREFIX@/state/node.log</string>
+  <key>StandardErrorPath</key><string>@PREFIX@/state/node.log</string>
+  <key>ProcessType</key><string>Background</string>
+</dict>
+</plist>

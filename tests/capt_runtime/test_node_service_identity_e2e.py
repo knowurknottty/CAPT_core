@@ -317,6 +317,13 @@ def _start_refused(user: str, cfg: Path) -> dict:
     return json.loads(proc.stdout.strip().splitlines()[-1])
 
 
+def test_preflight_only_reports_without_serving(node) -> None:
+    proc = node_cli(SVC, "serve", "--config", str(node["svc_cfg"]), "--preflight-only", home=BASE / "state")
+    assert proc.returncode == 0, (proc.stdout, proc.stderr[-800:])
+    report = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert report["state"] == "preflight_ok" and report["service"]["serviceUid"] == _uid(SVC)
+
+
 def test_preflight_refuses_human_and_agent_uids(node) -> None:
     assert _start_refused(HUMAN, node["svc_cfg"])["code"] == "NODE_RUNNING_AS_FORBIDDEN_UID"
     assert _start_refused(AGENT, node["svc_cfg"])["code"] == "NODE_RUNNING_AS_FORBIDDEN_UID"

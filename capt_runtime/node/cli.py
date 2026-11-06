@@ -320,6 +320,8 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--workspace", action="append", required=True)
     serve = subs.add_parser("serve")
     serve.add_argument("--config", required=True)
+    serve.add_argument("--preflight-only", action="store_true",
+                       help="service-identity mode: run the startup checks, print the report, exit 0 or 3")
     status = subs.add_parser("status")
     status.add_argument("--config", required=True)
     status.add_argument("--controller-id")
@@ -390,6 +392,10 @@ def main(argv: list[str] | None = None) -> int:
             # Legacy same-uid mode: everything lives next to the config.
             trust_dir = state_dir = _state_dir(args.config)
             service_report: dict[str, object] = {"mode": "legacy_same_uid"}
+            if args.preflight_only:
+                print(json.dumps({"state": "refused", "code": "NODE_PREFLIGHT_REQUIRES_SERVICE_IDENTITY",
+                                  "detail": ""}, sort_keys=True), flush=True)
+                return 3
         else:
             trust_dir, state_dir = policy.trust_dir, policy.state_dir
             try:
@@ -404,6 +410,9 @@ def main(argv: list[str] | None = None) -> int:
                 print(json.dumps({"state": "refused", "code": exc.code, "detail": exc.detail}, sort_keys=True), flush=True)
                 return 3
             service_report["mode"] = "service_identity"
+            if args.preflight_only:
+                print(json.dumps({"state": "preflight_ok", "service": service_report}, sort_keys=True), flush=True)
+                return 0
         node = NodeIdentity.from_private_bytes(
             config.node_id, config.device_name, _read_secret(state_dir / "node.key")
         )
