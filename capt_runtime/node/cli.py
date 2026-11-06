@@ -18,6 +18,7 @@ from .journal import NodeOperationJournal
 from .pairing import PairingRecord, PairingState
 from .protocol import capability_to_wire
 from .server import NodeServer
+from .service import DenialLog, ServiceIdentityPolicy, ServicePreflightError, preflight
 from .types import NodeOperationRequest, OperationCapability
 
 
@@ -164,7 +165,10 @@ def _deserialize_pairing(raw: dict[str, object]) -> PairingRecord:
 
 
 def _load_pairings(config_path: str | Path) -> list[PairingRecord]:
-    path = _state_dir(config_path) / "pairings.json"
+    return _load_pairings_from(_state_dir(config_path) / "pairings.json")
+
+
+def _load_pairings_from(path: Path) -> list[PairingRecord]:
     raw = json.loads(path.read_text()) if path.exists() else []
     return [_deserialize_pairing(item) for item in raw]
 
@@ -381,21 +385,46 @@ def main(argv: list[str] | None = None) -> int:
         )
     elif args.command == "serve":
         config = load_config(args.config)
-        node = _load_node(args.config, config)
-        authority_public = base64.b64decode(
-            (_state_dir(args.config) / "authority.pub").read_text().strip(), validate=True
+        policy = ServiceIdentityPolicy.from_config(json.loads(Path(args.config).read_text()))
+        if policy is None:
+            # Legacy same-uid mode: everything lives next to the config.
+            trust_dir = state_dir = _state_dir(args.config)
+            service_report: dict[str, object] = {"mode": "legacy_same_uid"}
+        else:
+            trust_dir, state_dir = policy.trust_dir, policy.state_dir
+            try:
+                service_report = preflight(
+                    policy,
+                    config_path=Path(args.config).resolve(),
+                    workspace_roots=config.workspace_roots,
+                    code_root=Path(__file__).resolve().parents[2],
+                    legacy_state_dir=_state_dir(args.config),
+                )
+            except ServicePreflightError as exc:
+                print(json.dumps({"state": "refused", "code": exc.code, "detail": exc.detail}, sort_keys=True), flush=True)
+                return 3
+            service_report["mode"] = "service_identity"
+        node = NodeIdentity.from_private_bytes(
+            config.node_id, config.device_name, _read_secret(state_dir / "node.key")
         )
-        journal = NodeOperationJournal(_state_dir(args.config) / "journal.sqlite")
+        authority_public = base64.b64decode(
+            (trust_dir / "authority.pub").read_text().strip(), validate=True
+        )
+        journal = NodeOperationJournal(state_dir / "journal.sqlite")
         server = NodeServer(
             _socket_path(config),
             node,
             journal,
-            pairings=[item for item in _load_pairings(args.config) if item.state is PairingState.ACTIVE],
+            pairings=[item for item in _load_pairings_from(trust_dir / "pairings.json") if item.state is PairingState.ACTIVE],
             authority_issuers={config.authority_id: authority_public},
             now=lambda: datetime.now(timezone.utc),
+            service_policy=policy,
+            service_roots=config.workspace_roots,
+            denial_log=DenialLog(state_dir / "denials.jsonl") if policy is not None else None,
         )
         server.start()
-        print(json.dumps({"nodeId": config.node_id, "endpoint": config.endpoint, "state": "serving"}, sort_keys=True), flush=True)
+        print(json.dumps({"nodeId": config.node_id, "endpoint": config.endpoint, "state": "serving",
+                          "service": service_report}, sort_keys=True), flush=True)
         try:
             while True:
                 time.sleep(0.5)

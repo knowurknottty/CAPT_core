@@ -17,6 +17,7 @@ from .identity import NodeIdentity
 from .journal import NodeOperationJournal
 from .pairing import PairingRecord, PairingState
 from .protocol import canonical_json, decode_frame, encode_frame, request_from_wire
+from .service import DenialLog, ServiceIdentityPolicy, peer_uid, require_scope_within_service, secure_socket
 from .types import canonical_request_digest
 
 
@@ -30,8 +31,15 @@ class NodeServer:
         pairings: list[PairingRecord],
         authority_issuers: dict[str, bytes],
         now: Callable[[], Any],
+        service_policy: ServiceIdentityPolicy | None = None,
+        service_roots: tuple[str, ...] = (),
+        denial_log: DenialLog | None = None,
     ) -> None:
         self.socket_path = Path(socket_path)
+        # R0.4 service-identity mode: peer uid gate, scope ceiling, durable denials.
+        self.service_policy = service_policy
+        self.service_roots = tuple(service_roots)
+        self.denial_log = denial_log
         self.node = node
         self.journal = journal
         self.pairings = {record.controller_id: record for record in pairings}
@@ -54,6 +62,8 @@ class NodeServer:
         self.socket_path.unlink(missing_ok=True)
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.bind(str(self.socket_path))
+        if self.service_policy is not None:
+            secure_socket(self.socket_path, self.service_policy)
         sock.listen(16)
         sock.settimeout(0.2)
         self._sock = sock
@@ -83,12 +93,27 @@ class NodeServer:
         current = threading.current_thread()
         try:
             with conn:
+                request: Any = None
+                peer: int | None = None
                 try:
+                    if self.service_policy is not None:
+                        peer = peer_uid(conn)
+                        if peer is None or peer not in self.service_policy.allowed_peer_uids:
+                            raise PermissionError("NODE_PEER_UID_DENIED")
                     request = self._recv(conn)
                     response = self._handle(request)
                 except Exception as exc:
                     code = str(exc) or f"node_internal_exception:{type(exc).__name__}"
                     response = {"ok": False, "code": code}
+                    if self.denial_log is not None and isinstance(exc, (PermissionError, KeyError, ValueError)):
+                        payload = request.get("payload") if isinstance(request, dict) else None
+                        self.denial_log.record(
+                            code,
+                            peerUid=peer,
+                            kind=request.get("kind") if isinstance(request, dict) else None,
+                            controllerId=request.get("controllerId") if isinstance(request, dict) else None,
+                            operationId=payload.get("operationId") if isinstance(payload, dict) else None,
+                        )
                 try:
                     frame = encode_frame(response)
                 except ValueError as exc:
@@ -184,6 +209,8 @@ class NodeServer:
         if request.capability.controller_id != controller_id:
             raise PermissionError("controller_capability_mismatch")
         verify_capability_authority(request.capability, self.authority_issuers)
+        if self.service_policy is not None:
+            require_scope_within_service(request.capability.filesystem_roots, self.service_roots)
         operation_lock = self._retain_operation_lock(request.operation_id)
         operation_lock.acquire()
         try:
