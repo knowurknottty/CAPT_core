@@ -86,7 +86,7 @@ Cutover: `deploy/macos/capt-node/CUTOVER.md`. Evidence: `docs/evidence/r04/`.
 | CAPT_core | `feat/r04-capt-node-service-identity` / #254 (draft) | see PR | CI green at 0fe4e1b1; later pushes queued |
 | CAPT_core | `fix/r04-keychain-state-key-argv` / #255 (draft) | c417a835 | CI green (11 checks) |
 | inversion-commander | `feat/r04-bridge-runtime-gate` / #20 (draft) | a815662b | GitGuardian green; no Actions workflows in this repo |
-| CAPT-Interop | `fix/r04-split-uid-runtime-lifecycle` / #3 (draft) | 80f307be | harness stop/lock fix; Linux 13/13 |
+| CAPT-Interop | `fix/r04-split-uid-runtime-lifecycle` / #3 (draft) | 6574acc3 | harness stop/lock fix (80f307be), exact-runtime identity check before SIGKILL (1614a1b9), macOS 13/13 evidence (0ffe88ad), receipt records checkout SHAs (6574acc3); CI 6/6 |
 
 There are no merges, no force-pushes and no direct writes to `main`. The repositories stay private.
 
@@ -108,6 +108,7 @@ There are no merges, no force-pushes and no direct writes to `main`. The reposit
 | RR-12 | LOW | `denials.jsonl` grows without bound under an allowed peer | Rotate by the operator; no truncation by the service |
 | RR-13 | LOW | `CAPT_STATE_KEY_B64` override readable by the same uid (`ps -E`) | Test and harness use only |
 | RR-14 | LOW | Live Commander capability is 24 h and refreshed manually | After cutover: re-run `install.sh operator`, which re-signs the capability and leaves an active pairing untouched (drilled in `staging-drill.sh`) |
+| RR-15 | LOW (unassessed) | The macOS receipt shows the service account in implicit groups `everyone`, `localaccounts`, `com.apple.sharepoint.group.1/.2` and `_lpoperator` (nested membership; the 502 agent shows the same). Whatever those groups grant on this Mac, the service holds | Enumerate what the sharepoint groups and `_lpoperator` grant (`dscl . -read /Groups/com.apple.sharepoint.group.1`, File Sharing settings) before cutover |
 
 ## Final acceptance gates
 
