@@ -302,12 +302,36 @@ cmd_uninstall() {
   need_root
   [[ $STAGING -eq 1 ]] || die "uninstall is staging-only; production keeps its accounts and state"
   cmd_rollback
-  [[ "$PREFIX" == /Library/CAPTNodeStaging ]] && rm -rf "$PREFIX"
+  [[ "$PREFIX" == /Library/CAPTNodeStaging ]] || die "unexpected staging prefix; refusing uninstall"
+  rm -rf "$PREFIX"
   rm -rf "$OPERATOR"
-  dscl . -delete "/Users/$ACCOUNT" 2>/dev/null || true
-  dscl . -delete "/Groups/$CLIENTS" 2>/dev/null || true
-  dscl . -delete "/Groups/$ACCOUNT" 2>/dev/null || true
-  echo "staging removed"
+  # macOS may deny user-record deletion even to root (eDSPermissionError,
+  # including when the caller lacks Full Disk Access). Never swallow that
+  # error or claim that staging was fully removed while its UID still exists.
+  local record failed=0
+  for record in "/Users/$ACCOUNT" "/Groups/$CLIENTS" "/Groups/$ACCOUNT"; do
+    if dscl . -read "$record" >/dev/null 2>&1; then
+      if ! dscl . -delete "$record"; then
+        echo "staging cleanup: Directory Services refused $record" >&2
+        failed=1
+      fi
+    fi
+  done
+  # Independently check Directory Services: successful deletion of paths and
+  # groups does not imply removal of the actual service user identity.
+  for record in "/Users/$ACCOUNT" "/Groups/$CLIENTS" "/Groups/$ACCOUNT"; do
+    if dscl . -read "$record" >/dev/null 2>&1; then
+      echo "staging cleanup: residual Directory Services record $record" >&2
+      failed=1
+    fi
+  done
+  if [[ -e "$PREFIX" || -e "$OPERATOR" || -e "$PLIST" ]]; then
+    echo "staging cleanup: residual staging installation path" >&2
+    failed=1
+  fi
+  [[ "$failed" -eq 0 ]] ||
+    die "staging uninstall incomplete; resolve macOS account-deletion authorization before declaring the drill passed"
+  echo "staging removed; account, groups, daemon and paths independently verified absent"
 }
 
 case "$CMD" in
