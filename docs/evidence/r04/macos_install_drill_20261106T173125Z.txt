@@ -1,0 +1,59 @@
+CAPT R0.4 macOS deployment-kit staging drill
+utc: 20261106T173125Z  source: edbe214bfca05ec9643ed4729b001ac96d32398c  macos: 26.4.1
+PASS prepare (accounts, layout, pinned app, hash-pinned venv) (rc=0)
+    
+    [notice] A new release of pip is available: 26.2.1 -> 26.3
+    [notice] To update, run: /Library/CAPTNodeStaging/app.new/.venv/bin/python -m pip install --upgrade pip
+    prepared /Library/CAPTNodeStaging at edbe214bfca05ec9643ed4729b001ac96d32398c for _captnodestg (450); next: install.sh --staging operator (as knowurknot)
+PASS app is root-owned and not writable by the service (rc=0)
+    shell-init: error retrieving current directory: getcwd: cannot access parent directories: Permission denied
+PASS operator (as the human, no sudo) (rc=0)
+    operator ready in /Users/knowurknot/.capt-node-operator-staging (controller inversion-commander); next: sudo install.sh --staging trust
+PASS trust + preflight as the service uid (rc=0)
+    {"service": {"allowedPeerUids": [501], "checkedForbiddenPaths": 9, "forbiddenUids": [501, 502], "groups": [12, 61, 100, 450, 451, 701, 702], "mode": "service_identity", "serviceGid": 450, "serviceUid": 450, "stateDir": "/Library/CAPTNodeStaging/state", "trustDir": "/Library/CAPTNodeStaging/trust"}, "state": "preflight_ok"}
+    trust installed and preflight passed; next: sudo CAPT_NODE_ACTIVATE=I-APPROVE-R04-CUTOVER install.sh --staging activate
+PASS node key moved: operator no longer holds it (rc=0)
+    ls: /Users/knowurknot/.capt-node-operator-staging/.capt-node-state/node.key: No such file or directory
+PASS operator re-run after trust re-signs the capability, pairing untouched (rc=0)
+    operator ready in /Users/knowurknot/.capt-node-operator-staging (controller inversion-commander); next: sudo install.sh --staging trust
+PASS trust anchors unchanged by the re-run (rc=0)
+    
+PASS drill A: service-owned trust anchor refuses activation (rc=1)
+    install.sh: preflight refused; not activating
+PASS drill A: no daemon left running (rc=0)
+    
+PASS activate without approval is refused (rc=1)
+    install.sh: activate requires CAPT_NODE_ACTIVATE=I-APPROVE-R04-CUTOVER (explicit owner approval)
+PASS activate (verifies RUNNING uid from the process table, probes as the human) (rc=0)
+    _captnodestg:captnodestgclients 660 /Library/CAPTNodeStaging/run/capt-node.sock
+    active: online.inversionlabs.capt-node-staging pid=2198 uid=450 (_captnodestg); probe ok. Legacy Node is still running until retire-legacy.
+PASS status (rc=0)
+    label: online.inversionlabs.capt-node-staging
+    running: pid=2198 uid=450 (_captnodestg)
+    socket: _captnodestg:captnodestgclients 660
+    app commit: edbe214bfca05ec9643ed4729b001ac96d32398c
+    {"service": {"allowedPeerUids": [501], "checkedForbiddenPaths": 9, "forbiddenUids": [501, 502], "groups": [12, 61, 100, 450, 451, 701, 702], "mode": "service_identity", "serviceGid": 450, "serviceUid": 450, "stateDir": "/Library/CAPTNodeStaging/state", "trustDir": "/Library/CAPTNodeStaging/trust"}, "state": "preflight_ok"}
+    legacy online.inversionlabs.capt-node-primary: running pid=861 uid=501861
+    service-uid processes: 1
+PASS drill B: genuine crash restart keeps service uid (rc=0)
+    injecting SIGSEGV into staging pid=2198 uid=450
+    launchd restarted staging pid=2415 uid=450 after 10s
+PASS drill C: started as the human, the Node refused (NODE_RUNNING_AS_FORBIDDEN_UID) (rc=0)
+    
+PASS drill C: and was not restarted (rc=0)
+    
+PASS drill D: live socket allows human, denies agent (EACCES/EPERM) (rc=0)
+    human socket positive control: connected
+    agent OS denial verified: errno=13
+PASS rollback (stop + revoke service uid; no legacy restore) (rc=0)
+    service Node stopped and revoked; trust anchors, state and accounts kept for inspection.
+PASS after rollback: no service-uid process, no daemon (rc=0)
+    
+PASS restore-legacy is refused in staging (rc=1)
+    service Node stopped and revoked; trust anchors, state and accounts kept for inspection.
+    install.sh: --restore-legacy is production-only
+PASS uninstall staging (rc=0)
+    service Node stopped and revoked; trust anchors, state and accounts kept for inspection.
+    staging removed
+live runtime: unchanged (same pids, uids, start times)
+result: pass=20 fail=0

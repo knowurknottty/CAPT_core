@@ -62,8 +62,8 @@ Cutover: `deploy/macos/capt-node/CUTOVER.md`. Evidence: `docs/evidence/r04/`.
   - Hermes not exercised (no plugin was deployed through the shared gateway).
 - **Simulated remote Commander caller attempting a human-authority op:** done by inspection of the live manifest and by bridge unit tests. The live tool was **not** invoked: it would mutate the live runtime.
 - **Computed enforcement report:** `ENFORCED_FOR_DECLARED_EFFECT_SET` for all 15 **declared Node service-identity staging effects** on real-user Linux and macOS JUnit. File: `docs/evidence/r04/enforcement_linux_macos.json` (computed from hashed receipts). This is **not a production enforcement claim**; parallel uid-501 surfaces and deployed Commander remain unsafe.
-- **Rollback:** implemented. The downgrade path needs `CAPT_NODE_ACCEPT_SAME_UID_EXPOSURE=YES`. Tested in the staging drill (pending owner run).
-- **Remaining blockers:** macOS Node staging 16/16 and Interop split-uid 13/13 now passed; **staging deployment/rollback drill still unrun**; live exposure (edge, bridge, TIA); production cutover requires owner approval.
+- **Rollback:** implemented. The staged rollback, revocation and crash restart passed, but the 20/20 script result concealed a residual macOS service-user record; the **full teardown gate remains open** until the corrected installer is rerun successfully.
+- **Remaining blockers:** macOS Node staging 16/16 and Interop split-uid 13/13 passed. Staging drill now has 19/20 original and 20/20 corrected receipts, but **the service-account deletion postcondition failed independently**; macOS privacy/Directory Services permission issue remains. Live edge, bridge and TIA exposures persist; production cutover requires owner approval.
 
 ## Security test report (summary)
 
@@ -72,7 +72,7 @@ Cutover: `deploy/macos/capt-node/CUTOVER.md`. Evidence: `docs/evidence/r04/`.
 | Node service identity, real users | Linux root sandbox | 16/16 | `docs/evidence/r04/linux_node_service_identity_20261106T052112Z.xml` (sha256 f4842699…df41b) |
 | same, CI job | GitHub Actions (0fe4e1b1) | success | run on PR #254 |
 | same, real macOS users | Mac (macOS 26.4.1, Core fac6ad0e, `_captnodestg` uid 450) | **16/16, 0 failures, 0 skips; exit 0; live process table unchanged**; independently inspected JUnit and SHA-256 | `docs/evidence/r04/macos_node_service_identity_20261106T145636Z.{txt,xml}` (Mac originals byte-identical) |
-| Deployment kit drill | Mac | pending owner run | `deploy/macos/capt-node/staging-drill.sh` |
+| Deployment kit drill | Mac | **PARTIAL:** original 19/20 (SIGKILL not treated as crash), corrected script 20/20 (SIGSEGV restart and EACCES proven), but hidden staging user persisted after uninstall | `docs/evidence/r04/macos_install_drill_20261106T172331Z.txt`, `...173125Z.txt`; see `MACOS_STAGING_DRILL_20261106.md` |
 | Keychain argv fix | Linux / macOS | 13+1 skip / 14/14 | PR #255 |
 | Bridge runtime gate + credential guard | Linux | 81 pass, 1 pre-existing | PR #20 |
 | R0.3 split-uid regression | Mac (Interop 6f3d6412, Core c417a835) | **6/13 FAIL**: harness orphaned the runtime on stop (sudo cannot relay SIGKILL), state lock blocked the restart; cascade. Not an authority bypass | `CAPT-Interop/evidence/macos_split_uid_20261106T150004Z.*` on the Mac |
@@ -109,6 +109,7 @@ There are no merges, no force-pushes and no direct writes to `main`. The reposit
 | RR-13 | LOW | `CAPT_STATE_KEY_B64` override readable by the same uid (`ps -E`) | Test and harness use only |
 | RR-14 | LOW | Live Commander capability is 24 h and refreshed manually | After cutover: re-run `install.sh operator`, which re-signs the capability and leaves an active pairing untouched (drilled in `staging-drill.sh`) |
 | RR-15 | LOW (unassessed) | The macOS receipt shows the service account in implicit groups `everyone`, `localaccounts`, `com.apple.sharepoint.group.1/.2` and `_lpoperator` (nested membership; the 502 agent shows the same). Whatever those groups grant on this Mac, the service holds | Enumerate what the sharepoint groups and `_lpoperator` grant (`dscl . -read /Groups/com.apple.sharepoint.group.1`, File Sharing settings) before cutover |
+| RR-16 | MEDIUM / STAGING GATE BLOCKER | The macOS staging uninstaller silently suppressed Directory Services user deletion failures; a disposable UID 450 account persisted despite 20/20 script assertions | Fixed error masking and postcondition checks in Core #254; macOS root deletion still returns eDSPermissionError (-14120). The full teardown gate is not met; explicit owner-controlled macOS authorization is needed. |
 
 ## Final acceptance gates
 
@@ -125,11 +126,11 @@ There are no merges, no force-pushes and no direct writes to `main`. The reposit
 | Filesystem | PARTIAL | Linux and macOS Node service-identity staging tested; production still exposed through uid-501 surfaces |
 | Credentials | PARTIAL | #255 (macOS-proven) and #20 not deployed; RR-8 live |
 | Concurrency | PARTIAL | Linux and both macOS staging suites passed; production not yet proven |
-| Recovery | PARTIAL | Revocation proven on Linux; launchd crash drill pending |
+| Recovery | PARTIAL | macOS crash SIGSEGV restarted under UID 450; service rollback passed. Complete staging user teardown remains unproven |
 | Linux E2E | PASS | 16/16 local + CI |
 | macOS E2E | PASS | Node service identity 16/16 and split-uid regression 13/13 with zero skips; deployment/rollback drill tracked separately |
 | Commander | FAIL | deployed edge and bridge stale |
-| Rollback | NOT TESTED | implemented; drill pending |
+| Rollback | PARTIAL | macOS service/daemon revocation passed, but hidden staging account survived after suppressed dscl deletion error; patched cleanup pending rerun |
 | Source integrity | FAIL | deployed Commander ≠ `main`; edge unpinned |
 | Production | NOT TESTED | not authorized for activation |
 
@@ -137,7 +138,7 @@ There are no merges, no force-pushes and no direct writes to `main`. The reposit
 
 **PARTIAL — SPECIFIC GATES REMAIN.**
 
-The architecture holds wherever it was tested with real users, and no gap needs a redesign. The failing gates are live deployment state: a stale edge Worker and bridge, a Node not yet cut over, and uid-501 surfaces outside the three repos. The Node service-identity macOS receipt is now verified and included in the staging enforcement computation; the patched split-uid regression subsequently passed 13/13 on macOS. The deployment/rollback drill remains pending. RR-1 and RR-2 exist today, independent of R0.4, and close with cutover §2.
+The architecture holds wherever it was tested with real users, and no gap needs a redesign. The failing gates are live deployment state: a stale edge Worker and bridge, a Node not yet cut over, and uid-501 surfaces outside the three repos. The Node service-identity macOS receipt is now verified and included in the staging enforcement computation; the patched split-uid regression subsequently passed 13/13 on macOS. The corrected drill demonstrated crash restart and socket denial but the independent account-delete postcondition failed; staging cleanup remains a release gate. RR-1 and RR-2 exist today, independent of R0.4, and close with cutover §2.
 
 ## November 6 — Mac evidence verification (R0.4 staging only)
 
@@ -146,3 +147,7 @@ The exact original Mac receipt files were hashed, parsed and copied byte-for-byt
 ## macOS Interop regression rerun — success after process-lifecycle fix
 
 At Interop checkout `1614a1b930ef5992cfcc416dd386b5b22d566a35` (PR #3) and Core checkout `c417a8352d08e113980715175c61657efbebf1f2` (PR #255), the 2026-11-06T16:04:26Z owner-authorized macOS split-uid suite finished **13/13** (failures=0, errors=0, skipped=0) and left no disposable RuntimeService process. Raw receipt SHA-256: TXT `689c98025076122b8449e0c72381235fb144512c735c94ef1c3070401144ed4e`; XML `f7f4c6c564496b82912ae742018fdef9611980db75d697cc77c862981ce1cc0a`. Note: the sudo-generated receipt itself omitted checkout commit SHAs due to Git safe-directory restrictions; these revisions were independently recorded immediately before and after the test. The prior 6/13 run is retained as failure evidence. Staging drill remains owner-only and not run.
+
+## November 6 — staging drill receipts and cleanup audit
+
+The original 19/20 and corrected 20/20 macOS staging drill receipts are preserved with SHA-256 in `docs/evidence/r04/` alongside `MACOS_STAGING_DRILL_20261106.md`. The SIGSEGV crash restart was observed from PID 2198 to PID 2415 under UID 450 after 10 seconds; the agent socket received OS EACCES while the human connected. **However, the hidden _captnodestg user record survived `uninstall`**, and an administrator-authorized `dscl` removal returned eDSPermissionError (-14120). The script now fails closed on residual account records; a new privileged drill using that change has not passed. **Do not promote the 20/20 script receipt into a complete-cleanup claim.**

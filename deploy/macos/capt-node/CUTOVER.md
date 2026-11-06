@@ -10,7 +10,7 @@ Commands assume a clean checkout of the approved Core commit at `~/capt-r04-rele
 |---|---|---|
 | P1 | Core PR #254 (service identity + kit) and #255 (Keychain argv) merged; CI green on the merge commit | GitHub checks on `main` |
 | P2 | macOS real-user receipt `macos_node_service_identity_*.txt` exit 0, 16/16 | `deploy/macos/capt-node/staging-e2e.sh` |
-| P3 | macOS drill receipt `macos_install_drill_*.txt` `fail=0` | `deploy/macos/capt-node/staging-drill.sh` |
+| P3 | macOS drill receipt `macos_install_drill_*.txt` `fail=0` **and** `_captnodestg` user, staging groups, daemon and install paths independently verified absent | `deploy/macos/capt-node/staging-drill.sh`; `dscl . -read /Users/_captnodestg` must return not-found after uninstall |
 | P4 | `scripts/r04_enforcement_report.py --junit linux=… --junit macos=…` → `ENFORCED_FOR_DECLARED_EFFECT_SET` | exit 0 |
 | P5 | R0.3 split-uid regression 13/13 on macOS against the release commit | `CAPT-Interop/scripts/setup_split_uid_macos.sh agent --run …` |
 | P6 | Commander PR #20 merged | GitHub |
