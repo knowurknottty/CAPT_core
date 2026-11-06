@@ -68,21 +68,41 @@ def _decode_key(text: str) -> bytes:
     return key
 
 
-def _keychain_key() -> Optional[bytes]:
+def _security(args: list[str], *, stdin: Optional[str] = None) -> "subprocess.CompletedProcess[str]":
+    """Run the macOS ``security`` CLI. Secrets travel only on stdin/stdout pipes.
+
+    Errors are reduced to stable codes raised ``from None``: a ``TimeoutExpired``
+    carries the full command line, which must never reach a log or traceback.
+    """
+    try:
+        return subprocess.run(
+            ["security", *args], input=stdin, capture_output=True, text=True,
+            timeout=5, check=False,
+        )
+    except subprocess.TimeoutExpired:
+        raise AtRestProtectionError("STATE_KEYCHAIN_TIMEOUT") from None
+    except OSError:
+        raise AtRestProtectionError("STATE_KEYCHAIN_UNAVAILABLE") from None
+
+
+def _keychain_key(keychain: Optional[str] = None) -> Optional[bytes]:
     """Get the existing macOS key or create it exactly once.
 
     Never use Keychain's -U/update operation: concurrent first starts can
     replace an already-used encryption key and orphan ciphertext.
+
+    The new key is never placed in argv (visible to same-uid processes through
+    the process table): it is added through ``security -i``, which reads the
+    command from stdin. ``keychain`` selects a keychain file (tests use a
+    disposable one); ``None`` is the user's default keychain.
     """
     if sys.platform != "darwin" or not shutil.which("security"):
         return None
+    target = [keychain] if keychain else []
 
     def find_key() -> Optional[bytes]:
-        found = subprocess.run(
-            ["security", "find-generic-password", "-s", _KEYCHAIN_SERVICE,
-             "-a", _KEYCHAIN_ACCOUNT, "-w"],
-            capture_output=True, text=True, timeout=5, check=False,
-        )
+        found = _security(["find-generic-password", "-s", _KEYCHAIN_SERVICE,
+                           "-a", _KEYCHAIN_ACCOUNT, "-w", *target])
         if found.returncode == 0:
             # A successful lookup with empty/invalid bytes is corruption,
             # not authorization to create a different encryption key.
@@ -95,14 +115,14 @@ def _keychain_key() -> Optional[bytes]:
     if existing is not None:
         return existing
     candidate = os.urandom(32)
-    add = subprocess.run(
-        ["security", "add-generic-password", "-s", _KEYCHAIN_SERVICE,
-         "-a", _KEYCHAIN_ACCOUNT,
-         "-w", base64.b64encode(candidate).decode("ascii")],
-        capture_output=True, text=True, timeout=5, check=False,
-    )
-    # Another process may have won the create race. Reread the winning
-    # persistent key in both cases, rather than keeping a local candidate.
+    encoded = base64.b64encode(candidate).decode("ascii")  # [A-Za-z0-9+/=]: no quoting needed
+    command = " ".join(["add-generic-password", "-s", _KEYCHAIN_SERVICE,
+                        "-a", _KEYCHAIN_ACCOUNT, "-w", encoded, *target]) + "\n"
+    add = _security(["-i"], stdin=command)
+    del command, encoded
+    # Another process may have won the create race (``security -i`` exits 45,
+    # errSecDuplicateItem). Reread the winning persistent key in both cases,
+    # rather than keeping a local candidate.
     winner = find_key()
     if winner is None:
         raise AtRestProtectionError("STATE_KEYCHAIN_CREATE_FAILED")
