@@ -99,3 +99,9 @@ credentials explicitly; a credential not listed is protected by permissions alon
 
 - r1 (R1): identities, layout, preflight, peer gate, scope ceiling, denial log; Linux real-user
   E2E 12/12; macOS staging script.
+- r2 (R2): status bound to the issuing controller; socket bound under umask 0177; operation-id
+  conflicts logged; revocation boundary = service stop + kill service uid (operation close is
+  not); laundering edges outside the Node found and recorded (`R04_REPORT.md` RR-1, RR-2,
+  RR-4, RR-8).
+- r3 (R3): deployment kit, LaunchDaemon template, hash-pinned venv, `--preflight-only`,
+  staging drill, computed enforcement report.
