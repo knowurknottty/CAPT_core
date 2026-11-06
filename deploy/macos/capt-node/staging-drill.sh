@@ -45,11 +45,38 @@ check "activate without approval is refused" 1 bash "$I" --staging activate
 check "activate (verifies RUNNING uid from the process table, probes as the human)" 0 env $APPROVE bash "$I" --staging activate
 check "status" 0 bash "$I" --staging status
 
-# Failure drill B: crash → launchd restarts it, still as the service uid.
-PID="$(launchctl print system/$LABEL | awk '/^\tpid = /{print $3; exit}')"
-kill -9 "$PID" 2>/dev/null; sleep 12
-NEW="$(launchctl print system/$LABEL | awk '/^\tpid = /{print $3; exit}')"
-check "drill B: crash restart keeps the service uid" 0 /bin/sh -c "[ -n '$NEW' ] && [ '$NEW' != '$PID' ] && [ \"\$(ps -o uid= -p $NEW | tr -d ' ')\" = \"$(id -u $SVC)\" ]"
+# Failure drill B: a genuine crash-class signal, not operator SIGKILL.
+# On macOS 26.4.1 SIGKILL left a Crashed-only launchd service inactive;
+# launchd.plist(5) explicitly cites SIGSEGV as a crash-class signal.
+drill_crash_restart() {
+  local before after expected actual i
+  before="$(launchctl print "system/$LABEL" 2>/dev/null | awk '/^\tpid = /{print $3; exit}')" || before=""
+  [[ "$before" =~ ^[0-9]+$ ]] || { echo "no staging Node before crash"; return 1; }
+  expected="$(id -u "$SVC")"
+  actual="$(ps -o uid= -p "$before" 2>/dev/null | tr -d '[:space:]')" || actual=""
+  [[ "$actual" == "$expected" ]] || {
+    echo "refusing to signal unexpected pid=$before uid=$actual (expected $expected)"
+    return 1
+  }
+  echo "injecting SIGSEGV into staging pid=$before uid=$actual"
+  kill -SEGV "$before" || { echo "SIGSEGV delivery failed"; return 1; }
+  for i in $(seq 1 60); do
+    after="$(launchctl print "system/$LABEL" 2>/dev/null | awk '/^\tpid = /{print $3; exit}')" || after=""
+    if [[ "$after" =~ ^[0-9]+$ && "$after" != "$before" && -S "$PREFIX/run/capt-node.sock" ]]; then
+      actual="$(ps -o uid= -p "$after" 2>/dev/null | tr -d '[:space:]')" || actual=""
+      if [[ "$actual" == "$expected" && "$(stat -f '%u' "$PREFIX/run/capt-node.sock" 2>/dev/null)" == "$expected" ]]; then
+        echo "launchd restarted staging pid=$after uid=$actual after ${i}s"
+        return 0
+      fi
+    fi
+    sleep 1
+  done
+  echo "no correctly-identified restart after 60s; last pid=${after:-none}"
+  launchctl print "system/$LABEL" 2>&1 |
+    grep -E 'state =|pid =|last exit|runs =|throttle' | head -15 || true
+  return 1
+}
+check "drill B: genuine crash restart keeps service uid" 0 drill_crash_restart
 
 # Failure drill C: launched as the HUMAN uid, the Node refuses and stays down (no uid-501 recovery).
 CPL=/Library/LaunchDaemons/online.inversionlabs.capt-node-staging-as-human.plist
@@ -62,9 +89,46 @@ check "drill C: started as the human, the Node refused (NODE_RUNNING_AS_FORBIDDE
 check "drill C: and was not restarted" 0 /bin/sh -c "! launchctl print system/$LABEL-as-human 2>/dev/null | grep -q 'pid = '"
 launchctl bootout "system/$LABEL-as-human" 2>/dev/null; rm -f "$CPL" /private/tmp/capt-node-drill-c.log
 
-# Failure drill D: the agent account cannot reach the socket.
-check "drill D: agent cannot connect to the Node socket" 1 sudo -n -u "$AGENT" /usr/bin/python3 -I -c \
-  "import socket; s=socket.socket(socket.AF_UNIX); s.connect('$PREFIX/run/capt-node.sock')"
+# Failure drill D: verify a LIVE socket, human positive control and
+# specific OS EACCES/EPERM for the agent (not an absent socket or bad cwd).
+drill_socket_isolation() {
+  local sock="$PREFIX/run/capt-node.sock" pid uid
+  pid="$(launchctl print "system/$LABEL" 2>/dev/null | awk '/^\tpid = /{print $3; exit}')" || pid=""
+  [[ "$pid" =~ ^[0-9]+$ && -S "$sock" ]] || {
+    echo "cannot test denial: staging service or socket absent"; return 1;
+  }
+  uid="$(ps -o uid= -p "$pid" 2>/dev/null | tr -d '[:space:]')" || uid=""
+  [[ "$uid" == "$(id -u "$SVC")" ]] || { echo "unexpected service uid=$uid"; return 1; }
+  (
+    cd /
+    sudo -n -u "$HUMAN" /usr/bin/python3 -I - "$sock" <<'PY'
+import socket, sys
+s = socket.socket(socket.AF_UNIX)
+s.connect(sys.argv[1])
+s.close()
+print("human socket positive control: connected")
+PY
+  ) || { echo "human socket positive control failed"; return 1; }
+  (
+    cd /
+    sudo -n -u "$AGENT" /usr/bin/python3 -I - "$sock" <<'PY'
+import errno, socket, sys
+s = socket.socket(socket.AF_UNIX)
+try:
+    s.connect(sys.argv[1])
+except OSError as exc:
+    if exc.errno not in (errno.EACCES, errno.EPERM):
+        print(f"unexpected socket error errno={exc.errno}", file=sys.stderr)
+        sys.exit(2)
+    print(f"agent OS denial verified: errno={exc.errno}")
+else:
+    s.close()
+    print("SECURITY FAILURE: agent connected", file=sys.stderr)
+    sys.exit(1)
+PY
+  )
+}
+check "drill D: live socket allows human, denies agent (EACCES/EPERM)" 0 drill_socket_isolation
 
 check "rollback (stop + revoke service uid; no legacy restore)" 0 bash "$I" --staging rollback
 check "after rollback: no service-uid process, no daemon" 0 /bin/sh -c "[ \"\$(pgrep -u $SVC | wc -l | tr -d ' ')\" = 0 ] && ! launchctl print system/$LABEL >/dev/null 2>&1"
