@@ -149,3 +149,51 @@ def test_allowed_peer_executes_and_widened_capability_is_refused(tmp_path: Path,
         assert codes == ["NODE_CAPABILITY_ROOT_OUTSIDE_SERVICE_SCOPE"]
     finally:
         srv.close()
+
+
+# ---------------------------------------------------------------- R2 repairs
+
+def test_status_is_bound_to_the_issuing_controller(tmp_path: Path, monkeypatch) -> None:
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    node = NodeIdentity.generate("node-t", "t")
+    owner, other = ControllerIdentity.generate("ctl", "t"), ControllerIdentity.generate("ctl-2", "t")
+    authority = CapabilityAuthorityIdentity.generate("authority-t")
+    pairings = []
+    for ctl in (owner, other):
+        record = PairingRecord.pending(node, ctl)
+        pairings.append(record.activate(record.short_code))
+    policy = ServiceIdentityPolicy.from_config(_block(tmp_path))
+    monkeypatch.setattr(server_mod, "peer_uid", lambda conn: 501)
+    srv = NodeServer(tmp_path / "n.sock", node, NodeOperationJournal(tmp_path / "j.sqlite"), pairings=pairings,
+                     authority_issuers={"authority-t": authority.public_key_bytes()},
+                     now=lambda: datetime.now(timezone.utc), service_policy=policy,
+                     service_roots=(str(ws),), denial_log=DenialLog(tmp_path / "denials.jsonl"))
+    srv.start()
+    try:
+        NodeClient(tmp_path / "n.sock", owner).execute(_request(authority, owner, [str(ws)], op_id="op-own"))
+        assert NodeClient(tmp_path / "n.sock", owner).status("op-own")["state"] == "closed"
+        with pytest.raises(Exception, match="operation_not_found"):
+            NodeClient(tmp_path / "n.sock", other).status("op-own")
+    finally:
+        srv.close()
+
+
+def test_socket_bind_restores_umask_and_operation_conflicts_are_logged(tmp_path: Path, monkeypatch) -> None:
+    import os as _os
+    before = _os.umask(0o022)
+    _os.umask(before)
+    srv, client, authority, controller, ws = _served(tmp_path, monkeypatch, peer=501)
+    try:
+        current = _os.umask(0o022)
+        _os.umask(current)
+        assert current == before
+        client.execute(_request(authority, controller, [str(ws)], op_id="op-x"))
+        changed = _request(authority, controller, [str(ws)], op_id="op-x")
+        changed.arguments["argv"] = ["/bin/echo", "different"]
+        with pytest.raises(Exception, match="operation_digest_mismatch"):
+            client.execute(changed)
+        codes = [json.loads(x)["code"] for x in (tmp_path / "denials.jsonl").read_text().splitlines()]
+        assert any(c.startswith("operation_digest_mismatch") for c in codes)
+    finally:
+        srv.close()

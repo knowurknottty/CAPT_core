@@ -287,6 +287,28 @@ def test_restart_keeps_identity_and_replays_not_redispatches(node) -> None:
     assert (BASE / "ws/result.txt").read_text() == "governed"
 
 
+# ---------------------------------------------------------------- R2 adversarial (service running)
+
+def test_symlinks_do_not_launder_reach(node) -> None:
+    link = human_exec(node, "r2-link", ["/bin/sh", "-c", f"ln -s '{node['token']}' tok && cat tok"])
+    assert link["exitCode"] != 0 and "ermission denied" in (link["stderr"] or ""), link
+    made = human_exec(node, "r2-link2", ["/bin/ln", "-s", str(BASE / "trust"), "out"])
+    assert made["state"] == "closed", made
+    escaped = human_exec(node, "r2-cwd-link", ["/bin/pwd"], cwd=str(BASE / "ws/out"))
+    assert escaped.get("code") == "filesystem_scope_violation", escaped
+
+
+def test_concurrent_reuse_of_one_operation_id_dispatches_once(node) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+    argv = ["/bin/sh", "-c", "echo once >> race.txt"]
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(lambda _: human_exec(node, "r2-race", argv), range(6)))
+    closed = [r for r in results if r.get("state") == "closed"]
+    refused = [r for r in results if r.get("code") == "operation_digest_mismatch"]
+    assert len(closed) + len(refused) == 6, results
+    assert (BASE / "ws/race.txt").read_text() == "once\n"
+
+
 # ---------------------------------------------------------------- preflight refuses unsafe deployments
 
 def _start_refused(user: str, cfg: Path) -> dict:
@@ -295,8 +317,9 @@ def _start_refused(user: str, cfg: Path) -> dict:
     return json.loads(proc.stdout.strip().splitlines()[-1])
 
 
-def test_preflight_refuses_human_uid(node) -> None:
+def test_preflight_refuses_human_and_agent_uids(node) -> None:
     assert _start_refused(HUMAN, node["svc_cfg"])["code"] == "NODE_RUNNING_AS_FORBIDDEN_UID"
+    assert _start_refused(AGENT, node["svc_cfg"])["code"] == "NODE_RUNNING_AS_FORBIDDEN_UID"
 
 
 def test_preflight_refuses_reachable_human_credential(node) -> None:
@@ -322,3 +345,38 @@ def test_preflight_refuses_service_owned_trust_and_writable_code(node) -> None:
         assert _start_refused(SVC, node["svc_cfg"])["code"] == "NODE_CODE_OR_CONFIG_WRITABLE"
     finally:
         os.chown(node_dir, 0, -1)
+
+
+# ---------------------------------------------------------------- cancel vs emergency revocation (R2)
+
+def _svc_processes(marker: str) -> list[str]:
+    out = subprocess.run(["pgrep", "-u", SVC, "-f", marker], capture_output=True, text=True)
+    return out.stdout.split()
+
+
+def test_operation_close_is_not_revocation_but_service_revocation_is(node) -> None:
+    """A capability holder can leave a detached process behind (double fork + setsid).
+    Closing or cancelling the operation does not reach it; the emergency revocation
+    procedure (stop the service, kill every process of the service uid) does. It runs
+    last: it leaves the Node stopped."""
+    marker = f"capt-r2-detached-{os.getpid()}"
+    script = ("import os,sys,time\nif os.fork(): sys.exit(0)\nos.setsid()\n"
+              "if os.fork(): sys.exit(0)\nos.closerange(0, 256)\ntime.sleep(300)\n")
+    out = human_exec(node, "r2-detach", [PY, "-c", script, marker])
+    assert out["state"] == "closed", out
+    time.sleep(0.5)
+    survivors = _svc_processes(marker)
+    assert survivors, "expected the detached child to outlive its operation (documents the cancel gap)"
+    # Emergency revocation, as the owner would run it (root): stop the Node, kill the uid.
+    node["stop"](node["proc"])
+    subprocess.run(["pkill", "-KILL", "-u", SVC], check=False)
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        left = subprocess.run(["pgrep", "-u", SVC], capture_output=True, text=True).stdout.split()
+        if not left:
+            break
+        subprocess.run(["pkill", "-KILL", "-u", SVC], check=False)
+        time.sleep(0.2)
+    assert not _svc_processes(marker)
+    left = subprocess.run(["ps", "-o", "pid=,stat=,command=", "-U", SVC], capture_output=True, text=True).stdout
+    assert not left.strip(), left  # nothing of the service uid survives revocation

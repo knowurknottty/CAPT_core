@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import os
 import socket
 import threading
 from pathlib import Path
@@ -61,9 +62,17 @@ class NodeServer:
         self.socket_path.parent.mkdir(parents=True, exist_ok=True)
         self.socket_path.unlink(missing_ok=True)
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.bind(str(self.socket_path))
         if self.service_policy is not None:
+            # Bind with a closed umask so the socket never exists, even briefly, with
+            # wider permissions than the policy allows; then chgrp + chmod to policy.
+            previous = os.umask(0o177)
+            try:
+                sock.bind(str(self.socket_path))
+            finally:
+                os.umask(previous)
             secure_socket(self.socket_path, self.service_policy)
+        else:
+            sock.bind(str(self.socket_path))
         sock.listen(16)
         sock.settimeout(0.2)
         self._sock = sock
@@ -105,7 +114,7 @@ class NodeServer:
                 except Exception as exc:
                     code = str(exc) or f"node_internal_exception:{type(exc).__name__}"
                     response = {"ok": False, "code": code}
-                    if self.denial_log is not None and isinstance(exc, (PermissionError, KeyError, ValueError)):
+                    if self.denial_log is not None and isinstance(exc, (PermissionError, KeyError, ValueError, RuntimeError)):
                         payload = request.get("payload") if isinstance(request, dict) else None
                         self.denial_log.record(
                             code,
@@ -200,7 +209,9 @@ class NodeServer:
             if not isinstance(operation_id, str) or not operation_id:
                 raise ValueError("operation_id_missing")
             row = self.journal.lookup(operation_id)
-            if row is None:
+            # Status is bound to the controller that issued the operation, like
+            # evidence_read: another paired controller learns nothing, not even existence.
+            if row is None or self.journal.controller_id(operation_id) != controller_id:
                 raise KeyError("operation_not_found")
             return {"ok": True, "result": row}
         if kind != "execute":
